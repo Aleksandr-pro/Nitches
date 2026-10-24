@@ -5,7 +5,7 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   Шинная физика v0.3.1, реалистичный свет, гонки, дрифт и нитро.
+   v0.4.0: шинная физика, шоурум, реалистичный свет, гонки, дрифт и нитро.
    ===================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -325,27 +325,27 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.28;
+renderer.toneMappingExposure = 1.34;
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xe4a06a, 120, 820);
+scene.fog = new THREE.Fog(0xdca16f, 150, 880);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
 
 // Свет заката фестиваля — более насыщенный и объёмный
-scene.add(new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.62));
-const sun = new THREE.DirectionalLight(0xffb070, 2.95);
+scene.add(new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.66));
+const sun = new THREE.DirectionalLight(0xffb070, 3.05);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.radius = 3.2;
 sun.shadow.normalBias = 0.018;
-sun.shadow.camera.left = -48;
-sun.shadow.camera.right = 48;
-sun.shadow.camera.top = 48;
-sun.shadow.camera.bottom = -48;
-sun.shadow.camera.far = 280;
+sun.shadow.camera.left = -52;
+sun.shadow.camera.right = 52;
+sun.shadow.camera.top = 52;
+sun.shadow.camera.bottom = -52;
+sun.shadow.camera.far = 300;
 sun.shadow.bias = -0.0012;
 sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
@@ -426,22 +426,70 @@ function makeRoadTexture() {
 }
 
 function makeStreetTexture() {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#34373c'; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 9000; i++) {
-    const v = 42 + Math.random() * 30;
-    g.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
-    g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  g.fillStyle = '#303338';
+  g.fillRect(0, 0, 512, 512);
+  // Пятна ремонта и неравномерного износа
+  for (let i = 0; i < 76; i++) {
+    const v = 38 + Math.random() * 28;
+    g.fillStyle = `rgba(${v},${v + 2},${v + 6},${0.1 + Math.random() * 0.16})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 512, Math.random() * 512, 28 + Math.random() * 105, 16 + Math.random() * 62, Math.random() * 3, 0, Math.PI * 2);
+    g.fill();
   }
-  g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(58, 0, 34, 256); g.fillRect(164, 0, 34, 256);
+  for (let i = 0; i < 18000; i++) {
+    const v = 92 + Math.random() * 120;
+    g.fillStyle = `rgba(${v},${v},${v},${Math.random() * 0.13})`;
+    g.fillRect(Math.random() * 512, Math.random() * 512, 1.6, 1.6);
+  }
+  // Колеи колёс
+  [128, 384].forEach((x) => {
+    const grad = g.createLinearGradient(x - 44, 0, x + 44, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.3)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - 44, 0, 88, 512);
+  });
+  // Трещины и поперечный шов
+  g.strokeStyle = 'rgba(7,7,9,0.48)';
+  for (let i = 0; i < 15; i++) {
+    g.lineWidth = 1 + Math.random() * 1.8;
+    g.beginPath();
+    let x = Math.random() * 512;
+    let y = Math.random() * 512;
+    g.moveTo(x, y);
+    for (let j = 0; j < 4; j++) {
+      x += (Math.random() - 0.5) * 80;
+      y += Math.random() * 52;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(8,8,10,0.34)';
+  g.fillRect(0, 252, 512, 6);
+  // Разметка
   g.fillStyle = 'rgba(245,245,240,0.92)';
-  g.fillRect(10, 0, 5, 256); g.fillRect(241, 0, 5, 256); g.fillRect(125, 18, 6, 104);
+  g.fillRect(20, 0, 7, 512);
+  g.fillRect(485, 0, 7, 512);
+  g.fillStyle = 'rgba(248,207,72,0.9)';
+  g.fillRect(251, 30, 10, 150);
+  // Стёртость краски зерном асфальта
+  for (let i = 0; i < 2200; i++) {
+    const zones = [[20, 7], [485, 7], [251, 10]];
+    const [zx, zw] = zones[(Math.random() * zones.length) | 0];
+    g.fillStyle = `rgba(48,51,56,${Math.random() * 0.55})`;
+    g.fillRect(zx + Math.random() * zw, Math.random() * 512, 2.2, 2.2);
+  }
   const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = MAX_ANISO;
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
 function makeCrosswalkTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
   const g = c.getContext('2d');
@@ -451,6 +499,38 @@ function makeCrosswalkTexture() {
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+function makeConcreteTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#969b97';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 70; i++) {
+    const v = 126 + Math.random() * 55;
+    g.fillStyle = `rgba(${v},${v},${v - 4},${0.08 + Math.random() * 0.13})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 256, Math.random() * 256, 18 + Math.random() * 58, 10 + Math.random() * 34, Math.random() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 9000; i++) {
+    const v = 105 + Math.random() * 105;
+    g.fillStyle = `rgba(${v},${v},${v},${Math.random() * 0.16})`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  }
+  // Швы плит: при UV ленты v=distance/8 дают стыки примерно каждые 4 м
+  g.fillStyle = 'rgba(52,55,54,0.62)';
+  g.fillRect(0, 0, 256, 4);
+  g.fillRect(0, 126, 256, 4);
+  g.fillRect(0, 252, 256, 4);
+  g.fillRect(0, 0, 4, 256);
+  g.fillRect(252, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
+  return tex;
+}
+
 function makeGroundTexture() {
   // Нейтральная микродеталь: основной цвет задают вершинные цвета рельефа
   const c = document.createElement('canvas');
@@ -495,11 +575,11 @@ function makeSkyTexture() {
   c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#1d3e74');
-  grad.addColorStop(0.34, '#4c72b5');
-  grad.addColorStop(0.55, '#b97a79');
-  grad.addColorStop(0.68, '#ff9d54');
-  grad.addColorStop(0.78, '#ffc06a');
+  grad.addColorStop(0, '#245aa0');
+  grad.addColorStop(0.34, '#5e8fc7');
+  grad.addColorStop(0.55, '#c98d7d');
+  grad.addColorStop(0.68, '#ffab5e');
+  grad.addColorStop(0.78, '#ffd083');
   grad.addColorStop(1, '#8a4b32');
   g.fillStyle = grad;
   g.fillRect(0, 0, 1024, 512);
@@ -524,7 +604,7 @@ function makeSkyTexture() {
   // первые звёзды в зените
   g.fillStyle = 'rgba(255,255,255,0.55)';
   for (let i = 0; i < 130; i++) {
-    g.globalAlpha = Math.random() * 0.55;
+    g.globalAlpha = Math.random() * 0.3;
     g.fillRect(Math.random() * 1024, Math.random() * 105, 1.4, 1.4);
   }
   g.globalAlpha = 1;
@@ -658,21 +738,35 @@ function makeLeafTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = '#557f3d';
+  g.fillStyle = '#4b7436';
   g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 4200; i++) {
-    const gr = 95 + Math.random() * 105;
-    g.fillStyle = `rgba(${gr * 0.55},${gr},${gr * 0.42},${0.25 + Math.random() * 0.5})`;
+  // Объём кроны: тёмные впадины и освещённые внешние пучки
+  for (let i = 0; i < 115; i++) {
+    const lit = Math.random() > 0.48;
+    g.fillStyle = lit ? 'rgba(132,176,82,0.16)' : 'rgba(25,54,25,0.2)';
+    g.beginPath();
+    g.ellipse(Math.random() * 256, Math.random() * 256, 14 + Math.random() * 42, 9 + Math.random() * 27, Math.random() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 5600; i++) {
+    const warm = Math.random() < 0.065;
+    const gr = 92 + Math.random() * 112;
+    g.fillStyle = warm
+      ? `rgba(${165 + Math.random() * 55},${94 + Math.random() * 42},38,${0.28 + Math.random() * 0.42})`
+      : `rgba(${gr * 0.52},${gr},${gr * 0.4},${0.28 + Math.random() * 0.52})`;
     g.save();
     g.translate(Math.random() * 256, Math.random() * 256);
     g.rotate(Math.random() * Math.PI);
-    g.fillRect(-3, -1, 6 + Math.random() * 5, 2.2);
+    g.beginPath();
+    g.ellipse(0, 0, 3 + Math.random() * 4.2, 1.1 + Math.random() * 1.5, 0, 0, Math.PI * 2);
+    g.fill();
     g.restore();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(2, 2);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
   return tex;
 }
 
@@ -752,20 +846,33 @@ function makeGrassBladeTexture() {
   c.width = c.height = 128;
   const g = c.getContext('2d');
   g.clearRect(0, 0, 128, 128);
-  for (let i = 0; i < 90; i++) {
-    const x = 8 + Math.random() * 112;
-    const h = 45 + Math.random() * 78;
-    const lean = (Math.random() - 0.5) * 34;
-    const gr = 100 + Math.random() * 110;
-    g.strokeStyle = `rgba(${gr * 0.48},${gr},${gr * 0.36},0.96)`;
-    g.lineWidth = 2 + Math.random() * 2.4;
+  for (let i = 0; i < 145; i++) {
+    const x = 5 + Math.random() * 118;
+    const h = 42 + Math.random() * 82;
+    const lean = (Math.random() - 0.5) * 38;
+    if (Math.random() < 0.12) {
+      g.strokeStyle = `rgba(${168 + Math.random() * 36},${148 + Math.random() * 28},72,0.92)`;
+    } else {
+      const gr = 96 + Math.random() * 116;
+      g.strokeStyle = `rgba(${gr * 0.46},${gr},${gr * 0.34},0.97)`;
+    }
+    g.lineWidth = 1.7 + Math.random() * 2.5;
     g.beginPath();
     g.moveTo(x, 128);
     g.quadraticCurveTo(x + lean * 0.3, 128 - h * 0.62, x + lean, 128 - h);
     g.stroke();
   }
+  // Несколько мелких полевых цветов добавляют масштаб и цвет у обочины
+  const flowerColors = ['#ffffff', '#ffd94d', '#ff9ecf', '#c4b5fd'];
+  for (let i = 0; i < 15; i++) {
+    g.fillStyle = flowerColors[(Math.random() * flowerColors.length) | 0];
+    g.beginPath();
+    g.arc(10 + Math.random() * 108, 38 + Math.random() * 58, 1.6 + Math.random() * 1.4, 0, Math.PI * 2);
+    g.fill();
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
   return tex;
 }
 
@@ -817,7 +924,7 @@ function makeBannerTexture() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envSource = makeEnvironmentTexture();
   scene.environment = pmrem.fromEquirectangular(envSource).texture;
-  if ('environmentIntensity' in scene) scene.environmentIntensity = 1.05;
+  if ('environmentIntensity' in scene) scene.environmentIntensity = 1.14;
   envSource.dispose();
   pmrem.dispose();
 }
@@ -998,6 +1105,8 @@ function terrainHeight(x, z, roadDist = null) {
 let waterMaterial = null;
 let foamRing = null;
 let grassMesh = null;
+let bushMesh = null;
+let menuStage = null;
 let festivalWheel = null;
 const windTurbines = [];
 const ambientCars = [];
@@ -1035,9 +1144,9 @@ const colliders = []; // {x,z,r}
 {
   const waterNormal = makeWaterNormalTexture();
   waterMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0x166f96, roughness: 0.12, metalness: 0,
-    normalMap: waterNormal, normalScale: new THREE.Vector2(0.65, 0.65),
-    transparent: true, opacity: 0.94, envMapIntensity: 1.35,
+    color: 0x166f96, roughness: 0.09, metalness: 0,
+    normalMap: waterNormal, normalScale: new THREE.Vector2(0.78, 0.78),
+    transparent: true, opacity: 0.94, envMapIntensity: 1.52,
   });
   const water = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), waterMaterial);
   water.rotation.x = -Math.PI / 2;
@@ -1052,7 +1161,7 @@ const colliders = []; // {x,z,r}
   foamRing.position.y = -0.92;
   scene.add(foamRing);
 
-  const terrainGeo = new THREE.PlaneGeometry(640, 640, 150, 150);
+  const terrainGeo = new THREE.PlaneGeometry(640, 640, 168, 168);
   terrainGeo.rotateX(-Math.PI / 2);
   const posAttr = terrainGeo.attributes.position;
   for (let i = 0; i < posAttr.count; i++) {
@@ -1063,9 +1172,9 @@ const colliders = []; // {x,z,r}
   terrainGeo.computeVertexNormals();
   const normAttr = terrainGeo.attributes.normal;
   const colors = new Float32Array(posAttr.count * 3);
-  const cGrass = new THREE.Color(0x619e48);
+  const cGrass = new THREE.Color(0x5f9d43);
   const cDry = new THREE.Color(0x99a454);
-  const cForest = new THREE.Color(0x356735);
+  const cForest = new THREE.Color(0x2f6334);
   const cSand = new THREE.Color(0xdcc088);
   const cDirt = new THREE.Color(0x8a6b49);
   const cRock = new THREE.Color(0x767068);
@@ -1092,18 +1201,31 @@ const colliders = []; // {x,z,r}
   const terrain = new THREE.Mesh(
     terrainGeo,
     new THREE.MeshStandardMaterial({
-      map: groundTex, bumpMap: groundTex, bumpScale: 0.35,
-      vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.25,
+      map: groundTex, bumpMap: groundTex, bumpScale: 0.5,
+      vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.32,
     })
   );
   terrain.receiveShadow = true;
   scene.add(terrain);
 }
 
-const streetRoadMat = new THREE.MeshStandardMaterial({ map: makeStreetTexture(), roughness: 0.94, side: THREE.DoubleSide });
-const plainAsphaltMat = new THREE.MeshStandardMaterial({ color: 0x34373c, roughness: 0.96 });
-const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x8f9290, roughness: 0.98, side: THREE.DoubleSide });
-const roadShoulderMat = new THREE.MeshStandardMaterial({ color: 0x6f6a5f, roughness: 1.0, side: THREE.DoubleSide });
+const streetTex = makeStreetTexture();
+const streetRoadMat = new THREE.MeshStandardMaterial({
+  map: streetTex, bumpMap: streetTex, bumpScale: 0.16,
+  roughness: 0.9, envMapIntensity: 0.38, side: THREE.DoubleSide,
+});
+const plainAsphaltMat = new THREE.MeshStandardMaterial({ color: 0x34373c, roughness: 0.92, envMapIntensity: 0.3 });
+const concreteTex = makeConcreteTexture();
+const sidewalkMat = new THREE.MeshStandardMaterial({
+  map: concreteTex, bumpMap: concreteTex, bumpScale: 0.18,
+  color: 0xb8bcb8, roughness: 0.98, envMapIntensity: 0.22, side: THREE.DoubleSide,
+});
+const secondaryShoulderTex = makeGroundTexture();
+secondaryShoulderTex.repeat.set(1, 1);
+const roadShoulderMat = new THREE.MeshStandardMaterial({
+  map: secondaryShoulderTex, bumpMap: secondaryShoulderTex, bumpScale: 0.42,
+  color: 0x8a7a5f, roughness: 1.0, side: THREE.DoubleSide,
+});
 function makeRoadStripGeometry(road, leftOffset, rightOffset, yLift) {
   const samples = road.samples, positions = [], uvs = [], indices = [];
   let travelled = 0;
@@ -1201,8 +1323,8 @@ function buildSecondaryRoads() {
   const road = new THREE.Mesh(
     buildRibbon(ROAD_HALF, 0.025),
     new THREE.MeshStandardMaterial({
-      map: asphaltTex, bumpMap: asphaltTex, bumpScale: 0.18,
-      roughness: 0.94, metalness: 0, envMapIntensity: 0.3,
+      map: asphaltTex, bumpMap: asphaltTex, bumpScale: 0.22,
+      roughness: 0.9, metalness: 0, envMapIntensity: 0.42,
     })
   );
   road.receiveShadow = true;
@@ -1274,8 +1396,8 @@ function buildSecondaryRoads() {
   }
 
   const broadleafParts = [];
-  [[2.05, 0, 4.85, 0, 1.18], [1.45, -1.05, 4.15, 0.35, 1], [1.35, 1.1, 4.3, -0.25, 1], [1.05, 0.15, 5.75, 0.55, 0.95]].forEach(([r, x, y, z, sy]) => {
-    const part = displaceGeo(new THREE.SphereGeometry(r, 12, 9), 0.24, 0.55);
+  [[2.05, 0, 4.85, 0, 1.18], [1.45, -1.05, 4.15, 0.35, 1], [1.35, 1.1, 4.3, -0.25, 1], [1.05, 0.15, 5.75, 0.55, 0.95], [0.98, -1.55, 5.05, -0.55, 0.85], [0.9, 1.55, 5.18, 0.65, 0.85]].forEach(([r, x, y, z, sy]) => {
+    const part = displaceGeo(new THREE.SphereGeometry(r, 11, 8), 0.28, 0.55);
     part.scale(1.08, sy * 0.78, 1);
     part.translate(x, y, z);
     broadleafParts.push(part);
@@ -1293,17 +1415,17 @@ function buildSecondaryRoads() {
 
   const treePos = [];
   let guard = 0;
-  while (treePos.length < 230 && guard++ < 6000) {
+  while (treePos.length < 330 && guard++ < 9000) {
     const a = rnd() * TAU;
     const r = 22 + rnd() * 248;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
     const roadDist = roadDistanceApprox(x, z);
-    if (roadDist < 13.5) continue;
+    if (roadDist < 12.6) continue;
     const h = terrainHeight(x, z, roadDist);
     if (h > 7.6 || h < -0.15) continue; // на голых скалах и в воде деревья не растут
-    treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.8 + rnd() * 0.55, rot: rnd() * TAU });
-    if (treePos.length % 3 === 0) colliders.push({ x, z, r: 0.4 });
+    treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.82 + rnd() * 0.68, rot: rnd() * TAU });
+    if (treePos.length % 4 === 0) colliders.push({ x, z, r: 0.4 });
   }
   const broadList = treePos.filter((t) => !t.pine);
   const pineList = treePos.filter((t) => t.pine);
@@ -1339,7 +1461,7 @@ function buildSecondaryRoads() {
     dummy.scale.setScalar(t.s);
     dummy.updateMatrix();
     broadleaf.setMatrixAt(i, dummy.matrix);
-    broadleaf.setColorAt(i, tmpC.setHSL(0.29 + rnd() * 0.06, 0.22 + rnd() * 0.18, 0.66 + rnd() * 0.24));
+    broadleaf.setColorAt(i, tmpC.setHSL(0.29 + rnd() * 0.06, 0.3 + rnd() * 0.18, 0.52 + rnd() * 0.2));
   });
   pineList.forEach((t, i) => {
     dummy.position.set(t.x, t.h - 0.08, t.z);
@@ -1347,7 +1469,7 @@ function buildSecondaryRoads() {
     dummy.scale.setScalar(t.s);
     dummy.updateMatrix();
     pines.setMatrixAt(i, dummy.matrix);
-    pines.setColorAt(i, tmpC.setHSL(0.33 + rnd() * 0.04, 0.2, 0.62 + rnd() * 0.2));
+    pines.setColorAt(i, tmpC.setHSL(0.33 + rnd() * 0.04, 0.26, 0.48 + rnd() * 0.16));
   });
   if (broadleaf.instanceColor) broadleaf.instanceColor.needsUpdate = true;
   if (pines.instanceColor) pines.instanceColor.needsUpdate = true;
@@ -1361,9 +1483,9 @@ function buildSecondaryRoads() {
   const rocks = new THREE.InstancedMesh(
     rockGeo,
     new THREE.MeshStandardMaterial({ map: rockTex, bumpMap: rockTex, bumpScale: 0.55, roughness: 1, flatShading: true }),
-    80
+    95
   );
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 95; i++) {
     let x = 0, z = 0, h = 0;
     for (let tries = 0; tries < 20; tries++) {
       const a = rnd() * TAU;
@@ -1385,27 +1507,75 @@ function buildSecondaryRoads() {
   rocks.castShadow = rocks.receiveShadow = true;
   scene.add(rocks);
 
+  // Общая выборка точек растительности: большая часть ставится рядом с
+  // дорогами, где её реально видно из машины, а не вдали от маршрутов.
+  function sampleVegetationPoint(roadBias, minOffset, maxOffset) {
+    const pick = rnd();
+    const side = rnd() < 0.5 ? -1 : 1;
+    if (pick < roadBias * 0.68) {
+      return pointAtS(rnd() * TRACK_LENGTH, side * (ROAD_HALF + minOffset + rnd() * (maxOffset - minOffset))).pos;
+    }
+    if (pick < roadBias) {
+      const road = SECONDARY_ROADS[(rnd() * SECONDARY_ROADS.length) | 0];
+      return pointOnRoad(road, rnd() * road.length, side * (road.halfWidth + minOffset + rnd() * (maxOffset - minOffset))).pos;
+    }
+    const a = rnd() * TAU;
+    const r = 12 + Math.pow(rnd(), 0.75) * 262;
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+  }
+
+  // Низкие кусты закрывают переход «асфальт → трава → лес» и дают глубину обочинам
+  const bushGeo = displaceGeo(new THREE.SphereGeometry(1, 11, 8), 0.18, 0.85);
+  bushGeo.scale(1.25, 0.62, 1);
+  bushGeo.translate(0, 0.48, 0);
+  const BUSH_COUNT = 260;
+  bushMesh = new THREE.InstancedMesh(
+    bushGeo,
+    new THREE.MeshStandardMaterial({ map: leafTex, roughness: 1, envMapIntensity: 0.28 }),
+    BUSH_COUNT
+  );
+  let placedBushes = 0;
+  guard = 0;
+  while (placedBushes < BUSH_COUNT && guard++ < BUSH_COUNT * 7) {
+    const pt = sampleVegetationPoint(0.68, 0.8, 14);
+    const d = roadDistanceApprox(pt.x, pt.z);
+    if (d < 7.4) continue;
+    const h = terrainHeight(pt.x, pt.z, d);
+    if (h < 0.02 || h > 8.2) continue;
+    const bs = 0.7 + rnd() * 1.15;
+    dummy.position.set(pt.x, h - 0.05, pt.z);
+    dummy.rotation.set(0, rnd() * TAU, 0);
+    dummy.scale.set(bs * (0.85 + rnd() * 0.45), bs * (0.72 + rnd() * 0.38), bs * (0.85 + rnd() * 0.45));
+    dummy.updateMatrix();
+    bushMesh.setMatrixAt(placedBushes, dummy.matrix);
+    bushMesh.setColorAt(placedBushes, tmpC.setHSL(0.28 + rnd() * 0.07, 0.3 + rnd() * 0.16, 0.48 + rnd() * 0.2));
+    placedBushes++;
+  }
+  bushMesh.count = placedBushes;
+  if (bushMesh.instanceColor) bushMesh.instanceColor.needsUpdate = true;
+  bushMesh.receiveShadow = true;
+  scene.add(bushMesh);
+
   // пучки травы крест-накрест
-  const bladePlane = new THREE.PlaneGeometry(0.75, 0.48);
-  bladePlane.translate(0, 0.23, 0);
+  const bladePlane = new THREE.PlaneGeometry(0.92, 0.58);
+  bladePlane.translate(0, 0.28, 0);
   const bladePlane2 = bladePlane.clone();
   bladePlane2.rotateY(Math.PI / 2);
   const grassGeo = mergeGeometries([bladePlane, bladePlane2]);
-  const GRASS_COUNT = 2300;
+  const GRASS_COUNT = 3800;
   grassMesh = new THREE.InstancedMesh(
     grassGeo,
     new THREE.MeshStandardMaterial({
-      map: makeGrassBladeTexture(), alphaTest: 0.34, side: THREE.DoubleSide, roughness: 1,
+      map: makeGrassBladeTexture(), alphaTest: 0.3, side: THREE.DoubleSide, roughness: 1,
     }),
     GRASS_COUNT
   );
   let placedGrass = 0;
   guard = 0;
-  while (placedGrass < GRASS_COUNT && guard++ < GRASS_COUNT * 5) {
-    const a = rnd() * TAU;
-    const r = 12 + Math.pow(rnd(), 0.75) * 262;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
+  while (placedGrass < GRASS_COUNT && guard++ < GRASS_COUNT * 6) {
+    const pt = sampleVegetationPoint(0.62, 0.7, 15);
+    const x = pt.x;
+    const z = pt.z;
     const d = roadDistanceApprox(x, z);
     if (d < 8.6) continue;
     const h = terrainHeight(x, z, d);
@@ -1416,7 +1586,7 @@ function buildSecondaryRoads() {
     dummy.scale.set(gs, gs * (0.75 + rnd() * 0.5), gs);
     dummy.updateMatrix();
     grassMesh.setMatrixAt(placedGrass, dummy.matrix);
-    grassMesh.setColorAt(placedGrass, tmpC.setHSL(0.26 + rnd() * 0.09, 0.3, 0.64 + rnd() * 0.24));
+    grassMesh.setColorAt(placedGrass, tmpC.setHSL(0.26 + rnd() * 0.09, 0.38, 0.5 + rnd() * 0.22));
     placedGrass++;
   }
   grassMesh.count = placedGrass;
@@ -1544,16 +1714,17 @@ const balloons = [];
 
   // облака: мягкие спрайты в закатном свете
   const cloudTex = makeCloudSpriteTexture();
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 32; i++) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: cloudTex, transparent: true, opacity: 0.42 + rnd() * 0.3,
+      map: cloudTex, color: rnd() > 0.45 ? 0xffe3c8 : 0xeaf3ff,
+      transparent: true, opacity: 0.36 + rnd() * 0.3,
       depthWrite: false, fog: false,
     }));
     const a = rnd() * TAU;
     const dist = 160 + rnd() * 420;
     sprite.position.set(Math.cos(a) * dist, 95 + rnd() * 85, Math.sin(a) * dist);
-    const w = 85 + rnd() * 150;
-    sprite.scale.set(w, w * 0.36, 1);
+    const w = 90 + rnd() * 170;
+    sprite.scale.set(w, w * 0.34, 1);
     sprite.userData.speed = 0.7 + rnd() * 1.3;
     cloudGroup.add(sprite);
   }
@@ -1573,9 +1744,14 @@ const cpMeshes = [];
       pole.position.set(side * (ROAD_HALF + 0.6), 2.3, 0);
       grp.add(pole);
     });
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_HALF * 2 + 1.2, 4.4, 0.5), mat);
-    beam.position.y = 2.2;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_HALF * 2 + 1.2, 0.38, 0.3), mat);
+    beam.position.y = 4.35;
     grp.add(beam);
+    [-1, 1].forEach((side) => {
+      const flare = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.05, 0.34), mat);
+      flare.position.set(side * (ROAD_HALF + 0.6), 3.55, 0);
+      grp.add(flare);
+    });
     // световой столб следующего чекпоинта
     const pillar = new THREE.Mesh(
       new THREE.CylinderGeometry(2.6, 2.6, 34, 12, 1, true),
@@ -1591,6 +1767,42 @@ const cpMeshes = [];
     scene.add(grp);
     cpMeshes.push({ grp, beamMat: mat, pillarMat: pillar.material });
   });
+}
+
+
+// Сцена шоурума в меню: световые линии и локальный свет вокруг машины у старта
+{
+  const start = pointAtS(-10, 0);
+  menuStage = new THREE.Group();
+  const orangeLine = new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.82 });
+  const cyanLine = new THREE.MeshBasicMaterial({ color: 0x35d5ff, transparent: true, opacity: 0.72 });
+  [-1, 1].forEach((side) => {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 7.4), side < 0 ? orangeLine : cyanLine);
+    strip.position.set(side * 1.68, 0, 0);
+    menuStage.add(strip);
+    const pylon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.72, 0.28),
+      new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.55, metalness: 0.35 })
+    );
+    pylon.position.set(side * 1.68, 0.36, 3.7);
+    pylon.castShadow = true;
+    menuStage.add(pylon);
+  });
+  [-1, 1].forEach((end) => {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.035, 0.14), end < 0 ? cyanLine : orangeLine);
+    strip.position.set(0, 0, end * 3.7);
+    menuStage.add(strip);
+  });
+  const keyLight = new THREE.SpotLight(0xffd7a8, 55, 20, 0.62, 0.65, 1.2);
+  keyLight.position.set(-3.4, 5.6, 4.6);
+  keyLight.target.position.set(0, 0.65, 0);
+  const rimLight = new THREE.PointLight(0x35c5ff, 12, 11, 1.6);
+  rimLight.position.set(3.4, 1.5, -3.6);
+  menuStage.add(keyLight, keyLight.target, rimLight);
+  menuStage.position.copy(start.pos);
+  menuStage.position.y = terrainHeight(start.pos.x, start.pos.z, 0) + 0.055;
+  menuStage.rotation.y = start.yaw + 0.6;
+  scene.add(menuStage);
 }
 
 /* ============================ Детали окружения ============================ */
@@ -2489,6 +2701,7 @@ function startGame() {
   $('finishMenu').classList.add('hidden');
   $('pauseMenu').classList.add('hidden');
   inspectMode = false;
+  if (menuStage) menuStage.visible = false;
   $('inspectBar').classList.add('hidden');
   $('hud').classList.remove('hidden');
   showTouchControls(true);
@@ -2511,15 +2724,20 @@ function startGame() {
 function updateHUDStatic() {
   $('hudЛучший').textContent = player.лучшийLap ? fmtTime(player.лучшийLap) : '—';
   $('hudScore').textContent = '0';
+  const progressPct = $('hudProgressPct');
+  const progressBar = $('hudProgressBar');
+  if (progressPct) progressPct.textContent = selectedMode === 'race' ? '0%' : 'FREE';
+  if (progressBar) progressBar.style.width = '0%';
+  if (speedFxEl) speedFxEl.style.opacity = '0';
 }
 
 function updateCPVisibility() {
   cpMeshes.forEach((cp, i) => {
     const isNext = selectedMode === 'race' && i === player.nextCP;
     cp.grp.visible = selectedMode === 'race';
-    cp.beamMat.opacity = isNext ? 0.35 : 0.05;
+    cp.beamMat.opacity = isNext ? 0.92 : 0.14;
     cp.beamMat.color.setHex(isNext ? 0x7cfc4a : 0xffffff);
-    cp.pillarMat.opacity = isNext ? 0.35 : 0;
+    cp.pillarMat.opacity = isNext ? 0.32 : 0;
   });
   $('checkpointArrow').style.display = selectedMode === 'race' ? 'block' : 'none';
 }
@@ -3247,7 +3465,7 @@ function ensureTireEffects() {
   if (tireSmokeReady) return;
   tireSmokeReady = true;
   const tex = makeCloudSpriteTexture();
-  for (let i = 0; i < 54; i++) {
+  for (let i = 0; i < 78; i++) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
       map: tex, color: 0xd8d8d8, transparent: true, opacity: 0, depthWrite: false,
     }));
@@ -3259,7 +3477,7 @@ function ensureTireEffects() {
   const skidGeo = new THREE.PlaneGeometry(0.27, 1);
   skidGeo.rotateX(-Math.PI / 2);
   skidMesh = new THREE.InstancedMesh(skidGeo, new THREE.MeshBasicMaterial({
-    color: 0x0b0b0d, transparent: true, opacity: 0.5, depthWrite: false,
+    color: 0x0b0b0d, transparent: true, opacity: 0.58, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -3,
   }), 280);
   skidDummy.position.set(0, -10, 0);
@@ -3272,12 +3490,12 @@ function ensureTireEffects() {
 function emitTireSmoke(x, y, z) {
   const p = tireSmokePool[tireSmokeCursor];
   tireSmokeCursor = (tireSmokeCursor + 1) % tireSmokePool.length;
-  p.life = p.maxLife = 0.55 + Math.random() * 0.5;
-  p.sprite.position.set(x + (Math.random() - 0.5) * 0.25, y + 0.18, z + (Math.random() - 0.5) * 0.25);
-  p.sprite.scale.setScalar(0.45 + Math.random() * 0.35);
-  p.sprite.material.opacity = 0.28;
+  p.life = p.maxLife = 0.7 + Math.random() * 0.55;
+  p.sprite.position.set(x + (Math.random() - 0.5) * 0.3, y + 0.2, z + (Math.random() - 0.5) * 0.3);
+  p.sprite.scale.setScalar(0.62 + Math.random() * 0.42);
+  p.sprite.material.opacity = 0.34;
   p.sprite.visible = true;
-  p.vel.set(player.vel.x * 0.12 + (Math.random() - 0.5) * 0.5, 0.65 + Math.random() * 0.5, player.vel.z * 0.12 + (Math.random() - 0.5) * 0.5);
+  p.vel.set(player.vel.x * 0.13 + (Math.random() - 0.5) * 0.55, 0.7 + Math.random() * 0.55, player.vel.z * 0.13 + (Math.random() - 0.5) * 0.55);
 }
 function addSkidSegment(a, b) {
   const dx = b.x - a.x;
@@ -3301,8 +3519,8 @@ function updateTireEffects(dt) {
     p.life -= dt;
     if (p.life <= 0) { p.sprite.visible = false; continue; }
     p.sprite.position.addScaledVector(p.vel, dt);
-    p.sprite.scale.multiplyScalar(1 + dt * 1.9);
-    p.sprite.material.opacity = 0.28 * (p.life / p.maxLife);
+    p.sprite.scale.multiplyScalar(1 + dt * 2.05);
+    p.sprite.material.opacity = 0.34 * (p.life / p.maxLife);
   }
   if (!player.mesh || gameState !== 'racing') {
     player.smokeAccumulator = Math.max(0, player.smokeAccumulator - dt * 2);
@@ -3330,6 +3548,7 @@ function updateTireEffects(dt) {
 
 /* ============================ Камера ============================ */
 const camTargetPos = new THREE.Vector3();
+const _menuLookTarget = new THREE.Vector3();
 function wrapAnglePi(angle) {
   let d = angle % TAU;
   if (d > Math.PI) d -= TAU;
@@ -3354,8 +3573,21 @@ function updateCamera(dt) {
     );
     camTargetPos.y = Math.max(camTargetPos.y, terrainHeight(camTargetPos.x, camTargetPos.z) + 0.5);
     camera.position.lerp(camTargetPos, Math.min(dt * 5, 1));
-    camera.lookAt(center.x, center.y + 0.78, center.z);
-    camera.fov = lerp(camera.fov, 52, dt * 2);
+    // В ландшафте сдвигаем точку взгляда влево от машины: авто оказывается
+    // в открытой правой части шоурума, а не за левой панелью гаража.
+    const viewX = center.x - camera.position.x;
+    const viewZ = center.z - camera.position.z;
+    const viewLen = Math.max(0.001, Math.hypot(viewX, viewZ));
+    const stageOffset = window.innerWidth > 820 && window.innerWidth > window.innerHeight
+      ? clamp(distance * 0.15, 0, 1.35)
+      : 0;
+    _menuLookTarget.set(
+      center.x + (viewZ / viewLen) * stageOffset,
+      center.y + 0.78,
+      center.z - (viewX / viewLen) * stageOffset
+    );
+    camera.lookAt(_menuLookTarget);
+    camera.fov = lerp(camera.fov, 49, dt * 2);
     camera.updateProjectionMatrix();
     return;
   }
@@ -3408,76 +3640,140 @@ function updateCamera(dt) {
 
 /* ============================ HUD + миникарта ============================ */
 const minimap = $('minimap').getContext('2d');
+const speedFxEl = $('speedFx');
 let minimapTimer = 0;
 
 function drawMinimap() {
   const S = 132;
+  const scale = S / 610;
+  const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
   minimap.clearRect(0, 0, S, S);
-  const toMap = (x, z) => [S / 2 + (x / 640) * S, S / 2 + (z / 640) * S];
-  // остров
+  minimap.save();
   minimap.beginPath();
-  minimap.arc(...toMap(0, 0), (290 / 640) * S, 0, TAU);
-  minimap.fillStyle = 'rgba(70,140,60,0.35)';
+  minimap.arc(S / 2, S / 2, S / 2 - 1, 0, TAU);
+  minimap.clip();
+
+  // Вода и остров: читаемый тёмный фон, как в современных гоночных интерфейсах
+  minimap.fillStyle = '#0a2a3d';
+  minimap.fillRect(0, 0, S, S);
+  minimap.beginPath();
+  minimap.arc(...toMap(0, 0), 292 * scale, 0, TAU);
+  minimap.fillStyle = 'rgba(49, 92, 55, 0.94)';
   minimap.fill();
-  // уличная сеть острова
-  minimap.strokeStyle = 'rgba(203,213,225,0.72)';
-  minimap.lineWidth = 1.6;
-  SECONDARY_ROADS.forEach((road) => {
+  minimap.strokeStyle = 'rgba(236, 211, 156, 0.78)';
+  minimap.lineWidth = 2;
+  minimap.stroke();
+
+  const strokeSamples = (samples, step = 3, closed = false) => {
     minimap.beginPath();
-    road.samples.forEach((pt, i) => {
-      if (i % 3 !== 0) return;
+    let started = false;
+    samples.forEach((pt, i) => {
+      if (i % step !== 0 && i !== samples.length - 1) return;
       const [x, y] = toMap(pt.x, pt.z);
-      if (i === 0) minimap.moveTo(x, y); else minimap.lineTo(x, y);
+      if (!started) {
+        minimap.moveTo(x, y);
+        started = true;
+      } else {
+        minimap.lineTo(x, y);
+      }
     });
-    if (road.closed) minimap.closePath();
+    if (closed) minimap.closePath();
     minimap.stroke();
-  });
+  };
+
+  minimap.lineCap = 'round';
+  minimap.lineJoin = 'round';
+
+  // Второстепенные дороги: тёмная подложка + светлая нитка асфальта
+  minimap.strokeStyle = 'rgba(7, 13, 20, 0.92)';
+  minimap.lineWidth = 4.4;
+  SECONDARY_ROADS.forEach((road) => strokeSamples(road.samples, 3, road.closed));
+  minimap.strokeStyle = 'rgba(174, 187, 194, 0.9)';
+  minimap.lineWidth = 2.1;
+  SECONDARY_ROADS.forEach((road) => strokeSamples(road.samples, 3, road.closed));
+
+  // Главная трасса
+  minimap.strokeStyle = 'rgba(7, 13, 20, 0.96)';
+  minimap.lineWidth = 5.6;
+  strokeSamples(SAMPLES, 4, true);
+  minimap.strokeStyle = 'rgba(238, 246, 250, 0.96)';
+  minimap.lineWidth = 3;
+  strokeSamples(SAMPLES, 4, true);
+
+  // Ближайший отрезок маршрута до следующего чекпоинта
+  if (selectedMode === 'race' && player.mesh) {
+    const startIdx = ((player.prevSampleIdx || 0) % 800 + 800) % 800;
+    const targetIdx = Math.round((player.nextCP * 800) / CHECKPOINTS.length) % 800;
+    const steps = (targetIdx - startIdx + 800) % 800;
+    if (steps > 2 && steps <= 150) {
+      const drawRoute = (style, width) => {
+        minimap.beginPath();
+        for (let offset = 0; offset <= steps; offset += 4) {
+          const pt = SAMPLES[(startIdx + offset) % 800];
+          const [x, y] = toMap(pt.x, pt.z);
+          if (offset === 0) minimap.moveTo(x, y);
+          else minimap.lineTo(x, y);
+        }
+        const last = SAMPLES[targetIdx];
+        const [lx, ly] = toMap(last.x, last.z);
+        minimap.lineTo(lx, ly);
+        minimap.strokeStyle = style;
+        minimap.lineWidth = width;
+        minimap.stroke();
+      };
+      drawRoute('rgba(46, 230, 255, 0.34)', 5);
+      drawRoute('#35e0ff', 2.4);
+    }
+  }
+
   // ориентиры: фестиваль и деревенская церковь
   [[0, -175, '#f0abfc'], [99, -23, '#facc15']].forEach(([wx, wz, color]) => {
     const [x, y] = toMap(wx, wz);
     minimap.beginPath();
-    minimap.arc(x, y, 3.2, 0, TAU);
+    minimap.arc(x, y, 3.1, 0, TAU);
     minimap.fillStyle = color;
     minimap.fill();
+    minimap.strokeStyle = 'rgba(0,0,0,0.45)';
+    minimap.lineWidth = 1;
+    minimap.stroke();
   });
-  // трасса
-  minimap.beginPath();
-  SAMPLES.forEach((p, i) => {
-    const [x, y] = toMap(p.x, p.z);
-    if (i === 0) minimap.moveTo(x, y);
-    else if (i % 4 === 0) minimap.lineTo(x, y);
-  });
-  minimap.closePath();
-  minimap.strokeStyle = 'rgba(255,255,255,0.9)';
-  minimap.lineWidth = 3;
-  minimap.stroke();
+
   // следующий чекпоинт
   if (selectedMode === 'race') {
     const cp = CHECKPOINTS[player.nextCP];
     const [x, y] = toMap(cp.pos.x, cp.pos.z);
     minimap.beginPath();
-    minimap.arc(x, y, 4.5, 0, TAU);
+    minimap.arc(x, y, 5.2, 0, TAU);
     minimap.fillStyle = '#7cfc4a';
     minimap.fill();
+    minimap.strokeStyle = '#ffffff';
+    minimap.lineWidth = 1.4;
+    minimap.stroke();
   }
+
   // обычный трафик
   ambientCars.forEach((car) => {
     const p = car.mesh.group.position;
     const [x, y] = toMap(p.x, p.z);
     minimap.beginPath();
     minimap.arc(x, y, 1.7, 0, TAU);
-    minimap.fillStyle = 'rgba(255,255,255,0.72)';
+    minimap.fillStyle = 'rgba(255,255,255,0.74)';
     minimap.fill();
   });
+
   // соперники
   rivals.forEach((r, i) => {
     const p = r.mesh.group.position;
     const [x, y] = toMap(p.x, p.z);
     minimap.beginPath();
-    minimap.arc(x, y, 3, 0, TAU);
+    minimap.arc(x, y, 3.2, 0, TAU);
     minimap.fillStyle = '#' + RIVAL_COLORS[i].toString(16).padStart(6, '0');
     minimap.fill();
+    minimap.strokeStyle = 'rgba(0,0,0,0.55)';
+    minimap.lineWidth = 1;
+    minimap.stroke();
   });
+
   // игрок — стрелка по курсу
   if (player.mesh) {
     const p = player.mesh.group.position;
@@ -3486,22 +3782,35 @@ function drawMinimap() {
     minimap.translate(x, y);
     minimap.rotate(-player.yaw);
     minimap.beginPath();
-    minimap.moveTo(0, 6);
-    minimap.lineTo(-4, -5);
-    minimap.lineTo(4, -5);
+    minimap.moveTo(0, 6.5);
+    minimap.lineTo(-4.4, -5.2);
+    minimap.lineTo(0, -2.6);
+    minimap.lineTo(4.4, -5.2);
     minimap.closePath();
     minimap.fillStyle = '#ff5e3a';
     minimap.strokeStyle = '#fff';
-    minimap.lineWidth = 1.2;
+    minimap.lineWidth = 1.3;
     minimap.fill();
     minimap.stroke();
     minimap.restore();
   }
+
+  minimap.fillStyle = 'rgba(255,255,255,0.92)';
+  minimap.font = '900 10px system-ui, sans-serif';
+  minimap.textAlign = 'center';
+  minimap.fillText('N', S / 2, 13);
+  minimap.restore();
 }
 
 function updateHUD(dt) {
   if (!player.mesh) return;
   const kmh = Math.round(player.vel.length() * 3.6);
+  if (speedFxEl) {
+    const speedRatio = clamp(player.vel.length() / selectedCar.topSpeed, 0, 1);
+    speedFxEl.style.opacity = graphicsQuality === 'realistic'
+      ? (Math.pow(speedRatio, 1.7) * (player.boosting ? 0.9 : 0.52)).toFixed(3)
+      : '0';
+  }
   $('hudSpeed').textContent = kmh;
   $('hudGear').textContent = player.gear === 0 ? 'R' : player.gear;
   $('rpmFill').style.width = `${Math.round(player.rpmRatio * 100)}%`;
@@ -3522,6 +3831,9 @@ function updateHUD(dt) {
     const pos = player.mesh.group.position;
     const d = Math.hypot(pos.x - cp.pos.x, pos.z - cp.pos.z);
     $('hudCheckpoint').textContent = `🎯 ${Math.round(d)} м`;
+    const raceProgress = clamp(player.s / (TOTAL_LAPS * TRACK_LENGTH), 0, 1);
+    $('hudProgressPct').textContent = `${Math.round(raceProgress * 100)}%`;
+    $('hudProgressBar').style.width = `${raceProgress * 100}%`;
     // стрелка к чекпоинту
     const toCP = Math.atan2(cp.pos.x - pos.x, cp.pos.z - pos.z);
     let rel = toCP - player.yaw;
@@ -3614,8 +3926,8 @@ function animate() {
     updateHUD(dt);
   }
 
-  // тень следует за игроком — дешевле для мобильных
-  if (player.mesh && gameState !== 'menu') {
+  // тень следует за игроком — дешевле для мобильных; в меню она нужна шоуруму
+  if (player.mesh) {
     const p = player.mesh.group.position;
     sun.position.set(p.x - 90, p.y + 125, p.z - 60);
     sun.target.position.copy(p);
@@ -3750,7 +4062,7 @@ function isOrbitInteractiveTarget(target) {
 }
 function canOrbitFromEvent(e) {
   if (isOrbitInteractiveTarget(e.target)) return false;
-  if (gameState === 'menu') return e.target === renderer.domElement || e.target === $('menu') || (e.target.closest && e.target.closest('.logo'));
+  if (gameState === 'menu') return e.target === renderer.domElement || e.target === $('menu') || (e.target.closest && e.target.closest('.logo, .showroom-stage, .menu-topbar'));
   return !!player.mesh && e.target === renderer.domElement;
 }
 function markOrbitInteraction() {
@@ -3820,7 +4132,7 @@ window.addEventListener('pointercancel', releaseOrbitPointer);
 renderer.domElement.addEventListener('dblclick', () => resetOrbitView(true));
 window.addEventListener('wheel', (e) => {
   if (isOrbitInteractiveTarget(e.target)) return;
-  if (gameState === 'menu' && e.target !== renderer.domElement) return;
+  if (gameState === 'menu' && !(e.target === renderer.domElement || e.target === $('menu') || (e.target.closest && e.target.closest('.logo, .showroom-stage, .menu-topbar')))) return;
   if (gameState !== 'menu' && !player.mesh) return;
   const factor = Math.exp(e.deltaY * 0.0011);
   markOrbitInteraction();
@@ -3835,6 +4147,46 @@ document.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 /* ============================ UI: меню и кнопки ============================ */
+function carClassCode(car) {
+  const match = car.cls.match(/Класс\s+([A-Z]\d?)/);
+  return match ? match[1] : 'A';
+}
+
+function carPerformanceIndex(car) {
+  const weighted = car.stats.spd * 0.34 + car.stats.acc * 0.28 + car.stats.hnd * 0.26 + car.stats.off * 0.12;
+  const bases = { S1: 900, S: 830, A: 720, B: 560 };
+  return Math.round((bases[carClassCode(car)] || 700) + weighted * 72);
+}
+
+function carDriveLabel(car) {
+  if (car.driveFrontBias >= 0.49) return 'AWD 50/50';
+  if (car.driveFrontBias > 0) {
+    const front = Math.round(car.driveFrontBias * 100);
+    return `AWD ${front}/${100 - front}`;
+  }
+  return 'RWD';
+}
+
+function updateMenuHero() {
+  const heroName = $('heroCarName');
+  if (!heroName) return;
+  const car = selectedCar;
+  heroName.textContent = car.name;
+  $('heroCarClass').textContent = carClassCode(car);
+  $('heroCarPI').textContent = `PI ${carPerformanceIndex(car)}`;
+  $('heroCarClassLine').textContent = car.cls;
+  $('heroPower').textContent = `${Math.round(car.powerKW * 1.341)} л.с.`;
+  $('heroDrive').textContent = carDriveLabel(car);
+  $('heroTopSpeed').textContent = `${Math.round(car.topSpeed * 3.6)} км/ч`;
+  $('heroMass').textContent = `${car.mass} кг`;
+  $('menuЛучшийLap').textContent = player.лучшийLap ? fmtTime(player.лучшийLap) : '—';
+  $('menuProfileClass').textContent = carClassCode(car);
+  $('menuCarsOwned').textContent = `${CARS.length} АВТО`;
+  $('startModeLabel').textContent = selectedMode === 'race'
+    ? `Гонка • ${TOTAL_LAPS} круга • 5 соперников`
+    : 'Свободный заезд • открытый остров';
+}
+
 function buildCarPicker() {
   const wrap = $('carPicker');
   wrap.innerHTML = '';
@@ -3842,13 +4194,20 @@ function buildCarPicker() {
     const btn = document.createElement('button');
     btn.className = 'car-card' + (car === selectedCar ? ' selected' : '');
     btn.innerHTML = `
-      <div class="car-swatch" style="background:#${car.color.toString(16).padStart(6, '0')}">${car.emoji}</div>
-      <div class="car-name">${car.name}</div>
-      <div class="car-class">${car.cls}</div>
-      <div class="stat">СКОР.<span class="bar"><i style="width:${car.stats.spd * 100}%"></i></span></div>
-      <div class="stat">РАЗГОН<span class="bar"><i style="width:${car.stats.acc * 100}%"></i></span></div>
-      <div class="stat">УПРАВЛ.<span class="bar"><i style="width:${car.stats.hnd * 100}%"></i></span></div>
-      <div class="stat">ГРУНТ<span class="bar"><i style="width:${car.stats.off * 100}%"></i></span></div>`;
+      <div class="car-card-top">
+        <div class="car-swatch" style="background:#${car.color.toString(16).padStart(6, '0')}">${car.emoji}</div>
+        <div class="car-heading">
+          <div class="car-name">${car.name}</div>
+          <div class="car-class">${car.cls}</div>
+        </div>
+        <div class="car-pi"><span>${carClassCode(car)}</span><b>${carPerformanceIndex(car)}</b></div>
+      </div>
+      <div class="car-stats">
+        <div class="stat">СКОР.<span class="bar"><i style="width:${car.stats.spd * 100}%"></i></span></div>
+        <div class="stat">РАЗГОН<span class="bar"><i style="width:${car.stats.acc * 100}%"></i></span></div>
+        <div class="stat">УПРАВЛ.<span class="bar"><i style="width:${car.stats.hnd * 100}%"></i></span></div>
+        <div class="stat">ГРУНТ<span class="bar"><i style="width:${car.stats.off * 100}%"></i></span></div>
+      </div>`;
     btn.addEventListener('click', () => {
       selectedCar = car;
       buildCarPicker();
@@ -3857,15 +4216,27 @@ function buildCarPicker() {
     wrap.appendChild(btn);
   });
   buildPaintPicker();
+  updateMenuHero();
 }
 
 function buildPaintPicker() {
   const wrap = $('paintPicker');
   if (!wrap) return;
   const isGTR = selectedCar.id === 'gtr35';
-  wrap.classList.toggle('hidden', !isGTR);
+  wrap.classList.remove('hidden');
   if (!isGTR) {
-    wrap.innerHTML = '';
+    const factoryHex = `#${selectedCar.color.toString(16).padStart(6, '0')}`;
+    wrap.innerHTML = `<div class="paint-title">🎨 Цвет кузова: <b>заводской ${factoryHex.toUpperCase()}</b></div>`;
+    const row = document.createElement('div');
+    row.className = 'paint-row';
+    const sw = document.createElement('button');
+    sw.className = 'paint-swatch selected';
+    sw.type = 'button';
+    sw.disabled = true;
+    sw.title = 'Заводской цвет';
+    sw.style.background = factoryHex;
+    row.appendChild(sw);
+    wrap.appendChild(row);
     return;
   }
   const current = GTR_PAINTS.find((paint) => paint.hex === selectedGTRPaint);
@@ -3893,8 +4264,16 @@ function previewCarInMenu() {
   createPlayerCar();
   const start = pointAtS(-10, 0);
   player.mesh.group.position.copy(start.pos);
-  player.mesh.group.rotation.y = start.yaw + 0.6;
+  player.mesh.group.rotation.set(0, start.yaw + 0.6, 0);
   player.yaw = start.yaw + 0.6;
+  if (menuStage) menuStage.visible = true;
+  // Передний три-четвертной ракурс: камера перед машиной и чуть сбоку.
+  menuOrbit = player.yaw + 0.78;
+  cameraOrbit.yaw = 0;
+  cameraOrbit.menuPitch = 0.18;
+  cameraOrbit.menuDistance = 8.6;
+  cameraOrbit.menuIdle = 0;
+  updateMenuHero();
 }
 
 document.querySelectorAll('.mode-btn').forEach((btn) => {
@@ -3902,6 +4281,7 @@ document.querySelectorAll('.mode-btn').forEach((btn) => {
     document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     selectedMode = btn.dataset.mode;
+    updateMenuHero();
   });
 });
 
@@ -3992,19 +4372,19 @@ document.querySelectorAll('.assist-btn').forEach((btn) => {
 function applyGraphicsQuality(quality, announce = false) {
   graphicsQuality = quality === 'fast' ? 'fast' : 'realistic';
   safeSetItem('nh_gfx', graphicsQuality);
-  document.querySelectorAll('.gfx-btn').forEach((btn) => {
+  document.querySelectorAll('[data-gfx]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.gfx === graphicsQuality);
   });
   renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   const shadowSize = graphicsQuality === 'realistic' ? 2048 : 1024;
   sun.shadow.radius = graphicsQuality === 'realistic' ? 3.2 : 2;
-  sun.shadow.camera.left = graphicsQuality === 'realistic' ? -48 : -40;
+  sun.shadow.camera.left = graphicsQuality === 'realistic' ? -52 : -40;
   sun.shadow.camera.right = -sun.shadow.camera.left;
   sun.shadow.camera.top = -sun.shadow.camera.left;
   sun.shadow.camera.bottom = sun.shadow.camera.left;
   sun.shadow.camera.updateProjectionMatrix();
-  renderer.toneMappingExposure = graphicsQuality === 'realistic' ? 1.28 : 1.12;
+  renderer.toneMappingExposure = graphicsQuality === 'realistic' ? 1.34 : 1.14;
 
   if (sun.shadow.mapSize.x !== shadowSize) {
     sun.shadow.mapSize.set(shadowSize, shadowSize);
@@ -4014,6 +4394,8 @@ function applyGraphicsQuality(quality, announce = false) {
     }
   }
   if (grassMesh) grassMesh.visible = graphicsQuality === 'realistic';
+  if (bushMesh) bushMesh.visible = graphicsQuality === 'realistic';
+  if (speedFxEl && graphicsQuality !== 'realistic') speedFxEl.style.opacity = '0';
   cloudGroup.visible = graphicsQuality === 'realistic';
   if (announce) {
     showCenterMsg(
@@ -4022,7 +4404,7 @@ function applyGraphicsQuality(quality, announce = false) {
     );
   }
 }
-document.querySelectorAll('.gfx-btn').forEach((btn) => {
+document.querySelectorAll('[data-gfx]').forEach((btn) => {
   btn.addEventListener('click', () => applyGraphicsQuality(btn.dataset.gfx, true));
 });
 
@@ -4061,7 +4443,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
   updateRotateHint();
 });
 

@@ -24,6 +24,7 @@
 
     <!-- ===== HUD ===== -->
     <div id="hud" class="hidden">
+      <div id="speedFx" aria-hidden="true"></div>
       <div class="hud-top-left">
         <div class="hud-card race-card">
           <div class="race-main">
@@ -34,6 +35,7 @@
             <span>⏱ <b id="hudTime">0:00.0</b></span>
             <span>🏆 <b id="hudЛучший">—</b></span>
           </div>
+          <div class="race-progress"><span id="hudProgressPct">0%</span><div class="progress-track"><div id="hudProgressBar"></div></div></div>
           <div class="race-sub score-row">
             <span>🔥 ДРИФТ <b id="hudScore">0</b></span>
             <span id="hudCheckpoint">🎯 0 м</span>
@@ -127,62 +129,101 @@
     <!-- ===== Главное меню ===== -->
     <div id="menu">
       <div class="menu-inner">
-        <div class="logo">
-          <div class="logo-badge">ФЕСТИВАЛЬ СКОРОСТИ • PHYSICS + CITY UPDATE</div>
-          <h1>NITCHES<br /><span>HORIZON</span></h1>
-          <p class="logo-sub">
-            Живой тропический остров: асфальтовые улицы деревни, горный серпантин, прибрежная дорога, трафик и пешеходы.<br />
-            Новая шинная физика, аналоговый руль и свободная камера вокруг <b>GT-R35 «Godzilla»</b>.
-          </p>
+        <header class="menu-topbar">
+          <div class="logo">
+            <div class="logo-badge">🏁 ФЕСТИВАЛЬ СКОРОСТИ • Шоурум + ГРАФИКА</div>
+            <h1>NITCHES<br /><span>HORIZON</span></h1>
+            <p class="logo-sub">
+              Выбирай машину в гараже, осматривай её в шоуруме и сразу выезжай
+              на фестивальные дороги острова.
+            </p>
+          </div>
+          <div class="profile-chip" aria-label="Профиль пилота">
+            <div class="profile-avatar">NH</div>
+            <div class="profile-main">
+              <span>ПИЛОТ ФЕСТИВАЛЯ</span>
+              <b>NITCHES DRIVER</b>
+              <small>🏆 Лучший круг: <b id="menuЛучшийLap">—</b></small>
+            </div>
+            <div class="profile-level"><span>КЛАСС</span><b id="menuProfileClass">S1</b></div>
+          </div>
+        </header>
+
+        <div class="menu-layout">
+          <aside class="menu-sidebar" aria-label="Гараж и режим игры">
+            <div class="menu-section-title">
+              <span>🚗 ГАРАЖ</span><b id="menuCarsOwned">4 АВТО</b>
+            </div>
+            <div class="car-picker" id="carPicker"></div>
+
+            <div class="menu-section-title modes-title">
+              <span>🎮 РЕЖИМ</span><b>ФЕСТИВАЛЬ</b>
+            </div>
+            <div class="mode-picker">
+              <button class="mode-btn active" data-mode="race">
+                🏁 Гонка<small>3 круга • 5 соперников • чекпоинты</small>
+              </button>
+              <button class="mode-btn" data-mode="free">
+                🌅 Свободный заезд<small>открытый остров • дрифт • исследование</small>
+              </button>
+            </div>
+
+            <div class="menu-hints compact">
+              <div><b>Управление:</b> руль, кнопки и клавиатура WASD</div>
+              <div><b>Камера:</b> свайп/мышь по шоуруму, C — вид, V — сброс, I — осмотр</div>
+            </div>
+          </aside>
+
+          <section class="showroom-stage" id="showroomStage" aria-label="Шоурум выбранной машины">
+            <div class="showroom-vignette"></div>
+            <div class="hero-car-card">
+              <div class="hero-kicker">
+                <span id="heroCarClass">S1</span><b id="heroCarPI">PI 980</b>
+              </div>
+              <h2 id="heroCarName">GT-R35 GODZILLA</h2>
+              <p id="heroCarClassLine">Класс S1 • детализированная модель R35</p>
+              <div class="hero-specs">
+                <span><b id="heroPower">565 л.с.</b><small>МОЩНОСТЬ</small></span>
+                <span><b id="heroDrive">AWD</b><small>ПРИВОД</small></span>
+                <span><b id="heroTopSpeed">230 км/ч</b><small>МАКС. СКОРОСТЬ</small></span>
+                <span><b id="heroMass">1765 кг</b><small>МАССА</small></span>
+              </div>
+              <div class="showroom-hint">↔ Вращай камеру свайпом или мышью • щипок / колесо — зум</div>
+            </div>
+          </section>
         </div>
 
-        <div class="car-picker" id="carPicker"></div>
-
-        <div id="paintPicker" class="paint-picker hidden"></div>
-
-        <div class="gfx-picker setting-picker" aria-label="Схема управления">
-          <span>🕹️ Управление</span>
-          <button class="gfx-btn control-btn active" data-control="wheel">🎡 Руль</button>
-          <button class="gfx-btn control-btn" data-control="buttons">◀▶ Кнопки</button>
-        </div>
-
-        <div class="gfx-picker setting-picker" aria-label="Помощь в управлении">
-          <span>🧭 Ассистенты</span>
-          <button class="gfx-btn assist-btn" data-assist="arcade">Аркада</button>
-          <button class="gfx-btn assist-btn active" data-assist="sport">Спорт</button>
-          <button class="gfx-btn assist-btn" data-assist="drift">Дрифт</button>
-        </div>
-
-        <div class="gfx-picker" aria-label="Качество графики">
-          <span>🎨 Графика</span>
-          <button class="gfx-btn active" data-gfx="realistic">✨ Реалистичная</button>
-          <button class="gfx-btn" data-gfx="fast">⚡ Быстрая</button>
-        </div>
-
-        <div class="mode-picker">
-          <button class="mode-btn active" data-mode="race">
-            🏁 ГОНКА
-            <small>3 круга • 5 соперников • чекпоинты</small>
+        <div class="menu-dock">
+          <div id="paintPicker" class="paint-picker hidden"></div>
+          <div class="settings-stack" aria-label="Настройки перед стартом">
+            <div class="gfx-picker setting-picker" aria-label="Управление">
+              <span class="gfx-label">🎮 Управление:</span>
+              <button class="control-btn gfx-btn active" data-control="wheel">Руль</button>
+              <button class="control-btn gfx-btn" data-control="buttons">Кнопки</button>
+            </div>
+            <div class="gfx-picker setting-picker" aria-label="Стиль вождения">
+              <span class="gfx-label">🏎️ Стиль:</span>
+              <button class="assist-btn gfx-btn" data-assist="arcade">Аркада</button>
+              <button class="assist-btn gfx-btn active" data-assist="sport">Спорт</button>
+              <button class="assist-btn gfx-btn" data-assist="drift">Дрифт</button>
+            </div>
+            <div class="gfx-picker setting-picker" aria-label="Качество графики">
+              <span class="gfx-label">📱 Графика:</span>
+              <button class="gfx-btn" data-gfx="fast">Быстрая</button>
+              <button class="gfx-btn active" data-gfx="realistic">Реалистичная</button>
+            </div>
+          </div>
+          <button id="btnStart">
+            <span>🚦 НА СТАРТ!</span>
+            <small id="startModeLabel">Гонка • 3 круга • 5 соперников</small>
           </button>
-          <button class="mode-btn" data-mode="free">
-            🗺️ СВОБОДНАЯ ПОЕЗДКА
-            <small>катайся по острову, жги резину, бей рекорды дрифта</small>
-          </button>
         </div>
 
-        <button id="btnStart">🏎️ НА СТАРТ!</button>
-
-        <div class="menu-hints">
-          <div>📱 <b>На телефоне:</b> вращай руль пальцем слева; газ / тормоз / нитро / дрифт — справа. Свайп по экрану вращает камеру, щипок — масштаб.</div>
-          <div>⌨️ <b>На ПК:</b> WASD / стрелки, Shift — нитро, Пробел — дрифт, мышь — орбита камеры, колесо — зум, C — ракурс, V — сброс обзора, I — осмотр.</div>
-          <div>📲 <b>Как приложение:</b> меню браузера → «Добавить на главный экран»</div>
-        </div>
-
-        <div class="fan-note">
-          Фанатский прототип в духе CounterFlame: все модели собраны кодом, без чужих ассетов и логотипов.
+        <p class="fan-note">
+          Фанатский прототип: все модели собраны кодом, без чужих ассетов и логотипов.
           GT-R35 «Godzilla» — дань уважения силуэту Nissan GT-R (R35). Не аффилирована с Nissan,
           Microsoft / Xbox / Turn 10.
-        </div>
+        </p>
       </div>
     </div>
 
