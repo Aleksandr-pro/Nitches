@@ -127,7 +127,350 @@
         "size": 4470,
         "compressedSize": 295,
         "extension": ".mtl",
-        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2",
+        "parsed": {
+          "valid": true,
+          "materialCount": 24,
+          "materials": [
+            {
+              "name": "M_BlackTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BlackTrimTextured",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BrakePad1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BrakePad2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_ChromeTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_ChromeTrim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Exhaust",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Glass1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim3",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_HeadLight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_HeadLight2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Mirror1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_PaintJob2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Paintjob1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Rim1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Rim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tailight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tailight2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tire1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_TurnSignalLight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_WindShield",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_dark",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            }
+          ],
+          "materialsTruncated": false
+        }
       },
       {
         "path": "Mustang/Mustang.obj",
@@ -144,9 +487,141 @@
             "faces": 362632,
             "uvs": 110624
           },
+          "estimatedTriangles": 717122,
+          "faceVertexCounts": {
+            "3": 18086,
+            "4": 343690,
+            "5": 8,
+            "6": 45,
+            "8": 12,
+            "12": 8,
+            "13": 6,
+            "16": 748,
+            "24": 12,
+            "28": 3,
+            "32": 14
+          },
+          "bounds": {
+            "min": [
+              -4.085942,
+              -0.36111,
+              -1.279316
+            ],
+            "max": [
+              3.00215,
+              1.618911,
+              1.511444
+            ],
+            "sizeXYZ": [
+              7.088092,
+              1.980021,
+              2.79076
+            ],
+            "note": "Raw OBJ vertex bounds before any axis conversion."
+          },
           "materialLibraries": [
             "Mustang.mtl"
           ],
+          "materialsUsed": [
+            {
+              "name": "M_Rim1",
+              "useCount": 28
+            },
+            {
+              "name": "M_Rim2",
+              "useCount": 28
+            },
+            {
+              "name": "M_ChromeTrim",
+              "useCount": 23
+            },
+            {
+              "name": "M_BlackTrim",
+              "useCount": 16
+            },
+            {
+              "name": "M_ChromeTrim2",
+              "useCount": 6
+            },
+            {
+              "name": "M_BlackTrimTextured",
+              "useCount": 5
+            },
+            {
+              "name": "M_BrakePad1",
+              "useCount": 4
+            },
+            {
+              "name": "M_BrakePad2",
+              "useCount": 4
+            },
+            {
+              "name": "M_Tire1",
+              "useCount": 4
+            },
+            {
+              "name": "M_HeadLight1",
+              "useCount": 4
+            },
+            {
+              "name": "M_PaintJob2",
+              "useCount": 3
+            },
+            {
+              "name": "M_Glass1",
+              "useCount": 3
+            },
+            {
+              "name": "M_dark",
+              "useCount": 3
+            },
+            {
+              "name": "M_HeadLight2",
+              "useCount": 3
+            },
+            {
+              "name": "M_Tailight2",
+              "useCount": 2
+            },
+            {
+              "name": "M_GrillTrim3",
+              "useCount": 2
+            },
+            {
+              "name": "M_GrillTrim",
+              "useCount": 2
+            },
+            {
+              "name": "M_Mirror1",
+              "useCount": 1
+            },
+            {
+              "name": "M_TurnSignalLight1",
+              "useCount": 1
+            },
+            {
+              "name": "M_WindShield",
+              "useCount": 1
+            },
+            {
+              "name": "M_GrillTrim2",
+              "useCount": 1
+            },
+            {
+              "name": "M_Tailight1",
+              "useCount": 1
+            },
+            {
+              "name": "M_Exhaust",
+              "useCount": 1
+            },
+            {
+              "name": "M_Paintjob1",
+              "useCount": 1
+            }
+          ],
+          "objectCount": 99,
+          "groupCount": 0,
           "objects": [
             "M_Wiper1_Cube.038",
             "M_Spoiler1_Cube.036",
@@ -197,9 +672,417 @@
             "M_WheelBLSpoke5_Cube.026",
             "M_WheelBLSpoke1_Cube.026",
             "M_WheelBLAxle_Cylinder.016",
-            "M_WheelBLRim_Cylinder.015"
+            "M_WheelBLRim_Cylinder.015",
+            "M_WheelBLBrakePad_Cylinder.033",
+            "M_WheelBRBrakepad_Cylinder.033",
+            "M_WheelBRRim_Cylinder.012",
+            "M_WheelBRAxle_Cylinder.009",
+            "M_WheelBRSpoke1_Cube.025",
+            "M_WheelBRSpoke2_Cube.025",
+            "M_WheelBRSpoke3_Cube.025",
+            "M_WheelBRSpoke4_Cube.025",
+            "M_WheelBRSpoke5_Cube.025",
+            "M_WheelBRTire_Cylinder.008",
+            "M_WheelFRTire_Cylinder.007",
+            "M_WheelFRSpoke5_Cube.006",
+            "M_WheelFRSpoke4_Cube.006",
+            "M_WheelFRSpoke3_Cube.006",
+            "M_WheelFRSpoke2_Cube.006",
+            "M_WheelFRSpoke1_Cube.006",
+            "M_WheelFRAxle_Cylinder.006",
+            "M_WheelFRRim_Cylinder.005",
+            "M_WindowBar_Cube.021",
+            "M_GrillFan1_Cylinder.011",
+            "M_GrillFan2_Cylinder.010",
+            "M_GrillTrim_Cube.019",
+            "M_FrontGrill_honeycomb.001",
+            "M_FrontGrill2_Plane.002",
+            "M_IntakeGrill_Cube.015",
+            "M_Intake1_Cube.014",
+            "M_Intake2_Cube.012",
+            "M_FrontTrim_Cube.011",
+            "M_GrillBar_Cylinder.004",
+            "M_FrontSmallLights2_Cube.010",
+            "M_FrontSmallLights_Cube.009",
+            "M_FrontGrillSupport_Cube.007",
+            "M_BackLights_Cylinder.003",
+            "M_BackLightGlass_Cube.001",
+            "M_Exhaust_Cylinder.001",
+            "M_BackBumperSupport_Cube.004",
+            "M_BackBumper_Cube.003",
+            "M_FrontBumper_Cube.002",
+            "M_FrontLights2_Cylinder.026",
+            "M_FrontLightBulbs4_Cylinder.025",
+            "M_FrontLightsGlass2_Cylinder.024",
+            "M_FrontLightBulbs3_Cylinder.023",
+            "M_FrontLightBulbs1_Cylinder.022",
+            "M_FrontLightsGlass1_Cylinder.021",
+            "M_FrontLightBulbs2_Cylinder.017",
+            "M_FrontLights1_Cylinder",
+            "M_BackPanel_Cube",
+            "M_Body_Plane",
+            "M_Wiper2_Cube.061"
           ],
-          "countTruncated": false
+          "objectsTruncated": false,
+          "largestObjectsByTriangles": [
+            {
+              "name": "M_Body_Plane",
+              "vertices": 44837,
+              "uvs": 45978,
+              "normals": 31026,
+              "faces": 37240,
+              "estimatedTriangles": 74480
+            },
+            {
+              "name": "M_BackPanel_Cube",
+              "vertices": 21985,
+              "uvs": 24887,
+              "normals": 5288,
+              "faces": 17392,
+              "estimatedTriangles": 34784
+            },
+            {
+              "name": "M_Intake1_Cube.014",
+              "vertices": 16898,
+              "uvs": 20778,
+              "normals": 10741,
+              "faces": 16896,
+              "estimatedTriangles": 33792
+            },
+            {
+              "name": "M_WheelFLRim_Cylinder.027",
+              "vertices": 14592,
+              "normals": 11663,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelBLRim_Cylinder.015",
+              "vertices": 14592,
+              "normals": 11662,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelBRRim_Cylinder.012",
+              "vertices": 14592,
+              "normals": 11656,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelFRRim_Cylinder.005",
+              "vertices": 14592,
+              "normals": 11657,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelFLTire_Cylinder.019",
+              "vertices": 31392,
+              "normals": 14166,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelBLTire_Cylinder.018",
+              "vertices": 31392,
+              "normals": 14166,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelBRTire_Cylinder.008",
+              "vertices": 31392,
+              "normals": 14172,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelFRTire_Cylinder.007",
+              "vertices": 31392,
+              "normals": 14171,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_FrontGrill_honeycomb.001",
+              "vertices": 10168,
+              "normals": 36,
+              "faces": 13228,
+              "estimatedTriangles": 23144
+            },
+            {
+              "name": "M_BackWindowFlaps_Cube.033",
+              "vertices": 7555,
+              "uvs": 9053,
+              "normals": 5190,
+              "faces": 7488,
+              "estimatedTriangles": 14976
+            },
+            {
+              "name": "M_FrontLights2_Cylinder.026",
+              "vertices": 6538,
+              "normals": 2434,
+              "faces": 6460,
+              "estimatedTriangles": 12920
+            },
+            {
+              "name": "M_FrontLights1_Cylinder",
+              "vertices": 6538,
+              "normals": 2475,
+              "faces": 6460,
+              "estimatedTriangles": 12920
+            },
+            {
+              "name": "M_BackBumper_Cube.003",
+              "vertices": 5938,
+              "normals": 5524,
+              "faces": 5936,
+              "estimatedTriangles": 11872
+            },
+            {
+              "name": "M_BackLogo1_CUText",
+              "vertices": 11440,
+              "normals": 5303,
+              "faces": 7126,
+              "estimatedTriangles": 11416
+            },
+            {
+              "name": "M_FrontBumper_Cube.002",
+              "vertices": 4402,
+              "normals": 3840,
+              "faces": 4400,
+              "estimatedTriangles": 8800
+            },
+            {
+              "name": "M_WheelFRBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2165,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelFLBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2140,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelBLBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2158,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelBRBrakepad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2178,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_Mirrors_Cube.032",
+              "vertices": 4008,
+              "normals": 2767,
+              "faces": 3320,
+              "estimatedTriangles": 6640
+            },
+            {
+              "name": "M_Spoiler1_Cube.036",
+              "vertices": 3316,
+              "uvs": 3802,
+              "normals": 2349,
+              "faces": 2912,
+              "estimatedTriangles": 5824
+            },
+            {
+              "name": "M_WheelFLAxle_Cylinder.020",
+              "vertices": 4178,
+              "normals": 2547,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelBLAxle_Cylinder.016",
+              "vertices": 4178,
+              "normals": 2562,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelBRAxle_Cylinder.009",
+              "vertices": 4178,
+              "normals": 2563,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelFRAxle_Cylinder.006",
+              "vertices": 4178,
+              "normals": 2544,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_DoorHandleL_Cube.030",
+              "vertices": 2720,
+              "normals": 2265,
+              "faces": 2720,
+              "estimatedTriangles": 5440
+            },
+            {
+              "name": "M_DoorHandleR_Cube.023",
+              "vertices": 2720,
+              "normals": 2267,
+              "faces": 2720,
+              "estimatedTriangles": 5440
+            },
+            {
+              "name": "M_WheelFLSpoke1_Cube.027",
+              "vertices": 3396,
+              "normals": 2939,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke5_Cube.027",
+              "vertices": 3396,
+              "normals": 2957,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke4_Cube.027",
+              "vertices": 3396,
+              "normals": 2955,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke3_Cube.027",
+              "vertices": 3396,
+              "normals": 2969,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke2_Cube.027",
+              "vertices": 3396,
+              "normals": 2956,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke2_Cube.026",
+              "vertices": 3396,
+              "normals": 2966,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke3_Cube.026",
+              "vertices": 3396,
+              "normals": 2985,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke4_Cube.026",
+              "vertices": 3396,
+              "normals": 2973,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke5_Cube.026",
+              "vertices": 3396,
+              "normals": 2968,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke1_Cube.026",
+              "vertices": 3396,
+              "normals": 2939,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke1_Cube.025",
+              "vertices": 3396,
+              "normals": 2935,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke2_Cube.025",
+              "vertices": 3396,
+              "normals": 2966,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke3_Cube.025",
+              "vertices": 3396,
+              "normals": 2965,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke4_Cube.025",
+              "vertices": 3396,
+              "normals": 2980,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke5_Cube.025",
+              "vertices": 3396,
+              "normals": 2971,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke5_Cube.006",
+              "vertices": 3396,
+              "normals": 2958,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke4_Cube.006",
+              "vertices": 3396,
+              "normals": 2972,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke3_Cube.006",
+              "vertices": 3396,
+              "normals": 2964,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke2_Cube.006",
+              "vertices": 3396,
+              "normals": 2960,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke1_Cube.006",
+              "vertices": 3396,
+              "normals": 2934,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            }
+          ],
+          "countTruncated": false,
+          "lastMaterialSeen": "M_ChromeTrim"
         }
       },
       {
@@ -257,7 +1140,350 @@
         "size": 4470,
         "compressedSize": 295,
         "extension": ".mtl",
-        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2",
+        "parsed": {
+          "valid": true,
+          "materialCount": 24,
+          "materials": [
+            {
+              "name": "M_BlackTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BlackTrimTextured",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BrakePad1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_BrakePad2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_ChromeTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_ChromeTrim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Exhaust",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Glass1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_GrillTrim3",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_HeadLight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_HeadLight2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Mirror1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_PaintJob2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Paintjob1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Rim1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Rim2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tailight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tailight2",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_Tire1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_TurnSignalLight1",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_WindShield",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            },
+            {
+              "name": "M_dark",
+              "properties": {
+                "Ns": "96.078431",
+                "Ka": "1.000000 1.000000 1.000000",
+                "Kd": "0.640000 0.640000 0.640000",
+                "Ks": "0.500000 0.500000 0.500000",
+                "Ke": "0.000000 0.000000 0.000000",
+                "Ni": "1.000000",
+                "d": "1.000000",
+                "illum": "2"
+              },
+              "textures": {}
+            }
+          ],
+          "materialsTruncated": false
+        }
       },
       {
         "path": "Mustang/Textures/Mustang.obj",
@@ -274,9 +1500,141 @@
             "faces": 362632,
             "uvs": 110624
           },
+          "estimatedTriangles": 717122,
+          "faceVertexCounts": {
+            "3": 18086,
+            "4": 343690,
+            "5": 8,
+            "6": 45,
+            "8": 12,
+            "12": 8,
+            "13": 6,
+            "16": 748,
+            "24": 12,
+            "28": 3,
+            "32": 14
+          },
+          "bounds": {
+            "min": [
+              -4.085942,
+              -0.36111,
+              -1.279316
+            ],
+            "max": [
+              3.00215,
+              1.618911,
+              1.511444
+            ],
+            "sizeXYZ": [
+              7.088092,
+              1.980021,
+              2.79076
+            ],
+            "note": "Raw OBJ vertex bounds before any axis conversion."
+          },
           "materialLibraries": [
             "Mustang.mtl"
           ],
+          "materialsUsed": [
+            {
+              "name": "M_Rim1",
+              "useCount": 28
+            },
+            {
+              "name": "M_Rim2",
+              "useCount": 28
+            },
+            {
+              "name": "M_ChromeTrim",
+              "useCount": 23
+            },
+            {
+              "name": "M_BlackTrim",
+              "useCount": 16
+            },
+            {
+              "name": "M_ChromeTrim2",
+              "useCount": 6
+            },
+            {
+              "name": "M_BlackTrimTextured",
+              "useCount": 5
+            },
+            {
+              "name": "M_BrakePad1",
+              "useCount": 4
+            },
+            {
+              "name": "M_BrakePad2",
+              "useCount": 4
+            },
+            {
+              "name": "M_Tire1",
+              "useCount": 4
+            },
+            {
+              "name": "M_HeadLight1",
+              "useCount": 4
+            },
+            {
+              "name": "M_PaintJob2",
+              "useCount": 3
+            },
+            {
+              "name": "M_Glass1",
+              "useCount": 3
+            },
+            {
+              "name": "M_dark",
+              "useCount": 3
+            },
+            {
+              "name": "M_HeadLight2",
+              "useCount": 3
+            },
+            {
+              "name": "M_Tailight2",
+              "useCount": 2
+            },
+            {
+              "name": "M_GrillTrim3",
+              "useCount": 2
+            },
+            {
+              "name": "M_GrillTrim",
+              "useCount": 2
+            },
+            {
+              "name": "M_Mirror1",
+              "useCount": 1
+            },
+            {
+              "name": "M_TurnSignalLight1",
+              "useCount": 1
+            },
+            {
+              "name": "M_WindShield",
+              "useCount": 1
+            },
+            {
+              "name": "M_GrillTrim2",
+              "useCount": 1
+            },
+            {
+              "name": "M_Tailight1",
+              "useCount": 1
+            },
+            {
+              "name": "M_Exhaust",
+              "useCount": 1
+            },
+            {
+              "name": "M_Paintjob1",
+              "useCount": 1
+            }
+          ],
+          "objectCount": 99,
+          "groupCount": 0,
           "objects": [
             "M_Wiper1_Cube.038",
             "M_Spoiler1_Cube.036",
@@ -327,9 +1685,417 @@
             "M_WheelBLSpoke5_Cube.026",
             "M_WheelBLSpoke1_Cube.026",
             "M_WheelBLAxle_Cylinder.016",
-            "M_WheelBLRim_Cylinder.015"
+            "M_WheelBLRim_Cylinder.015",
+            "M_WheelBLBrakePad_Cylinder.033",
+            "M_WheelBRBrakepad_Cylinder.033",
+            "M_WheelBRRim_Cylinder.012",
+            "M_WheelBRAxle_Cylinder.009",
+            "M_WheelBRSpoke1_Cube.025",
+            "M_WheelBRSpoke2_Cube.025",
+            "M_WheelBRSpoke3_Cube.025",
+            "M_WheelBRSpoke4_Cube.025",
+            "M_WheelBRSpoke5_Cube.025",
+            "M_WheelBRTire_Cylinder.008",
+            "M_WheelFRTire_Cylinder.007",
+            "M_WheelFRSpoke5_Cube.006",
+            "M_WheelFRSpoke4_Cube.006",
+            "M_WheelFRSpoke3_Cube.006",
+            "M_WheelFRSpoke2_Cube.006",
+            "M_WheelFRSpoke1_Cube.006",
+            "M_WheelFRAxle_Cylinder.006",
+            "M_WheelFRRim_Cylinder.005",
+            "M_WindowBar_Cube.021",
+            "M_GrillFan1_Cylinder.011",
+            "M_GrillFan2_Cylinder.010",
+            "M_GrillTrim_Cube.019",
+            "M_FrontGrill_honeycomb.001",
+            "M_FrontGrill2_Plane.002",
+            "M_IntakeGrill_Cube.015",
+            "M_Intake1_Cube.014",
+            "M_Intake2_Cube.012",
+            "M_FrontTrim_Cube.011",
+            "M_GrillBar_Cylinder.004",
+            "M_FrontSmallLights2_Cube.010",
+            "M_FrontSmallLights_Cube.009",
+            "M_FrontGrillSupport_Cube.007",
+            "M_BackLights_Cylinder.003",
+            "M_BackLightGlass_Cube.001",
+            "M_Exhaust_Cylinder.001",
+            "M_BackBumperSupport_Cube.004",
+            "M_BackBumper_Cube.003",
+            "M_FrontBumper_Cube.002",
+            "M_FrontLights2_Cylinder.026",
+            "M_FrontLightBulbs4_Cylinder.025",
+            "M_FrontLightsGlass2_Cylinder.024",
+            "M_FrontLightBulbs3_Cylinder.023",
+            "M_FrontLightBulbs1_Cylinder.022",
+            "M_FrontLightsGlass1_Cylinder.021",
+            "M_FrontLightBulbs2_Cylinder.017",
+            "M_FrontLights1_Cylinder",
+            "M_BackPanel_Cube",
+            "M_Body_Plane",
+            "M_Wiper2_Cube.061"
           ],
-          "countTruncated": false
+          "objectsTruncated": false,
+          "largestObjectsByTriangles": [
+            {
+              "name": "M_Body_Plane",
+              "vertices": 44837,
+              "uvs": 45978,
+              "normals": 31026,
+              "faces": 37240,
+              "estimatedTriangles": 74480
+            },
+            {
+              "name": "M_BackPanel_Cube",
+              "vertices": 21985,
+              "uvs": 24887,
+              "normals": 5288,
+              "faces": 17392,
+              "estimatedTriangles": 34784
+            },
+            {
+              "name": "M_Intake1_Cube.014",
+              "vertices": 16898,
+              "uvs": 20778,
+              "normals": 10741,
+              "faces": 16896,
+              "estimatedTriangles": 33792
+            },
+            {
+              "name": "M_WheelFLRim_Cylinder.027",
+              "vertices": 14592,
+              "normals": 11663,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelBLRim_Cylinder.015",
+              "vertices": 14592,
+              "normals": 11662,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelBRRim_Cylinder.012",
+              "vertices": 14592,
+              "normals": 11656,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelFRRim_Cylinder.005",
+              "vertices": 14592,
+              "normals": 11657,
+              "faces": 14592,
+              "estimatedTriangles": 29184
+            },
+            {
+              "name": "M_WheelFLTire_Cylinder.019",
+              "vertices": 31392,
+              "normals": 14166,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelBLTire_Cylinder.018",
+              "vertices": 31392,
+              "normals": 14166,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelBRTire_Cylinder.008",
+              "vertices": 31392,
+              "normals": 14172,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_WheelFRTire_Cylinder.007",
+              "vertices": 31392,
+              "normals": 14171,
+              "faces": 14016,
+              "estimatedTriangles": 27840
+            },
+            {
+              "name": "M_FrontGrill_honeycomb.001",
+              "vertices": 10168,
+              "normals": 36,
+              "faces": 13228,
+              "estimatedTriangles": 23144
+            },
+            {
+              "name": "M_BackWindowFlaps_Cube.033",
+              "vertices": 7555,
+              "uvs": 9053,
+              "normals": 5190,
+              "faces": 7488,
+              "estimatedTriangles": 14976
+            },
+            {
+              "name": "M_FrontLights2_Cylinder.026",
+              "vertices": 6538,
+              "normals": 2434,
+              "faces": 6460,
+              "estimatedTriangles": 12920
+            },
+            {
+              "name": "M_FrontLights1_Cylinder",
+              "vertices": 6538,
+              "normals": 2475,
+              "faces": 6460,
+              "estimatedTriangles": 12920
+            },
+            {
+              "name": "M_BackBumper_Cube.003",
+              "vertices": 5938,
+              "normals": 5524,
+              "faces": 5936,
+              "estimatedTriangles": 11872
+            },
+            {
+              "name": "M_BackLogo1_CUText",
+              "vertices": 11440,
+              "normals": 5303,
+              "faces": 7126,
+              "estimatedTriangles": 11416
+            },
+            {
+              "name": "M_FrontBumper_Cube.002",
+              "vertices": 4402,
+              "normals": 3840,
+              "faces": 4400,
+              "estimatedTriangles": 8800
+            },
+            {
+              "name": "M_WheelFRBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2165,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelFLBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2140,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelBLBrakePad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2158,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_WheelBRBrakepad_Cylinder.033",
+              "vertices": 4336,
+              "normals": 2178,
+              "faces": 3360,
+              "estimatedTriangles": 6720
+            },
+            {
+              "name": "M_Mirrors_Cube.032",
+              "vertices": 4008,
+              "normals": 2767,
+              "faces": 3320,
+              "estimatedTriangles": 6640
+            },
+            {
+              "name": "M_Spoiler1_Cube.036",
+              "vertices": 3316,
+              "uvs": 3802,
+              "normals": 2349,
+              "faces": 2912,
+              "estimatedTriangles": 5824
+            },
+            {
+              "name": "M_WheelFLAxle_Cylinder.020",
+              "vertices": 4178,
+              "normals": 2547,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelBLAxle_Cylinder.016",
+              "vertices": 4178,
+              "normals": 2562,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelBRAxle_Cylinder.009",
+              "vertices": 4178,
+              "normals": 2563,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_WheelFRAxle_Cylinder.006",
+              "vertices": 4178,
+              "normals": 2544,
+              "faces": 2736,
+              "estimatedTriangles": 5472
+            },
+            {
+              "name": "M_DoorHandleL_Cube.030",
+              "vertices": 2720,
+              "normals": 2265,
+              "faces": 2720,
+              "estimatedTriangles": 5440
+            },
+            {
+              "name": "M_DoorHandleR_Cube.023",
+              "vertices": 2720,
+              "normals": 2267,
+              "faces": 2720,
+              "estimatedTriangles": 5440
+            },
+            {
+              "name": "M_WheelFLSpoke1_Cube.027",
+              "vertices": 3396,
+              "normals": 2939,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke5_Cube.027",
+              "vertices": 3396,
+              "normals": 2957,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke4_Cube.027",
+              "vertices": 3396,
+              "normals": 2955,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke3_Cube.027",
+              "vertices": 3396,
+              "normals": 2969,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFLSpoke2_Cube.027",
+              "vertices": 3396,
+              "normals": 2956,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke2_Cube.026",
+              "vertices": 3396,
+              "normals": 2966,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke3_Cube.026",
+              "vertices": 3396,
+              "normals": 2985,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke4_Cube.026",
+              "vertices": 3396,
+              "normals": 2973,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke5_Cube.026",
+              "vertices": 3396,
+              "normals": 2968,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBLSpoke1_Cube.026",
+              "vertices": 3396,
+              "normals": 2939,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke1_Cube.025",
+              "vertices": 3396,
+              "normals": 2935,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke2_Cube.025",
+              "vertices": 3396,
+              "normals": 2966,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke3_Cube.025",
+              "vertices": 3396,
+              "normals": 2965,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke4_Cube.025",
+              "vertices": 3396,
+              "normals": 2980,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelBRSpoke5_Cube.025",
+              "vertices": 3396,
+              "normals": 2971,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke5_Cube.006",
+              "vertices": 3396,
+              "normals": 2958,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke4_Cube.006",
+              "vertices": 3396,
+              "normals": 2972,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke3_Cube.006",
+              "vertices": 3396,
+              "normals": 2964,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke2_Cube.006",
+              "vertices": 3396,
+              "normals": 2960,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            },
+            {
+              "name": "M_WheelFRSpoke1_Cube.006",
+              "vertices": 3396,
+              "normals": 2934,
+              "faces": 2648,
+              "estimatedTriangles": 5296
+            }
+          ],
+          "countTruncated": false,
+          "lastMaterialSeen": "M_ChromeTrim"
         }
       },
       {
@@ -342,6 +2108,42 @@
       }
     ],
     "textures": [
+      {
+        "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif",
+        "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif",
+        "size": 1266612,
+        "compressedSize": 1255254,
+        "extension": ".tif",
+        "sha256": "5d081761ab7550a39ec36ba5ef1f8a60dbd3fe254849d6846907b0288ea2a080",
+        "image": {}
+      },
+      {
+        "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif",
+        "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif",
+        "size": 4977110,
+        "compressedSize": 4874744,
+        "extension": ".tif",
+        "sha256": "50bd047592c8314dc5ee646eda18c296acce338323ee1f3affbe9de7a91bc482",
+        "image": {}
+      },
+      {
+        "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif",
+        "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif",
+        "size": 4815080,
+        "compressedSize": 4627632,
+        "extension": ".tif",
+        "sha256": "41c2f290bee68f1997408cc1fd502808d7cbf70e7e47f5b369a772d4d4f84100",
+        "image": {}
+      },
+      {
+        "path": "Mustang/Textures/grunge1.tiff",
+        "normalizedPath": "Mustang/Textures/grunge1.tiff",
+        "size": 898032,
+        "compressedSize": 871715,
+        "extension": ".tiff",
+        "sha256": "f03020bfdeb1fb854101b6887f8fbd9e48d995cdd550cc0babea628671702bd1",
+        "image": {}
+      },
       {
         "path": "Mustang/Textures/LightDisplacement.jpg",
         "normalizedPath": "Mustang/Textures/LightDisplacement.jpg",
@@ -397,10 +2199,78 @@
     ],
     "nestedArchives": []
   },
-  "textPreviews": [],
+  "duplicateGroups": [
+    {
+      "sha256": "5926416e6dbcfd5f1df190699f735edea71c9d0538c13c09707837e7f0efd130",
+      "size": 47212771,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.obj",
+        "Mustang/Textures/Mustang.obj"
+      ]
+    },
+    {
+      "sha256": "2a66cb1b91044e6a6864ab9c24c1f613058052af5d7da01716786ab115c8bf83",
+      "size": 35856184,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.stl",
+        "Mustang/Textures/Mustang.stl"
+      ]
+    },
+    {
+      "sha256": "96ee4e6740d708605416ac11b49a271e5d7893486498e45a7e7326034a0581f5",
+      "size": 15108572,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.fbx",
+        "Mustang/Textures/Mustang.fbx"
+      ]
+    },
+    {
+      "sha256": "0f94dca59b5dc71506c160ad9b3171082650587464cb6e3c7161a012be60f582",
+      "size": 8641040,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.blend",
+        "Mustang/Textures/Mustang.blend"
+      ]
+    },
+    {
+      "sha256": "8bc59ec05c75f23fd8ac063bfaa1f11a8e3a356fb88cfc3d522c0b43e5955759",
+      "size": 8640912,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.blend1",
+        "Mustang/Textures/Mustang.blend1"
+      ]
+    },
+    {
+      "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2",
+      "size": 4470,
+      "count": 2,
+      "paths": [
+        "Mustang/Mustang.mtl",
+        "Mustang/Textures/Mustang.mtl"
+      ]
+    }
+  ],
+  "textPreviews": [
+    {
+      "path": "Mustang/Mustang.mtl",
+      "size": 4470,
+      "preview": "# Blender MTL File: 'Mustang.blend'\n# Material Count: 24\n\nnewmtl M_BlackTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BlackTrimTextured\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BrakePad1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BrakePad2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_ChromeTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_ChromeTrim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Exhaust\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Glass1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim3\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_HeadLight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_HeadLight2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Mirror1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_PaintJob2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Paintjob1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Rim1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Rim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tailight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tailight2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tire1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_TurnSignalLight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_WindShield\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_dark\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.mtl",
+      "size": 4470,
+      "preview": "# Blender MTL File: 'Mustang.blend'\n# Material Count: 24\n\nnewmtl M_BlackTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BlackTrimTextured\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BrakePad1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_BrakePad2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_ChromeTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_ChromeTrim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Exhaust\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Glass1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_GrillTrim3\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_HeadLight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_HeadLight2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Mirror1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_PaintJob2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Paintjob1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Rim1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Rim2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tailight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tailight2\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_Tire1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_TurnSignalLight1\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_WindShield\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n\nnewmtl M_dark\nNs 96.078431\nKa 1.000000 1.000000 1.000000\nKd 0.640000 0.640000 0.640000\nKs 0.500000 0.500000 0.500000\nKe 0.000000 0.000000 0.000000\nNi 1.000000\nd 1.000000\nillum 2\n"
+    }
+  ],
   "extractionErrors": [],
   "warnings": [
-    "Найдено текстур крупнее 2048 px: 2; для мобильной runtime-версии их обычно нужно уменьшать/сжимать."
+    "Найдено текстур крупнее 2048 px: 2; для мобильной runtime-версии их обычно нужно уменьшать/сжимать.",
+    "Найдено точных дубликатов: 6 групп; повторные копии занимают около 110.12 MiB. В LFS одинаковые объекты хранятся по хешу один раз, но распакованный набор лучше не дублировать."
   ],
   "largestFiles": [
     {

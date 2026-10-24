@@ -14,12 +14,24 @@
 ## Предупреждения
 
 - ⚠️ Найдено текстур крупнее 2048 px: 2; для мобильной runtime-версии их обычно нужно уменьшать/сжимать.
+- ⚠️ Найдено точных дубликатов: 6 групп; повторные копии занимают около 110.12 MiB. В LFS одинаковые объекты хранятся по хешу один раз, но распакованный набор лучше не дублировать.
+
+## Точные дубликаты
+
+Одинаковые файлы в LFS физически хранятся по SHA-256 один раз, но для конвертации достаточно одной копии.
+
+- 45.03 MiB × 2: `Mustang/Mustang.obj`, `Mustang/Textures/Mustang.obj`
+- 34.20 MiB × 2: `Mustang/Mustang.stl`, `Mustang/Textures/Mustang.stl`
+- 14.41 MiB × 2: `Mustang/Mustang.fbx`, `Mustang/Textures/Mustang.fbx`
+- 8.24 MiB × 2: `Mustang/Mustang.blend`, `Mustang/Textures/Mustang.blend`
+- 8.24 MiB × 2: `Mustang/Mustang.blend1`, `Mustang/Textures/Mustang.blend1`
+- 4.37 KiB × 2: `Mustang/Mustang.mtl`, `Mustang/Textures/Mustang.mtl`
 
 ## Кандидаты
 
 - Runtime `.glb/.gltf`: 0
 - Исходные 3D-форматы: 12
-- Текстуры: 4
+- Текстуры: 8
 - Вложенные архивы: 0
 
 ### Исходные модели
@@ -27,18 +39,22 @@
 - `Mustang/Mustang.blend` — 8.24 MiB; Blender 279
 - `Mustang/Mustang.blend1` — 8.24 MiB; Blender 279
 - `Mustang/Mustang.fbx` — 14.41 MiB; FBX 7400
-- `Mustang/Mustang.mtl` — 4.37 KiB
-- `Mustang/Mustang.obj` — 45.03 MiB; vertices=480964, normals=281117, faces=362632, uvs=110624
+- `Mustang/Mustang.mtl` — 4.37 KiB; materials=24
+- `Mustang/Mustang.obj` — 45.03 MiB; vertices=480964, normals=281117, faces=362632, uvs=110624, triangles≈717122, objects=99, rawSizeXYZ=[7.088092, 1.980021, 2.79076]
 - `Mustang/Mustang.stl` — 34.20 MiB
 - `Mustang/Textures/Mustang.blend` — 8.24 MiB; Blender 279
 - `Mustang/Textures/Mustang.blend1` — 8.24 MiB; Blender 279
 - `Mustang/Textures/Mustang.fbx` — 14.41 MiB; FBX 7400
-- `Mustang/Textures/Mustang.mtl` — 4.37 KiB
-- `Mustang/Textures/Mustang.obj` — 45.03 MiB; vertices=480964, normals=281117, faces=362632, uvs=110624
+- `Mustang/Textures/Mustang.mtl` — 4.37 KiB; materials=24
+- `Mustang/Textures/Mustang.obj` — 45.03 MiB; vertices=480964, normals=281117, faces=362632, uvs=110624, triangles≈717122, objects=99, rawSizeXYZ=[7.088092, 1.980021, 2.79076]
 - `Mustang/Textures/Mustang.stl` — 34.20 MiB
 
 ### Крупнейшие текстуры
 
+- `Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif` — 4.75 MiB
+- `Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif` — 4.59 MiB
+- `Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif` — 1.21 MiB
+- `Mustang/Textures/grunge1.tiff` — 876.98 KiB
 - `Mustang/Textures/UV_Mustang.png` — 388.50 KiB, 2048×2048
 - `Mustang/Textures/MustangBodyStripe1.png` — 100.87 KiB, 4096×4096
 - `Mustang/Textures/MustangBodyStripe2.png` — 95.68 KiB, 4096×4096
