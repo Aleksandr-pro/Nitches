@@ -185,18 +185,13 @@ def apply_decimation(objects, ratio: float) -> None:
             modifier.use_collapse_triangulate = True
         except Exception:
             pass
-        bpy.context.view_layer.update()
-        depsgraph = bpy.context.evaluated_depsgraph_get()
-        evaluated = obj.evaluated_get(depsgraph)
-        new_mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=depsgraph)
-        old_mesh = obj.data
-        try:
-            obj.modifiers.remove(modifier)
-        except Exception:
-            pass
-        obj.data = new_mesh
-        if old_mesh.users == 0:
-            bpy.data.meshes.remove(old_mesh)
+        # IMPORTANT: do not bake with meshes.new_from_object() and assign the
+        # result back to the object. For these parented FBX parts that path
+        # returned geometry that already carried the parent/object transform,
+        # so the following world-space extraction applied the transform a
+        # second time (run 40138059730: 449 m spike, geometry piled into the
+        # south-east chunk). Leaving the modifier in the stack and reading the
+        # evaluated depsgraph mesh keeps exactly one transform application.
     bpy.context.view_layer.update()
 
 
@@ -212,6 +207,10 @@ class CityTransform:
         self.scale_xy = float(args.scale_xy)
         self.scale_z = float(args.scale_z)
         self.ground_source_z = float(args.ground_source_z)
+        # No legitimate (even decimated) vertex can sit above the original
+        # source maximum; used as a safety clip against transform spikes.
+        self.max_source_dz = max(0.0, float(source_max[2]) - self.ground_source_z)
+        self.max_height_m = self.max_source_dz * self.scale_z
         self.width_m = float(source_max[0] - source_min[0]) * self.scale_xy
         self.depth_m = float(source_max[1] - source_min[1]) * self.scale_xy
         self.min_x = -self.width_m * 0.5
@@ -225,7 +224,7 @@ class CityTransform:
         out[:, 0] = (vertices[:, 0] - self.source_center[0]) * self.scale_xy
         out[:, 1] = (vertices[:, 1] - self.source_center[1]) * self.scale_xy
         dz = vertices[:, 2] - self.ground_source_z
-        out[:, 2] = np.maximum(dz, 0.0) * self.scale_z
+        out[:, 2] = np.clip(dz, 0.0, self.max_source_dz) * self.scale_z
         return out
 
     def to_three_local(self, vertices: np.ndarray) -> np.ndarray:
@@ -771,6 +770,28 @@ def main() -> int:
         decimated_triangles = tri_count(decimated)
         decimation_ratio *= second_ratio
 
+    # Sanity gate: decimation collapses edges between existing vertices, so
+    # the decimated world bounds must stay inside the original bounds. Any
+    # excess means a transform was applied twice (see apply_decimation) and
+    # the GLB would be garbage — fail loudly instead of exporting it.
+    decimated_local = np.vstack([transform.to_blender_local(item["vertices"]) for item in decimated])
+    decimated_max_height = float(decimated_local[:, 2].max()) if len(decimated_local) else 0.0
+    tolerance_m = 1.5
+    if (
+        float(decimated_local[:, 0].min()) < transform.min_x - tolerance_m
+        or float(decimated_local[:, 0].max()) > transform.max_x + tolerance_m
+        or float(decimated_local[:, 1].min()) < transform.min_z - tolerance_m
+        or float(decimated_local[:, 1].max()) > transform.max_z + tolerance_m
+        or decimated_max_height > transform.max_height_m + tolerance_m
+    ):
+        raise RuntimeError(
+            "Decimated geometry escaped the original city bounds "
+            f"(x {float(decimated_local[:, 0].min()):.1f}..{float(decimated_local[:, 0].max()):.1f}, "
+            f"y {float(decimated_local[:, 1].min()):.1f}..{float(decimated_local[:, 1].max()):.1f}, "
+            f"maxHeight {decimated_max_height:.1f} m vs original {transform.max_height_m:.1f} m); "
+            "a world transform was probably applied twice."
+        )
+
     material = build_material()
     root, output_objects, chunk_infos, output_vertices = build_chunk_objects(decimated, transform, args, material)
     output_triangles = int(sum(chunk["triangles"] for chunk in chunk_infos))
@@ -854,6 +875,7 @@ def main() -> int:
             "originalVertices": original_vertices,
             "originalTriangles": original_triangles,
             "decimatedTriangles": decimated_triangles,
+            "decimatedMaxHeightM": round(float(decimated_max_height), 3),
             "outputVertices": int(output_vertices),
             "outputTriangles": output_triangles,
             "decimationRatio": round(float(decimation_ratio), 6),

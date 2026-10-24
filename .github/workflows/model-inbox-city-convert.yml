@@ -253,6 +253,7 @@ jobs:
               .gltf.textures == 0 and
               .bounds.sizeXYZ[0] > 1000 and
               .bounds.sizeXYZ[1] > 40 and
+              .bounds.sizeXYZ[1] < 130 and
               .bounds.sizeXYZ[2] > 800
             ' "$loader_validation" >/dev/null
 
@@ -292,7 +293,7 @@ jobs:
             cp "$conversion_report" "$report_dir/conversion.json"
             cp "$conversion_markdown" "$report_dir/conversion.md"
             cp "$occupancy_svg" "$report_dir/occupancy.svg"
-            tail -n 1000 "$blender_log" > "$report_dir/blender-convert.log"
+            tail -n 1000 "$blender_log" > "$report_dir/blender-convert.txt"
             node scripts/validate-glb-loader.mjs --generic "$runtime_dest" > "$report_dir/loader-validation.json"
 
             printf '%s\t%s\n' "$runtime_dest" "$(sha256sum "$runtime_dest" | awk '{print $1}')" >> "$CONVERT_ROOT/verify.tsv"
@@ -306,7 +307,7 @@ jobs:
               "$report_dir/conversion.md" \
               "$report_dir/occupancy.svg" \
               "$report_dir/loader-validation.json" \
-              "$report_dir/blender-convert.log"
+              "$report_dir/blender-convert.txt"
           done < "$CONVERT_ROOT/outputs.tsv"
 
           node scripts/check-lfs-assets.mjs
