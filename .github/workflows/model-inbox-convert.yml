@@ -1,0 +1,359 @@
+name: Model Inbox convert
+
+# Converts a large source package uploaded to the draft GitHub Release
+# "Model Inbox" into an optimized runtime GLB, preserves the original archive
+# under asset-source/, uploads both binaries to Git LFS from this runner, and
+# commits only pointers/reports back to the same non-main branch.
+on:
+  push:
+    branches:
+      - 'arena/**'
+    paths:
+      - 'asset-inbox/conversions/*.json'
+      - '.github/workflows/model-inbox-convert.yml'
+      - 'scripts/blender_convert_car.py'
+      - 'scripts/check-lfs-assets.mjs'
+      - 'scripts/inventory-model-archive.py'
+      - 'scripts/validate-glb-loader.mjs'
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Conversion manifest, e.g. asset-inbox/conversions/mustang.json'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: model-inbox-convert-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    name: Convert Model Inbox car to optimized GLB
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BEFORE_SHA: ${{ github.event.before }}
+      INPUT_MANIFEST: ${{ inputs.manifest }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Checkout branch (LFS pulled explicitly when needed)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Blender
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender python3-numpy unzip
+          blender --version
+
+      - name: Select conversion manifests
+        run: |
+          set -euo pipefail
+          MANIFESTS=()
+          if [ -n "${INPUT_MANIFEST}" ]; then
+            MANIFESTS=("${INPUT_MANIFEST}")
+          elif [ -n "${BEFORE_SHA}" ] && [ "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            mapfile -t MANIFESTS < <(git diff --name-only --diff-filter=AM "${BEFORE_SHA}" "${GITHUB_SHA}" -- 'asset-inbox/conversions/*.json')
+          fi
+          if [ "${#MANIFESTS[@]}" -eq 0 ]; then
+            mapfile -t MANIFESTS < <(find asset-inbox/conversions -maxdepth 1 -type f -name '*.json' | sort)
+          fi
+          if [ "${#MANIFESTS[@]}" -eq 0 ]; then
+            echo "No conversion manifests found" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/model-convert"
+          printf '%s\n' "${MANIFESTS[@]}" | tee "$RUNNER_TEMP/model-convert/manifests.txt"
+
+      - name: Download, convert and optimize selected cars
+        run: |
+          set -euo pipefail
+          CONVERT_ROOT="$RUNNER_TEMP/model-convert"
+          mkdir -p "$CONVERT_ROOT"
+          # Keep a copy of this step's stdout/stderr for the failure-diagnostic
+          # commit below; sandbox log downloads from Actions can be blocked.
+          exec > >(tee -a "$CONVERT_ROOT/download-convert-step.log") 2>&1
+          : > "$CONVERT_ROOT/outputs.tsv"
+
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            case "$manifest" in
+              asset-inbox/conversions/*.json) ;;
+              *) echo "Refusing unexpected manifest path: $manifest" >&2; exit 1 ;;
+            esac
+            test -f "$manifest"
+
+            car_id="$(jq -r '.carId' "$manifest")"
+            release_id="$(jq -r '.releaseId' "$manifest")"
+            asset_id="$(jq -r '.assetId' "$manifest")"
+            asset_name="$(jq -r '.assetName' "$manifest")"
+            expected_size="$(jq -r '.expectedSize // 0' "$manifest")"
+            expected_sha="$(jq -r '.expectedSha256 // ""' "$manifest")"
+            input_obj_rel="$(jq -r '.inputObj' "$manifest")"
+            input_blend_rel="$(jq -r '.inputBlend // ""' "$manifest")"
+            target_length="$(jq -r '.targetLength // 4.66' "$manifest")"
+            default_paint="$(jq -r '.defaultPaint // "#9b1420"' "$manifest")"
+
+            if ! [[ "$car_id" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+              echo "Invalid carId in $manifest: $car_id" >&2
+              exit 1
+            fi
+            if ! [[ "$release_id" =~ ^[0-9]+$ && "$asset_id" =~ ^[0-9]+$ && "$expected_size" =~ ^[0-9]+$ ]]; then
+              echo "releaseId, assetId and expectedSize must be numeric in $manifest" >&2
+              exit 1
+            fi
+            if [ -n "$expected_sha" ] && ! [[ "$expected_sha" =~ ^[a-f0-9]{64}$ ]]; then
+              echo "expectedSha256 must be a lowercase SHA-256 in $manifest" >&2
+              exit 1
+            fi
+            if ! [[ "$target_length" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+              echo "targetLength must be numeric metres in $manifest" >&2
+              exit 1
+            fi
+            if ! [[ "$default_paint" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+              echo "defaultPaint must be #RRGGBB in $manifest" >&2
+              exit 1
+            fi
+            case "$asset_name" in
+              */*|*\\*) echo "assetName must be a plain file name: $asset_name" >&2; exit 1 ;;
+            esac
+            case "$input_obj_rel" in
+              /*|*\\*|../*|*/../*) echo "inputObj must be a safe relative path: $input_obj_rel" >&2; exit 1 ;;
+            esac
+            case "$input_blend_rel" in
+              /*|*\\*|../*|*/../*) echo "inputBlend must be a safe relative path: $input_blend_rel" >&2; exit 1 ;;
+            esac
+
+            work="$CONVERT_ROOT/$car_id"
+            extract="$work/extract"
+            mkdir -p "$work" "$extract"
+            archive="$work/$asset_name"
+
+            echo "Downloading release asset $asset_id ($asset_name) for $car_id..."
+            curl --fail --location --retry 3 --retry-delay 2 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              -o "$archive"
+
+            actual_size="$(stat -c '%s' "$archive")"
+            actual_sha="$(sha256sum "$archive" | awk '{print $1}')"
+            echo "Downloaded $actual_size bytes, sha256 $actual_sha"
+            if [ "$expected_size" != "0" ] && [ "$actual_size" != "$expected_size" ]; then
+              echo "Size mismatch for $asset_name: expected $expected_size, got $actual_size" >&2
+              exit 1
+            fi
+            if [ -n "$expected_sha" ] && [ "$actual_sha" != "$expected_sha" ]; then
+              echo "SHA-256 mismatch for $asset_name: expected $expected_sha, got $actual_sha" >&2
+              exit 1
+            fi
+
+            python3 scripts/inventory-model-archive.py "$archive" \
+              --out-dir "$work/inventory" \
+              --car-id "$car_id" \
+              --release-id "$release_id" \
+              --asset-id "$asset_id" \
+              --expected-size "$expected_size" > "$work/inventory.stdout.json"
+            unsafe="$(jq -r '.summary.unsafeEntryCount' "$work/inventory/inventory.json")"
+            if [ "$unsafe" != "0" ]; then
+              echo "Archive contains unsafe ZIP paths; refusing to unzip" >&2
+              exit 1
+            fi
+            unzip -q "$archive" -d "$extract"
+
+            input_obj="$extract/$input_obj_rel"
+            test -f "$input_obj"
+            blend_dump="$work/blend-materials.json"
+            if [ -n "$input_blend_rel" ] && [ -f "$extract/$input_blend_rel" ]; then
+              echo "Dumping material colors from Blender source (best effort)..."
+              if ! blender -b "$extract/$input_blend_rel" -noaudio \
+                --python scripts/blender_convert_car.py -- \
+                --mode dump --output-json "$blend_dump" 2>&1 | tee "$work/blender-dump.log"; then
+                echo "Warning: Blender material dump failed; semantic fallback colors will be used."
+                rm -f "$blend_dump"
+              fi
+            fi
+
+            generated_glb="$work/$car_id.glb"
+            conversion_report="$work/conversion.json"
+            echo "Converting $input_obj_rel to optimized GLB..."
+            blender -b --factory-startup -noaudio \
+              --python scripts/blender_convert_car.py -- \
+              --mode convert \
+              --input-obj "$input_obj" \
+              --blend-materials "$blend_dump" \
+              --output-glb "$generated_glb" \
+              --report-json "$conversion_report" \
+              --target-length "$target_length" \
+              --default-paint "$default_paint" \
+              --root-name "$(jq -r '.displayName // .carId' "$manifest")" 2>&1 | tee "$work/blender-convert.log"
+
+            test -s "$generated_glb"
+            triangles="$(jq -r '.finalEstimatedTriangles' "$conversion_report")"
+            output_bytes="$(jq -r '.outputBytes' "$conversion_report")"
+            echo "Generated GLB: $output_bytes bytes, about $triangles triangles"
+            if [ "$triangles" -gt 260000 ]; then
+              echo "Optimized GLB still has too many triangles for this mobile game: $triangles" >&2
+              exit 1
+            fi
+            if [ "$output_bytes" -gt 52428800 ]; then
+              echo "Optimized GLB is still larger than 50 MiB: $output_bytes" >&2
+              exit 1
+            fi
+
+            printf '%s\t%s\t%s\t%s\t%s\n' \
+              "$car_id" "$archive" "$generated_glb" "$conversion_report" "$blend_dump" \
+              >> "$CONVERT_ROOT/outputs.tsv"
+          done < "$CONVERT_ROOT/manifests.txt"
+
+      - name: Copy outputs, validate, upload to LFS and verify redownload
+        run: |
+          set -euo pipefail
+          CONVERT_ROOT="$RUNNER_TEMP/model-convert"
+          test -s "$CONVERT_ROOT/outputs.tsv"
+
+          git lfs version
+          git lfs install --local
+          # Materialize already-committed runtime assets (pipeline fixture)
+          # so the repository checker can run before the new commit.
+          git lfs pull --include="public/assets/models/**" --exclude=""
+
+          : > "$CONVERT_ROOT/verify.tsv"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          while IFS=$'\t' read -r car_id archive generated_glb conversion_report blend_dump; do
+            runtime_dest="public/assets/models/cars/$car_id/$car_id.glb"
+            source_dest="asset-source/cars/$car_id/$(basename "$archive")"
+            report_dir="asset-inbox/imports/$car_id"
+            mkdir -p "$(dirname "$runtime_dest")" "$(dirname "$source_dest")" "$report_dir"
+
+            cp "$generated_glb" "$runtime_dest"
+            cp "$archive" "$source_dest"
+            cp "$conversion_report" "$report_dir/conversion.json"
+            if [ -s "$blend_dump" ]; then
+              cp "$blend_dump" "$report_dir/blend-materials.json"
+            fi
+
+            node scripts/validate-glb-loader.mjs "$runtime_dest" > "$report_dir/loader-validation.json"
+            printf '%s\t%s\n' "$runtime_dest" "$(sha256sum "$runtime_dest" | awk '{print $1}')" >> "$CONVERT_ROOT/verify.tsv"
+            printf '%s\t%s\n' "$source_dest" "$(sha256sum "$source_dest" | awk '{print $1}')" >> "$CONVERT_ROOT/verify.tsv"
+
+            git add "$runtime_dest" "$source_dest" "$report_dir/conversion.json" "$report_dir/loader-validation.json"
+            if [ -s "$blend_dump" ]; then
+              git add "$report_dir/blend-materials.json"
+            fi
+          done < "$CONVERT_ROOT/outputs.tsv"
+
+          node scripts/check-lfs-assets.mjs
+
+          if git diff --cached --quiet; then
+            echo "Converted outputs are unchanged; nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "feat(assets): import optimized Model Inbox car"
+          git lfs ls-files
+          git lfs push origin HEAD
+
+          # Prove GitHub LFS can return the exact bytes: delete the working
+          # files and the local LFS cache objects, then pull them again.
+          include_list="$(cut -f1 "$CONVERT_ROOT/verify.tsv" | paste -sd, -)"
+          while IFS=$'\t' read -r path expected_sha; do
+            rm -f "$path"
+            rm -f ".git/lfs/objects/${expected_sha:0:2}/${expected_sha:2:2}/${expected_sha}"
+          done < "$CONVERT_ROOT/verify.tsv"
+          git lfs pull --include="$include_list" --exclude=""
+          while IFS=$'\t' read -r path expected_sha; do
+            actual_sha="$(sha256sum "$path" | awk '{print $1}')"
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "Redownloaded LFS object mismatch for $path: $actual_sha != $expected_sha" >&2
+              exit 1
+            fi
+            echo "Verified LFS redownload: $path ($actual_sha)"
+          done < "$CONVERT_ROOT/verify.tsv"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "Working tree is not clean after LFS redownload verification" >&2
+            exit 1
+          fi
+          git push origin "HEAD:${BRANCH}"
+
+      - name: Commit conversion failure diagnostics
+        if: failure()
+        run: |
+          set -euo pipefail
+          CONVERT_ROOT="$RUNNER_TEMP/model-convert"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          manifests_file="$CONVERT_ROOT/manifests.txt"
+          if [ ! -s "$manifests_file" ]; then
+            find asset-inbox/conversions -maxdepth 1 -type f -name '*.json' | sort > "$manifests_file"
+          fi
+
+          diag_paths=()
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            car_id="$(jq -r '.carId // "unknown"' "$manifest")"
+            work="$CONVERT_ROOT/$car_id"
+            report_dir="asset-inbox/imports/$car_id"
+            report="$report_dir/conversion-failure.md"
+            mkdir -p "$report_dir"
+            {
+              echo "# Conversion failure diagnostics: $car_id"
+              echo
+              echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              echo "Commit: ${GITHUB_SHA}"
+              echo
+              for log in \
+                "$CONVERT_ROOT/download-convert-step.log" \
+                "$work/blender-dump.log" \
+                "$work/blender-convert.log" \
+                "$work/inventory.stdout.json" \
+                "$work/conversion.json" \
+                "$work/blend-materials.json"; do
+                if [ -s "$log" ]; then
+                  echo "## ${log#$CONVERT_ROOT/}"
+                  echo
+                  echo '```text'
+                  tail -n 400 "$log" | sed 's/```/``\x60/g'
+                  echo '```'
+                  echo
+                fi
+              done
+            } > "$report"
+            diag_paths+=("$report")
+          done < "$manifests_file"
+
+          if [ "${#diag_paths[@]}" -eq 0 ]; then
+            echo "No diagnostics to commit"
+            exit 0
+          fi
+          git add "${diag_paths[@]}"
+          if git diff --cached --quiet; then
+            echo "Diagnostics are unchanged"
+            exit 0
+          fi
+          git commit -m "chore(assets): add conversion failure diagnostics"
+          git push origin "HEAD:${BRANCH}"

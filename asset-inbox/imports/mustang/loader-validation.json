@@ -1,0 +1,101 @@
+{
+  "file": "public/assets/models/cars/mustang/mustang.glb",
+  "bytes": 5874616,
+  "meshes": 22,
+  "triangles": 157759,
+  "nodes": [
+    "Scene",
+    "Mustang",
+    "Body",
+    "BodyMesh",
+    "BodyMesh_1",
+    "BodyMesh_2",
+    "BodyMesh_3",
+    "BodyMesh_4",
+    "BodyMesh_5",
+    "BodyMesh_6",
+    "BodyMesh_7",
+    "BodyMesh_8",
+    "BodyMesh_9",
+    "Wheel_FL",
+    "Wheel_FL_Spin",
+    "Wheel_FL_SpinMesh",
+    "Wheel_FL_SpinMesh_1",
+    "Wheel_FL_SpinMesh_2",
+    "Wheel_FR",
+    "Wheel_FR_Spin",
+    "Wheel_FR_SpinMesh",
+    "Wheel_FR_SpinMesh_1",
+    "Wheel_FR_SpinMesh_2",
+    "Wheel_RL",
+    "Wheel_RL_Spin",
+    "Wheel_RL_SpinMesh",
+    "Wheel_RL_SpinMesh_1",
+    "Wheel_RL_SpinMesh_2",
+    "Wheel_RR",
+    "Wheel_RR_Spin",
+    "Wheel_RR_SpinMesh",
+    "Wheel_RR_SpinMesh_1",
+    "Wheel_RR_SpinMesh_2"
+  ],
+  "materials": [
+    "BlackTrim",
+    "Brake",
+    "Chrome",
+    "Exhaust",
+    "Glass",
+    "Headlight",
+    "Mirror",
+    "Paint",
+    "PaintSecondary",
+    "Rim",
+    "Taillight",
+    "Tire",
+    "TurnSignal"
+  ],
+  "bounds": {
+    "min": [
+      -0.917831,
+      0,
+      -2.421613
+    ],
+    "max": [
+      0.916921,
+      1.301742,
+      2.238387
+    ],
+    "sizeXYZ": [
+      1.834753,
+      1.301742,
+      4.66
+    ],
+    "center": [
+      -0.000455,
+      0.650871,
+      -0.091613
+    ]
+  },
+  "wheels": {
+    "Wheel_FL": [
+      0.729272,
+      0.337795,
+      1.306608
+    ],
+    "Wheel_FR": [
+      -0.729076,
+      0.337796,
+      1.306608
+    ],
+    "Wheel_RL": [
+      0.729291,
+      0.337795,
+      -1.306608
+    ],
+    "Wheel_RR": [
+      -0.729486,
+      0.337796,
+      -1.306608
+    ]
+  },
+  "animations": 0
+}
