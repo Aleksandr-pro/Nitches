@@ -23,11 +23,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # Android SDK уже предустановлен на ubuntu-раннерах GitHub
       # ($ANDROID_SDK_ROOT) — сторонний setup-android не нужен.
