@@ -85,11 +85,12 @@ test('chunk tiles honour LOD resolution and terrain geometry is valid', () => {
   assert.ok(Math.abs(Math.hypot(n[0], n[1], n[2]) - 1) < 1e-3);
 
   const merged = mergeGeometryData([
-    { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), uvs: new Float32Array(6), indices: new Uint32Array([0, 1, 2]) },
-    { positions: new Float32Array([2, 0, 0, 3, 0, 0, 2, 0, 1]), uvs: new Float32Array(6), indices: new Uint32Array([0, 1, 2]) },
+    { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), uvs: new Float32Array(6), indices: new Uint32Array([0, 1, 2]) },
+    { positions: new Float32Array([2, 0, 0, 3, 0, 0, 2, 0, 1]), normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), uvs: new Float32Array(6), indices: new Uint32Array([0, 1, 2]) },
   ]);
   assert.equal(merged.vertexCount, 6);
   assert.deepEqual([...merged.indices], [0, 1, 2, 3, 4, 5]);
+  assert.equal(merged.normals.length, merged.positions.length);
 });
 
 test('manifest serializes all 256 chunks with road references', () => {

@@ -24,8 +24,8 @@ function toBufferGeometry(THREE, data, { normals = true, colors = false } = {}) 
 }
 
 /**
- * Three.js adapter for the dormant Stage 3 foundation.  It never replaces
- * legacy gameplay/collisions: main only creates it behind a feature flag.
+ * Three.js adapter for the Festival Britain foundation.  Since v0.6 main
+ * creates it as the playable world by default (legacy island: ?world=legacy).
  */
 export class WorldFoundationStreamer {
   constructor({
@@ -68,7 +68,8 @@ export class WorldFoundationStreamer {
     });
     this.roadMaterials = new Map();
     for (const [surface, color] of Object.entries(ROAD_MATERIAL_COLORS)) {
-      this.roadMaterials.set(surface, new THREE.MeshBasicMaterial({
+      // Lambert (not Basic) so roads take sun lighting and car shadows.
+      this.roadMaterials.set(surface, new THREE.MeshLambertMaterial({
         color,
         polygonOffset: true,
         polygonOffsetFactor: -2,
@@ -110,6 +111,7 @@ export class WorldFoundationStreamer {
     geometries.push(terrainGeometry);
     const terrainMesh = new THREE.Mesh(terrainGeometry, this.terrainMaterial);
     terrainMesh.name = `terrain-${descriptor.key}`;
+    terrainMesh.receiveShadow = true;
     terrainMesh.matrixAutoUpdate = false;
     terrainMesh.updateMatrix();
     group.add(terrainMesh);
@@ -133,10 +135,11 @@ export class WorldFoundationStreamer {
     for (const [surface, ribbons] of bySurface) {
       const merged = mergeGeometryData(ribbons);
       if (!merged.positions.length) continue;
-      const roadGeometry = toBufferGeometry(THREE, merged, { normals: false });
+      const roadGeometry = toBufferGeometry(THREE, merged, { normals: true });
       geometries.push(roadGeometry);
       const roadMesh = new THREE.Mesh(roadGeometry, this.roadMaterials.get(surface) || this.roadMaterials.get('asphalt'));
       roadMesh.name = `roads-${surface}-${descriptor.key}`;
+      roadMesh.receiveShadow = true;
       roadMesh.renderOrder = 2;
       roadMesh.matrixAutoUpdate = false;
       roadMesh.updateMatrix();

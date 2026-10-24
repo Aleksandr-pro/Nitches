@@ -18,12 +18,16 @@ import {
 import { iconMarkup, setIcon } from './ui/icons.js';
 import { createFestivalBritainFoundation } from './world/festivalBritain.js';
 import { createWorldFoundationStreamer } from './world/worldStreamer.js';
+import { buildHeightTile } from './world/heightfield.js';
+import { buildTerrainTileGeometry } from './world/meshBuilders.js';
+import { roadPointAt } from './world/roadGraph.js';
 import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.5.0: Mustang Fastback из настоящей GLB-модели, шинная физика, шоурум,
-   реалистичный свет, гонки, дрифт и нитро.
+   v0.6.0: новая карта Festival Britain 4×4 км (свободная поездка),
+   Mustang Fastback из настоящей GLB-модели, шинная физика, шоурум,
+   реалистичный свет, дрифт и нитро. Старый остров: ?world=legacy.
    ===================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -465,35 +469,55 @@ const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerH
 camera.position.set(0, 26, -140);
 
 /* =====================================================================
-   ЭТАП 3: фундамент мира 4×4 км (Festival Britain) — ЗА ФИЧЕФЛАГОМ.
-   По умолчанию legacy-карта 640 м остаётся играбельной основой; фундамент
-   не создаётся и не влияет на физику, коллизии и геймплей. Включение для
-   QA: ?world=foundation (плюс &worldPreview=1 — показать меши под старой
-   картой) или localStorage nh_world_foundation=1. Диагностика для тестов:
-   window.__NH_WORLD__ (stats(), setPreview(bool)).
+   МИР v0.6: Festival Britain 4×4 км — ИГРАБЕЛЬНАЯ карта по умолчанию
+   (вертикальный срез: свободная поездка по всей карте; гонки, трафик и
+   соперники пока остаются на legacy-острове и придут позже).
+   Откат на старую карту 640 м: ?world=legacy или localStorage
+   nh_world=legacy. Диагностика: window.__NH_WORLD__ (mode, stats()).
+   При любой ошибке инициализации — автоматический fallback на legacy.
    ===================================================================== */
 let worldFoundation = null;
 let worldStreamer = null;
+let worldBackdrop = null;
 let worldStreamAccumS = 0;
+let britainDistrictId = 'festival-vale';
+let skyMesh = null;      // заполняются в блоке «Небо» ниже
+let sunBallMesh = null;
+let sunHaloMesh = null;
+const SUN_SKY_OFFSET = new THREE.Vector3(-560, 132, -620);
 
-function worldFoundationFlag() {
+function resolveWorldMode() {
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('world') === 'foundation') {
-      return { enabled: true, preview: params.get('worldPreview') === '1', source: 'url' };
-    }
-    if (window.localStorage && window.localStorage.getItem('nh_world_foundation') === '1') {
-      return { enabled: true, preview: params.get('worldPreview') === '1', source: 'localStorage' };
-    }
-  } catch { /* флаг недоступен — остаёмся на legacy-мире */ }
-  return { enabled: false, preview: false, source: 'off' };
+    if (params.get('world') === 'legacy') return 'legacy';
+    if (window.localStorage && window.localStorage.getItem('nh_world') === 'legacy') return 'legacy';
+  } catch { /* по умолчанию — новая карта */ }
+  return 'britain';
 }
 
-function initWorldFoundation() {
-  const flag = worldFoundationFlag();
+let WORLD_MODE = resolveWorldMode();
+
+function isBritainWorld() {
+  return WORLD_MODE === 'britain' && worldFoundation !== null;
+}
+
+/** Точка спавна у фестиваля новой карты, носом на север к центру карты. */
+function britainSpawnPoint(lane = 0) {
+  const fallbackY = worldFoundation ? worldFoundation.heightAt(0, 1226) : 6;
+  const fallback = { pos: new THREE.Vector3(0, fallbackY, 1226), yaw: Math.PI };
+  if (!worldFoundation) return fallback;
+  const edge = worldFoundation.roadGraph.edgesById.get('festival-north-festival');
+  if (!edge) return fallback;
+  const p = roadPointAt(edge, Math.max(0, edge.lengthM - 24), lane);
+  if (!p) return fallback;
+  return { pos: new THREE.Vector3(p.x, p.y, p.z), yaw: Math.atan2(-p.tangent.x, -p.tangent.z) };
+}
+
+function initWorldMode() {
   const diagnostics = {
-    stage: 3,
-    ...flag,
+    world: 'festival-britain',
+    version: '0.6.0',
+    mode: WORLD_MODE,
     foundation: null,
     streamer: null,
     error: null,
@@ -501,37 +525,108 @@ function initWorldFoundation() {
     setPreview: (visible) => (worldStreamer ? worldStreamer.setVisible(Boolean(visible)) : false),
   };
   window.__NH_WORLD__ = diagnostics;
-  if (!flag.enabled) return diagnostics;
+  if (WORLD_MODE !== 'britain') return diagnostics;
   try {
     worldFoundation = createFestivalBritainFoundation();
     worldStreamer = createWorldFoundationStreamer({
       THREE,
       scene,
       foundation: worldFoundation,
-      visible: flag.preview,
+      visible: true,
+      heightOffsetM: 0,
+      loadRadiusChunks: 3,
+      unloadRadiusChunks: 4,
+      loadsPerUpdate: 4,
     });
-    // Фокус стартового стриминга — фестиваль новой карты.
-    worldStreamer.update(0, 1250, { budget: 9 });
+
+    // Грубый фон всей карты одним мешем на метр ниже стримящихся чанков:
+    // силуэт мира виден до горизонта, пока детали догружаются вокруг.
+    const backdropTile = buildHeightTile({
+      chunkX: 0,
+      chunkZ: 0,
+      chunkSizeM: 4000,
+      cells: 72,
+      worldOriginM: -2000,
+      sampleHeight: (x, z) => worldFoundation.heightAt(x, z),
+    });
+    const backdropData = buildTerrainTileGeometry(backdropTile, {
+      colorAt: worldFoundation.terrainColorAt,
+    });
+    const backdropGeometry = new THREE.BufferGeometry();
+    backdropGeometry.setAttribute('position', new THREE.BufferAttribute(backdropData.positions, 3));
+    backdropGeometry.setAttribute('normal', new THREE.BufferAttribute(backdropData.normals, 3));
+    backdropGeometry.setAttribute('uv', new THREE.BufferAttribute(backdropData.uvs, 2));
+    if (backdropData.colors) backdropGeometry.setAttribute('color', new THREE.BufferAttribute(backdropData.colors, 3));
+    backdropGeometry.setIndex(new THREE.BufferAttribute(backdropData.indices, 1));
+    worldBackdrop = new THREE.Mesh(backdropGeometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    worldBackdrop.position.y = -1.0;
+    worldBackdrop.receiveShadow = true;
+    worldBackdrop.name = 'nh-britain-backdrop';
+    scene.add(worldBackdrop);
+
+    // Дальность обзора под 4 километра вместо острова.
+    scene.fog.near = 260;
+    scene.fog.far = 3200;
+    camera.far = 7000;
+    camera.updateProjectionMatrix();
+
+    const spawn = britainSpawnPoint();
+    worldStreamer.update(spawn.pos.x, spawn.pos.z, { budget: 12 });
+    selectedMode = 'free'; // гонки на новой карте — следующим этапом
     diagnostics.foundation = worldFoundation;
     diagnostics.streamer = worldStreamer;
-    console.info('[world] Festival Britain foundation enabled:', worldFoundation.stats());
+    console.info('[world] Festival Britain playable:', worldFoundation.stats());
   } catch (error) {
+    WORLD_MODE = 'legacy';
+    diagnostics.mode = 'legacy';
     diagnostics.error = String((error && error.message) || error);
-    console.warn('[world] foundation init failed; legacy world unchanged:', error);
+    worldFoundation = null;
+    worldStreamer = null;
+    console.warn('[world] Britain init failed; falling back to legacy island:', error);
   }
   return diagnostics;
 }
 
-const worldDiagnostics = initWorldFoundation();
+const worldDiagnostics = initWorldMode();
 void worldDiagnostics;
 
+/** В режиме Britain кнопка «гонка» в меню принудительно показывает free. */
+function applyBritainModeUI() {
+  if (!isBritainWorld()) return;
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    const active = b.dataset.mode === 'free';
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
 function updateWorldFoundation(dt) {
-  if (!worldStreamer) return;
+  if (!worldStreamer || !isBritainWorld()) return;
   worldStreamAccumS += dt;
   if (worldStreamAccumS < 0.25) return;
   worldStreamAccumS = 0;
   const pos = player.mesh && player.mesh.group ? player.mesh.group.position : null;
-  worldStreamer.update(pos ? pos.x : 0, pos ? pos.z : 1250, { budget: 2 });
+  const fx = pos ? pos.x : 0;
+  const fz = pos ? pos.z : 1250;
+  worldStreamer.update(fx, fz, { budget: 3 });
+
+  // Сфера неба (R=950) и облака не покрывают 4 км из начала координат —
+  // едут за игроком, как и тень солнца.
+  if (skyMesh) skyMesh.position.set(fx, 0, fz);
+  if (sunBallMesh) sunBallMesh.position.set(fx + SUN_SKY_OFFSET.x, SUN_SKY_OFFSET.y, fz + SUN_SKY_OFFSET.z);
+  if (sunHaloMesh && sunBallMesh) sunHaloMesh.position.copy(sunBallMesh.position);
+  cloudGroup.position.set(fx, 0, fz);
+
+  if (pos && gameState === 'racing') {
+    const district = worldFoundation.getDistrict(pos.x, pos.z);
+    const id = district ? district.id : null;
+    if (id && id !== britainDistrictId) {
+      britainDistrictId = id;
+      showCenterMsg(district.name, 2100, '#2ee6ff', 'map');
+    } else if (!id) {
+      britainDistrictId = null;
+    }
+  }
 }
 
 // Свет заката фестиваля — более насыщенный и объёмный
@@ -1284,6 +1379,8 @@ function nearestRoadInfoApprox(x, z) {
   return best || { dist: 60, edge: 60, halfWidth: ROAD_HALF, surface: 'grass' };
 }
 function terrainHeight(x, z, roadDist = null) {
+  // Festival Britain: высота — из фундамента 4×4 км (рельеф + выравнивание дорог).
+  if (isBritainWorld()) return worldFoundation.heightAt(x, z);
   const d = roadDist === null ? roadDistanceApprox(x, z) : roadDist;
   const roadFactor = smoothstep(15, 48, d); // сетка рельефа не должна вылезать на асфальт
   const rolling = 1.0 + (fbm2(x * 0.011 + 7.3, z * 0.011 - 2.9) - 0.5) * 5.2
@@ -1317,6 +1414,9 @@ scene.add(cloudGroup);
 
 /* ============================ Мир ============================ */
 const colliders = []; // {x,z,r}
+// Метка: все объекты сцены после неё до захвата у «Модели машины» —
+// legacy-остров. В режиме Britain они скрываются одним списком.
+const LEGACY_SCENE_MARK = scene.children.length;
 
 // Небо
 {
@@ -1325,12 +1425,14 @@ const colliders = []; // {x,z,r}
     new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false })
   );
   scene.add(sky);
+  skyMesh = sky;
   const sunBall = new THREE.Mesh(
     new THREE.SphereGeometry(27, 20, 20),
     new THREE.MeshBasicMaterial({ color: 0xffe6ae, fog: false })
   );
   sunBall.position.set(-560, 132, -620);
   scene.add(sunBall);
+  sunBallMesh = sunBall;
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeGlowTexture(), color: 0xffc98a, transparent: true, opacity: 0.9,
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
@@ -1338,6 +1440,7 @@ const colliders = []; // {x,z,r}
   halo.scale.set(380, 380, 1);
   halo.position.copy(sunBall.position);
   scene.add(halo);
+  sunHaloMesh = halo;
 }
 
 // Океан и остров (рельефная местность)
@@ -2641,6 +2744,26 @@ function buildLivingWorld() {
 buildStaticInfrastructure();
 buildLivingWorld();
 
+/* ==================== Скрытие legacy-острова в режиме Britain ====================
+   Остров всегда строится как раньше (нужен для ?world=legacy), но на новой
+   карте все его объекты выключаются одним списком. Небо и сцена меню —
+   исключения: небо едет за игроком, шоурум переезжает к фестивалю. */
+const legacyWorldObjects = scene.children.slice(LEGACY_SCENE_MARK);
+function applyBritainWorldVisibility() {
+  if (!isBritainWorld()) return;
+  const keep = new Set([skyMesh, sunBallMesh, sunHaloMesh, menuStage]);
+  legacyWorldObjects.forEach((obj) => {
+    if (!keep.has(obj)) obj.visible = false;
+  });
+  colliders.length = 0; // на новой карте пока нет пропсов — и невидимых стен
+  if (menuStage) {
+    const spawn = britainSpawnPoint();
+    menuStage.position.set(spawn.pos.x, worldFoundation.heightAt(spawn.pos.x, spawn.pos.z) + 0.055, spawn.pos.z);
+    menuStage.rotation.y = spawn.yaw + 0.6;
+  }
+}
+applyBritainWorldVisibility();
+
 /* ============================ Модель машины ============================ */
 function buildCarMesh(color, accent, isBuggy = false) {
   const car = new THREE.Group();
@@ -2896,8 +3019,11 @@ function vibrate(ms) {
 /* ============================ Старт гонки ============================ */
 function resetPlayerToStart() {
   createPlayerCar();
-  const start = pointAtS(-6, -2.5);
+  const start = isBritainWorld() ? britainSpawnPoint(-2.2) : pointAtS(-6, -2.5);
   player.mesh.group.position.copy(start.pos);
+  if (isBritainWorld()) {
+    player.mesh.group.position.y = worldFoundation.heightAt(start.pos.x, start.pos.z);
+  }
   player.yaw = start.yaw;
   player.vel.set(0, 0, 0);
   player.yawRate = 0;
@@ -2913,9 +3039,9 @@ function resetPlayerToStart() {
   player.nitro = 0.7;
   player.score = 0;
   player.driftChain = 0;
-  player.s = -6;
+  player.s = isBritainWorld() ? 0 : -6;
   player.sampleAccum = 0;
-  player.prevSampleIdx = nearestSampleIdx(start.pos).idx;
+  player.prevSampleIdx = isBritainWorld() ? 0 : nearestSampleIdx(start.pos).idx;
   player.nextCP = 1;
   player.lap = 1;
   player.lapStart = 0;
@@ -2926,6 +3052,7 @@ function resetPlayerToStart() {
 function createRivals() {
   rivals.forEach((r) => scene.remove(r.mesh.group));
   rivals = [];
+  if (isBritainWorld()) return; // соперники ездят по legacy-сплайну; на новой карте — позже
   const count = selectedMode === 'race' ? 5 : 3;
   for (let i = 0; i < count; i++) {
     const built = buildCarMesh(RIVAL_COLORS[i], RIVAL_COLORS[i], false);
@@ -2945,6 +3072,7 @@ function createRivals() {
 
 function startGame() {
   engine.init();
+  if (isBritainWorld()) selectedMode = 'free';
   resetPlayerToStart();
   createRivals();
   raceTime = 0;
@@ -2966,7 +3094,10 @@ function startGame() {
     $('hudLap').textContent = `КРУГ 1/${TOTAL_LAPS}`;
   } else {
     gameState = 'racing';
-    showCenterMsg('СВОБОДНАЯ ПОЕЗДКА — твой остров!', 2600, '#2ee6ff', 'map');
+    showCenterMsg(
+      isBritainWorld() ? 'СВОБОДНАЯ ПОЕЗДКА — Festival Britain, 4×4 км!' : 'СВОБОДНАЯ ПОЕЗДКА — твой остров!',
+      2600, '#2ee6ff', 'map',
+    );
     $('hudPosition').textContent = 'FREE';
     $('hudLap').textContent = 'ОТКРЫТЫЙ МИР';
   }
@@ -3047,6 +3178,36 @@ function currentPosition() {
 }
 
 function respawn() {
+  if (isBritainWorld()) {
+    const pos = player.mesh.group.position;
+    const nearRoad = worldFoundation.nearestRoad(pos.x, pos.z, { maxDistanceM: 600 });
+    if (nearRoad && nearRoad.segment) {
+      const seg = nearRoad.segment;
+      let yaw = Math.atan2(seg.x2 - seg.x1, seg.z2 - seg.z1);
+      // не разворачиваем игрока против текущего курса без нужды
+      const fwdX = Math.sin(player.yaw);
+      const fwdZ = Math.cos(player.yaw);
+      if (Math.sin(yaw) * fwdX + Math.cos(yaw) * fwdZ < 0) yaw += Math.PI;
+      pos.set(nearRoad.point.x, nearRoad.point.y, nearRoad.point.z);
+      player.yaw = yaw;
+    } else {
+      const spawn = britainSpawnPoint();
+      pos.copy(spawn.pos);
+      player.yaw = spawn.yaw;
+    }
+    player.vel.set(0, 0, 0);
+    player.yawRate = 0;
+    player.steerAngle = 0;
+    player.throttle = 0;
+    player.brakePedal = 0;
+    resetPlayerPowertrain();
+    player.longAccel = 0;
+    player.latAccel = 0;
+    player.surfaceMuSmooth = 1;
+    resetSteering();
+    showCenterMsg('На дорогу!', 900, '#fff', 'rotate-ccw');
+    return;
+  }
   const near = pointAtS(player.s);
   player.mesh.group.position.copy(near.pos);
   player.yaw = near.yaw;
@@ -3081,6 +3242,18 @@ function tireLateralForce(alpha, load, mu) {
 }
 
 function surfaceInfoAt(x, z, groundH) {
+  if (isBritainWorld()) {
+    const s = worldFoundation.surfaceAt(x, z, { heightM: groundH });
+    const hard = s.id === 'asphalt' || s.id === 'concrete' || s.id === 'cobble';
+    const offroadSkill = hard ? 1 : 0.8 + selectedCar.offroad * 0.3;
+    return {
+      name: s.id,
+      label: s.label,
+      mu: s.mu * offroadSkill,
+      rolling: s.rollingResistance,
+      roadInfo: null,
+    };
+  }
   const roadInfo = nearestRoadInfoApprox(x, z);
   const radial = Math.hypot(x, z);
   if (roadInfo.edge <= 0) {
@@ -3362,23 +3535,28 @@ function updatePlayer(dt) {
   _right.set(_fwd.z, 0, -_fwd.x);
   let fwdSpeed = player.vel.dot(_fwd);
 
-  const near = nearestSampleIdx(pos);
-  const roadInfoForGround = nearestRoadInfoApprox(pos.x, pos.z);
-  const groundH = terrainHeight(pos.x, pos.z, roadInfoForGround.dist);
+  const britain = isBritainWorld();
+  const near = britain ? null : nearestSampleIdx(pos);
+  const roadInfoForGround = britain ? null : nearestRoadInfoApprox(pos.x, pos.z);
+  const groundH = terrainHeight(pos.x, pos.z, roadInfoForGround ? roadInfoForGround.dist : null);
   player.groundH = groundH;
   const surface = surfaceInfoAt(pos.x, pos.z, groundH);
   player.surface = surface.label;
   player.surfaceMu = car.tireMu * surface.mu;
   player.offroad = surface.name !== 'asphalt';
-  const inWater = Math.hypot(pos.x, pos.z) > 289 || groundH < -0.85;
+  const inWater = britain ? groundH < -0.3 : (Math.hypot(pos.x, pos.z) > 289 || groundH < -0.85);
 
-  // Прогресс вдоль трассы (без скачков через петлю)
-  let dIdx = near.idx - player.prevSampleIdx;
-  if (dIdx > 400) dIdx -= 800;
-  if (dIdx < -400) dIdx += 800;
-  if (Math.abs(dIdx) < 60) player.sampleAccum += dIdx;
-  player.prevSampleIdx = near.idx;
-  player.s = (player.sampleAccum / 800) * TRACK_LENGTH - 6;
+  if (britain) {
+    player.s = player.travelDistance;
+  } else {
+    // Прогресс вдоль трассы (без скачков через петлю)
+    let dIdx = near.idx - player.prevSampleIdx;
+    if (dIdx > 400) dIdx -= 800;
+    if (dIdx < -400) dIdx += 800;
+    if (Math.abs(dIdx) < 60) player.sampleAccum += dIdx;
+    player.prevSampleIdx = near.idx;
+    player.s = (player.sampleAccum / 800) * TRACK_LENGTH - 6;
+  }
 
   // Уклон рельефа в осях машины
   const hF = terrainHeight(pos.x + _fwd.x * 2.2, pos.z + _fwd.z * 2.2);
@@ -3413,17 +3591,30 @@ function updatePlayer(dt) {
   const velLen = player.vel.length();
   syncPowertrainTelemetry();
 
-  const newGroundH = terrainHeight(pos.x, pos.z, nearestRoadInfoApprox(pos.x, pos.z).dist);
+  const newGroundH = terrainHeight(pos.x, pos.z, britain ? 0 : nearestRoadInfoApprox(pos.x, pos.z).dist);
   player.groundH = newGroundH;
-  pos.y = inWater ? Math.max(newGroundH, -0.58) : newGroundH;
+  pos.y = inWater ? Math.max(newGroundH, britain ? -0.35 : -0.58) : newGroundH;
 
   // Граница мира
-  const distC = Math.hypot(pos.x, pos.z);
-  if (distC > 322) {
-    pos.x *= 322 / distC;
-    pos.z *= 322 / distC;
-    player.vel.multiplyScalar(0.4);
-    player.yawRate *= 0.5;
+  if (britain) {
+    const bound = 1960;
+    let hitBound = false;
+    if (pos.x > bound) { pos.x = bound; hitBound = true; }
+    if (pos.x < -bound) { pos.x = -bound; hitBound = true; }
+    if (pos.z > bound) { pos.z = bound; hitBound = true; }
+    if (pos.z < -bound) { pos.z = -bound; hitBound = true; }
+    if (hitBound) {
+      player.vel.multiplyScalar(0.4);
+      player.yawRate *= 0.5;
+    }
+  } else {
+    const distC = Math.hypot(pos.x, pos.z);
+    if (distC > 322) {
+      pos.x *= 322 / distC;
+      pos.z *= 322 / distC;
+      player.vel.multiplyScalar(0.4);
+      player.yawRate *= 0.5;
+    }
   }
 
   // Столкновения с объектами: убираем скорость в препятствие, касательную частично сохраняем
@@ -3951,7 +4142,107 @@ const minimap = $('minimap').getContext('2d');
 const speedFxEl = $('speedFx');
 let minimapTimer = 0;
 
+let britainMinimapBase = null;
+
+function buildBritainMinimapBase(S) {
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S;
+  const g = c.getContext('2d');
+  const scale = S / 4200;
+  const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
+  g.beginPath();
+  g.arc(S / 2, S / 2, S / 2 - 1, 0, TAU);
+  g.clip();
+  g.fillStyle = '#0a2a3d';
+  g.fillRect(0, 0, S, S);
+  const [lx, ly] = toMap(-2000, -2000);
+  const [rx, ry] = toMap(2000, 2000);
+  g.fillStyle = 'rgba(49, 92, 55, 0.94)';
+  g.fillRect(lx, ly, rx - lx, ry - ly);
+  g.strokeStyle = 'rgba(236, 211, 156, 0.78)';
+  g.lineWidth = 2;
+  g.strokeRect(lx, ly, rx - lx, ry - ly);
+  const [ox, oy] = toMap(-1200, -1050);
+  g.beginPath();
+  g.ellipse(ox, oy, 310 * scale, 245 * scale, 0, 0, TAU);
+  g.fillStyle = '#155e7d';
+  g.fill();
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const strokeEdge = (edge, style, width) => {
+    g.strokeStyle = style;
+    g.lineWidth = width;
+    g.beginPath();
+    let started = false;
+    edge.samples.forEach((pt, i) => {
+      if (i % 2 !== 0 && i !== edge.samples.length - 1) return;
+      const [x, y] = toMap(pt.x, pt.z);
+      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+    });
+    g.stroke();
+  };
+  worldFoundation.roadGraph.edges.forEach((e) => strokeEdge(e, 'rgba(7, 13, 20, 0.92)', 2.6));
+  worldFoundation.roadGraph.edges.forEach((e) => strokeEdge(
+    e,
+    e.surface === 'dirt' ? 'rgba(196, 160, 110, 0.9)' : 'rgba(220, 232, 238, 0.92)',
+    1.3,
+  ));
+  worldFoundation.districts.forEach((d) => {
+    const [x, y] = toMap(d.x, d.z);
+    g.beginPath();
+    g.arc(x, y, d.id === 'festival-vale' ? 3.2 : 2.2, 0, TAU);
+    g.fillStyle = d.id === 'festival-vale' ? '#f0abfc' : '#facc15';
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,0.45)';
+    g.lineWidth = 1;
+    g.stroke();
+  });
+  return c;
+}
+
+function drawBritainMinimap() {
+  const S = 132;
+  if (!britainMinimapBase) britainMinimapBase = buildBritainMinimapBase(S);
+  const scale = S / 4200;
+  const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
+  minimap.clearRect(0, 0, S, S);
+  minimap.save();
+  minimap.beginPath();
+  minimap.arc(S / 2, S / 2, S / 2 - 1, 0, TAU);
+  minimap.clip();
+  minimap.drawImage(britainMinimapBase, 0, 0);
+  if (player.mesh) {
+    const p = player.mesh.group.position;
+    const [x, y] = toMap(p.x, p.z);
+    minimap.save();
+    minimap.translate(x, y);
+    minimap.rotate(-player.yaw);
+    minimap.beginPath();
+    minimap.moveTo(0, 6.5);
+    minimap.lineTo(-4.4, -5.2);
+    minimap.lineTo(0, -2.6);
+    minimap.lineTo(4.4, -5.2);
+    minimap.closePath();
+    minimap.fillStyle = '#ff5e3a';
+    minimap.strokeStyle = '#fff';
+    minimap.lineWidth = 1.3;
+    minimap.fill();
+    minimap.stroke();
+    minimap.restore();
+  }
+  minimap.fillStyle = 'rgba(255,255,255,0.92)';
+  minimap.font = '900 10px system-ui, sans-serif';
+  minimap.textAlign = 'center';
+  minimap.fillText('N', S / 2, 13);
+  minimap.restore();
+}
+
 function drawMinimap() {
+  if (isBritainWorld()) {
+    drawBritainMinimap();
+    return;
+  }
   const S = 132;
   const scale = S / 610;
   const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
@@ -4211,9 +4502,9 @@ function animate() {
     sprite.position.x += dt * (sprite.userData.speed || 1);
     if (sprite.position.x > 620) sprite.position.x = -620;
   });
-  updateLivingWorld(gameState === 'paused' ? 0 : dt, t);
+  if (!isBritainWorld()) updateLivingWorld(gameState === 'paused' ? 0 : dt, t);
   updateTireEffects(dt);
-  updateWorldFoundation(dt); // no-op, пока флаг мира 4×4 км не включён
+  updateWorldFoundation(dt); // стриминг чанков Britain; в legacy — no-op
 
   // пульс следующего чекпоинта
   if (selectedMode === 'race' && player.mesh) {
@@ -4640,8 +4931,11 @@ function buildPaintPicker() {
 
 function previewCarInMenu() {
   createPlayerCar();
-  const start = pointAtS(-10, 0);
+  const start = isBritainWorld() ? britainSpawnPoint() : pointAtS(-10, 0);
   player.mesh.group.position.copy(start.pos);
+  if (isBritainWorld()) {
+    player.mesh.group.position.y = worldFoundation.heightAt(start.pos.x, start.pos.z);
+  }
   player.mesh.group.rotation.set(0, start.yaw + 0.6, 0);
   player.yaw = start.yaw + 0.6;
   if (menuStage) menuStage.visible = true;
@@ -4662,6 +4956,10 @@ document.querySelectorAll('.mode-btn').forEach((btn) => {
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
     selectedMode = btn.dataset.mode;
+    if (isBritainWorld()) {
+      selectedMode = 'free'; // гонки на новой карте — следующим этапом
+      applyBritainModeUI();
+    }
     updateMenuHero();
   });
 });
@@ -4848,6 +5146,7 @@ window.addEventListener('resize', () => {
 
 /* ============================ Старт ============================ */
 buildCarPicker();
+applyBritainModeUI();
 applyControlScheme(controlScheme);
 applyAssistMode(assistMode);
 applyGraphicsQuality(graphicsQuality);
@@ -4857,13 +5156,16 @@ animate();
 
 // Необязательный облачный контент не должен блокировать встроенный мир/APK.
 // Если CDN не настроен или недоступен, игра продолжит работу без прототипа.
-void installCloudPrototype({
-  scene,
-  colliders,
-  terrainHeight,
-  pointAtS,
-  roadDistanceApprox,
-});
+// Облачный дуб привязан к legacy-сплайну — на новой карте его пока нет.
+if (!isBritainWorld()) {
+  void installCloudPrototype({
+    scene,
+    colliders,
+    terrainHeight,
+    pointAtS,
+    roadDistanceApprox,
+  });
+}
 
 // PWA: офлайн-кэш только в продакшен-сборке
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

@@ -294,6 +294,7 @@ export function buildRoadRibbonGeometry(edge, {
   uvScaleM = 8,
 } = {}) {
   const positions = [];
+  const normals = [];
   const uvs = [];
   const indices = [];
   const samples = edge?.samples || [];
@@ -316,17 +317,28 @@ export function buildRoadRibbonGeometry(edge, {
       { x: b.x - nx * half, z: b.z - nz * half, y: finite(b.y, 0), s: b.s },
     ];
     const base = positions.length / 3;
+    const cornerYs = [];
     corners.forEach((corner, cornerIndex) => {
       const y = heightAt ? finite(heightAt(corner.x, corner.z), corner.y) : corner.y;
+      cornerYs.push(y);
       positions.push(corner.x, y + liftM, corner.z);
       uvs.push(cornerIndex % 2 === 0 ? 0 : 1, corner.s / uvScale);
     });
+    // Flat per-quad normal (cross of across-vector and 3D tangent), +Y up.
+    const dy = (cornerYs[2] + cornerYs[3]) / 2 - (cornerYs[0] + cornerYs[1]) / 2;
+    let ux = -nz * dy;
+    let uy = nz * tx - nx * tz;
+    let uz = nx * dy;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    for (let k = 0; k < 4; k++) normals.push(ux, uy, uz);
     // Winding chosen so ribbon triangles face +Y (visible from above).
     indices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
   }
 
   return {
     positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
     uvs: new Float32Array(uvs),
     indices: new Uint32Array(indices),
     vertexCount: positions.length / 3,
