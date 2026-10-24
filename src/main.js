@@ -15,6 +15,7 @@ import {
   resetAxleWheelState,
   updateAxleWheel,
 } from './vehicle/wheelDynamics.js';
+import { iconMarkup, setIcon } from './ui/icons.js';
 import './style.css';
 
 /* =====================================================================
@@ -89,7 +90,7 @@ const CARS = [
     id: 'gtr35',
     name: 'GT-R35 GODZILLA',
     cls: 'Класс S1 • детализированная модель R35',
-    emoji: '🇯🇵',
+    silhouette: 'car-coupe',
     color: 0x1167b1,
     accent: 0x2e7bff,
     topSpeed: 64, // ≈ 230 км/ч (ограничитель трансмиссии)
@@ -109,7 +110,7 @@ const CARS = [
     id: 'mustang',
     name: 'MUSTANG FASTBACK',
     cls: 'Класс A • реальная 3D-модель',
-    emoji: '🐎',
+    silhouette: 'car-muscle',
     color: 0x17181c,
     accent: 0xff7a1a,
     topSpeed: 55, // м/с ≈ 198 км/ч
@@ -129,7 +130,7 @@ const CARS = [
     id: 'volt',
     name: 'VOLT GT',
     cls: 'Класс A • баланс',
-    emoji: '🏎️',
+    silhouette: 'car-sport',
     color: 0xff5e3a,
     accent: 0xffb03a,
     topSpeed: 52, // м/с ≈ 187 км/ч
@@ -149,7 +150,7 @@ const CARS = [
     id: 'falcon',
     name: 'FALCON RS',
     cls: 'Класс S • гиперкар',
-    emoji: '🦅',
+    silhouette: 'car-hyper',
     color: 0x2e7bff,
     accent: 0x2ee6ff,
     topSpeed: 62, // ≈ 223 км/ч
@@ -169,7 +170,7 @@ const CARS = [
     id: 'dune',
     name: 'DUNE BREAKER',
     cls: 'Класс B • внедорожник',
-    emoji: '🛻',
+    silhouette: 'car-pickup',
     color: 0x37c978,
     accent: 0xd9ff4a,
     topSpeed: 46,
@@ -391,7 +392,7 @@ function updateSteeringVisual() {
   const label = $('steerAngleLabel');
   if (label) {
     const deg = Math.round((player.steerAngle || 0) * 57.2958);
-    label.textContent = deg === 0 ? '0°' : `${Math.abs(deg)}° ${deg > 0 ? '↰' : '↱'}`;
+    label.textContent = deg === 0 ? '0°' : `${deg > 0 ? '+' : '-'}${Math.abs(deg)}°`;
   }
 }
 
@@ -2787,9 +2788,19 @@ const engine = {
 
 /* ============================ Сообщения / HUD ============================ */
 let centerMsgTimer = null;
-function showCenterMsg(text, ms = 1900, color = '#fff') {
+function showCenterMsg(text, ms = 1900, color = '#fff', iconName = null) {
   const el = $('centerMsg');
-  el.textContent = text;
+  el.replaceChildren();
+  if (iconName) {
+    const icon = document.createElement('span');
+    icon.className = 'center-msg-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = iconMarkup(iconName, 'ui-icon');
+    el.appendChild(icon);
+  }
+  const label = document.createElement('span');
+  label.textContent = text;
+  el.appendChild(label);
   el.style.color = color;
   el.style.opacity = '1';
   clearTimeout(centerMsgTimer);
@@ -2799,7 +2810,8 @@ function showCenterMsg(text, ms = 1900, color = '#fff') {
 let driftPopupTimer = null;
 function showДрифтPopup(points, chain) {
   const el = $('driftPopup');
-  el.textContent = chain > 1 ? `ДРИФТ +${points} ×${chain}` : `ДРИФТ +${points}`;
+  const label = chain > 1 ? `ДРИФТ +${points} ×${chain}` : `ДРИФТ +${points}`;
+  el.innerHTML = `${iconMarkup('flame', 'ui-icon')}<span>${label}</span>`;
   el.style.opacity = '1';
   clearTimeout(driftPopupTimer);
   driftPopupTimer = setTimeout(() => (el.style.opacity = '0'), 700);
@@ -2882,7 +2894,7 @@ function startGame() {
     $('hudLap').textContent = `КРУГ 1/${TOTAL_LAPS}`;
   } else {
     gameState = 'racing';
-    showCenterMsg('СВОБОДНАЯ ПОЕЗДКА — твой остров! 🗺️', 2600, '#2ee6ff');
+    showCenterMsg('СВОБОДНАЯ ПОЕЗДКА — твой остров!', 2600, '#2ee6ff', 'map');
     $('hudPosition').textContent = 'FREE';
     $('hudLap').textContent = 'ОТКРЫТЫЙ МИР';
   }
@@ -2915,9 +2927,18 @@ function finishRace() {
   player.finishTime = raceTime;
   showTouchControls(false);
   const pos = currentPosition();
-  const medals = ['🥇 ЧЕМПИОН ФЕСТИВАЛЯ!', '🥈 Второе место!', '🥉 Третье место!', 'Финиш!', 'Финиш!', 'Финиш!'];
-  $('finishTitle').textContent = pos <= 3 ? 'ПОДИУМ! 🎉' : 'Финиш!';
-  $('finishPlace').textContent = medals[pos - 1] || 'Финиш!';
+  const placeLabels = [
+    '1 место — чемпион фестиваля!',
+    '2 место — серебро фестиваля!',
+    '3 место — бронза фестиваля!',
+    'Финиш!',
+    'Финиш!',
+    'Финиш!',
+  ];
+  $('finishTitle').textContent = pos <= 3 ? 'ПОДИУМ!' : 'Финиш!';
+  $('finishPlace').innerHTML = pos <= 3
+    ? `${iconMarkup('medal', 'ui-icon finish-place-icon')}<span>${placeLabels[pos - 1]}</span>`
+    : (placeLabels[pos - 1] || 'Финиш!');
 
   const rows = [
     { name: `ТЫ (${selectedCar.name})`, time: player.finishTime, me: true },
@@ -2933,7 +2954,7 @@ function finishRace() {
     .join('');
   $('finishStats').innerHTML =
     `Лучший круг: <b>${player.лучшийLap ? fmtTime(player.лучшийLap) : '—'}</b><br>` +
-    `Очки дрифта: <b>${Math.floor(player.score)}</b> 🔥`;
+    `Очки дрифта: <b>${Math.floor(player.score)}</b> ${iconMarkup('flame', 'ui-icon inline-icon')}`;
   $('finishMenu').classList.remove('hidden');
   engine.beep(660, 0.25);
   setTimeout(() => engine.beep(880, 0.3), 180);
@@ -2968,7 +2989,7 @@ function respawn() {
   player.surfaceMuSmooth = 1;
   resetSteering();
   player.prevSampleIdx = nearestSampleIdx(near.pos).idx;
-  showCenterMsg('На трассу! ⟲', 900);
+  showCenterMsg('На трассу!', 900, '#fff', 'rotate-ccw');
 }
 
 /* ============================ Физика игрока ============================ */
@@ -3357,7 +3378,7 @@ function updatePlayer(dt) {
       }
       player.yawRate *= 0.68;
       if (preCollisionSpeed > 6 && crashCooldown <= 0) {
-        showCenterMsg('💥 СТОЛКНОВЕНИЕ!', 800, '#ff8a6a');
+        showCenterMsg('СТОЛКНОВЕНИЕ!', 800, '#ff8a6a', 'alert-triangle');
         player.driftChain = 0;
         vibrate(70);
         engine.beep(110, 0.2, 0.3);
@@ -3412,7 +3433,7 @@ function updatePlayer(dt) {
       player.yawRate *= 0.75;
       traffic.hitTimer = 1.4;
       if (crashCooldown <= 0) {
-        showCenterMsg('💥 Авария с трафиком!', 850, '#ff8a6a');
+        showCenterMsg('Авария с трафиком!', 850, '#ff8a6a', 'alert-triangle');
         vibrate(55);
         engine.beep(125, 0.16, 0.24);
         crashCooldown = 0.6;
@@ -3475,7 +3496,7 @@ function updatePlayer(dt) {
           if (!player.лучшийLap || lapTime < player.лучшийLap) {
             player.лучшийLap = lapTime;
             safeSetЛучшийLap(lapTime);
-            showCenterMsg(`🏆 РЕКОРД КРУГА: ${fmtTime(lapTime)}!`, 2200, '#ffb03a');
+            showCenterMsg(`РЕКОРД КРУГА: ${fmtTime(lapTime)}!`, 2200, '#ffb03a', 'trophy');
           }
         }
         player.lapStart = raceTime;
@@ -3485,7 +3506,7 @@ function updatePlayer(dt) {
           finishRace();
           return;
         }
-        if (player.lap === TOTAL_LAPS) showCenterMsg('🏁 ФИНАЛЬНЫЙ КРУГ!', 2200, '#ffb03a');
+        if (player.lap === TOTAL_LAPS) showCenterMsg('ФИНАЛЬНЫЙ КРУГ!', 2200, '#ffb03a', 'flag');
         else showCenterMsg(`КРУГ ${player.lap}/${TOTAL_LAPS}`, 1600);
         engine.beep(880, 0.2);
       } else {
@@ -4033,7 +4054,7 @@ function updateHUD(dt) {
   $('hudSurface').textContent = player.surface;
   $('nitroFill').style.width = `${Math.round(player.nitro * 100)}%`;
   document.querySelector('.nitro-bar').classList.toggle('boosting', player.boosting);
-  $('offroadTag').textContent = `🌿 ${player.surface}`;
+  $('offroadLabel').textContent = player.surface;
   $('offroadTag').classList.toggle('hidden', !player.offroad);
   $('hudTime').textContent = fmtTime(raceTime);
   $('hudScore').textContent = Math.floor(player.score).toLocaleString('ru-RU');
@@ -4045,7 +4066,7 @@ function updateHUD(dt) {
     const cp = CHECKPOINTS[player.nextCP];
     const pos = player.mesh.group.position;
     const d = Math.hypot(pos.x - cp.pos.x, pos.z - cp.pos.z);
-    $('hudCheckpoint').textContent = `🎯 ${Math.round(d)} м`;
+    $('hudCheckpoint').textContent = `${Math.round(d)} м`;
     const raceProgress = clamp(player.s / (TOTAL_LAPS * TRACK_LENGTH), 0, 1);
     $('hudProgressPct').textContent = `${Math.round(raceProgress * 100)}%`;
     $('hudProgressBar').style.width = `${raceProgress * 100}%`;
@@ -4070,15 +4091,15 @@ function updateCountdown(dt) {
   if (countdownT > 2.6) text = '3';
   else if (countdownT > 1.7) text = '2';
   else if (countdownT > 0.8) text = '1';
-  else if (countdownT > 0) text = 'ГО! 🏁';
+  else if (countdownT > 0) text = 'ГО!';
   if (text !== countdownShown) {
     countdownShown = text;
     el.textContent = text;
     el.classList.remove('pop');
     void el.offsetWidth;
     el.classList.add('pop');
-    engine.beep(text === 'ГО! 🏁' ? 990 : 440, 0.18);
-    if (text === 'ГО! 🏁') {
+    engine.beep(text === 'ГО!' ? 990 : 440, 0.18);
+    if (text === 'ГО!') {
       gameState = 'racing';
       player.lapStart = 0;
       vibrate(60);
@@ -4341,7 +4362,7 @@ function resetOrbitView(announce = true) {
   } else {
     resetCameraOrbit();
   }
-  if (announce && gameState !== 'menu') showCenterMsg('⌖ Обзор камеры сброшен', 850);
+  if (announce && gameState !== 'menu') showCenterMsg('Обзор камеры сброшен', 850, '#fff', 'crosshair');
 }
 window.addEventListener('pointerdown', (e) => {
   if (e.button !== undefined && e.button > 0) return;
@@ -4456,12 +4477,15 @@ function buildCarPicker() {
   CARS.forEach((car) => {
     const btn = document.createElement('button');
     btn.className = 'car-card' + (car === selectedCar ? ' selected' : '');
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', car === selectedCar ? 'true' : 'false');
     btn.innerHTML = `
       <div class="car-card-top">
-        <div class="car-swatch" style="background:#${car.color.toString(16).padStart(6, '0')}">${car.emoji}</div>
+        <div class="car-swatch" style="background:#${car.color.toString(16).padStart(6, '0')}">${iconMarkup(car.silhouette || 'car-coupe', 'car-silhouette')}</div>
         <div class="car-heading">
           <div class="car-name">${car.name}</div>
           <div class="car-class">${car.cls}</div>
+          <div class="car-drive-badge">${carDriveLabel(car)}</div>
         </div>
         <div class="car-pi"><span>${carClassCode(car)}</span><b>${carPerformanceIndex(car)}</b></div>
       </div>
@@ -4503,7 +4527,7 @@ function buildPaintPicker() {
   wrap.classList.remove('hidden');
   if (!paintConfig) {
     const factoryHex = `#${selectedCar.color.toString(16).padStart(6, '0')}`;
-    wrap.innerHTML = `<div class="paint-title">🎨 Цвет кузова: <b>заводской ${factoryHex.toUpperCase()}</b></div>`;
+    wrap.innerHTML = `<div class="paint-title">${iconMarkup('palette', 'ui-icon')} Цвет кузова: <b>заводской ${factoryHex.toUpperCase()}</b></div>`;
     const row = document.createElement('div');
     row.className = 'paint-row';
     const sw = document.createElement('button');
@@ -4511,19 +4535,24 @@ function buildPaintPicker() {
     sw.type = 'button';
     sw.disabled = true;
     sw.title = 'Заводской цвет';
+    sw.setAttribute('aria-label', `Заводской цвет ${factoryHex.toUpperCase()}`);
+    sw.setAttribute('aria-pressed', 'true');
     sw.style.background = factoryHex;
     row.appendChild(sw);
     wrap.appendChild(row);
     return;
   }
   const current = paintConfig.list.find((paint) => paint.hex === paintConfig.currentHex);
-  wrap.innerHTML = `<div class="paint-title">🎨 Краска ${paintConfig.label}: <b>${current ? current.name : ''}</b></div>`;
+  wrap.innerHTML = `<div class="paint-title">${iconMarkup('palette', 'ui-icon')} Краска ${paintConfig.label}: <b>${current ? current.name : ''}</b></div>`;
   const row = document.createElement('div');
   row.className = 'paint-row';
   paintConfig.list.forEach((paint) => {
     const sw = document.createElement('button');
     sw.className = 'paint-swatch' + (paint.hex === paintConfig.currentHex ? ' selected' : '');
+    sw.type = 'button';
     sw.title = paint.name;
+    sw.setAttribute('aria-label', `Краска: ${paint.name}`);
+    sw.setAttribute('aria-pressed', paint.hex === paintConfig.currentHex ? 'true' : 'false');
     sw.style.background = `#${paint.hex.toString(16).padStart(6, '0')}`;
     sw.addEventListener('click', () => {
       paintConfig.apply(paint.hex);
@@ -4554,8 +4583,11 @@ function previewCarInMenu() {
 
 document.querySelectorAll('.mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
+    document.querySelectorAll('.mode-btn').forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
     selectedMode = btn.dataset.mode;
     updateMenuHero();
   });
@@ -4564,8 +4596,8 @@ document.querySelectorAll('.mode-btn').forEach((btn) => {
 function cycleCamera() {
   cameraMode = (cameraMode + 1) % 3;
   if (cameraMode === 2 && !inspectMode) resetCameraOrbit();
-  const names = ['Камера: погоня 🎥', 'Камера: издалека 🎥', 'Камера: капот 🎥'];
-  showCenterMsg(names[cameraMode], 900);
+  const names = ['Камера: погоня', 'Камера: издалека', 'Камера: капот'];
+  showCenterMsg(names[cameraMode], 900, '#fff', 'camera');
 }
 
 function pauseGame() {
@@ -4612,7 +4644,7 @@ function enterInspectMode() {
   showTouchControls(false);
   cameraOrbit.idle = 0;
   if (cameraMode === 2) cameraMode = 0;
-  showCenterMsg('🔍 Осматривай машину со всех сторон', 1300, '#2ee6ff');
+  showCenterMsg('Осматривай машину со всех сторон', 1300, '#2ee6ff', 'eye');
 }
 function exitInspectMode() {
   inspectMode = false;
@@ -4623,18 +4655,29 @@ function applyControlScheme(scheme, announce = false) {
   controlScheme = scheme === 'buttons' ? 'buttons' : 'wheel';
   safeSetItem('nh_controls', controlScheme);
   document.querySelectorAll('.control-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.control === controlScheme);
+    const active = btn.dataset.control === controlScheme;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   resetSteering();
   if (gameState === 'racing' || gameState === 'countdown') showTouchControls(true);
   else showTouchControls(false);
-  if (announce) showCenterMsg(controlScheme === 'wheel' ? 'Управление: аналоговый руль 🎡' : 'Управление: кнопки ◀▶', 1000);
+  if (announce) {
+    showCenterMsg(
+      controlScheme === 'wheel' ? 'Управление: аналоговый руль' : 'Управление: сенсорные кнопки',
+      1000,
+      '#fff',
+      controlScheme === 'wheel' ? 'steering-wheel' : 'gamepad',
+    );
+  }
 }
 function applyAssistMode(mode, announce = false) {
   assistMode = ASSIST_PROFILES[mode] ? mode : 'sport';
   safeSetItem('nh_assist', assistMode);
   document.querySelectorAll('.assist-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.assist === assistMode);
+    const active = btn.dataset.assist === assistMode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   if (announce) showCenterMsg(`Ассистенты: ${ASSIST_PROFILES[assistMode].label}`, 1000);
 }
@@ -4649,7 +4692,9 @@ function applyGraphicsQuality(quality, announce = false) {
   graphicsQuality = quality === 'fast' ? 'fast' : 'realistic';
   safeSetItem('nh_gfx', graphicsQuality);
   document.querySelectorAll('[data-gfx]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.gfx === graphicsQuality);
+    const active = btn.dataset.gfx === graphicsQuality;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -4675,8 +4720,10 @@ function applyGraphicsQuality(quality, announce = false) {
   cloudGroup.visible = graphicsQuality === 'realistic';
   if (announce) {
     showCenterMsg(
-      graphicsQuality === 'realistic' ? 'Графика: реалистичная ✨' : 'Графика: быстрая ⚡',
-      1100
+      graphicsQuality === 'realistic' ? 'Графика: реалистичная' : 'Графика: быстрая',
+      1100,
+      '#fff',
+      graphicsQuality === 'realistic' ? 'sparkles' : 'zap',
     );
   }
 }
@@ -4704,7 +4751,10 @@ $('btnInspectCamera').addEventListener('click', cycleCamera);
 $('btnRespawn').addEventListener('click', () => gameState === 'racing' && respawn());
 $('btnSound').addEventListener('click', () => {
   engine.enabled = !engine.enabled;
-  $('btnSound').textContent = engine.enabled ? '🔊' : '🔇';
+  const btn = $('btnSound');
+  setIcon(btn, engine.enabled ? 'volume-2' : 'volume-x');
+  btn.setAttribute('aria-pressed', engine.enabled ? 'true' : 'false');
+  btn.title = engine.enabled ? 'Выключить звук' : 'Включить звук';
   engine.init();
 });
 

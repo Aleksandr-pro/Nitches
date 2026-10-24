@@ -47,6 +47,60 @@ button {
   color: #fff;
 }
 
+/* ============ Stage 2: единая SVG-иконография ============ */
+.svg-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ui-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.18em;
+}
+
+.inline-icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.14em;
+}
+
+.hud-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.hud-meta .ui-icon {
+  width: 15px;
+  height: 15px;
+  vertical-align: initial;
+  color: var(--accent2);
+}
+
+.score-row .hud-meta:first-child .ui-icon {
+  color: #ff7a3c;
+}
+
+.score-row .hud-meta:last-child .ui-icon {
+  color: #7cfc4a;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: default;
+}
+
 /* ============ HUD ============ */
 #hud {
   position: fixed;
@@ -171,8 +225,21 @@ button {
   border-radius: 12px;
   background: var(--dark);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  font-size: 19px;
+  display: grid;
+  place-items: center;
   backdrop-filter: blur(6px);
+  transition: transform 0.1s, background 0.1s, border-color 0.1s;
+}
+
+.icon-btn .ui-icon {
+  width: 22px;
+  height: 22px;
+  vertical-align: initial;
+}
+
+.icon-btn:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(25, 30, 52, 0.86);
 }
 
 .icon-btn:active {
@@ -184,17 +251,33 @@ button {
   position: absolute;
   top: 16%;
   left: 50%;
+  width: min(92vw, 760px);
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32em;
   font-size: clamp(20px, 5vw, 38px);
   font-weight: 900;
   font-style: italic;
   letter-spacing: 1px;
+  line-height: 1.05;
   text-shadow: 0 3px 18px rgba(0, 0, 0, 0.7);
   color: #fff;
   opacity: 0;
   transition: opacity 0.25s;
-  white-space: nowrap;
   text-align: center;
+}
+
+.center-msg-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.center-msg-icon .ui-icon {
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: initial;
 }
 
 #countdown {
@@ -231,6 +314,9 @@ button {
   position: absolute;
   right: 16px;
   bottom: 272px;
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
   font-size: clamp(16px, 3.4vw, 26px);
   font-weight: 900;
   font-style: italic;
@@ -239,6 +325,13 @@ button {
   opacity: 0;
   transform: rotate(-3deg);
   text-align: right;
+}
+
+#driftPopup .ui-icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: initial;
+  color: #ff7a3c;
 }
 
 .speedo {
@@ -266,11 +359,21 @@ button {
 }
 
 .nitro-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 2px;
   color: var(--cyan);
   margin-top: 2px;
+}
+
+.nitro-label .ui-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: initial;
 }
 
 .nitro-bar {
@@ -297,7 +400,9 @@ button {
 
 .offroad-tag {
   margin-top: 6px;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: rgba(70, 120, 40, 0.85);
   padding: 3px 10px;
   border-radius: 20px;
@@ -306,15 +411,28 @@ button {
   letter-spacing: 1px;
 }
 
+.offroad-tag .ui-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: initial;
+}
+
 #checkpointArrow {
   position: absolute;
   top: 64px;
   left: 50%;
+  width: 34px;
+  height: 34px;
   transform: translateX(-50%);
-  font-size: 30px;
   color: #7CFC4A;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8));
   transition: none;
+}
+
+#checkpointArrow .ui-icon {
+  width: 100%;
+  height: 100%;
+  vertical-align: initial;
 }
 
 /* ============ Сенсорное управление ============ */
@@ -362,6 +480,23 @@ button {
   font-weight: 800;
   letter-spacing: 1px;
   opacity: 0.85;
+}
+
+.touch-btn .ui-icon {
+  width: 27px;
+  height: 27px;
+  vertical-align: initial;
+  pointer-events: none;
+}
+
+.touch-btn.gas .ui-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.touch-btn.mini .ui-icon {
+  width: 22px;
+  height: 22px;
 }
 
 .touch-btn.pressed {
@@ -438,15 +573,24 @@ button {
   position: fixed;
   bottom: calc(180px + var(--safe-b));
   left: 50%;
+  max-width: calc(100vw - 24px);
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(255, 94, 58, 0.92);
   padding: 8px 16px;
   border-radius: 24px;
   font-size: 14px;
   font-weight: 700;
   z-index: 30;
-  white-space: nowrap;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+#rotateHint .ui-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: initial;
 }
 
 /* ============ Меню / шоурум ============ */
@@ -487,7 +631,9 @@ button {
 }
 
 .logo-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: linear-gradient(90deg, var(--accent), var(--accent2));
   padding: 5px 14px;
   border-radius: 999px;
@@ -497,6 +643,12 @@ button {
   transform: skewX(-8deg);
   box-shadow: 0 4px 18px rgba(255, 94, 58, 0.45);
   white-space: nowrap;
+}
+
+.logo-badge .ui-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: initial;
 }
 
 .logo h1 {
@@ -579,6 +731,19 @@ button {
   white-space: nowrap;
 }
 
+.profile-best {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-best .ui-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: initial;
+  color: var(--accent2);
+}
+
 .profile-level {
   margin-left: auto;
   text-align: center;
@@ -640,6 +805,19 @@ button {
   letter-spacing: 1.2px;
 }
 
+.section-title-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.section-title-label .ui-icon {
+  width: 17px;
+  height: 17px;
+  vertical-align: initial;
+  color: var(--accent2);
+}
+
 .menu-section-title.modes-title {
   margin-top: 18px;
 }
@@ -683,12 +861,32 @@ button {
   width: 50px;
   height: 50px;
   border-radius: 15px;
-  font-size: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 18px rgba(0, 0, 0, 0.3);
+}
+
+.car-silhouette {
+  width: 40px;
+  height: 40px;
+  display: block;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.car-drive-badge {
+  display: inline-flex;
+  margin-top: 5px;
+  padding: 2px 6px;
+  border: 1px solid rgba(46, 230, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(46, 230, 255, 0.1);
+  color: var(--cyan);
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
 }
 
 .car-heading {
@@ -776,6 +974,10 @@ button {
 
 .mode-btn {
   width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 16px;
@@ -784,6 +986,37 @@ button {
   font-weight: 900;
   font-style: italic;
   text-align: left;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+
+.mode-btn:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.mode-btn:active {
+  transform: scale(0.985);
+}
+
+.mode-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--accent2);
+}
+
+.mode-icon .ui-icon {
+  width: 21px;
+  height: 21px;
+  vertical-align: initial;
+}
+
+.mode-copy {
+  min-width: 0;
 }
 
 .mode-btn small {
@@ -927,8 +1160,18 @@ button {
 
 .showroom-hint {
   margin-top: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10.5px;
   color: rgba(255, 255, 255, 0.68);
+}
+
+.showroom-hint .ui-icon {
+  width: 15px;
+  height: 15px;
+  vertical-align: initial;
+  color: var(--cyan);
 }
 
 .menu-dock {
@@ -948,10 +1191,20 @@ button {
 }
 
 .paint-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.2px;
   margin-bottom: 10px;
+}
+
+.paint-title .ui-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: initial;
+  color: var(--accent2);
 }
 
 .paint-title b {
@@ -1007,6 +1260,16 @@ button {
 
 .gfx-label {
   min-width: 112px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gfx-label .ui-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: initial;
+  color: var(--accent2);
 }
 
 .gfx-btn {
@@ -1050,6 +1313,18 @@ button {
   font-weight: 800;
   letter-spacing: 0.2px;
   opacity: 0.88;
+}
+
+.start-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.start-label .ui-icon {
+  width: 0.92em;
+  height: 0.92em;
+  vertical-align: initial;
 }
 
 #btnStart:hover {
@@ -1341,13 +1616,43 @@ button {
   font-style: italic;
 }
 
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.panel-title .ui-icon {
+  width: 24px;
+  height: 24px;
+  vertical-align: initial;
+  color: var(--accent2);
+}
+
 .panel-btn {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 14px;
   border-radius: 12px;
   font-size: 16px;
   font-weight: 800;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: transform 0.1s, border-color 0.1s, background 0.1s;
+}
+
+.panel-btn .ui-icon {
+  width: 19px;
+  height: 19px;
+  vertical-align: initial;
+}
+
+.panel-btn:hover {
+  border-color: rgba(255, 255, 255, 0.38);
 }
 
 .panel-btn.primary {
@@ -1359,14 +1664,33 @@ button {
 }
 
 .finish-flag {
-  font-size: 52px;
+  display: flex;
+  justify-content: center;
+  color: var(--accent2);
+}
+
+.finish-flag .ui-icon {
+  width: 58px;
+  height: 58px;
+  vertical-align: initial;
 }
 
 #finishPlace {
-  font-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: clamp(24px, 7vw, 40px);
   font-weight: 900;
   font-style: italic;
+  line-height: 1.05;
   color: var(--accent2);
+}
+
+.finish-place-icon {
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: initial;
 }
 
 #finishTable {
@@ -1571,22 +1895,44 @@ button {
 .inspect-text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
   font-size: 14px;
   line-height: 1.25;
 }
+.inspect-text > .ui-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: initial;
+  color: var(--cyan);
+}
 .inspect-text span {
   display: block;
+  flex-basis: calc(100% - 25px);
+  margin-left: 25px;
   font-size: 11px;
   opacity: 0.76;
   margin-top: 2px;
 }
 #inspectBar button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 11px 13px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.18);
   font-weight: 900;
   white-space: nowrap;
+}
+#inspectBar button .ui-icon {
+  width: 17px;
+  height: 17px;
+  vertical-align: initial;
 }
 #inspectBar button.primary {
   background: linear-gradient(92deg, #ff5e3a, #ffb03a);
@@ -1618,5 +1964,72 @@ button {
   }
   .inspect-text span {
     display: none;
+  }
+}
+
+/* Stage 2: компактные иконки на маленьких экранах. */
+@media (max-width: 560px) {
+  .hud-top-right {
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+  }
+  .icon-btn .ui-icon {
+    width: 20px;
+    height: 20px;
+  }
+  .hud-card {
+    min-width: 150px;
+  }
+  .race-sub {
+    font-size: 11px;
+    gap: 7px;
+  }
+  #centerMsg {
+    top: 14%;
+    letter-spacing: 0.35px;
+  }
+  .mode-btn {
+    min-height: 54px;
+    padding: 9px 10px;
+  }
+  .mode-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+  #rotateHint {
+    font-size: 12px;
+    padding: 7px 12px;
+  }
+  #inspectBar {
+    gap: 6px;
+    padding: 8px;
+  }
+  #inspectBar button {
+    padding: 10px;
+  }
+}
+
+@media (max-height: 500px) {
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .icon-btn .ui-icon {
+    width: 19px;
+    height: 19px;
+  }
+  #checkpointArrow {
+    top: 48px;
+    width: 28px;
+    height: 28px;
+  }
+  .touch-btn .ui-icon {
+    width: 23px;
+    height: 23px;
   }
 }
