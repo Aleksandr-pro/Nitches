@@ -184,7 +184,7 @@ export function createPowertrainSpec(car = {}) {
     maxBrakeForceN: maxBrakeTorqueNm / wheelRadiusM,
     brakeFrontBias: clamp(finite(config.brakeFrontBias, 0.68), 0.35, 0.85),
     maxReverseSpeedMps: clamp(positive(config.maxReverseSpeedMps, 9), 3, 16),
-    selectorHoldS: clamp(finite(config.selectorHoldS, 0.16), 0, 0.5),
+    selectorHoldS: clamp(finite(config.selectorHoldS, 0.09), 0, 0.5),
   });
 }
 
@@ -221,6 +221,7 @@ export function resetPowertrainState(state, spec) {
   state.pendingGear = null;
   state.shiftTimerS = 0;
   state.shiftDurationS = 0;
+  state.shiftHoldS = 0;
   state.engineRpm = spec.idleRpm;
   state.rpmRatio = clamp(spec.idleRpm / spec.limiterRpm, 0, 1);
   state.clutch = 0;
@@ -228,6 +229,7 @@ export function resetPowertrainState(state, spec) {
   state.drivePedal = 0;
   state.serviceBrakePedal = 0;
   state.engineTorqueNm = 0;
+  state.engineLoad = 0;
   state.wheelTorqueNm = 0;
   state.driveForceN = 0;
   state.engineBrakeForceN = 0;
@@ -272,8 +274,22 @@ function updateAutomaticGear(state, spec, speedMps, drivePedal) {
   if (lowerCoupledRpm > spec.limiterRpm * 0.94) return;
 
   const lowRpm = Math.max(spec.idleRpm + 500, spec.redlineRpm * 0.27);
-  const kickdown = drivePedal > 0.82 && coupledRpm < spec.redlineRpm * 0.62;
-  if ((coupledRpm > 0 && coupledRpm < lowRpm) || kickdown) {
+  // Anti-hunting hysteresis.  The first-to-second step is wide: an upshift
+  // at 97% lands near 58% in second.  A fixed 62% kickdown threshold would
+  // immediately request first again, so derive the threshold from the
+  // actual adjacent-gear step and require RPM to fall materially below
+  // the post-upshift operating point before kickdown is allowed.
+  const currentRatio = gearRatioFor(spec, state.gear);
+  const lowerRatio = gearRatioFor(spec, state.gear - 1);
+  const postUpshiftRpm = lowerRatio > 0
+    ? upshiftRpm * (currentRatio / lowerRatio)
+    : spec.redlineRpm * 0.58;
+  const kickdownRpm = Math.min(spec.redlineRpm * 0.62, postUpshiftRpm * 0.86);
+  const kickdown = drivePedal > 0.82
+    && coupledRpm < kickdownRpm
+    && finite(state.shiftHoldS, 0) <= 0;
+  const dangerouslyLow = coupledRpm > 0 && coupledRpm < Math.max(spec.idleRpm + 260, spec.redlineRpm * 0.2);
+  if ((coupledRpm > 0 && coupledRpm < lowRpm && (finite(state.shiftHoldS, 0) <= 0 || dangerouslyLow)) || kickdown) {
     startShift(state, spec, state.gear - 1);
   }
 }
@@ -288,6 +304,10 @@ function updateAutomaticGear(state, spec, speedMps, drivePedal) {
 export function updatePowertrain(state, spec, input = {}) {
   const dt = clamp(finite(input.dt, 0), 0, 0.05);
   const speedMps = finite(input.longitudinalSpeedMps, 0);
+  // Gearbox output follows the driven wheels.  During a burnout this is
+  // deliberately different from body speed, causing RPM flare and allowing
+  // the automatic gearbox to react to wheel speed rather than GPS speed.
+  const drivenWheelSpeedMps = finite(input.drivenWheelSpeedMps, speedMps);
   const throttlePedal = clamp(input.throttlePedal, 0, 1);
   const brakePedal = clamp(input.brakePedal, 0, 1);
   const canDrive = input.canDrive !== false;
@@ -302,6 +322,7 @@ export function updatePowertrain(state, spec, input = {}) {
     state.drivePedal = 0;
     state.serviceBrakePedal = 0;
     state.engineTorqueNm = 0;
+    state.engineLoad = 0;
     state.wheelTorqueNm = 0;
     state.driveForceN = 0;
     state.engineBrakeForceN = 0;
@@ -344,15 +365,22 @@ export function updatePowertrain(state, spec, input = {}) {
     }
   }
 
+  state.shiftHoldS = Math.max(0, finite(state.shiftHoldS, 0) - dt);
+
   // Complete an in-progress shift before making another automatic decision.
   if (state.pendingGear !== null) {
     state.shiftTimerS -= dt;
     if (state.shiftTimerS <= 0) {
-      state.gear = state.pendingGear;
+      const completedGear = state.pendingGear;
+      const wasUpshift = completedGear > state.gear;
+      state.gear = completedGear;
       state.pendingGear = null;
       state.shiftTimerS = 0;
       state.shiftDurationS = 0;
       state.shifting = false;
+      // Let the new gear actually pull for a beat.  This also makes each
+      // shift perceptible instead of a stutter around one threshold.
+      state.shiftHoldS = wasUpshift ? 0.55 : 0.28;
     }
   }
 
@@ -365,21 +393,21 @@ export function updatePowertrain(state, spec, input = {}) {
   const movingSelectedDirection = state.selector === 'R' ? speedMps < -0.2 : speedMps > 0.2;
   if (movingSelectedDirection && serviceBrakePedal > 0.03) drivePedal = 0;
 
-  updateAutomaticGear(state, spec, speedMps, drivePedal);
+  updateAutomaticGear(state, spec, drivenWheelSpeedMps, drivePedal);
 
   const activeGear = state.gear;
   const ratio = gearRatioFor(spec, activeGear);
-  const coupledRpm = coupledEngineRpm(spec, activeGear, speedMps);
+  const coupledRpm = coupledEngineRpm(spec, activeGear, drivenWheelSpeedMps);
   const pendingCoupledRpm = state.pendingGear === null
     ? coupledRpm
-    : coupledEngineRpm(spec, state.pendingGear, speedMps);
+    : coupledEngineRpm(spec, state.pendingGear, drivenWheelSpeedMps);
 
   // Clutch model: open during shifts, deliberately slipping in first/reverse
   // at launch, and open at a standstill with no drive request.
   let clutchTarget = 1;
   if (state.pendingGear !== null) {
     clutchTarget = 0;
-  } else if (Math.abs(speedMps) < 0.12 && drivePedal <= 0.02) {
+  } else if (Math.abs(drivenWheelSpeedMps) < 0.12 && drivePedal <= 0.02) {
     clutchTarget = 0;
   } else if (activeGear === 1 || activeGear === -1) {
     const engagement = smoothstep(spec.launchRpm * 0.34, spec.launchRpm * 0.98, coupledRpm);
@@ -455,6 +483,7 @@ export function updatePowertrain(state, spec, input = {}) {
   state.drivePedal = drivePedal;
   state.serviceBrakePedal = serviceBrakePedal;
   state.engineTorqueNm = engineTorqueNm;
+  state.engineLoad = clamp(drivePedal * state.clutch, 0, 1);
   state.wheelTorqueNm = wheelTorqueNm;
   state.driveForceN = driveForceN;
   state.engineBrakeForceN = engineBrakeForceN;

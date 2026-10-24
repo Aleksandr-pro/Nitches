@@ -379,20 +379,38 @@ button {
   width: 92px;
   height: 92px;
   border-color: rgba(124, 252, 74, 0.7);
+  background: linear-gradient(
+    to top,
+    rgba(60, 180, 60, 0.84) calc(var(--pedal-value, 0) * 100%),
+    rgba(10, 12, 24, 0.55) 0
+  );
 }
 
 .touch-btn.gas.pressed {
-  background: rgba(60, 180, 60, 0.8);
+  background: linear-gradient(
+    to top,
+    rgba(80, 220, 80, 0.92) calc(var(--pedal-value, 0) * 100%),
+    rgba(10, 12, 24, 0.55) 0
+  );
 }
 
 .touch-btn.brake {
   width: 76px;
   height: 76px;
   border-color: rgba(255, 90, 90, 0.7);
+  background: linear-gradient(
+    to top,
+    rgba(205, 55, 55, 0.86) calc(var(--pedal-value, 0) * 100%),
+    rgba(10, 12, 24, 0.55) 0
+  );
 }
 
 .touch-btn.brake.pressed {
-  background: rgba(200, 50, 50, 0.85);
+  background: linear-gradient(
+    to top,
+    rgba(235, 70, 70, 0.94) calc(var(--pedal-value, 0) * 100%),
+    rgba(10, 12, 24, 0.55) 0
+  );
 }
 
 .touch-btn.mini {
