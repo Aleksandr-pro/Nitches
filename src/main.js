@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGTR35, GTR_PAINTS } from './gtr.js';
+import { buildMustang, preloadMustangModel, MUSTANG_PAINTS } from './mustang.js';
 import './style.css';
 
 /* =====================================================================
@@ -86,6 +87,21 @@ const CARS = [
     stats: { spd: 0.98, acc: 0.99, hnd: 0.96, off: 0.3 },
   },
   {
+    id: 'mustang',
+    name: 'MUSTANG FASTBACK',
+    cls: 'Класс A • реальная 3D-модель',
+    emoji: '🐎',
+    color: 0x17181c,
+    accent: 0xff7a1a,
+    topSpeed: 55, // м/с ≈ 198 км/ч
+    engine: 29,
+    grip: 8.2,
+    offroad: 0.55,
+    mass: 1470, powerKW: 271, driveFrontBias: 0, wheelbase: 2.613, cgToFront: 1.37, cgHeight: 0.53,
+    tireMu: 1.02, dragArea: 0.78, brakeDecel: 9.2, launchAccel: 5.7, maxSteer: 0.58,
+    stats: { spd: 0.84, acc: 0.84, hnd: 0.78, off: 0.38 },
+  },
+  {
     id: 'volt',
     name: 'VOLT GT',
     cls: 'Класс A • баланс',
@@ -160,6 +176,10 @@ function safeSetItem(key, value) {
 let selectedGTRPaint = Number(safeGetItem('nh_gtr_paint')) || GTR_PAINTS[0].hex;
 if (!GTR_PAINTS.some((paint) => paint.hex === selectedGTRPaint)) selectedGTRPaint = GTR_PAINTS[0].hex;
 CARS[0].color = selectedGTRPaint;
+let selectedMustangPaint = Number(safeGetItem('nh_mustang_paint')) || MUSTANG_PAINTS[0].hex;
+if (!MUSTANG_PAINTS.some((paint) => paint.hex === selectedMustangPaint)) selectedMustangPaint = MUSTANG_PAINTS[0].hex;
+const mustangCatalogCar = CARS.find((car) => car.id === 'mustang');
+if (mustangCatalogCar) mustangCatalogCar.color = selectedMustangPaint;
 let graphicsQuality = safeGetItem('nh_gfx') === 'fast' ? 'fast' : 'realistic';
 let controlScheme = safeGetItem('nh_controls') === 'buttons' ? 'buttons' : 'wheel';
 let assistMode = ['arcade', 'sport', 'drift'].includes(safeGetItem('nh_assist'))
@@ -2554,13 +2574,49 @@ function buildCarMesh(color, accent, isBuggy = false) {
   return { group: car, wheels, flame, wheelRadius: wy };
 }
 
+let mustangLoadInFlight = false;
+function requestMustangModel() {
+  if (mustangLoadInFlight) return;
+  mustangLoadInFlight = true;
+  preloadMustangModel()
+    .then(() => {
+      mustangLoadInFlight = false;
+      if (selectedCar.id !== 'mustang' || !player.mesh) return;
+      // Бесшовно заменяем fallback на настоящий GLB, сохраняя позу машины.
+      const oldGroup = player.mesh.group;
+      const position = oldGroup.position.clone();
+      const quaternion = oldGroup.quaternion.clone();
+      const scale = oldGroup.scale.clone();
+      createPlayerCar();
+      if (player.mesh) {
+        player.mesh.group.position.copy(position);
+        player.mesh.group.quaternion.copy(quaternion);
+        player.mesh.group.scale.copy(scale);
+      }
+    })
+    .catch((error) => {
+      mustangLoadInFlight = false;
+      console.warn('Mustang GLB не загрузился, остаётся fallback-модель:', error);
+    });
+}
+
 function createPlayerCar() {
   if (player.mesh) {
     scene.remove(player.mesh.group);
   }
-  const built = selectedCar.id === 'gtr35'
-    ? buildGTR35(selectedGTRPaint)
-    : buildCarMesh(selectedCar.color, selectedCar.accent, selectedCar.id === 'dune');
+  let built;
+  if (selectedCar.id === 'gtr35') {
+    built = buildGTR35(selectedGTRPaint);
+  } else if (selectedCar.id === 'mustang') {
+    built = buildMustang(selectedMustangPaint, selectedCar.accent);
+    if (!built) {
+      // GLB ещё грузится: мгновенно показываем близкий по размеру fallback.
+      built = buildCarMesh(selectedCar.color, selectedCar.accent, false);
+      requestMustangModel();
+    }
+  } else {
+    built = buildCarMesh(selectedCar.color, selectedCar.accent, selectedCar.id === 'dune');
+  }
   built.group.rotation.order = 'YXZ';
   player.mesh = built;
   player.wheels = built.wheels;
@@ -4222,9 +4278,23 @@ function buildCarPicker() {
 function buildPaintPicker() {
   const wrap = $('paintPicker');
   if (!wrap) return;
-  const isGTR = selectedCar.id === 'gtr35';
+  const paintConfig = selectedCar.id === 'gtr35'
+    ? {
+      list: GTR_PAINTS,
+      currentHex: selectedGTRPaint,
+      label: 'GT-R35',
+      apply: (hex) => { selectedGTRPaint = hex; safeSetItem('nh_gtr_paint', hex); },
+    }
+    : selectedCar.id === 'mustang'
+      ? {
+        list: MUSTANG_PAINTS,
+        currentHex: selectedMustangPaint,
+        label: 'Mustang',
+        apply: (hex) => { selectedMustangPaint = hex; safeSetItem('nh_mustang_paint', hex); },
+      }
+      : null;
   wrap.classList.remove('hidden');
-  if (!isGTR) {
+  if (!paintConfig) {
     const factoryHex = `#${selectedCar.color.toString(16).padStart(6, '0')}`;
     wrap.innerHTML = `<div class="paint-title">🎨 Цвет кузова: <b>заводской ${factoryHex.toUpperCase()}</b></div>`;
     const row = document.createElement('div');
@@ -4239,19 +4309,18 @@ function buildPaintPicker() {
     wrap.appendChild(row);
     return;
   }
-  const current = GTR_PAINTS.find((paint) => paint.hex === selectedGTRPaint);
-  wrap.innerHTML = `<div class="paint-title">🎨 Краска GT-R35: <b>${current ? current.name : ''}</b></div>`;
+  const current = paintConfig.list.find((paint) => paint.hex === paintConfig.currentHex);
+  wrap.innerHTML = `<div class="paint-title">🎨 Краска ${paintConfig.label}: <b>${current ? current.name : ''}</b></div>`;
   const row = document.createElement('div');
   row.className = 'paint-row';
-  GTR_PAINTS.forEach((paint) => {
+  paintConfig.list.forEach((paint) => {
     const sw = document.createElement('button');
-    sw.className = 'paint-swatch' + (paint.hex === selectedGTRPaint ? ' selected' : '');
+    sw.className = 'paint-swatch' + (paint.hex === paintConfig.currentHex ? ' selected' : '');
     sw.title = paint.name;
     sw.style.background = `#${paint.hex.toString(16).padStart(6, '0')}`;
     sw.addEventListener('click', () => {
-      selectedGTRPaint = paint.hex;
+      paintConfig.apply(paint.hex);
       selectedCar.color = paint.hex;
-      safeSetItem('nh_gtr_paint', paint.hex);
       buildCarPicker();
       previewCarInMenu();
     });

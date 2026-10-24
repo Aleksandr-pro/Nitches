@@ -12,4 +12,10 @@
 
 Инвентаризация архива: [`asset-inbox/imports/mustang/inventory.md`](../../../asset-inbox/imports/mustang/inventory.md).
 
-Игровой файл `public/assets/models/cars/mustang/mustang.glb` генерируется из `Mustang/Mustang.obj` скриптом [`scripts/blender_convert_car.py`](../../../scripts/blender_convert_car.py); цвета материалов при возможности читаются из `Mustang/Mustang.blend`. Отчёт конвертации сохраняется как `asset-inbox/imports/mustang/conversion.json`.
+Игровой файл `public/assets/models/cars/mustang/mustang.glb` сгенерирован из `Mustang/Mustang.obj` скриптом [`scripts/blender_convert_car.py`](../../../scripts/blender_convert_car.py); цвета материалов при возможности читаются из `Mustang/Mustang.blend`.
+
+- Runtime GLB: `5874616` байт
+- SHA-256 runtime GLB: `51226f39c160b184dd74b608e11f0ff93f5902bee3a4a24f4ccc3526c8bfe456`
+- Треугольников: `157759`
+- Габариты в игре: `4.66 × 1.835 × 1.302` м (длина × ширина × высота)
+- Отчёты: [`conversion.json`](../../../asset-inbox/imports/mustang/conversion.json) и [`loader-validation.json`](../../../asset-inbox/imports/mustang/loader-validation.json)

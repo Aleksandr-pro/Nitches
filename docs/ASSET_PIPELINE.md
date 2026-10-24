@@ -6,7 +6,7 @@
 
 ## Что уже есть в репозитории
 
-Сейчас в игре нет внешних пользовательских 3D-моделей автомобилей: GT-R и остальные машины строятся процедурно в `src/gtr.js` и `src/main.js`. Для сквозной проверки LFS добавлен маленький детерминированный фикстурный файл:
+Первая внешняя машина уже подключена: **Mustang Fastback** загружается из `public/assets/models/cars/mustang/mustang.glb` через `src/mustang.js`, а её исходный пакет хранится в `asset-source/cars/mustang/Mustang.zip`. Остальные машины пока строятся процедурно в `src/gtr.js` и `src/main.js`. Для сквозной проверки LFS также добавлен маленький детерминированный фикстурный файл:
 
 ```text
 public/assets/models/_pipeline/pipeline-smoke.glb
@@ -46,7 +46,7 @@ public/assets/models/cars/my-car/
 
 - модели: `.glb`, `.fbx`, `.blend`, `.blend1`, `.dae`, `.3ds`, `.max`, `.ma`, `.mb`, `.obj`, `.mtl`, `.stl`, `.ply`, `.usdz`, `.usdc` — где бы они ни лежали;
 - `.bin` внутри `public/assets/models/` и `asset-source/` — sidecar-данные для текстовых `.gltf`;
-- текстуры `.png`, `.jpg`, `.jpeg`, `.webp`, `.ktx2`, `.basis`, `.tga`, `.hdr`, `.exr`, `.dds` — только внутри `public/assets/` и `asset-source/`;
+- текстуры `.png`, `.jpg`, `.jpeg`, `.webp`, `.ktx2`, `.basis`, `.tga`, `.tif`, `.tiff`, `.hdr`, `.exr`, `.dds` — только внутри `public/assets/` и `asset-source/`;
 - исходники текстур `.psd`, `.xcf` и архивы поставки — только в `asset-source/`.
 
 Текстовый `.gltf` намеренно остаётся обычным Git-файлом: его удобно читать и сравнивать, а тяжёлые `.bin`/текстуры рядом с ним уходят в LFS. Для автомобилей всё равно предпочтителен один самодостаточный `.glb`.
@@ -58,7 +58,7 @@ public/assets/models/cars/my-car/
 - Формат: **binary glTF 2.0 (`.glb`)**, один файл, текстуры встроены.
 - Масштаб: **1 единица = 1 метр**. Реальная длина и колёсная база автомобиля обязательны — физика проекта метрическая.
 - Ориентация: нос автомобиля смотрит в **+Z**, верх — **+Y**, центр между осями находится в начале координат, нижняя точка шин касается `Y=0`.
-- Отдельные узлы колёс с именами ровно `Wheel_FL`, `Wheel_FR`, `Wheel_RL`, `Wheel_RR`; pivot каждого колеса — в центре его ступицы.
+- Отдельные узлы колёс с именами ровно `Wheel_FL`, `Wheel_FR`, `Wheel_RL`, `Wheel_RR`; pivot каждого колеса — в центре его ступицы. Внутри каждого pivot должен быть дочерний узел `Wheel_*_Spin`, в который игра записывает вращение по X, а рулевое вращение по Y применяется к самому pivot.
 - Желательные отдельные узлы/материалы: кузов (`Paint`), стекло, шины, диски, фары, салон. Материал краски не должен «запекать» один-единственный цвет в текстуру, если машине нужна перекраска из гаража.
 - Бюджет мобильной WebGL-модели: ориентируйтесь на 50–150 тыс. треугольников и разумный размер файла (лучше до 15–30 МБ на машину), текстуры обычно не крупнее 2048×2048. Это рекомендации, а не жёсткий лимит валидатора.
 - Не используйте Draco/Meshopt-сжатие и KTX2, пока соответствующие декодеры не подключены к загрузчику игры: файл сохранится и соберётся, но runtime может его не открыть.
@@ -119,16 +119,27 @@ git push
 
 Отчёт показывает состав архива, точные дубликаты, runtime-кандидаты `.glb/.gltf`, исходники, текстуры, а для OBJ/MTL — объекты, материалы, оценку треугольников после триангуляции и сырые габариты. Сама модель на этом шаге ещё не копируется ни в `public/`, ни в `asset-source/`: сначала нужно подтвердить источник/лицензию и решить, какой файл конвертировать и насколько сильно оптимизировать.
 
+Когда решение принято, создаётся манифест `asset-inbox/conversions/<car-id>.json`. Push в не-`main` ветку запускает workflow **Model Inbox convert**: runner устанавливает Blender, снова скачивает и проверяет архив из inbox, безопасно распаковывает его, читает цвета из `.blend` (best effort), запускает `scripts/blender_convert_car.py` для декимации, нормализации масштаба/осей и сборки узлов `Wheel_*`/`Wheel_*_Spin`, затем проверяет результат настоящим Three.js `GLTFLoader`. Исходный ZIP коммитится в `asset-source/cars/<car-id>/`, оптимизированный GLB — в `public/assets/models/cars/<car-id>/`, а отчёты `conversion.json` и `loader-validation.json` — рядом с инвентаризацией. Перед push runner загружает объекты в LFS, удаляет локальные копии и кэш, скачивает их заново и сверяет SHA-256.
+
+Для Mustang исходные ~717 тыс. треугольников и 232 МиБ распакованных дублирующих комплектов превратились в runtime-GLB на **157 759 треугольников** и **5 874 616 байт**; исходный ZIP целиком сохранён только как архивный источник и в APK не попадает.
+
 ## Клонировать и собрать в чистом окружении
 
 ```bash
 git clone https://github.com/Aleksandr-pro/Nitches.git
 cd Nitches
 git lfs install --local
-git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""
+git lfs pull --include="public/assets/models/**" --exclude=""
 npm ci
 npm run build
 npx cap sync android
+```
+
+Для обычной сборки нужны только runtime-модели из `public/assets/models/**`. Архивные исходники в `asset-source/**` могут оставаться LFS-pointer'ами: `npm run assets:check` предупредит о них, но не упадёт, чтобы каждый web/APK-билд не скачивал, например, 102-МБ ZIP Mustang. Если нужно материализовать и строго проверить **все** исходники, выполните:
+
+```bash
+git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""
+npm run assets:check-all
 ```
 
 `npm run build` автоматически выполняет:
@@ -141,13 +152,14 @@ npx cap sync android
 
 ```text
 ✗ public/assets/models/cars/my-car/my-car.glb: still a Git LFS pointer ...
-Run: git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""
+Run: git lfs pull --include="public/assets/models/**" --exclude=""
 ```
 
 ## Что настроено в CI
 
-- `.github/workflows/validate-assets.yml` — чистая проверка на GitHub-hosted runner: `actions/checkout` с `lfs: true`, явный `git lfs pull`, сверка фикстурного GLB с генератором, `npm ci`, `npm run build`, `npx cap sync android` и сравнение SHA-256 в `public/`, `dist/` и Android assets.
-- `.github/workflows/build-apk.yml` — релизная сборка APK теперь тоже делает checkout с `lfs: true`, явный `git lfs pull` и валидацию до установки зависимостей. APK не соберётся из pointer-файлов.
+- `.github/workflows/validate-assets.yml` — чистая проверка на GitHub-hosted runner: checkout с `lfs: false`, явный `git lfs pull` только runtime-моделей `public/assets/models/**`, сверка фикстурного GLB с генератором, `npm ci`, `npm run build`, `npx cap sync android` и сравнение SHA-256 в `public/`, `dist/` и Android assets.
+- `.github/workflows/build-apk.yml` — релизная сборка APK делает такой же runtime-only LFS pull и валидацию до установки зависимостей. APK не соберётся из pointer-файлов, а большие архивные исходники из `asset-source/` при этом не скачиваются.
+- `.github/workflows/model-inbox-convert.yml` — импорт выбранной модели из Model Inbox: скачивание архива, Blender-конвертация, GLTFLoader-валидация, загрузка GLB и исходного ZIP в LFS и проверка повторным скачиванием по SHA-256.
 
 ## Квоты GitHub LFS и запасной план
 

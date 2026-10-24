@@ -13,6 +13,8 @@ on:
       - 'public/assets/models/**'
       - 'scripts/check-lfs-assets.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/validate-glb-loader.mjs'
+      - 'src/mustang.js'
   push:
     branches:
       - main
@@ -28,6 +30,8 @@ on:
       - 'public/assets/models/**'
       - 'scripts/check-lfs-assets.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/validate-glb-loader.mjs'
+      - 'src/mustang.js'
   workflow_dispatch:
 
 permissions:
@@ -76,6 +80,14 @@ jobs:
 
       - name: Install dependencies (clean)
         run: npm ci
+
+      - name: Parse runtime car GLBs with Three.js GLTFLoader
+        run: |
+          shopt -s globstar nullglob
+          for glb in public/assets/models/cars/**/*.glb; do
+            echo "Validating $glb"
+            node scripts/validate-glb-loader.mjs "$glb"
+          done
 
       - name: Build web game
         run: npm run build
