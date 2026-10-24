@@ -1,0 +1,183 @@
+name: Model Inbox scene inspection
+
+# Downloads one large standalone model/scene from the draft GitHub Release
+# "Model Inbox", imports it in headless Blender, and commits a small
+# measurement report (JSON/Markdown/SVG footprint) to the same arena branch.
+# It does not copy the source model into Git/LFS or convert it for runtime.
+on:
+  push:
+    branches:
+      - 'arena/**'
+    paths:
+      - 'asset-inbox/inspections/*.json'
+      - '.github/workflows/model-inbox-inspect.yml'
+      - 'scripts/blender_inspect_scene.py'
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Inspection manifest, e.g. asset-inbox/inspections/kingsford-manhattan-city.json'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: model-inbox-inspect-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Inspect Model Inbox scene in Blender
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BEFORE_SHA: ${{ github.event.before }}
+      INPUT_MANIFEST: ${{ inputs.manifest }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Checkout branch without pulling LFS payloads
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install Blender
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender python3-numpy jq
+          blender --version
+
+      - name: Select inspection manifests
+        run: |
+          set -euo pipefail
+          MANIFESTS=()
+          if [ -n "${INPUT_MANIFEST}" ]; then
+            MANIFESTS=("${INPUT_MANIFEST}")
+          elif [ -n "${BEFORE_SHA}" ] && [ "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            mapfile -t MANIFESTS < <(git diff --name-only --diff-filter=AM "${BEFORE_SHA}" "${GITHUB_SHA}" -- 'asset-inbox/inspections/*.json')
+          fi
+          if [ "${#MANIFESTS[@]}" -eq 0 ]; then
+            mapfile -t MANIFESTS < <(find asset-inbox/inspections -maxdepth 1 -type f -name '*.json' | sort)
+          fi
+          if [ "${#MANIFESTS[@]}" -eq 0 ]; then
+            echo "No inspection manifests found" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/model-inspect"
+          printf '%s\n' "${MANIFESTS[@]}" | tee "$RUNNER_TEMP/model-inspect/manifests.txt"
+
+      - name: Download and inspect selected scenes
+        run: |
+          set -euo pipefail
+          WORK_ROOT="$RUNNER_TEMP/model-inspect"
+          mkdir -p "$WORK_ROOT"
+          : > "$WORK_ROOT/report-dirs.txt"
+
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            case "$manifest" in
+              asset-inbox/inspections/*.json) ;;
+              *) echo "Refusing unexpected manifest path: $manifest" >&2; exit 1 ;;
+            esac
+            test -f "$manifest"
+
+            asset_key="$(jq -r '.assetKey' "$manifest")"
+            display_name="$(jq -r '.displayName // .assetKey' "$manifest")"
+            release_id="$(jq -r '.releaseId' "$manifest")"
+            asset_id="$(jq -r '.assetId' "$manifest")"
+            asset_name="$(jq -r '.assetName' "$manifest")"
+            expected_size="$(jq -r '.expectedSize // 0' "$manifest")"
+            expected_sha="$(jq -r '.expectedSha256 // ""' "$manifest")"
+
+            if ! [[ "$asset_key" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+              echo "Invalid assetKey in $manifest: $asset_key" >&2
+              exit 1
+            fi
+            if ! [[ "$release_id" =~ ^[0-9]+$ && "$asset_id" =~ ^[0-9]+$ && "$expected_size" =~ ^[0-9]+$ ]]; then
+              echo "releaseId, assetId and expectedSize must be numeric in $manifest" >&2
+              exit 1
+            fi
+            if [ -n "$expected_sha" ] && ! [[ "$expected_sha" =~ ^[a-f0-9]{64}$ ]]; then
+              echo "expectedSha256 must be lowercase SHA-256 in $manifest" >&2
+              exit 1
+            fi
+            case "$asset_name" in
+              */*|*\\*) echo "assetName must be a plain file name: $asset_name" >&2; exit 1 ;;
+            esac
+
+            work="$WORK_ROOT/$asset_key"
+            mkdir -p "$work"
+            source_file="$work/$asset_name"
+            report_dir="asset-inbox/inspections/$asset_key"
+            mkdir -p "$report_dir"
+            echo "$report_dir" >> "$WORK_ROOT/report-dirs.txt"
+
+            echo "Downloading Model Inbox asset $asset_id ($asset_name) for $asset_key..."
+            curl --fail --location --retry 3 --retry-delay 2 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              -o "$source_file"
+
+            actual_size="$(stat -c '%s' "$source_file")"
+            actual_sha="$(sha256sum "$source_file" | awk '{print $1}')"
+            echo "Downloaded $actual_size bytes, sha256 $actual_sha"
+            if [ "$expected_size" != "0" ] && [ "$actual_size" != "$expected_size" ]; then
+              echo "Size mismatch for $asset_name: expected $expected_size, got $actual_size" >&2
+              exit 1
+            fi
+            if [ -n "$expected_sha" ] && [ "$actual_sha" != "$expected_sha" ]; then
+              echo "SHA-256 mismatch for $asset_name: expected $expected_sha, got $actual_sha" >&2
+              exit 1
+            fi
+
+            echo "Inspecting $asset_name in Blender..."
+            timeout 30m blender -b --factory-startup -noaudio \
+              --python scripts/blender_inspect_scene.py -- \
+              --input "$source_file" \
+              --asset-key "$asset_key" \
+              --display-name "$display_name" \
+              --output-json "$report_dir/scene-inspection.json" \
+              --output-md "$report_dir/scene-inspection.md" \
+              --output-svg "$report_dir/footprint.svg" \
+              2>&1 | tee "$report_dir/blender-inspection.log"
+
+            test -s "$report_dir/scene-inspection.json"
+            test -s "$report_dir/scene-inspection.md"
+            test -s "$report_dir/footprint.svg"
+            jq -e '.input.sha256 and .summary and .worldBounds' "$report_dir/scene-inspection.json" >/dev/null
+            jq '{input, worldBounds, summary, warnings}' "$report_dir/scene-inspection.json"
+          done < "$WORK_ROOT/manifests.txt"
+
+      - name: Upload inspection reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-inbox-scene-inspection-${{ github.run_id }}
+          path: asset-inbox/inspections/*/
+          include-hidden-files: true
+          retention-days: 30
+
+      - name: Commit inspection reports to this branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mapfile -t REPORT_DIRS < "$RUNNER_TEMP/model-inspect/report-dirs.txt"
+          if [ "${#REPORT_DIRS[@]}" -eq 0 ]; then
+            echo "No report directories recorded" >&2
+            exit 1
+          fi
+          git add -- "${REPORT_DIRS[@]}"
+          if git diff --cached --quiet; then
+            echo "Inspection reports unchanged; nothing to commit."
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m "Add Model Inbox scene inspection report"
+          git push origin "HEAD:${BRANCH}"
