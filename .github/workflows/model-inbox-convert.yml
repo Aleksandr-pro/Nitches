@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender unzip
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y blender python3-numpy unzip
           blender --version
 
       - name: Select conversion manifests
