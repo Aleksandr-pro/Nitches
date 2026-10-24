@@ -6,7 +6,12 @@
   "description": "Мобильная фестивальная гоночная аркада с открытым миром в духе Forza Horizon",
   "scripts": {
     "dev": "vite",
+    "assets:check": "node scripts/check-lfs-assets.mjs",
+    "assets:check-dist": "node scripts/check-lfs-assets.mjs --dist",
+    "assets:fixture": "node scripts/generate-pipeline-smoke-glb.mjs",
+    "prebuild": "npm run assets:check",
     "build": "vite build",
+    "postbuild": "npm run assets:check-dist",
     "preview": "vite preview",
     "cap:sync": "npm run build && cap sync android",
     "android:open": "cap open android",

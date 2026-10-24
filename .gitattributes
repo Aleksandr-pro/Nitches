@@ -1,0 +1,61 @@
+# Nitches Horizon — large binary game assets in Git LFS.
+#
+# Runtime models live in public/assets/models/ and are copied by Vite into
+# dist/, then by Capacitor into the Android app. Editable source models live
+# in asset-source/ and are not shipped. Existing Android/PWA PNG icons are
+# intentionally not matched here, so enabling LFS does not rewrite history.
+
+# 3D model containers (matched anywhere so a model cannot slip into plain Git)
+*.glb filter=lfs diff=lfs merge=lfs -text
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.blend1 filter=lfs diff=lfs merge=lfs -text
+*.dae filter=lfs diff=lfs merge=lfs -text
+*.3ds filter=lfs diff=lfs merge=lfs -text
+*.max filter=lfs diff=lfs merge=lfs -text
+*.ma filter=lfs diff=lfs merge=lfs -text
+*.mb filter=lfs diff=lfs merge=lfs -text
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.mtl filter=lfs diff=lfs merge=lfs -text
+*.stl filter=lfs diff=lfs merge=lfs -text
+*.ply filter=lfs diff=lfs merge=lfs -text
+*.usdz filter=lfs diff=lfs merge=lfs -text
+*.usdc filter=lfs diff=lfs merge=lfs -text
+
+# Binary sidecars for text .gltf files. Prefer single-file .glb for cars;
+# .gltf JSON itself stays diffable in normal Git.
+public/assets/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.bin filter=lfs diff=lfs merge=lfs -text
+
+# Textures and environment maps only inside asset directories.
+public/assets/**/*.png filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.webp filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.ktx2 filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.basis filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.tga filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.hdr filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.exr filter=lfs diff=lfs merge=lfs -text
+public/assets/**/*.dds filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.png filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.webp filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.ktx2 filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.basis filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.tga filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.hdr filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.exr filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.dds filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.psd filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.xcf filter=lfs diff=lfs merge=lfs -text
+
+# Packed deliveries of source models/textures. Do not put archives needed at
+# runtime in public/: unpack and ship an optimized .glb instead.
+asset-source/**/*.zip filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.7z filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.rar filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.tar filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+asset-source/**/*.tgz filter=lfs diff=lfs merge=lfs -text
