@@ -4,6 +4,10 @@ import assert from 'node:assert/strict';
 import { createFestivalBritainFoundation } from '../../src/world/festivalBritain.js';
 import { getReachableNodeIds } from '../../src/world/roadGraph.js';
 import { buildTerrainTileGeometry, mergeGeometryData } from '../../src/world/meshBuilders.js';
+import {
+  MANHATTAN_CITY_BASE_HEIGHT_M,
+  manhattanCityPlateauFactor,
+} from '../../src/world/manhattanCity.js';
 
 const foundation = createFestivalBritainFoundation();
 
@@ -52,7 +56,13 @@ test('terrain is flattened onto the road corridor centreline', () => {
   for (const edge of foundation.roadGraph.edges) {
     for (let i = 0; i < edge.samples.length; i += 29) {
       const sample = edge.samples[i];
-      const delta = Math.abs(foundation.heightAt(sample.x, sample.z) - sample.y);
+      const h = foundation.heightAt(sample.x, sample.z);
+      // On a road centreline the pre-plateau height is the road profile
+      // itself; inside the imported city footprint (and its blend apron,
+      // which the north ring crosses) the flat plateau then overrides it.
+      const plateau = manhattanCityPlateauFactor(sample.x, sample.z);
+      const expected = sample.y + (MANHATTAN_CITY_BASE_HEIGHT_M - sample.y) * plateau;
+      const delta = Math.abs(h - expected);
       assert.ok(delta < 0.05, `${edge.id} centreline delta ${delta}`);
     }
   }

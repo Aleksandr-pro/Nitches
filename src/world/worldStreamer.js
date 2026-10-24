@@ -3,6 +3,7 @@ import { buildTerrainTileGeometry, mergeGeometryData } from './meshBuilders.js';
 import { ChunkStreamingPlanner } from './chunks.js';
 import { WORLD_WATER_LEVEL_M } from './festivalBritain.js';
 import { buildDressingArchetypes, mulberry32, planChunkDressing } from './dressing.js';
+import { MANHATTAN_CITY_BOUNDS } from './manhattanCity.js';
 
 const ROAD_MATERIAL_COLORS = {
   asphalt: 0x34373c,
@@ -211,6 +212,9 @@ export class WorldFoundationStreamer {
       // elevations, giving a flat drivable cross-section.
       const ribbon = buildRoadRibbonGeometry(roadEdge, {
         bounds: descriptor.bounds,
+        // Kingsford's procedural road decals stop at the imported city edge;
+        // inside, the Manhattan plate carries its own streets.
+        excludeBounds: MANHATTAN_CITY_BOUNDS,
         liftM: 0.14,
       });
       if (!ribbon.positions.length) continue;

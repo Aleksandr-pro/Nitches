@@ -8,6 +8,8 @@
  * a GLB template later only changes the streamer, not the placement.
  */
 
+import { isInsideManhattanCity } from './manhattanCity.js';
+
 function finite(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -119,6 +121,8 @@ export function planChunkDressing(foundation, cx, cz, { lodTier = 0 } = {}) {
   for (let i = 0; i < attempts; i++) {
     const x = bounds.minX + rng() * (bounds.maxX - bounds.minX);
     const z = bounds.minZ + rng() * (bounds.maxZ - bounds.minZ);
+    // The imported Manhattan GLB owns its footprint: no procedural scatter.
+    if (isInsideManhattanCity(x, z, 2)) continue;
     const district = foundation.getDistrict(x, z);
     const biome = district?.biome || 'countryside';
     const quota = BIOME_DENSITY[biome] || BIOME_DENSITY.countryside;
@@ -181,6 +185,7 @@ export function planChunkDressing(foundation, cx, cz, { lodTier = 0 } = {}) {
       const px = sample.x + frame.normal.x * side * offset;
       const pz = sample.z + frame.normal.z * side * offset;
       if (!insideBounds(bounds, px, pz, 4)) continue;
+      if (isInsideManhattanCity(px, pz, 6)) continue;
       const py = foundation.heightAt(px, pz);
       if (py < 0.5 || slopeApprox(foundation, px, pz) > 0.32) continue;
       const nearOther = foundation.nearestRoad(px, pz, { maxDistanceM: 40 });
@@ -216,6 +221,7 @@ export function planChunkDressing(foundation, cx, cz, { lodTier = 0 } = {}) {
         const px = sample.x + frame.normal.x * side * (edge.halfWidthM + 1.15);
         const pz = sample.z + frame.normal.z * side * (edge.halfWidthM + 1.15);
         if (!insideBounds(bounds, px, pz, 2)) continue;
+        if (isInsideManhattanCity(px, pz, 2)) continue;
         plan.lamps.push({ x: px, z: pz, y: foundation.heightAt(px, pz), rotY: frame.yaw });
         collider({ kind: 'circle', x: px, z: pz, r: 0.28 });
       }
@@ -237,6 +243,7 @@ export function planChunkDressing(foundation, cx, cz, { lodTier = 0 } = {}) {
           const px = sample.x + frame.normal.x * side * (edge.halfWidthM + 2.3);
           const pz = sample.z + frame.normal.z * side * (edge.halfWidthM + 2.3);
           if (!insideBounds(bounds, px, pz, 2)) continue;
+          if (isInsideManhattanCity(px, pz, 2)) continue;
           const py = foundation.heightAt(px, pz);
           if (py < 0.35) continue;
           plan.walls.push({
@@ -253,7 +260,8 @@ export function planChunkDressing(foundation, cx, cz, { lodTier = 0 } = {}) {
   addCastleIfInChunk(foundation, chunk, plan, collider);
   addFestivalIfInChunk(foundation, chunk, plan, collider, rngForChunk(foundation.seed ^ 0xFE57, cx, cz));
 
-  if (centreDistrict?.biome === 'urban' && plan.buildings.length === 0) {
+  if (centreDistrict?.biome === 'urban' && plan.buildings.length === 0
+    && !isInsideManhattanCity(chunk.center.x, chunk.center.z)) {
     // Dense centre chunks without road samples still get a skyline block.
     const x = chunk.center.x;
     const z = chunk.center.z;

@@ -289,6 +289,7 @@ function segmentIntersectsBounds(a, b, bounds, padding) {
  */
 export function buildRoadRibbonGeometry(edge, {
   bounds = null,
+  excludeBounds = null,
   heightAt = null,
   liftM = 0.08,
   uvScaleM = 8,
@@ -305,6 +306,15 @@ export function buildRoadRibbonGeometry(edge, {
     const a = samples[i];
     const b = samples[i + 1];
     if (!segmentIntersectsBounds(a, b, bounds, half + 1)) continue;
+    if (excludeBounds) {
+      // Segment quads are independent ~5 m pieces, so dropping by midpoint
+      // cuts the ribbon cleanly at the rectangle edge (used to keep the
+      // Kingsford road decals out of the imported Manhattan footprint).
+      const mx = (a.x + b.x) * 0.5;
+      const mz = (a.z + b.z) * 0.5;
+      if (mx >= excludeBounds.minX && mx <= excludeBounds.maxX
+        && mz >= excludeBounds.minZ && mz <= excludeBounds.maxZ) continue;
+    }
     const tx = b.x - a.x;
     const tz = b.z - a.z;
     const length = Math.hypot(tx, tz) || 1;

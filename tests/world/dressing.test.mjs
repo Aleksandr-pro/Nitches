@@ -15,15 +15,21 @@ test('chunk dressing is deterministic for a seed', () => {
   assert.deepEqual(a.colliders[0], b.colliders[0]);
 });
 
-test('biomes shape the scatter: forest dense, moor rocky, city built-up', () => {
+test('biomes shape the scatter: forest dense, moor rocky, imported city empty', () => {
   const forest = planChunkDressing(foundation, 12, 11);
   const moor = planChunkDressing(foundation, 7, 2);
+  // Chunk 13_3 lies fully inside the imported Manhattan footprint, which
+  // replaced the procedural Kingsford blocks: no scatter may land there.
   const city = planChunkDressing(foundation, 13, 3);
   assert.ok(forest.trees.length > 60, `forest trees ${forest.trees.length}`);
   assert.ok(moor.rocks.length > forest.rocks.length);
-  assert.ok(city.buildings.length > 8, `city buildings ${city.buildings.length}`);
-  assert.ok(city.buildings.some((b) => b.kind === 'block' && b.h >= 10));
-  assert.ok(city.lamps.length > 0);
+  assert.equal(city.trees.length, 0);
+  assert.equal(city.bushes.length, 0);
+  assert.equal(city.rocks.length, 0);
+  assert.equal(city.buildings.length, 0);
+  assert.equal(city.lamps.length, 0);
+  assert.equal(city.walls.length, 0);
+  assert.equal(city.colliders.length, 0);
 });
 
 test('dressing never lands on roads or in water', () => {
@@ -59,13 +65,13 @@ test('landmarks: castle keep with towers and the festival arch', () => {
 });
 
 test('every plan produces usable colliders with unique ids', () => {
-  const plan = planChunkDressing(foundation, 13, 3);
+  const plan = planChunkDressing(foundation, 8, 13);
   assert.ok(plan.colliders.length > 10);
   const ids = new Set(plan.colliders.map((c) => c.id));
   assert.equal(ids.size, plan.colliders.length);
   for (const c of plan.colliders) {
     assert.ok(['circle', 'obb'].includes(c.kind), `kind ${c.kind}`);
-    assert.ok(c.id.startsWith('13_3:'));
+    assert.ok(c.id.startsWith('8_13:'));
   }
   assert.ok(plan.colliders.some((c) => c.kind === 'obb'));
 });
