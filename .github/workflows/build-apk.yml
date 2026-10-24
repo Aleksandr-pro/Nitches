@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write # нужно, чтобы публиковать релиз с APK при пуше тега v*
 
 jobs:
   build-apk:
@@ -98,3 +98,28 @@ jobs:
           name: NitchesHorizon-apk
           path: ${{ env.APK_PATH }}
           retention-days: 90
+
+      - name: Publish GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_PATH }}
+          name: Nitches Horizon ${{ github.ref_name }} — Android APK
+          fail_on_unmatched_files: true
+          body: |
+            ## 📱 Nitches Horizon для Android
+
+            **⬇️ Скачай файл `NitchesHorizon-v0.1.0.apk` ниже (раздел Assets) и открой его на телефоне.**
+
+            ### Установка
+            1. Скачай APK (Android 7.0 и новее).
+            2. Открой файл — если Android попросит, разреши «Установку из неизвестных источников» для браузера/файлового менеджера (стандартное предупреждение для приложений не из Google Play).
+            3. Нажми «Установить». Игра появится на рабочем столе: полноэкранная, горизонтальная, работает офлайн.
+
+            ### Что в этой версии
+            - 🏝️ Открытый остров: кольцевая трасса, горы, деревня, фестиваль
+            - 🏆 Гонки на 3 круга против 5 соперников + свободная поездка
+            - 🚗 3 машины, 💨 дрифт с очками, ⚡ нитро, миникарта
+            - 📱 Сенсорное управление
+
+            > ⚠️ Подпись этой сборки сгенерирована на CI. Если следующая версия не встанет поверх — удали старую и поставь заново (рекорд круга сбросится).
