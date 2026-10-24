@@ -2,7 +2,7 @@
   "blenderVersion": "4.0.2",
   "inputObj": "Mustang.obj",
   "outputGlb": "mustang.glb",
-  "outputBytes": 5874616,
+  "outputBytes": 5874584,
   "input": {
     "objects": 99,
     "polygons": 362632,
