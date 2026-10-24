@@ -776,7 +776,10 @@ def main() -> int:
     # the GLB would be garbage — fail loudly instead of exporting it.
     decimated_local = np.vstack([transform.to_blender_local(item["vertices"]) for item in decimated])
     decimated_max_height = float(decimated_local[:, 2].max()) if len(decimated_local) else 0.0
-    tolerance_m = 1.5
+    # Evaluated decimated vertices can sit a few metres outside the exact
+    # original vertex bounds (run 40139890420 measured 4.8 m on the west
+    # edge); a genuine double transform overshoots by hundreds of metres.
+    tolerance_m = 10.0
     if (
         float(decimated_local[:, 0].min()) < transform.min_x - tolerance_m
         or float(decimated_local[:, 0].max()) > transform.max_x + tolerance_m
