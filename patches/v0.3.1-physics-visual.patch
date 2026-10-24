@@ -72,7 +72,7 @@
  scene.add(sun);
  scene.add(sun.target);
  
-@@ -816,7 +817,7 @@
+@@ -817,7 +818,7 @@
  {
    const pmrem = new THREE.PMREMGenerator(renderer);
    const envSource = makeEnvironmentTexture();
@@ -102,7 +102,7 @@
  
 -  // Рулевая рейка: угол передних колёс уменьшается со скоростью
 -  const speedSensitiveSteer = car.maxSteer / (1 + Math.pow(Math.abs(u) / 17, 1.22));
-+  // Рулевая рейка: нелинейное уменьшение угла со скоростью + быстрее отклик
++  // Рулевая рейка: нелинейное уменьшение угла + быстрее отклик
 +  const absU = Math.abs(u);
 +  const speedSensitiveSteer = car.maxSteer / (1 + Math.pow(absU / 15.5, 1.35));
    const steerTarget = canDrive ? steering.value * speedSensitiveSteer * profile.steering : 0;
@@ -121,15 +121,14 @@
 -  const loadRear = clamp(staticRear + transfer, staticRear * 0.08, mass * gravity * 0.92);
 -
 -  // Углы увода шин передней и задней оси
-+  const trackHalf = 0.78; // половина колеи ~1.56 м
++  const trackHalf = 0.78;
 +  const latTransfer = mass * player.latAccel * car.cgHeight / (trackHalf * 2);
 +  let loadFront = clamp(staticFront - transfer, staticFront * 0.08, mass * gravity * 0.92);
 +  let loadRear = clamp(staticRear + transfer, staticRear * 0.08, mass * gravity * 0.92);
-+  // лёгкий эффект разгрузки внутренней стороны (сумма осей сохраняется)
 +  loadFront = clamp(loadFront - latTransfer * 0.12, loadFront * 0.55, loadFront * 1.35);
 +  loadRear = clamp(loadRear + latTransfer * 0.12, loadRear * 0.55, loadRear * 1.35);
 +
-+  // Углы увода шин передней и задней оси (меньший порог на малых скоростях)
++  // Углы увода шин (меньший порог на малых скоростях)
    const frontAxleLat = v + a * yawRate;
    const rearAxleLat = v - b * yawRate;
    const frontWheelLong = u * cosD + frontAxleLat * sinD;
@@ -142,7 +141,7 @@
 +  const alphaFront = Math.atan2(frontWheelLat, Math.max(Math.abs(frontWheelLong), longFloor));
 +  const alphaRear = Math.atan2(rearAxleLat, Math.max(Math.abs(u), longFloor));
 +
-+  // Плавный переход сцепления при смене покрытия (асфальт ↔ трава ↔ песок)
++  // Плавный переход сцепления при смене покрытия
 +  player.surfaceMuSmooth = lerp(player.surfaceMuSmooth ?? surface.mu, surface.mu, clamp(h * 6, 0, 1));
 +  let muFront = car.tireMu * player.surfaceMuSmooth * profile.grip;
    let muRear = muFront;
