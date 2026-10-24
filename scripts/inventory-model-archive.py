@@ -35,7 +35,7 @@ RUNTIME_EXTS = {".glb", ".gltf"}
 SOURCE_EXTS = MODEL_EXTS - RUNTIME_EXTS
 TEXTURE_EXTS = {
     ".png", ".jpg", ".jpeg", ".webp", ".ktx2", ".basis", ".tga", ".hdr",
-    ".exr", ".dds", ".bmp", ".psd", ".xcf",
+    ".exr", ".dds", ".bmp", ".psd", ".xcf", ".tif", ".tiff",
 }
 ARCHIVE_EXTS = {".zip", ".7z", ".rar", ".tar", ".tgz"}
 TEXT_HINTS = ("license", "licence", "readme", "source", "credit", "info", "author")
@@ -354,34 +354,141 @@ def parse_fbx(path: Path) -> dict:
 def parse_obj(path: Path) -> dict:
     counts = Counter()
     material_libraries: list[str] = []
+    materials_used: Counter[str] = Counter()
+    face_vertex_counts: Counter[int] = Counter()
     objects: list[str] = []
+    object_stats: dict[str, Counter[str]] = defaultdict(Counter)
+    group_count = 0
+    current_object = "(default)"
+    current_material = "(none)"
+    bounds_min = [math.inf, math.inf, math.inf]
+    bounds_max = [-math.inf, -math.inf, -math.inf]
+    estimated_triangles = 0
     truncated = False
+
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as f:
             for index, line in enumerate(f):
-                if index > 5_000_000:
+                if index > 10_000_000:
                     truncated = True
                     break
-                if line.startswith("v "):
+                if not line or line[0] == "#":
+                    continue
+                parts = line.strip().split()
+                if not parts:
+                    continue
+                keyword = parts[0]
+                if keyword == "v" and len(parts) >= 4:
                     counts["vertices"] += 1
-                elif line.startswith("vt "):
+                    object_stats[current_object]["vertices"] += 1
+                    try:
+                        vertex = [float(parts[1]), float(parts[2]), float(parts[3])]
+                    except ValueError:
+                        continue
+                    for axis, value in enumerate(vertex):
+                        bounds_min[axis] = min(bounds_min[axis], value)
+                        bounds_max[axis] = max(bounds_max[axis], value)
+                elif keyword == "vt":
                     counts["uvs"] += 1
-                elif line.startswith("vn "):
+                    object_stats[current_object]["uvs"] += 1
+                elif keyword == "vn":
                     counts["normals"] += 1
-                elif line.startswith("f "):
+                    object_stats[current_object]["normals"] += 1
+                elif keyword == "f":
+                    face_vertices = max(0, len(parts) - 1)
                     counts["faces"] += 1
-                elif line.startswith("mtllib "):
-                    material_libraries.append(line.split(maxsplit=1)[1].strip())
-                elif line.startswith("o "):
-                    objects.append(line[2:].strip())
+                    face_vertex_counts[face_vertices] += 1
+                    triangles = max(0, face_vertices - 2)
+                    estimated_triangles += triangles
+                    object_stats[current_object]["faces"] += 1
+                    object_stats[current_object]["estimatedTriangles"] += triangles
+                elif keyword == "mtllib" and len(parts) > 1:
+                    material_libraries.append(" ".join(parts[1:]))
+                elif keyword == "usemtl":
+                    current_material = " ".join(parts[1:]) if len(parts) > 1 else "(none)"
+                    materials_used[current_material] += 1
+                elif keyword == "o":
+                    current_object = " ".join(parts[1:]) if len(parts) > 1 else "(unnamed)"
+                    objects.append(current_object)
+                elif keyword == "g":
+                    group_count += 1
+                    if current_object == "(default)" and len(parts) > 1:
+                        current_object = " ".join(parts[1:])
     except Exception as exc:
         return {"valid": False, "error": str(exc)}
+
+    bounds = None
+    if counts["vertices"] and all(math.isfinite(v) for v in bounds_min + bounds_max):
+        bounds = {
+            "min": [round(v, 6) for v in bounds_min],
+            "max": [round(v, 6) for v in bounds_max],
+            "sizeXYZ": [round(bounds_max[i] - bounds_min[i], 6) for i in range(3)],
+            "note": "Raw OBJ vertex bounds before any axis conversion.",
+        }
+
+    object_details = [
+        {"name": name, **dict(stats)}
+        for name, stats in sorted(object_stats.items(), key=lambda kv: kv[1].get("estimatedTriangles", 0), reverse=True)
+    ]
     return {
-        "valid": counts["vertices"] > 0,
+        "valid": counts["vertices"] > 0 and counts["faces"] > 0,
         "counts": dict(counts),
+        "estimatedTriangles": estimated_triangles,
+        "faceVertexCounts": {str(k): v for k, v in sorted(face_vertex_counts.items())},
+        "bounds": bounds,
         "materialLibraries": material_libraries[:20],
-        "objects": objects[:50],
+        "materialsUsed": [
+            {"name": name, "useCount": count}
+            for name, count in materials_used.most_common(100)
+        ],
+        "objectCount": len(objects),
+        "groupCount": group_count,
+        "objects": objects[:200],
+        "objectsTruncated": len(objects) > 200,
+        "largestObjectsByTriangles": object_details[:50],
         "countTruncated": truncated,
+        "lastMaterialSeen": current_material,
+    }
+
+
+def parse_mtl(path: Path) -> dict:
+    materials: list[dict] = []
+    current: dict | None = None
+    texture_keys = {
+        "map_kd", "map_ka", "map_ks", "map_ns", "map_d", "disp", "decal",
+        "bump", "map_bump", "refl", "map_pr", "map_pm", "map_ps", "norm",
+    }
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception as exc:
+        return {"valid": False, "error": str(exc)}
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        key = parts[0].lower()
+        value = " ".join(parts[1:])
+        if key == "newmtl":
+            current = {"name": value, "properties": {}, "textures": {}}
+            materials.append(current)
+            continue
+        if current is None:
+            current = {"name": "(default)", "properties": {}, "textures": {}}
+            materials.append(current)
+        if key in texture_keys:
+            # MTL texture statements may include options before the file name;
+            # keep the full statement for later manual/converter inspection.
+            current["textures"][parts[0]] = value
+        else:
+            current["properties"][parts[0]] = value
+
+    return {
+        "valid": bool(materials),
+        "materialCount": len(materials),
+        "materials": materials[:100],
+        "materialsTruncated": len(materials) > 100,
     }
 
 
@@ -507,6 +614,16 @@ def build_markdown(data: dict) -> str:
             lines.append(f"- ⚠️ {warning}")
         lines.append("")
 
+    if data.get("duplicateGroups"):
+        lines.append("## Точные дубликаты")
+        lines.append("")
+        lines.append("Одинаковые файлы в LFS физически хранятся по SHA-256 один раз, но для конвертации достаточно одной копии.")
+        lines.append("")
+        for group in data["duplicateGroups"]:
+            paths = ", ".join(f"`{path}`" for path in group["paths"])
+            lines.append(f"- {human_bytes(group['size'])} × {group['count']}: {paths}")
+        lines.append("")
+
     lines.append("## Кандидаты")
     lines.append("")
     lines.append(f"- Runtime `.glb/.gltf`: {len(data['candidates']['runtime'])}")
@@ -546,13 +663,22 @@ def build_markdown(data: dict) -> str:
         lines.append("")
         for item in data["candidates"]["source"][:50]:
             parsed = item.get("parsed") or {}
-            extra = ""
+            details: list[str] = []
             if parsed.get("counts"):
-                extra = "; " + ", ".join(f"{k}={v}" for k, v in parsed["counts"].items())
-            elif parsed.get("blendVersion"):
-                extra = f"; Blender {parsed['blendVersion']}"
-            elif parsed.get("fbxVersion"):
-                extra = f"; FBX {parsed['fbxVersion']}"
+                details.extend(f"{k}={v}" for k, v in parsed["counts"].items())
+            if parsed.get("estimatedTriangles") is not None:
+                details.append(f"triangles≈{parsed['estimatedTriangles']}")
+            if parsed.get("objectCount") is not None:
+                details.append(f"objects={parsed['objectCount']}")
+            if parsed.get("bounds"):
+                details.append(f"rawSizeXYZ={parsed['bounds']['sizeXYZ']}")
+            if parsed.get("materialCount") is not None:
+                details.append(f"materials={parsed['materialCount']}")
+            if parsed.get("blendVersion"):
+                details.append(f"Blender {parsed['blendVersion']}")
+            if parsed.get("fbxVersion"):
+                details.append(f"FBX {parsed['fbxVersion']}")
+            extra = ("; " + ", ".join(details)) if details else ""
             lines.append(f"- `{item['path']}` — {human_bytes(item['size'])}{extra}")
         lines.append("")
 
@@ -713,6 +839,8 @@ def main() -> int:
                     out["parsed"] = parse_fbx(local)
                 elif ext == ".obj":
                     out["parsed"] = parse_obj(local)
+                elif ext == ".mtl":
+                    out["parsed"] = parse_mtl(local)
                 if ext in TEXTURE_EXTS:
                     out["image"] = image_dimensions(local, ext)
             return out
@@ -728,7 +856,7 @@ def main() -> int:
             lower = entry["path"].lower()
             if entry["size"] > 65536:
                 continue
-            if any(hint in lower for hint in TEXT_HINTS) or entry["extension"] in (".txt", ".md"):
+            if any(hint in lower for hint in TEXT_HINTS) or entry["extension"] in (".txt", ".md", ".mtl"):
                 text_candidates.append(entry)
         text_candidates.sort(key=lambda e: (0 if any(h in e["path"].lower() for h in ("license", "licence", "readme", "source", "credit")) else 1, e["path"].lower()))
         text_previews = []
@@ -766,6 +894,30 @@ def main() -> int:
     if nested:
         warnings.append("В архиве есть вложенные архивы; инвентаризатор не распаковывает их рекурсивно.")
 
+    duplicate_map: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        digest = entry.get("sha256")
+        if digest and not entry["isDirectory"]:
+            duplicate_map[digest].append(entry)
+    duplicate_groups = []
+    duplicate_wasted_bytes = 0
+    for digest, group in duplicate_map.items():
+        if len(group) < 2:
+            continue
+        duplicate_wasted_bytes += sum(item["size"] for item in group[1:])
+        duplicate_groups.append({
+            "sha256": digest,
+            "size": group[0]["size"],
+            "count": len(group),
+            "paths": [item["path"] for item in group],
+        })
+    duplicate_groups.sort(key=lambda group: group["size"], reverse=True)
+    if duplicate_groups:
+        warnings.append(
+            f"Найдено точных дубликатов: {len(duplicate_groups)} групп; повторные копии занимают около {human_bytes(duplicate_wasted_bytes)}. "
+            "В LFS одинаковые объекты хранятся по хешу один раз, но распакованный набор лучше не дублировать."
+        )
+
     sorted_extensions = [
         {"extension": ext, **values}
         for ext, values in sorted(by_extension.items(), key=lambda kv: kv[1]["uncompressedBytes"], reverse=True)
@@ -800,6 +952,7 @@ def main() -> int:
             "textures": textures,
             "nestedArchives": nested,
         },
+        "duplicateGroups": duplicate_groups,
         "textPreviews": text_previews,
         "extractionErrors": extraction_errors,
         "warnings": warnings,
