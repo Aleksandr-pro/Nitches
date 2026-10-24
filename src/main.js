@@ -77,10 +77,12 @@ const CARS = [
     emoji: '🇯🇵',
     color: 0x1167b1,
     accent: 0x2e7bff,
-    topSpeed: 64, // ≈ 230 км/ч
+    topSpeed: 64, // ≈ 230 км/ч (ограничитель трансмиссии)
     engine: 34,
     grip: 10,
     offroad: 0.5,
+    mass: 1765, powerKW: 421, driveFrontBias: 0.42, wheelbase: 2.78, cgToFront: 1.30, cgHeight: 0.52,
+    tireMu: 1.18, dragArea: 0.62, brakeDecel: 10.5, launchAccel: 6.4, maxSteer: 0.56,
     stats: { spd: 0.98, acc: 0.99, hnd: 0.96, off: 0.3 },
   },
   {
@@ -94,6 +96,8 @@ const CARS = [
     engine: 26,
     grip: 8.5,
     offroad: 0.62,
+    mass: 1380, powerKW: 255, driveFrontBias: 0, wheelbase: 2.70, cgToFront: 1.32, cgHeight: 0.50,
+    tireMu: 1.08, dragArea: 0.60, brakeDecel: 9.8, launchAccel: 5.8, maxSteer: 0.58,
     stats: { spd: 0.78, acc: 0.8, hnd: 0.82, off: 0.45 },
   },
   {
@@ -107,6 +111,8 @@ const CARS = [
     engine: 31,
     grip: 9.5,
     offroad: 0.5,
+    mass: 1240, powerKW: 545, driveFrontBias: 0, wheelbase: 2.65, cgToFront: 1.43, cgHeight: 0.42,
+    tireMu: 1.28, dragArea: 0.58, brakeDecel: 11.5, launchAccel: 7.2, maxSteer: 0.52,
     stats: { spd: 0.97, acc: 0.95, hnd: 0.9, off: 0.28 },
   },
   {
@@ -120,6 +126,8 @@ const CARS = [
     engine: 27,
     grip: 7,
     offroad: 0.94,
+    mass: 1550, powerKW: 210, driveFrontBias: 0.5, wheelbase: 2.85, cgToFront: 1.38, cgHeight: 0.72,
+    tireMu: 0.98, dragArea: 0.92, brakeDecel: 8.8, launchAccel: 5.0, maxSteer: 0.62,
     stats: { spd: 0.62, acc: 0.78, hnd: 0.66, off: 0.97 },
   },
 ];
@@ -153,6 +161,14 @@ let selectedGTRPaint = Number(safeGetItem('nh_gtr_paint')) || GTR_PAINTS[0].hex;
 if (!GTR_PAINTS.some((paint) => paint.hex === selectedGTRPaint)) selectedGTRPaint = GTR_PAINTS[0].hex;
 CARS[0].color = selectedGTRPaint;
 let graphicsQuality = safeGetItem('nh_gfx') === 'fast' ? 'fast' : 'realistic';
+let controlScheme = safeGetItem('nh_controls') === 'buttons' ? 'buttons' : 'wheel';
+let assistMode = ['arcade', 'sport', 'drift'].includes(safeGetItem('nh_assist'))
+  ? safeGetItem('nh_assist') : 'sport';
+const ASSIST_PROFILES = {
+  arcade: { label: 'Аркада', grip: 1.16, yawDamping: 2.2, stability: 2.5, traction: 0.9, steering: 0.92, handbrakeRearGrip: 0.34, maxYawRate: 2.1 },
+  sport: { label: 'Спорт', grip: 1.0, yawDamping: 1.45, stability: 1.05, traction: 0.45, steering: 1.0, handbrakeRearGrip: 0.24, maxYawRate: 2.7 },
+  drift: { label: 'Дрифт', grip: 0.92, yawDamping: 0.85, stability: 0.22, traction: 0.08, steering: 1.14, handbrakeRearGrip: 0.13, maxYawRate: 3.4 },
+};
 
 /* ============================ Состояние игры ============================ */
 let gameState = 'menu'; // menu | countdown | racing | paused | finished
@@ -183,6 +199,24 @@ const player = {
   groundPitch: 0,
   groundRoll: 0,
   groundH: 0,
+  // динамика автомобиля
+  yawRate: 0,
+  steerAngle: 0,
+  throttle: 0,
+  brakePedal: 0,
+  gear: 1,
+  rpmRatio: 0.18,
+  slipAngle: 0,
+  frontSlip: 0,
+  rearSlip: 0,
+  longAccel: 0,
+  latAccel: 0,
+  wheelspin: false,
+  surface: 'asphalt',
+  surfaceMu: 1,
+  travelDistance: 0,
+  smokeAccumulator: 0,
+  skidAccumulator: 0,
 };
 
 let rivals = [];
@@ -194,6 +228,92 @@ let menuOrbit = 0;
 let crashCooldown = 0;
 
 const input = { gas: false, brake: false, left: false, right: false, nitro: false, handbrake: false };
+
+/* Виртуальный руль: rotation — угол обода в радианах, + по часовой (поворот вправо).
+   Значение для физики, наоборот, + = влево, диапазон -1..1. */
+const steering = {
+  rotation: 0,
+  velocity: 0,
+  value: 0,
+  grabbing: false,
+  pointerId: null,
+  lastPointerAngle: 0,
+  maxRotation: 2.75, // ±158° обода
+  wasAtLock: false,
+};
+
+function resetSteering() {
+  steering.rotation = 0;
+  steering.velocity = 0;
+  steering.value = 0;
+  steering.grabbing = false;
+  steering.pointerId = null;
+  steering.wasAtLock = false;
+  updateSteeringVisual();
+}
+
+function approachValue(current, target, maxDelta) {
+  if (current < target) return Math.min(current + maxDelta, target);
+  return Math.max(current - maxDelta, target);
+}
+
+function updateSteeringVisual() {
+  const rotEl = $('steeringWheelRot');
+  if (rotEl) rotEl.style.transform = `rotate(${steering.rotation}rad)`;
+  const label = $('steerAngleLabel');
+  if (label) {
+    const deg = Math.round((player.steerAngle || 0) * 57.2958);
+    label.textContent = deg === 0 ? '0°' : `${Math.abs(deg)}° ${deg > 0 ? '↰' : '↱'}`;
+  }
+}
+
+function updateSteeringInput(dt) {
+  if (dt <= 0) return;
+  const digital = (input.right ? 1 : 0) + (input.left ? -1 : 0);
+  if (!steering.grabbing) {
+    if (digital !== 0) {
+      const target = digital * steering.maxRotation;
+      steering.rotation = approachValue(steering.rotation, target, 8.5 * dt);
+      steering.velocity = 0;
+    } else {
+      // Самовозврат руля: пружина с демпфированием, как aligning torque на настоящей рейке
+      const spring = 30;
+      const damping = 10.5;
+      steering.velocity += (-spring * steering.rotation - damping * steering.velocity) * dt;
+      steering.rotation += steering.velocity * dt;
+      if (Math.abs(steering.rotation) < 0.002 && Math.abs(steering.velocity) < 0.03) {
+        steering.rotation = 0;
+        steering.velocity = 0;
+      }
+    }
+  }
+  steering.rotation = clamp(steering.rotation, -steering.maxRotation, steering.maxRotation);
+  const atLock = Math.abs(steering.rotation) > steering.maxRotation - 0.02;
+  if (atLock && !steering.wasAtLock) vibrate(10);
+  steering.wasAtLock = atLock;
+  const normalized = clamp(steering.rotation / steering.maxRotation, -1, 1);
+  const shaped = Math.sign(normalized) * Math.pow(Math.abs(normalized), 1.12);
+  steering.value = Math.abs(shaped) < 0.012 ? 0 : -shaped; // + = влево для физики
+  updateSteeringVisual();
+}
+
+/* Свободная камера: орбита вокруг машины перетаскиванием и щипком/колесом мыши */
+const cameraOrbit = {
+  yaw: 0,
+  pitch: 0,
+  distanceScale: 1,
+  menuPitch: 0.24,
+  menuDistance: 7.4,
+  idle: 99,
+  menuIdle: 99,
+};
+let inspectMode = false;
+function resetCameraOrbit() {
+  cameraOrbit.yaw = 0;
+  cameraOrbit.pitch = 0;
+  cameraOrbit.distanceScale = 1;
+  cameraOrbit.idle = 99;
+}
 
 /* ============================ Сцена ============================ */
 const canvas = $('game');
@@ -303,6 +423,32 @@ function makeRoadTexture() {
   return tex;
 }
 
+function makeStreetTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#34373c'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) {
+    const v = 42 + Math.random() * 30;
+    g.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  }
+  g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(58, 0, 34, 256); g.fillRect(164, 0, 34, 256);
+  g.fillStyle = 'rgba(245,245,240,0.92)';
+  g.fillRect(10, 0, 5, 256); g.fillRect(241, 0, 5, 256); g.fillRect(125, 18, 6, 104);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+function makeCrosswalkTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 256, 128);
+  g.fillStyle = 'rgba(250,250,246,0.94)';
+  for (let x = 12; x < 245; x += 42) g.fillRect(x, 14, 24, 100);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 function makeGroundTexture() {
   // Нейтральная микродеталь: основной цвет задают вершинные цвета рельефа
   const c = document.createElement('canvas');
@@ -708,6 +854,75 @@ function pointAtS(s, lane = 0) {
   return { pos: p.clone().addScaledVector(n, lane), tangent: t, yaw: Math.atan2(t.x, t.z), u };
 }
 
+/* ==================== Дорожная сеть острова ====================
+   Главная кольцевая трасса дополнена обычными дорогами: деревня с круговой
+   улицей, подъезд к фестивалю, горный серпантин к ветрякам и прибрежная
+   дорога. Все они попадают в поле расстояний: рельеф под ними ровный,
+   а физика считает их асфальтом. */
+function makeRoadCurve(points, closed = false) {
+  return new THREE.CatmullRomCurve3(
+    points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+    closed,
+    'catmullrom',
+    0.45
+  );
+}
+const SECONDARY_ROADS = [];
+function addSecondaryRoad(name, points, options = {}) {
+  const closed = options.closed || false;
+  const roadCurve = makeRoadCurve(points, closed);
+  const length = roadCurve.getLength();
+  const sampleCount = clamp(Math.round(length / 2), 24, 520);
+  let samples = roadCurve.getSpacedPoints(sampleCount);
+  if (closed) samples = samples.slice(0, -1);
+  const road = {
+    name,
+    curve: roadCurve,
+    closed,
+    length,
+    halfWidth: options.halfWidth || 3.7,
+    sidewalk: options.sidewalk || false,
+    surface: options.surface || 'asphalt',
+    samples,
+    distanceSamples: samples,
+  };
+  SECONDARY_ROADS.push(road);
+  return road;
+}
+
+addSecondaryRoad('Деревенский подъезд', [
+  [142, 8], [128, -2], [112, -10], [98, -12], [84, -7], [72, 4], [65, 18],
+], { halfWidth: 3.7, sidewalk: true });
+const villageLoopRoad = addSecondaryRoad('Деревенский круг', [
+  [72, -34], [104, -40], [126, -22], [128, 8], [111, 34], [80, 35], [63, 12], [61, -16],
+], { closed: true, halfWidth: 3.7, sidewalk: true });
+addSecondaryRoad('Фестивальный подъезд', [
+  [2, -174], [-8, -158], [-20, -144], [-34, -132], [-43, -119], [-50, -106],
+], { halfWidth: 3.4 });
+addSecondaryRoad('Горный серпантин', [
+  [-174, 22], [-150, 29], [-126, 19], [-108, -2], [-88, -15], [-64, -8], [-50, 12], [-42, 31],
+], { halfWidth: 3.5 });
+const coastalRoad = addSecondaryRoad('Прибрежная дорога', [
+  [116, 164], [142, 184], [178, 190], [209, 169], [224, 132], [210, 105], [187, 91],
+], { halfWidth: 3.8 });
+
+function pointOnRoad(road, sPos, lane = 0) {
+  const u = road.closed
+    ? ((sPos / road.length) % 1 + 1) % 1
+    : clamp(sPos / road.length, 0, 1);
+  const p = road.curve.getPointAt(u);
+  const t = road.curve.getTangentAt(u);
+  const n = new THREE.Vector3(-t.z, 0, t.x);
+  return { pos: p.clone().addScaledVector(n, lane), tangent: t, normal: n, yaw: Math.atan2(t.x, t.z), u };
+}
+
+const ROAD_DISTANCE_SAMPLES = [
+  ...SAMPLES.map((pt) => ({ x: pt.x, z: pt.z, halfWidth: ROAD_HALF, surface: 'asphalt' })),
+  ...SECONDARY_ROADS.flatMap((road) => road.distanceSamples.map((pt) => ({
+    x: pt.x, z: pt.z, halfWidth: road.halfWidth, surface: road.surface,
+  }))),
+];
+
 // Чекпоинты: 12 штук, индекс 0 — старт/финиш
 const CHECKPOINTS = [];
 for (let i = 0; i < 12; i++) {
@@ -717,7 +932,7 @@ for (let i = 0; i < 12; i++) {
 /* ============================ Рельеф острова ============================ */
 const ROAD_GRID_CELL = 20;
 const roadGrid = new Map();
-SAMPLES.forEach((pt) => {
+ROAD_DISTANCE_SAMPLES.forEach((pt) => {
   const key = `${Math.floor(pt.x / ROAD_GRID_CELL)},${Math.floor(pt.z / ROAD_GRID_CELL)}`;
   if (!roadGrid.has(key)) roadGrid.set(key, []);
   roadGrid.get(key).push(pt);
@@ -739,6 +954,25 @@ function roadDistanceApprox(x, z) {
     }
   }
   return Math.sqrt(best2);
+}
+function nearestRoadInfoApprox(x, z) {
+  const cx = Math.floor(x / ROAD_GRID_CELL);
+  const cz = Math.floor(z / ROAD_GRID_CELL);
+  let best = null;
+  for (let gx = cx - 2; gx <= cx + 2; gx++) {
+    for (let gz = cz - 2; gz <= cz + 2; gz++) {
+      const cell = roadGrid.get(`${gx},${gz}`);
+      if (!cell) continue;
+      for (const pt of cell) {
+        const dist = Math.hypot(pt.x - x, pt.z - z);
+        const edge = dist - pt.halfWidth;
+        if (!best || edge < best.edge) {
+          best = { dist, edge, halfWidth: pt.halfWidth, surface: pt.surface };
+        }
+      }
+    }
+  }
+  return best || { dist: 60, edge: 60, halfWidth: ROAD_HALF, surface: 'grass' };
 }
 function terrainHeight(x, z, roadDist = null) {
   const d = roadDist === null ? roadDistanceApprox(x, z) : roadDist;
@@ -764,6 +998,9 @@ let foamRing = null;
 let grassMesh = null;
 let festivalWheel = null;
 const windTurbines = [];
+const ambientCars = [];
+const pedestrians = [];
+const birds = [];
 const cloudGroup = new THREE.Group();
 scene.add(cloudGroup);
 
@@ -861,6 +1098,65 @@ const colliders = []; // {x,z,r}
   scene.add(terrain);
 }
 
+const streetRoadMat = new THREE.MeshStandardMaterial({ map: makeStreetTexture(), roughness: 0.94, side: THREE.DoubleSide });
+const plainAsphaltMat = new THREE.MeshStandardMaterial({ color: 0x34373c, roughness: 0.96 });
+const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x8f9290, roughness: 0.98, side: THREE.DoubleSide });
+const roadShoulderMat = new THREE.MeshStandardMaterial({ color: 0x6f6a5f, roughness: 1.0, side: THREE.DoubleSide });
+function makeRoadStripGeometry(road, leftOffset, rightOffset, yLift) {
+  const samples = road.samples, positions = [], uvs = [], indices = [];
+  let travelled = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const pt = samples[i];
+    const prev = samples[(i - 1 + samples.length) % samples.length];
+    const next = samples[(i + 1) % samples.length];
+    const from = road.closed || i > 0 ? prev : pt;
+    const to = road.closed || i < samples.length - 1 ? next : pt;
+    const tx = to.x - from.x, tz = to.z - from.z, tl = Math.hypot(tx, tz) || 1;
+    const nx = -tz / tl, nz = tx / tl;
+    if (i > 0) travelled += Math.hypot(pt.x - samples[i - 1].x, pt.z - samples[i - 1].z);
+    const y = terrainHeight(pt.x, pt.z, 0) + yLift;
+    positions.push(pt.x + nx * leftOffset, y, pt.z + nz * leftOffset, pt.x + nx * rightOffset, y, pt.z + nz * rightOffset);
+    uvs.push(0, travelled / 8, 1, travelled / 8);
+  }
+  const segments = road.closed ? samples.length : samples.length - 1;
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2, b = ((i + 1) % samples.length) * 2;
+    indices.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  return geo;
+}
+function addRoadDisc(x, z, radius) {
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 28), plainAsphaltMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.set(x, terrainHeight(x, z, 0) + 0.11, z);
+  disc.receiveShadow = true; scene.add(disc); return disc;
+}
+function buildSecondaryRoads() {
+  for (const road of SECONDARY_ROADS) {
+    const asphalt = new THREE.Mesh(makeRoadStripGeometry(road, -road.halfWidth, road.halfWidth, 0.075), streetRoadMat);
+    asphalt.receiveShadow = true; scene.add(asphalt);
+    const shoulderOffset = road.sidewalk ? road.halfWidth + 0.95 : road.halfWidth;
+    for (const side of [-1, 1]) {
+      if (road.sidewalk) {
+        const walk = new THREE.Mesh(makeRoadStripGeometry(road, side * road.halfWidth, side * (road.halfWidth + 0.95), 0.105), sidewalkMat);
+        walk.receiveShadow = true; scene.add(walk);
+      }
+      const shoulder = new THREE.Mesh(makeRoadStripGeometry(road, side * shoulderOffset, side * (shoulderOffset + 0.85), 0.045), roadShoulderMat);
+      shoulder.receiveShadow = true; scene.add(shoulder);
+    }
+    if (!road.closed) {
+      const a = road.samples[0], b = road.samples[road.samples.length - 1];
+      addRoadDisc(a.x, a.z, road.halfWidth + 2.4); addRoadDisc(b.x, b.z, road.halfWidth + 2.4);
+    }
+  }
+  addRoadDisc(140, 5, 7.2); addRoadDisc(112, -10, 6.4); addRoadDisc(72, 4, 6.4);
+  addRoadDisc(2, -174, 6.2); addRoadDisc(-174, 22, 6.2); addRoadDisc(116, 164, 6.5); addRoadDisc(187, 91, 6.5);
+}
+
 // Дорога — лента вдоль сплайна (+ гравийная обочина)
 {
   function buildRibbon(halfWidth, y) {
@@ -909,6 +1205,7 @@ const colliders = []; // {x,z,r}
   );
   road.receiveShadow = true;
   scene.add(road);
+  buildSecondaryRoads();
 }
 
 // Горные пики острова — часть рельефа; на горизонте — скалистый хребет
@@ -999,9 +1296,9 @@ const colliders = []; // {x,z,r}
     const r = 22 + rnd() * 248;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    const near = nearestSampleIdx({ x, z });
-    if (near.dist < 13.5) continue;
-    const h = terrainHeight(x, z, near.dist);
+    const roadDist = roadDistanceApprox(x, z);
+    if (roadDist < 13.5) continue;
+    const h = terrainHeight(x, z, roadDist);
     if (h > 7.6 || h < -0.15) continue; // на голых скалах и в воде деревья не растут
     treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.8 + rnd() * 0.55, rot: rnd() * TAU });
     if (treePos.length % 3 === 0) colliders.push({ x, z, r: 0.4 });
@@ -1071,9 +1368,9 @@ const colliders = []; // {x,z,r}
       const r = 28 + rnd() * 240;
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
-      const near = nearestSampleIdx({ x, z });
-      if (near.dist < 10.5) continue;
-      h = terrainHeight(x, z, near.dist);
+      const roadDist = roadDistanceApprox(x, z);
+      if (roadDist < 10.5) continue;
+      h = terrainHeight(x, z, roadDist);
       break;
     }
     const sc = 0.35 + rnd() * 1.15;
@@ -1194,6 +1491,7 @@ const balloons = [];
     const side = i % 2 ? 1 : -1;
     const p = pointAtS(s, side * (ROAD_HALF + 21 + rnd() * 15));
     if (Math.hypot(p.pos.x, p.pos.z) > 255) continue;
+    if (nearestRoadInfoApprox(p.pos.x, p.pos.z).edge < 9.5) continue;
     const groundY = terrainHeight(p.pos.x, p.pos.z);
     const house = new THREE.Group();
     const w = 8.5 + rnd() * 3; // ширина фасада 8.5–11.5 м
@@ -1435,7 +1733,7 @@ const cpMeshes = [];
   });
 
   // Сельская церковь — ориентир на востоке острова
-  const churchPos = { x: 98, z: -12 };
+  const churchPos = { x: 99, z: -23 };
   const churchY = terrainHeight(churchPos.x, churchPos.z);
   const church = new THREE.Group();
   const churchWall = new THREE.MeshStandardMaterial({ map: makeFacadeTexture('#f3ead6', '#28455c'), roughness: 0.92 });
@@ -1467,6 +1765,467 @@ const cpMeshes = [];
   scene.add(church);
   colliders.push({ x: churchPos.x, z: churchPos.z, r: 8.2 });
 }
+
+
+/* ==================== Инфраструктура острова ==================== */
+function infraGroundY(x, z) { return terrainHeight(x, z, 0); }
+function infraBox(parent, w, h, d, mat, x, y, z, yaw = 0) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = yaw;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+function makeDirectionSignTexture(text) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = '#14532d'; g.fillRect(0, 0, 256, 96);
+  g.strokeStyle = '#ffffff'; g.lineWidth = 6; g.strokeRect(5, 5, 246, 86);
+  g.fillStyle = '#ffffff';
+  g.font = '700 30px Arial, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 128, 50);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+function addCrosswalkOnRoad(road, sPos) {
+  const p = pointOnRoad(road, sPos, 0);
+  const mat = new THREE.MeshBasicMaterial({
+    map: makeCrosswalkTexture(), transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(road.halfWidth * 2 - 0.7, 2.7), mat);
+  mesh.rotation.x = -Math.PI / 2;
+  const group = new THREE.Group();
+  group.position.set(p.pos.x, infraGroundY(p.pos.x, p.pos.z) + 0.16, p.pos.z);
+  group.rotation.y = p.yaw;
+  group.add(mesh);
+  scene.add(group);
+}
+function addGuardrails(road, side, s0, s1) {
+  const spots = [];
+  for (let sPos = s0; sPos <= s1; sPos += 8) {
+    const p = pointOnRoad(road, sPos, side * (road.halfWidth + 0.65));
+    spots.push({ x: p.pos.x, y: infraGroundY(p.pos.x, p.pos.z), z: p.pos.z, yaw: p.yaw });
+    colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.42 });
+  }
+  if (spots.length < 2) return;
+  const metal = new THREE.MeshStandardMaterial({ color: 0xb8bec4, roughness: 0.38, metalness: 0.72 });
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x555c62, roughness: 0.65, metalness: 0.45 });
+  const dummy = new THREE.Object3D();
+  const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.75, 0.16), postMat, spots.length);
+  spots.forEach((spot, i) => {
+    dummy.position.set(spot.x, spot.y + 0.38, spot.z);
+    dummy.rotation.set(0, spot.yaw, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    posts.setMatrixAt(i, dummy.matrix);
+  });
+  posts.castShadow = true;
+  scene.add(posts);
+  const rails = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.3, 1), metal, spots.length - 1);
+  for (let i = 0; i < spots.length - 1; i++) {
+    const a = spots[i], b = spots[i + 1];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    dummy.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 0.66, (a.z + b.z) / 2);
+    dummy.rotation.set(0, Math.atan2(dx, dz), 0);
+    dummy.scale.set(1, 1, Math.hypot(dx, dz) + 0.08);
+    dummy.updateMatrix();
+    rails.setMatrixAt(i, dummy.matrix);
+  }
+  rails.castShadow = true;
+  scene.add(rails);
+}
+function addPowerLine(road, side, s0, s1, step = 28) {
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x6b4a32, roughness: 0.92 });
+  const tops = [];
+  for (let sPos = s0; sPos <= s1; sPos += step) {
+    const p = pointOnRoad(road, sPos, side * (road.halfWidth + 2.3));
+    const y = infraGroundY(p.pos.x, p.pos.z);
+    const group = new THREE.Group();
+    group.position.set(p.pos.x, y, p.pos.z);
+    group.rotation.y = p.yaw;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.15, 7.8, 7), poleMat);
+    pole.position.y = 3.9;
+    pole.castShadow = true;
+    const cross = infraBox(group, 1.7, 0.13, 0.14, poleMat, 0, 7.35, 0);
+    cross.castShadow = true;
+    group.add(pole);
+    scene.add(group);
+    colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.28 });
+    tops.push(new THREE.Vector3(p.pos.x, y + 7.35, p.pos.z));
+  }
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x111318, transparent: true, opacity: 0.72 });
+  for (let i = 0; i < tops.length - 1; i++) {
+    const pts = [];
+    for (let k = 0; k <= 8; k++) {
+      const t = k / 8;
+      const pt = tops[i].clone().lerp(tops[i + 1], t);
+      pt.y -= Math.sin(t * Math.PI) * 0.65;
+      pts.push(pt);
+    }
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
+  }
+}
+function addStreetLamp(x, z, yaw) {
+  const y = infraGroundY(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = yaw;
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x3f464d, roughness: 0.45, metalness: 0.65 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 5.4, 8), poleMat);
+  pole.position.y = 2.7;
+  pole.castShadow = true;
+  const head = infraBox(group, 0.28, 0.16, 0.9, new THREE.MeshStandardMaterial({
+    color: 0xfff0bb, emissive: 0xffd777, emissiveIntensity: 1.5,
+  }), 0, 5.42, 0.35);
+  head.castShadow = false;
+  group.add(pole);
+  scene.add(group);
+  colliders.push({ x, z, r: 0.24 });
+}
+function addDirectionSign(x, z, yaw, text) {
+  const y = infraGroundY(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = yaw;
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x777f86, roughness: 0.45, metalness: 0.6 });
+  [-0.65, 0.65].forEach((px) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.5, 7), poleMat);
+    pole.position.set(px, 1.25, 0);
+    pole.castShadow = true;
+    group.add(pole);
+  });
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(2.35, 0.88, 0.07),
+    new THREE.MeshStandardMaterial({ map: makeDirectionSignTexture(text), roughness: 0.55 })
+  );
+  panel.position.y = 2.55;
+  panel.castShadow = true;
+  group.add(panel);
+  scene.add(group);
+  colliders.push({ x, z, r: 0.45 });
+}
+function addStopSign(x, z, yaw) {
+  const y = infraGroundY(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = yaw;
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.05, 2.7, 7),
+    new THREE.MeshStandardMaterial({ color: 0x7c858d, metalness: 0.55, roughness: 0.45 })
+  );
+  pole.position.y = 1.35;
+  pole.castShadow = true;
+  const sign = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.48, 0.48, 0.06, 8),
+    new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5, emissive: 0x450a0a, emissiveIntensity: 0.35 })
+  );
+  sign.rotation.x = Math.PI / 2;
+  sign.position.y = 2.72;
+  sign.castShadow = true;
+  group.add(pole, sign);
+  scene.add(group);
+  colliders.push({ x, z, r: 0.25 });
+}
+function addBusStop(road, sPos, side) {
+  const p = pointOnRoad(road, sPos, side * (road.halfWidth + 2.0));
+  const y = infraGroundY(p.pos.x, p.pos.z);
+  const group = new THREE.Group();
+  group.position.set(p.pos.x, y, p.pos.z);
+  group.rotation.y = p.yaw;
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x9a9d9b, roughness: 0.95 });
+  const frame = new THREE.MeshStandardMaterial({ color: 0x274156, roughness: 0.45, metalness: 0.55 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x9fc9d8, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.42 });
+  infraBox(group, 4.4, 0.14, 1.8, concrete, 0, 0.07, 0);
+  [-1.95, 1.95].forEach((x) => {
+    infraBox(group, 0.12, 2.35, 0.12, frame, x, 1.18, -0.72);
+    infraBox(group, 0.12, 2.35, 0.12, frame, x, 1.18, 0.72);
+  });
+  infraBox(group, 4.5, 0.13, 1.85, frame, 0, 2.45, 0);
+  infraBox(group, 3.7, 1.35, 0.045, glass, 0, 1.32, -0.72);
+  infraBox(group, 3.4, 0.12, 0.42, new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.85 }), 0, 0.58, -0.35);
+  scene.add(group);
+  colliders.push({ x: p.pos.x, z: p.pos.z, r: 2.25 });
+}
+function addParkingLot(x, z, width, depth, yaw) {
+  const y = infraGroundY(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, y + 0.1, z);
+  group.rotation.y = yaw;
+  const slab = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), plainAsphaltMat);
+  slab.rotation.x = -Math.PI / 2;
+  slab.receiveShadow = true;
+  group.add(slab);
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xf5f5f0 });
+  const bayCount = Math.max(2, Math.floor(width / 2.6));
+  for (let i = 0; i <= bayCount; i++) {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 4.7), lineMat);
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(-width / 2 + (width / bayCount) * i, 0.025, -depth / 2 + 2.45);
+    group.add(line);
+  }
+  scene.add(group);
+}
+function addBollards(points) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x293241, roughness: 0.45, metalness: 0.55 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0xffffff, emissiveIntensity: 0.18 });
+  const geo = new THREE.CylinderGeometry(0.11, 0.13, 0.85, 9);
+  const stripeGeo = new THREE.CylinderGeometry(0.116, 0.116, 0.13, 9);
+  const dummy = new THREE.Object3D();
+  const posts = new THREE.InstancedMesh(geo, mat, points.length);
+  const stripes = new THREE.InstancedMesh(stripeGeo, stripeMat, points.length);
+  points.forEach(([x, z], i) => {
+    const y = infraGroundY(x, z);
+    dummy.position.set(x, y + 0.43, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+    posts.setMatrixAt(i, dummy.matrix);
+    dummy.position.y = y + 0.68; dummy.updateMatrix();
+    stripes.setMatrixAt(i, dummy.matrix);
+    colliders.push({ x, z, r: 0.22 });
+  });
+  posts.castShadow = true;
+  scene.add(posts, stripes);
+}
+function addVillageHouse(x, z, yaw, wallColor, roofColor) {
+  const y = infraGroundY(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, y - 0.15, z);
+  group.rotation.y = yaw;
+  const walls = infraBox(group, 8.2, 5.4, 6.8, new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.92 }), 0, 2.7, 0);
+  walls.receiveShadow = true;
+  const roofGeo = new THREE.ConeGeometry(1, 2.7, 4);
+  roofGeo.rotateY(Math.PI / 4);
+  roofGeo.scale(6.5, 1, 5.4);
+  const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.9, flatShading: true }));
+  roof.position.y = 6.75;
+  roof.castShadow = true;
+  group.add(roof);
+  const door = infraBox(group, 0.95, 2.05, 0.08, new THREE.MeshStandardMaterial({ color: 0x4a2d1d, roughness: 0.8 }), -1.6, 1.05, 3.43);
+  door.castShadow = false;
+  const winMat = new THREE.MeshStandardMaterial({ color: 0xffd98a, emissive: 0xffb84d, emissiveIntensity: 0.55, roughness: 0.2 });
+  [1.2, 2.8].forEach((wx) => infraBox(group, 1.05, 1.05, 0.06, winMat, wx, 2.0, 3.44));
+  infraBox(group, 2.4, 0.16, 1.0, new THREE.MeshStandardMaterial({ color: 0x8d918e, roughness: 0.95 }), -1.6, 0.08, 3.85);
+  scene.add(group);
+  colliders.push({ x, z, r: 5.4 });
+}
+function addParkedCarAt(x, z, yaw, color) {
+  const built = buildCarMesh(color, 0x39424e, false);
+  built.group.position.set(x, infraGroundY(x, z) + 0.04, z);
+  built.group.rotation.y = yaw;
+  scene.add(built.group);
+  [-1.2, 1.2].forEach((dz) => {
+    colliders.push({ x: x + Math.sin(yaw) * dz, z: z + Math.cos(yaw) * dz, r: 1.12 });
+  });
+}
+function addParkedCarOnRoad(road, sPos, side, color) {
+  const p = pointOnRoad(road, sPos, side * (road.halfWidth - 1.05));
+  addParkedCarAt(p.pos.x, p.pos.z, p.yaw + (side < 0 ? Math.PI : 0), color);
+}
+function addTrafficCones(points) {
+  const orange = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.65 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
+  points.forEach(([x, z]) => {
+    const y = infraGroundY(x, z);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.23, 0.68, 10), orange);
+    cone.position.set(x, y + 0.34, z);
+    cone.castShadow = true;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.13, 10), white);
+    band.position.set(x, y + 0.39, z);
+    scene.add(cone, band);
+    colliders.push({ x, z, r: 0.28 });
+  });
+}
+function buildStaticInfrastructure() {
+  addCrosswalkOnRoad(villageLoopRoad, 18);
+  addCrosswalkOnRoad(villageLoopRoad, 96);
+  addCrosswalkOnRoad(villageLoopRoad, 178);
+  addCrosswalkOnRoad(SECONDARY_ROADS[0], 34);
+  addBusStop(villageLoopRoad, 88, 1);
+  addParkingLot(88, -20, 18, 9, 0.08);
+  addParkedCarAt(82.4, -21.8, 0.08, 0x7c8794);
+  addParkedCarAt(88.2, -21.9, 0.05, 0x334155);
+  addParkedCarAt(93.7, -21.7, 0.1, 0x9a3412);
+  addParkedCarOnRoad(villageLoopRoad, 34, 1, 0x64748b);
+  addParkedCarOnRoad(villageLoopRoad, 125, -1, 0x7f1d1d);
+  addParkedCarOnRoad(villageLoopRoad, 205, 1, 0xe5e7eb);
+  addDirectionSign(134, 12, -0.8, 'ДЕРЕВНЯ →');
+  addDirectionSign(7, -166, 2.9, 'ФЕСТИВАЛЬ');
+  addDirectionSign(-168, 14, 1.2, 'ВЕТРЯКИ →');
+  addDirectionSign(124, 156, -2.2, 'ПЛЯЖ →');
+  addStopSign(119, -17, 2.2);
+  addStopSign(58, 21, -0.7);
+  addPowerLine(SECONDARY_ROADS[0], -1, 4, 76, 24);
+  addPowerLine(villageLoopRoad, 1, 10, 210, 34);
+  const mountainRoad = SECONDARY_ROADS[3];
+  addGuardrails(mountainRoad, -1, 36, 96);
+  addGuardrails(mountainRoad, 1, 108, 166);
+  addGuardrails(coastalRoad, 1, 55, 175);
+  for (let sPos = 8; sPos < villageLoopRoad.length; sPos += 34) {
+    const p = pointOnRoad(villageLoopRoad, sPos, villageLoopRoad.halfWidth + 1.25);
+    addStreetLamp(p.pos.x, p.pos.z, p.yaw + Math.PI / 2);
+  }
+  const houseSpots = [
+    [80, -24, 0.2, 0xe7d8bd, 0x9f4634], [115, -20, -0.35, 0xdfe5d8, 0x51606b],
+    [110, 21, -1.2, 0xe4cdb2, 0x6d4a3a], [91, 25, 2.8, 0xf0e6cf, 0x7b4b3a],
+    [58, 26, 1.4, 0xd9dfd2, 0x8a4b38], [135, -22, -1.55, 0xe9ddca, 0x5f5047],
+  ];
+  houseSpots.forEach(([x, z, yaw, wall, roof]) => addVillageHouse(x, z, yaw, wall, roof));
+  addBollards([[-52, -102], [-48, -110], [-39, 34], [-45, 28], [221, 135], [215, 109], [86, -15], [90, -15]]);
+  const coneBase = pointOnRoad(coastalRoad, 118, coastalRoad.halfWidth - 0.7);
+  addTrafficCones([
+    [coneBase.pos.x, coneBase.pos.z],
+    [coneBase.pos.x + 2.2, coneBase.pos.z + 0.7],
+    [coneBase.pos.x + 4.4, coneBase.pos.z + 1.1],
+  ]);
+}
+
+
+/* ==================== Живой остров ==================== */
+function spawnAmbientCar(road, sPos, lane, speed, color) {
+  const built = buildCarMesh(color, 0x475569, false);
+  scene.add(built.group);
+  const car = {
+    mesh: built,
+    road,
+    s: sPos,
+    lane,
+    speed,
+    direction: lane < 0 ? -1 : 1,
+    wheelAngle: 0,
+  };
+  ambientCars.push(car);
+  return car;
+}
+function createPedestrian() {
+  const skinTones = [0xf1c7a5, 0xc98d64, 0x8d5a3b, 0xe8b48c];
+  const shirtColors = [0xef4444, 0x2563eb, 0xf59e0b, 0x10b981, 0xec4899, 0xe5e7eb, 0x7c3aed];
+  const pantsColors = [0x1f2937, 0x334155, 0x57534e, 0x1e3a5f, 0x713f12];
+  const skin = new THREE.MeshStandardMaterial({ color: skinTones[Math.floor(rnd() * skinTones.length)], roughness: 0.75 });
+  const shirt = new THREE.MeshStandardMaterial({ color: shirtColors[Math.floor(rnd() * shirtColors.length)], roughness: 0.88 });
+  const pants = new THREE.MeshStandardMaterial({ color: pantsColors[Math.floor(rnd() * pantsColors.length)], roughness: 0.92 });
+  const group = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.24), shirt);
+  torso.position.y = 1.14;
+  torso.castShadow = true;
+  group.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.165, 10, 8), skin);
+  head.position.y = 1.66;
+  head.castShadow = true;
+  group.add(head);
+  function makeLimb(x, y, mat, len, thick) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, 0);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(thick, len, thick), mat);
+    mesh.position.y = -len / 2;
+    mesh.castShadow = true;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  }
+  const leftLeg = makeLimb(-0.11, 0.84, pants, 0.8, 0.14);
+  const rightLeg = makeLimb(0.11, 0.84, pants, 0.8, 0.14);
+  const leftArm = makeLimb(-0.29, 1.4, shirt, 0.58, 0.105);
+  const rightArm = makeLimb(0.29, 1.4, shirt, 0.58, 0.105);
+  scene.add(group);
+  return { group, leftLeg, rightLeg, leftArm, rightArm };
+}
+function spawnLoopPedestrian(sPos, side, speed) {
+  const body = createPedestrian();
+  pedestrians.push({
+    ...body,
+    mode: 'loop',
+    s: sPos,
+    lane: side * (villageLoopRoad.halfWidth + 0.55),
+    direction: side > 0 ? 1 : -1,
+    speed,
+    phase: rnd() * TAU,
+  });
+}
+function spawnWanderPedestrian(homeX, homeZ, radius = 11) {
+  const body = createPedestrian();
+  const ped = {
+    ...body,
+    mode: 'wander',
+    x: homeX,
+    z: homeZ,
+    homeX,
+    homeZ,
+    radius,
+    targetX: homeX,
+    targetZ: homeZ,
+    yaw: rnd() * TAU,
+    speed: 0.75 + rnd() * 0.45,
+    phase: rnd() * TAU,
+    wait: rnd() * 2,
+  };
+  ped.group.position.set(homeX, infraGroundY(homeX, homeZ), homeZ);
+  pedestrians.push(ped);
+}
+function spawnStandingPedestrian(x, z, yaw) {
+  const body = createPedestrian();
+  body.group.position.set(x, infraGroundY(x, z), z);
+  body.group.rotation.y = yaw;
+  pedestrians.push({ ...body, mode: 'stand', x, z, yaw, phase: rnd() * TAU, speed: 0 });
+}
+function createBird(centerX, centerZ, radius, height, speed) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x17202b, side: THREE.DoubleSide });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 7, 5), mat);
+  body.scale.set(0.75, 0.65, 1.9);
+  group.add(body);
+  function wing(side) {
+    const pivot = new THREE.Group();
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.3), mat);
+    mesh.position.x = side * 0.58;
+    mesh.rotation.x = -Math.PI / 2;
+    pivot.add(mesh);
+    group.add(pivot);
+    return pivot;
+  }
+  const leftWing = wing(-1);
+  const rightWing = wing(1);
+  scene.add(group);
+  birds.push({ group, leftWing, rightWing, centerX, centerZ, radius, height, speed, phase: rnd() * TAU });
+}
+function buildLivingWorld() {
+  spawnAmbientCar(villageLoopRoad, 12, 1.75, 7.5, 0x94a3b8);
+  spawnAmbientCar(villageLoopRoad, 105, -1.75, 6.8, 0x7c2d12);
+  spawnAmbientCar(villageLoopRoad, 190, 1.75, 7.2, 0x14532d);
+  spawnAmbientCar(SECONDARY_ROADS[0], 12, 1.75, 8.2, 0xeab308);
+  spawnAmbientCar(coastalRoad, 28, 1.85, 11.5, 0x0f766e);
+  spawnAmbientCar(coastalRoad, 150, -1.85, 10.5, 0xf8fafc);
+  spawnAmbientCar(SECONDARY_ROADS[3], 30, 1.7, 9.0, 0x7e22ce);
+  spawnAmbientCar(null, 420, 2.5, 15.0, 0x475569);
+  spawnAmbientCar(null, 980, -2.5, 14.0, 0xb45309);
+
+  spawnLoopPedestrian(8, 1, 1.05);
+  spawnLoopPedestrian(62, -1, 0.9);
+  spawnLoopPedestrian(112, 1, 1.18);
+  spawnLoopPedestrian(151, -1, 0.82);
+  spawnLoopPedestrian(198, 1, 0.98);
+  spawnLoopPedestrian(232, -1, 1.1);
+  spawnWanderPedestrian(-16, -168, 10);
+  spawnWanderPedestrian(17, -181, 11);
+  spawnWanderPedestrian(-13, -184, 9);
+  spawnWanderPedestrian(18, -165, 10);
+  const scenic = pointOnRoad(coastalRoad, 132, coastalRoad.halfWidth + 1.7);
+  spawnStandingPedestrian(scenic.pos.x, scenic.pos.z, scenic.yaw + Math.PI / 2);
+  const churchWalk = pointOnRoad(SECONDARY_ROADS[0], 40, -(SECONDARY_ROADS[0].halfWidth + 0.55));
+  spawnStandingPedestrian(churchWalk.pos.x, churchWalk.pos.z, churchWalk.yaw - Math.PI / 2);
+
+  createBird(95, -10, 48, 30, 0.055);
+  createBird(98, -8, 58, 35, -0.045);
+  createBird(185, 145, 62, 28, 0.05);
+  createBird(190, 150, 44, 34, 0.065);
+  createBird(0, -175, 55, 38, -0.04);
+  createBird(-110, 0, 70, 42, 0.038);
+}
+buildStaticInfrastructure();
+buildLivingWorld();
 
 /* ============================ Модель машины ============================ */
 function buildCarMesh(color, accent, isBuggy = false) {
@@ -1674,6 +2433,14 @@ function resetPlayerToStart() {
   player.mesh.group.position.copy(start.pos);
   player.yaw = start.yaw;
   player.vel.set(0, 0, 0);
+  player.yawRate = 0;
+  player.steerAngle = 0;
+  player.throttle = 0;
+  player.brakePedal = 0;
+  player.gear = 1;
+  player.rpmRatio = 0.18;
+  resetSteering();
+  resetCameraOrbit();
   player.nitro = 0.7;
   player.score = 0;
   player.driftChain = 0;
@@ -1716,6 +2483,8 @@ function startGame() {
   $('menu').classList.add('hidden');
   $('finishMenu').classList.add('hidden');
   $('pauseMenu').classList.add('hidden');
+  inspectMode = false;
+  $('inspectBar').classList.add('hidden');
   $('hud').classList.remove('hidden');
   showTouchControls(true);
   updateRotateHint();
@@ -1798,6 +2567,15 @@ function respawn() {
   player.mesh.group.position.copy(near.pos);
   player.yaw = near.yaw;
   player.vel.set(0, 0, 0);
+  player.yawRate = 0;
+  player.steerAngle = 0;
+  player.throttle = 0;
+  player.brakePedal = 0;
+  player.gear = 1;
+  player.rpmRatio = 0.18;
+  player.longAccel = 0;
+  player.latAccel = 0;
+  resetSteering();
   player.prevSampleIdx = nearestSampleIdx(near.pos).idx;
   showCenterMsg('На трассу! ⟲', 900);
 }
@@ -1806,17 +2584,246 @@ function respawn() {
 const _fwd = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
+function tireLateralForce(alpha, load, mu) {
+  const peak = Math.max(mu * load, 0);
+  // Насыщающаяся кривая шины: пик около 7–9°, дальше скольжение чуть слабее
+  return -peak * Math.sin(1.45 * Math.atan(alpha / 0.13));
+}
+
+function surfaceInfoAt(x, z, groundH) {
+  const roadInfo = nearestRoadInfoApprox(x, z);
+  const radial = Math.hypot(x, z);
+  if (roadInfo.edge <= 0) {
+    return { name: 'asphalt', label: 'АСФАЛЬТ', mu: 1.0, rolling: 0.012, roadInfo };
+  }
+  if (roadInfo.edge <= 1.6) {
+    return { name: 'gravel', label: 'ОБОЧИНА', mu: 0.68, rolling: 0.036, roadInfo };
+  }
+  if (radial > 258 && groundH < 0.55) {
+    return { name: 'sand', label: 'ПЕСОК', mu: 0.5, rolling: 0.085, roadInfo };
+  }
+  if (groundH > 7.0) {
+    return { name: 'rock', label: 'СКАЛА', mu: 0.6, rolling: 0.052, roadInfo };
+  }
+  const offroadSkill = 0.78 + selectedCar.offroad * 0.34;
+  return {
+    name: 'grass', label: 'ТРАВА',
+    mu: 0.66 * offroadSkill,
+    rolling: lerp(0.052, 0.034, selectedCar.offroad),
+    roadInfo,
+  };
+}
+
+function updateGearAndRpm(dt, u) {
+  const thresholds = [0, 11, 20, 30, 41, 53, 67];
+  if (u < -0.15 && player.throttle < 0.05) {
+    player.gear = 0;
+    const target = 0.2 + clamp(Math.abs(u) / 8, 0, 1) * 0.55 + player.brakePedal * 0.1;
+    player.rpmRatio = lerp(player.rpmRatio, target, clamp(dt * 9, 0, 1));
+    return;
+  }
+  let gear = 1;
+  while (gear < 7 && u > thresholds[gear]) gear++;
+  player.gear = gear;
+  const low = thresholds[gear - 1];
+  const high = thresholds[gear] || selectedCar.topSpeed * 1.08;
+  const inGear = clamp((u - low) / Math.max(high - low, 1), 0, 1);
+  let target = 0.17 + inGear * 0.72 + player.throttle * 0.07;
+  if (player.wheelspin) target = Math.max(target, 0.9);
+  if (Math.abs(u) < 0.1 && player.throttle < 0.03) target = 0.17;
+  player.rpmRatio = lerp(player.rpmRatio, clamp(target, 0.14, 1), clamp(dt * 10, 0, 1));
+}
+
+function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canDrive, inWater) {
+  const pos = player.mesh.group.position;
+  const mass = car.mass;
+  const gravity = 9.81;
+  const a = car.cgToFront;
+  const b = car.wheelbase - a;
+  const wheelbase = car.wheelbase;
+  const yawInertia = mass * (0.9 + (wheelbase * wheelbase) / 12);
+
+  let fx = Math.sin(player.yaw);
+  let fz = Math.cos(player.yaw);
+  let rx = fz;
+  let rz = -fx;
+  let u = player.vel.x * fx + player.vel.z * fz;   // вперёд
+  let v = player.vel.x * rx + player.vel.z * rz;   // вправо
+  let yawRate = player.yawRate;
+  const speed = Math.hypot(u, v);
+
+  // Рулевая рейка: угол передних колёс уменьшается со скоростью
+  const speedSensitiveSteer = car.maxSteer / (1 + Math.pow(Math.abs(u) / 17, 1.22));
+  const steerTarget = canDrive ? steering.value * speedSensitiveSteer * profile.steering : 0;
+  const rackRate = Math.abs(steerTarget) > Math.abs(player.steerAngle) ? 3.4 : 4.8;
+  player.steerAngle = approachValue(player.steerAngle, steerTarget, rackRate * h);
+  player.steerVis = player.steerAngle;
+  const delta = player.steerAngle;
+  const cosD = Math.cos(delta);
+  const sinD = Math.sin(delta);
+
+  // Нагрузки на оси с продольным переносом веса
+  const staticFront = mass * gravity * b / wheelbase;
+  const staticRear = mass * gravity * a / wheelbase;
+  const transfer = mass * player.longAccel * car.cgHeight / wheelbase;
+  const loadFront = clamp(staticFront - transfer, staticFront * 0.08, mass * gravity * 0.92);
+  const loadRear = clamp(staticRear + transfer, staticRear * 0.08, mass * gravity * 0.92);
+
+  // Углы увода шин передней и задней оси
+  const frontAxleLat = v + a * yawRate;
+  const rearAxleLat = v - b * yawRate;
+  const frontWheelLong = u * cosD + frontAxleLat * sinD;
+  const frontWheelLat = -u * sinD + frontAxleLat * cosD;
+  const alphaFront = Math.atan2(frontWheelLat, Math.max(Math.abs(frontWheelLong), 2.0));
+  const alphaRear = Math.atan2(rearAxleLat, Math.max(Math.abs(u), 2.0));
+
+  let muFront = car.tireMu * surface.mu * profile.grip;
+  let muRear = muFront;
+  if (canDrive && input.handbrake) muRear *= profile.handbrakeRearGrip;
+  if (inWater) { muFront *= 0.28; muRear *= 0.28; }
+  const tireSpeedFactor = smoothstep(0.35, 3.2, speed);
+  let frontLatWheel = tireLateralForce(alphaFront, loadFront, muFront) * tireSpeedFactor;
+  let rearLat = tireLateralForce(alphaRear, loadRear, muRear) * tireSpeedFactor;
+
+  // Тяга двигателя: мощность на скорости + ограничение старта
+  const gearFactor = [0.86, 1.24, 1.08, 0.97, 0.88, 0.8, 0.73, 0.67][player.gear] || 0.75;
+  const surfaceTopFactor = surface.name === 'asphalt' ? 1 : lerp(0.7, 0.98, car.offroad);
+  const effectiveTop = car.topSpeed * surfaceTopFactor * (player.boosting ? 1.22 : 1) * (inWater ? 0.24 : 1);
+  let driveFront = 0;
+  let driveRear = 0;
+  let brakeFront = 0;
+  let brakeRear = 0;
+  if (canDrive && player.throttle > 0.01 && player.gear > 0) {
+    const powerForce = (car.powerKW * 1000 * 0.88) / Math.max(u, 3.6);
+    let totalDrive = Math.min(mass * car.launchAccel * gearFactor, powerForce) * player.throttle;
+    totalDrive *= clamp((effectiveTop * 1.05 - u) / Math.max(effectiveTop * 0.18, 3), 0, 1);
+    if (player.boosting && u < effectiveTop * 1.08) totalDrive += mass * 3.7;
+    driveFront = totalDrive * car.driveFrontBias;
+    driveRear = totalDrive * (1 - car.driveFrontBias);
+  }
+  if (canDrive && player.brakePedal > 0.01) {
+    if (u > 0.45) {
+      const totalBrake = -mass * car.brakeDecel * player.brakePedal;
+      brakeFront = totalBrake * 0.68;
+      brakeRear = totalBrake * 0.32;
+    } else if (u > -8.5) {
+      const reverseForce = -mass * 3.9 * player.brakePedal;
+      driveFront += reverseForce * car.driveFrontBias;
+      driveRear += reverseForce * (1 - car.driveFrontBias);
+    }
+  }
+  if (canDrive && input.handbrake && Math.abs(u) > 0.2) {
+    brakeRear += -Math.sign(u) * mass * 4.3;
+  }
+
+  // Круг сцепления: продольная сила не может забрать у шины всё
+  const maxFront = muFront * loadFront;
+  const maxRear = muRear * loadRear;
+  const availFront = Math.sqrt(Math.max(0, maxFront * maxFront - frontLatWheel * frontLatWheel));
+  const availRear = Math.sqrt(Math.max(0, maxRear * maxRear - rearLat * rearLat));
+  const demandFront = driveFront + brakeFront;
+  const demandRear = driveRear + brakeRear;
+  let frontLongWheel = clamp(demandFront, -availFront, availFront);
+  let rearLong = clamp(demandRear, -availRear, availRear);
+  const frontSpin = player.throttle > 0.25 && driveFront > maxFront * 0.92;
+  const rearSpin = player.throttle > 0.25 && driveRear > maxRear * 0.92;
+  player.wheelspin = frontSpin || rearSpin;
+  if (frontSpin) frontLatWheel *= lerp(0.48, 0.9, profile.traction);
+  if (rearSpin) rearLat *= lerp(0.4, 0.9, profile.traction);
+  if (player.brakePedal > 0.82 && Math.abs(brakeFront) > maxFront * 0.95) frontLatWheel *= lerp(0.72, 0.94, profile.traction);
+  if (player.brakePedal > 0.82 && Math.abs(brakeRear) > maxRear * 0.95) rearLat *= lerp(0.62, 0.9, profile.traction);
+
+  // Передняя ось: из координат повернутого колеса в координаты кузова
+  const frontLongBody = frontLongWheel * cosD - frontLatWheel * sinD;
+  const frontLatBody = frontLongWheel * sinD + frontLatWheel * cosD;
+
+  const aeroLong = -0.5 * 1.225 * car.dragArea * u * Math.abs(u);
+  const aeroLat = -1.15 * v * Math.abs(v);
+  const rollingLong = -mass * gravity * surface.rolling * Math.tanh(u / 0.65);
+  const engineBrake = canDrive && player.throttle < 0.03 && u > 0.2 ? -mass * 0.38 * Math.tanh(u / 1.5) : 0;
+  const slopeLongForce = -mass * gravity * slopeLong;
+  const slopeLatForce = -mass * gravity * slopeLat;
+  const totalLong = frontLongBody + rearLong + aeroLong + rollingLong + engineBrake + slopeLongForce;
+  const totalLat = frontLatBody + rearLat + aeroLat + slopeLatForce;
+
+  // Момент рыскания + электронная стабилизация профиля помощи
+  const kinematicYawRate = (u / wheelbase) * Math.tan(delta);
+  let yawAccel = (a * frontLatBody - b * rearLat) / yawInertia;
+  yawAccel -= yawRate * profile.yawDamping;
+  yawAccel += (kinematicYawRate - yawRate) * profile.stability * 1.45;
+  const dynamicBlend = smoothstep(2.0, 7.0, Math.abs(u));
+  yawAccel += (kinematicYawRate - yawRate) * (1 - dynamicBlend) * 16;
+  if (inWater) yawAccel -= yawRate * 2.2;
+  yawRate = clamp(yawRate + yawAccel * h, -profile.maxYawRate, profile.maxYawRate);
+
+  const longAccel = totalLong / mass;
+  const latAccel = totalLat / mass;
+  u += (longAccel + yawRate * v) * h;
+  v += (latAccel - yawRate * u) * h;
+
+  // На парковочных скоростях плавно переходим к кинематике Аккермана
+  const kinematicV = u * (b / wheelbase) * Math.tan(delta);
+  v = lerp(v, kinematicV, (1 - dynamicBlend) * clamp(h * 16, 0, 1));
+
+  const reverseRequested = canDrive && player.brakePedal > 0.03 && u <= 0.5;
+  if (Math.abs(u) < 0.13 && player.throttle < 0.03 && !reverseRequested && Math.abs(slopeLong) < 0.035) u = 0;
+  if (Math.hypot(u, v) < 0.06 && player.throttle < 0.03 && !reverseRequested) {
+    v = 0;
+    yawRate = 0;
+  }
+  if (inWater) {
+    const waterDamp = Math.exp(-1.9 * h);
+    u *= waterDamp;
+    v *= waterDamp;
+  }
+  const hardForward = Math.max(effectiveTop * 1.16 + 4, 9);
+  if (u > hardForward) u = lerp(u, hardForward, clamp(h * 3, 0, 1));
+  if (u < -9.2) u = -9.2;
+
+  player.yawRate = yawRate;
+  player.yaw += yawRate * h;
+  fx = Math.sin(player.yaw);
+  fz = Math.cos(player.yaw);
+  rx = fz;
+  rz = -fx;
+  player.vel.set(fx * u + rx * v, 0, fz * u + rz * v);
+  pos.addScaledVector(player.vel, h);
+  player.travelDistance += Math.hypot(u, v) * h;
+
+  const accelBlend = clamp(h * 18, 0, 1);
+  player.longAccel = lerp(player.longAccel, longAccel, accelBlend);
+  player.latAccel = lerp(player.latAccel, latAccel, accelBlend);
+  player.frontSlip = alphaFront;
+  player.rearSlip = alphaRear;
+  player.slipAngle = Math.atan2(v, Math.max(Math.abs(u), 0.1));
+}
+
 function updatePlayer(dt) {
   const car = selectedCar;
+  const profile = ASSIST_PROFILES[assistMode] || ASSIST_PROFILES.sport;
   const pos = player.mesh.group.position;
+  const canDrive = gameState === 'racing';
+
+  updateSteeringInput(dt);
+  const throttleTarget = canDrive && input.gas ? 1 : 0;
+  const brakeTarget = canDrive && input.brake ? 1 : 0;
+  player.throttle = approachValue(player.throttle, throttleTarget, (throttleTarget > player.throttle ? 4.8 : 6.5) * dt);
+  player.brakePedal = approachValue(player.brakePedal, brakeTarget, (brakeTarget > player.brakePedal ? 7.5 : 9.5) * dt);
 
   _fwd.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
   _right.set(_fwd.z, 0, -_fwd.x);
+  let fwdSpeed = player.vel.dot(_fwd);
+  updateGearAndRpm(dt, fwdSpeed);
 
-  const fwdSpeed = player.vel.dot(_fwd);
   const near = nearestSampleIdx(pos);
-  player.offroad = near.dist > ROAD_HALF + 0.6 || Math.hypot(pos.x, pos.z) > 278;
-  const inWater = Math.hypot(pos.x, pos.z) > 289 || terrainHeight(pos.x, pos.z, near.dist) < -0.85;
+  const roadInfoForGround = nearestRoadInfoApprox(pos.x, pos.z);
+  const groundH = terrainHeight(pos.x, pos.z, roadInfoForGround.dist);
+  player.groundH = groundH;
+  const surface = surfaceInfoAt(pos.x, pos.z, groundH);
+  player.surface = surface.label;
+  player.surfaceMu = car.tireMu * surface.mu;
+  player.offroad = surface.name !== 'asphalt';
+  const inWater = Math.hypot(pos.x, pos.z) > 289 || groundH < -0.85;
 
   // Прогресс вдоль трассы (без скачков через петлю)
   let dIdx = near.idx - player.prevSampleIdx;
@@ -1826,70 +2833,42 @@ function updatePlayer(dt) {
   player.prevSampleIdx = near.idx;
   player.s = (player.sampleAccum / 800) * TRACK_LENGTH - 6;
 
-  // Управление активно только в гонке
-  const canDrive = gameState === 'racing';
-  const steerInput = canDrive ? (input.left ? 1 : 0) + (input.right ? -1 : 0) : 0;
-  player.drifting = canDrive && input.handbrake && Math.abs(fwdSpeed) > 9;
+  // Уклон рельефа в осях машины
+  const hF = terrainHeight(pos.x + _fwd.x * 2.2, pos.z + _fwd.z * 2.2);
+  const hB = terrainHeight(pos.x - _fwd.x * 2.2, pos.z - _fwd.z * 2.2);
+  const hR = terrainHeight(pos.x + _right.x * 1.5, pos.z + _right.z * 1.5);
+  const hL = terrainHeight(pos.x - _right.x * 1.5, pos.z - _right.z * 1.5);
+  const slopeLong = clamp((hF - hB) / 4.4, -0.75, 0.75);
+  const slopeLat = clamp((hR - hL) / 3.0, -0.75, 0.75);
+  player.groundPitch = clamp(-Math.atan2(hF - hB, 4.4), -0.55, 0.55);
+  player.groundRoll = clamp(Math.atan2(hR - hL, 3.0), -0.55, 0.55);
 
   // Нитро
   player.boosting = canDrive && input.nitro && player.nitro > 0.02 && fwdSpeed > 2;
   if (player.boosting) {
     player.nitro = Math.max(0, player.nitro - dt * 0.32);
-    player.vel.addScaledVector(_fwd, 17 * dt);
   } else {
     player.nitro = Math.min(1, player.nitro + dt * 0.022);
   }
 
-  const topSpeed = car.topSpeed * (player.offroad ? car.offroad : 1) * (player.boosting ? 1.28 : 1) * (inWater ? 0.25 : 1);
-
-  if (canDrive && input.gas) {
-    const power = car.engine * clamp(1 - Math.max(fwdSpeed, 0) / (topSpeed * 1.12), 0, 1);
-    player.vel.addScaledVector(_fwd, power * dt);
-  }
-  if (canDrive && input.brake) {
-    if (fwdSpeed > 1) {
-      player.vel.addScaledVector(_fwd, -34 * dt);
-    } else {
-      player.vel.addScaledVector(_fwd, -13 * dt); // задний ход
-    }
+  const preCollisionSpeed = player.vel.length();
+  const steps = clamp(Math.ceil(dt / (1 / 240)), 1, 12);
+  const stepDt = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    simulateVehicleStep(stepDt, car, profile, surface, slopeLong, slopeLat, canDrive, inWater);
   }
 
-  // Руль
-  const speedAbs = Math.abs(fwdSpeed);
-  const steerAuthority = clamp(speedAbs / 7, 0, 1) * (1 - clamp(speedAbs / (car.topSpeed * 1.3), 0, 1) * 0.45);
-  const steerRate = (player.drifting ? 2.5 : 1.85) * steerAuthority;
-  player.yaw += steerInput * steerRate * dt * (fwdSpeed < -0.5 ? -1 : 1);
-  player.steerVis = lerp(player.steerVis, steerInput * 0.42, dt * 10);
-
-  // Сцепление: гасим боковой снос
-  const newFwdSpeed = player.vel.dot(_fwd);
+  _fwd.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  _right.set(_fwd.z, 0, -_fwd.x);
+  fwdSpeed = player.vel.dot(_fwd);
   const latSpeed = player.vel.dot(_right);
-  const grip = player.drifting ? 1.1 : player.offroad ? car.grip * 0.5 : car.grip;
-  const latKept = latSpeed * Math.exp(-grip * dt);
-  player.vel.copy(_fwd).multiplyScalar(newFwdSpeed).addScaledVector(_right, latKept);
+  const speedAbs = Math.abs(fwdSpeed);
+  const velLen = player.vel.length();
+  updateGearAndRpm(dt, fwdSpeed);
 
-  // Гравитация на склонах бездорожья: подъёмы тормозят, спуски разгоняют
-  if (player.offroad && !inWater && near.dist > ROAD_HALF + 2) {
-    const hAhead = terrainHeight(pos.x + _fwd.x * 2.2, pos.z + _fwd.z * 2.2);
-    const hBack = terrainHeight(pos.x - _fwd.x * 2.2, pos.z - _fwd.z * 2.2);
-    const slope = (hAhead - hBack) / 4.4;
-    player.vel.addScaledVector(_fwd, -slope * 8.2 * dt);
-  }
-
-  // Сопротивление
-  const drag = player.offroad ? 0.55 : 0.22;
-  player.vel.multiplyScalar(Math.exp(-drag * dt * (player.drifting ? 1.5 : 1)));
-  if (!input.gas && !input.brake) player.vel.multiplyScalar(Math.exp(-0.35 * dt));
-
-  // Мягкий кап скорости
-  const spd = player.vel.length();
-  const hardCap = topSpeed * 1.18 + 6;
-  if (spd > hardCap) player.vel.multiplyScalar(lerp(1, hardCap / spd, dt * 3));
-
-  pos.addScaledVector(player.vel, dt);
-  const groundH = terrainHeight(pos.x, pos.z, near.dist);
-  player.groundH = groundH;
-  pos.y = inWater ? Math.max(groundH, -0.58) : groundH; // машина повторяет рельеф
+  const newGroundH = terrainHeight(pos.x, pos.z, nearestRoadInfoApprox(pos.x, pos.z).dist);
+  player.groundH = newGroundH;
+  pos.y = inWater ? Math.max(newGroundH, -0.58) : newGroundH;
 
   // Граница мира
   const distC = Math.hypot(pos.x, pos.z);
@@ -1897,9 +2876,10 @@ function updatePlayer(dt) {
     pos.x *= 322 / distC;
     pos.z *= 322 / distC;
     player.vel.multiplyScalar(0.4);
+    player.yawRate *= 0.5;
   }
 
-  // Столкновения с объектами
+  // Столкновения с объектами: убираем скорость в препятствие, касательную частично сохраняем
   crashCooldown -= dt;
   for (const col of colliders) {
     const dx = pos.x - col.x;
@@ -1908,20 +2888,28 @@ function updatePlayer(dt) {
     const d2 = dx * dx + dz * dz;
     if (d2 < rr * rr && d2 > 0.0001) {
       const d = Math.sqrt(d2);
-      pos.x = col.x + (dx / d) * rr;
-      pos.z = col.z + (dz / d) * rr;
-      if (spd > 6 && crashCooldown <= 0) {
+      const nx = dx / d;
+      const nz = dz / d;
+      pos.x = col.x + nx * rr;
+      pos.z = col.z + nz * rr;
+      const vn = player.vel.x * nx + player.vel.z * nz;
+      if (vn < 0) {
+        player.vel.x -= vn * nx;
+        player.vel.z -= vn * nz;
+        player.vel.multiplyScalar(0.82);
+      }
+      player.yawRate *= 0.68;
+      if (preCollisionSpeed > 6 && crashCooldown <= 0) {
         showCenterMsg('💥 СТОЛКНОВЕНИЕ!', 800, '#ff8a6a');
         player.driftChain = 0;
         vibrate(70);
         engine.beep(110, 0.2, 0.3);
         crashCooldown = 0.7;
       }
-      player.vel.multiplyScalar(0.45);
     }
   }
 
-  // Столкновения с соперниками
+  // Столкновения с соперниками и обычным трафиком
   for (const r of rivals) {
     const rp = r.mesh.group.position;
     const dx = pos.x - rp.x;
@@ -1929,9 +2917,17 @@ function updatePlayer(dt) {
     const d2 = dx * dx + dz * dz;
     if (d2 < 9.5 && d2 > 0.0001) {
       const d = Math.sqrt(d2);
-      pos.x = rp.x + (dx / d) * 3.1;
-      pos.z = rp.z + (dz / d) * 3.1;
-      player.vel.multiplyScalar(0.72);
+      const nx = dx / d;
+      const nz = dz / d;
+      pos.x = rp.x + nx * 3.1;
+      pos.z = rp.z + nz * 3.1;
+      const vn = player.vel.x * nx + player.vel.z * nz;
+      if (vn < 0) {
+        player.vel.x -= vn * nx * 1.15;
+        player.vel.z -= vn * nz * 1.15;
+      }
+      player.vel.multiplyScalar(0.9);
+      player.yawRate *= 0.78;
       if (crashCooldown <= 0) {
         vibrate(40);
         engine.beep(140, 0.12, 0.2);
@@ -1939,15 +2935,42 @@ function updatePlayer(dt) {
       }
     }
   }
+  for (const traffic of ambientCars) {
+    const rp = traffic.mesh.group.position;
+    const dx = pos.x - rp.x;
+    const dz = pos.z - rp.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < 8.4 && d2 > 0.0001) {
+      const d = Math.sqrt(d2);
+      const nx = dx / d;
+      const nz = dz / d;
+      pos.x = rp.x + nx * 2.9;
+      pos.z = rp.z + nz * 2.9;
+      const vn = player.vel.x * nx + player.vel.z * nz;
+      if (vn < 0) {
+        player.vel.x -= vn * nx * 1.1;
+        player.vel.z -= vn * nz * 1.1;
+      }
+      player.vel.multiplyScalar(0.88);
+      player.yawRate *= 0.75;
+      traffic.hitTimer = 1.4;
+      if (crashCooldown <= 0) {
+        showCenterMsg('💥 Авария с трафиком!', 850, '#ff8a6a');
+        vibrate(55);
+        engine.beep(125, 0.16, 0.24);
+        crashCooldown = 0.6;
+      }
+    }
+  }
 
-  // Дрифт: очки за угол сноса
-  const velLen = player.vel.length();
-  const slip = velLen > 8 ? Math.abs(player.vel.dot(_right)) / velLen : 0;
+  // Дрифт определяется настоящим углом скольжения кузова и задней оси
+  const absSlip = Math.abs(player.slipAngle);
+  player.drifting = velLen > 9 && absSlip > 0.16 && (input.handbrake || Math.abs(player.rearSlip) > 0.17 || player.throttle > 0.35);
   player.driftChainTimer -= dt;
-  if (player.drifting && slip > 0.22 && velLen > 11) {
+  if (player.drifting && velLen > 10) {
     if (player.driftChainTimer <= 0) player.driftChain = Math.min(player.driftChain + 1, 8);
     player.driftChainTimer = 1.4;
-    const pts = Math.round(slip * velLen * dt * 14) * Math.max(player.driftChain, 1);
+    const pts = Math.round(absSlip * velLen * dt * 46) * Math.max(player.driftChain, 1);
     if (pts > 0) {
       player.score += pts;
       player.nitro = Math.min(1, player.nitro + dt * 0.1);
@@ -1957,33 +2980,22 @@ function updatePlayer(dt) {
     player.driftChain = 0;
   }
 
-  // Меш: кузов наклоняется по рельефу + крены от руля/газа
+  const maxTireSlip = Math.max(Math.abs(player.frontSlip), Math.abs(player.rearSlip));
+  if (velLen > 5 && (maxTireSlip > 0.18 || player.wheelspin)) {
+    player.smokeAccumulator = Math.min(1, player.smokeAccumulator + dt * (2 + maxTireSlip * 8));
+    player.skidAccumulator = Math.min(1, player.skidAccumulator + dt * 3);
+  }
+
+  // Кузов: рельеф + крен/тангаж от измеренных ускорений
   const g = player.mesh.group;
   g.rotation.y = player.yaw;
-  if (!inWater && near.dist > ROAD_HALF - 1) {
-    const hF = terrainHeight(pos.x + _fwd.x * 1.7, pos.z + _fwd.z * 1.7);
-    const hB = terrainHeight(pos.x - _fwd.x * 1.7, pos.z - _fwd.z * 1.7);
-    const hR = terrainHeight(pos.x + _right.x * 1.1, pos.z + _right.z * 1.1);
-    const hL = terrainHeight(pos.x - _right.x * 1.1, pos.z - _right.z * 1.1);
-    player.groundPitch = clamp(-Math.atan2(hF - hB, 3.4), -0.5, 0.5);
-    player.groundRoll = clamp(Math.atan2(hR - hL, 2.2), -0.5, 0.5);
-  } else {
-    player.groundPitch = lerp(player.groundPitch, 0, dt * 6);
-    player.groundRoll = lerp(player.groundRoll, 0, dt * 6);
-  }
-  g.rotation.z = lerp(
-    g.rotation.z,
-    player.groundRoll - player.steerVis * clamp(speedAbs / 30, 0, 1) * 0.09,
-    dt * 7
-  );
-  g.rotation.x = lerp(
-    g.rotation.x,
-    player.groundPitch + (input.gas && canDrive ? -0.02 : input.brake ? 0.025 : 0),
-    dt * 6
-  );
+  const rollTarget = player.groundRoll - clamp(player.latAccel * 0.011, -0.13, 0.13) * (car.cgHeight / 0.52);
+  const pitchTarget = player.groundPitch - clamp(player.longAccel * 0.006, -0.075, 0.095);
+  g.rotation.z = lerp(g.rotation.z, rollTarget, clamp(dt * 7, 0, 1));
+  g.rotation.x = lerp(g.rotation.x, pitchTarget, clamp(dt * 6, 0, 1));
   const wheelR = player.mesh.wheelRadius || 0.4;
   player.wheels.forEach((w) => {
-    if (w.front) w.pivot.rotation.y = player.steerVis;
+    if (w.front) w.pivot.rotation.y = player.steerAngle;
     w.spin.rotation.x += (fwdSpeed / wheelR) * dt;
   });
   player.mesh.flame.visible = player.boosting;
@@ -2024,7 +3036,8 @@ function updatePlayer(dt) {
     }
   }
 
-  engine.update(clamp(Math.abs(fwdSpeed) / car.topSpeed, 0, 1), player.boosting);
+
+  engine.update(player.rpmRatio, player.boosting);
 }
 
 /* ============================ Соперники (ИИ) ============================ */
@@ -2062,17 +3075,254 @@ function updateRivals(dt) {
   }
 }
 
+
+/* ============================ Живой трафик, пешеходы и птицы ============================ */
+function animatePedestrianLimbs(ped, moving, dt, t) {
+  if (moving) ped.phase += dt * (4.2 + ped.speed * 2.4);
+  const swing = moving ? Math.sin(ped.phase) * 0.55 : 0;
+  ped.leftLeg.rotation.x = swing;
+  ped.rightLeg.rotation.x = -swing;
+  ped.leftArm.rotation.x = -swing * 0.72;
+  ped.rightArm.rotation.x = swing * 0.72;
+  if (!moving) {
+    ped.leftArm.rotation.x = Math.sin(t * 1.3 + ped.phase) * 0.06;
+    ped.rightArm.rotation.x = Math.cos(t * 1.1 + ped.phase) * 0.06;
+  }
+}
+function updateAmbientCars(dt) {
+  for (const car of ambientCars) {
+    if (car.hitTimer > 0) car.hitTimer = Math.max(0, car.hitTimer - dt);
+    let speedNow = car.hitTimer > 0 ? 0 : car.speed;
+    const group = car.mesh.group;
+    if (player.mesh) {
+      const pp = player.mesh.group.position;
+      const dx = pp.x - group.position.x;
+      const dz = pp.z - group.position.z;
+      const dist = Math.hypot(dx, dz);
+      const forwardX = Math.sin(group.rotation.y);
+      const forwardZ = Math.cos(group.rotation.y);
+      const ahead = dist > 0.01 ? (dx * forwardX + dz * forwardZ) / dist : 0;
+      if (dist < 15 && ahead > 0.35) speedNow *= clamp((dist - 5) / 10, 0.08, 1);
+    }
+    car.s += car.direction * speedNow * dt;
+    let roadPoint;
+    if (car.road) {
+      if (!car.road.closed) {
+        if (car.s > car.road.length - 4) { car.s = car.road.length - 4; car.direction = -1; car.lane = -Math.abs(car.lane); }
+        if (car.s < 4) { car.s = 4; car.direction = 1; car.lane = Math.abs(car.lane); }
+      }
+      roadPoint = pointOnRoad(car.road, car.s, car.lane);
+    } else {
+      roadPoint = pointAtS(car.s, car.lane);
+    }
+    const targetYaw = roadPoint.yaw + (car.direction < 0 ? Math.PI : 0);
+    const yawDelta = wrapAnglePi(targetYaw - group.rotation.y);
+    group.position.set(roadPoint.pos.x, terrainHeight(roadPoint.pos.x, roadPoint.pos.z, 0) + 0.04, roadPoint.pos.z);
+    group.rotation.y = dt === 0 ? targetYaw : angleLerp(group.rotation.y, targetYaw, Math.min(dt * 5, 1));
+    car.mesh.wheels.forEach((w) => {
+      if (w.front) w.pivot.rotation.y = clamp(yawDelta * 1.4, -0.42, 0.42);
+      w.spin.rotation.x += (speedNow / (car.mesh.wheelRadius || 0.34)) * dt;
+    });
+  }
+}
+function updatePedestrians(dt, t) {
+  const playerPos = player.mesh ? player.mesh.group.position : null;
+  for (const ped of pedestrians) {
+    let moving = false;
+    if (ped.mode === 'loop') {
+      ped.s += ped.direction * ped.speed * dt;
+      const p = pointOnRoad(villageLoopRoad, ped.s, ped.lane);
+      ped.group.position.set(p.pos.x, infraGroundY(p.pos.x, p.pos.z), p.pos.z);
+      ped.group.rotation.y = p.yaw + (ped.direction < 0 ? Math.PI : 0);
+      moving = dt > 0;
+    } else if (ped.mode === 'wander') {
+      if (ped.wait > 0) {
+        ped.wait -= dt;
+      } else {
+        const dx = ped.targetX - ped.x;
+        const dz = ped.targetZ - ped.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.35) {
+          const a = rnd() * TAU;
+          const r = 3 + rnd() * ped.radius;
+          ped.targetX = ped.homeX + Math.cos(a) * r;
+          ped.targetZ = ped.homeZ + Math.sin(a) * r;
+          ped.wait = 0.6 + rnd() * 2.6;
+        } else {
+          const targetYaw = Math.atan2(dx, dz);
+          ped.yaw = angleLerp(ped.yaw, targetYaw, Math.min(dt * 6, 1));
+          ped.x += Math.sin(ped.yaw) * ped.speed * dt;
+          ped.z += Math.cos(ped.yaw) * ped.speed * dt;
+          moving = dt > 0;
+        }
+      }
+      ped.group.position.set(ped.x, infraGroundY(ped.x, ped.z), ped.z);
+      ped.group.rotation.y = ped.yaw;
+    } else {
+      ped.group.rotation.y = ped.yaw + Math.sin(t * 0.45 + ped.phase) * 0.1;
+      if (Math.sin(t * 0.35 + ped.phase) > 0.72) {
+        ped.rightArm.rotation.z = -2.45 + Math.sin(t * 7 + ped.phase) * 0.28;
+      } else {
+        ped.rightArm.rotation.z = 0;
+      }
+    }
+    if (playerPos && ped.mode !== 'stand') {
+      const dx = ped.group.position.x - playerPos.x;
+      const dz = ped.group.position.z - playerPos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.01 && dist < 5.5) {
+        const push = (5.5 - dist) * 0.28;
+        ped.group.position.x += (dx / dist) * push;
+        ped.group.position.z += (dz / dist) * push;
+        ped.group.position.y = infraGroundY(ped.group.position.x, ped.group.position.z);
+      }
+    }
+    animatePedestrianLimbs(ped, moving, dt, t);
+    if (moving) ped.group.position.y += Math.abs(Math.sin(ped.phase)) * 0.035;
+  }
+}
+function updateBirds(t) {
+  for (const bird of birds) {
+    const angle = bird.phase + t * bird.speed;
+    const x = bird.centerX + Math.cos(angle) * bird.radius;
+    const z = bird.centerZ + Math.sin(angle) * bird.radius;
+    const y = bird.height + Math.sin(t * 0.65 + bird.phase) * 2.2;
+    bird.group.position.set(x, y, z);
+    const vx = -Math.sin(angle) * Math.sign(bird.speed || 1);
+    const vz = Math.cos(angle) * Math.sign(bird.speed || 1);
+    bird.group.rotation.y = Math.atan2(vx, vz);
+    const flap = Math.sin(t * 8 + bird.phase) * 0.62;
+    bird.leftWing.rotation.z = flap;
+    bird.rightWing.rotation.z = -flap;
+  }
+}
+function updateLivingWorld(dt, t) {
+  updateAmbientCars(dt);
+  updatePedestrians(dt, t);
+  updateBirds(t);
+}
+
+/* Дым шин и следы резины */
+const tireSmokePool = [];
+let tireSmokeCursor = 0;
+let tireSmokeReady = false;
+const _wheelWorld = new THREE.Vector3();
+let skidMesh = null;
+let skidCursor = 0;
+const skidDummy = new THREE.Object3D();
+const lastSkidPoints = [null, null];
+function ensureTireEffects() {
+  if (tireSmokeReady) return;
+  tireSmokeReady = true;
+  const tex = makeCloudSpriteTexture();
+  for (let i = 0; i < 54; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, color: 0xd8d8d8, transparent: true, opacity: 0, depthWrite: false,
+    }));
+    sprite.scale.setScalar(0.5);
+    sprite.visible = false;
+    scene.add(sprite);
+    tireSmokePool.push({ sprite, life: 0, maxLife: 1, vel: new THREE.Vector3() });
+  }
+  const skidGeo = new THREE.PlaneGeometry(0.27, 1);
+  skidGeo.rotateX(-Math.PI / 2);
+  skidMesh = new THREE.InstancedMesh(skidGeo, new THREE.MeshBasicMaterial({
+    color: 0x0b0b0d, transparent: true, opacity: 0.5, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -3,
+  }), 280);
+  skidDummy.position.set(0, -10, 0);
+  skidDummy.scale.set(0.001, 0.001, 0.001);
+  skidDummy.updateMatrix();
+  for (let i = 0; i < 280; i++) skidMesh.setMatrixAt(i, skidDummy.matrix);
+  skidMesh.instanceMatrix.needsUpdate = true;
+  scene.add(skidMesh);
+}
+function emitTireSmoke(x, y, z) {
+  const p = tireSmokePool[tireSmokeCursor];
+  tireSmokeCursor = (tireSmokeCursor + 1) % tireSmokePool.length;
+  p.life = p.maxLife = 0.55 + Math.random() * 0.5;
+  p.sprite.position.set(x + (Math.random() - 0.5) * 0.25, y + 0.18, z + (Math.random() - 0.5) * 0.25);
+  p.sprite.scale.setScalar(0.45 + Math.random() * 0.35);
+  p.sprite.material.opacity = 0.28;
+  p.sprite.visible = true;
+  p.vel.set(player.vel.x * 0.12 + (Math.random() - 0.5) * 0.5, 0.65 + Math.random() * 0.5, player.vel.z * 0.12 + (Math.random() - 0.5) * 0.5);
+}
+function addSkidSegment(a, b) {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 0.25) return;
+  const mx = (a.x + b.x) / 2;
+  const mz = (a.z + b.z) / 2;
+  skidDummy.position.set(mx, terrainHeight(mx, mz, 0) + 0.095, mz);
+  skidDummy.rotation.set(0, Math.atan2(dx, dz), 0);
+  skidDummy.scale.set(1, 1, len + 0.08);
+  skidDummy.updateMatrix();
+  skidMesh.setMatrixAt(skidCursor, skidDummy.matrix);
+  skidCursor = (skidCursor + 1) % 280;
+  skidMesh.instanceMatrix.needsUpdate = true;
+}
+function updateTireEffects(dt) {
+  ensureTireEffects();
+  for (const p of tireSmokePool) {
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    if (p.life <= 0) { p.sprite.visible = false; continue; }
+    p.sprite.position.addScaledVector(p.vel, dt);
+    p.sprite.scale.multiplyScalar(1 + dt * 1.9);
+    p.sprite.material.opacity = 0.28 * (p.life / p.maxLife);
+  }
+  if (!player.mesh || gameState !== 'racing') {
+    player.smokeAccumulator = Math.max(0, player.smokeAccumulator - dt * 2);
+    lastSkidPoints[0] = lastSkidPoints[1] = null;
+    return;
+  }
+  const maxSlip = Math.max(Math.abs(player.frontSlip), Math.abs(player.rearSlip));
+  const sliding = player.vel.length() > 5 && (maxSlip > 0.18 || player.wheelspin);
+  const rearWheels = player.wheels.filter((w) => !w.front);
+  if (sliding && player.smokeAccumulator > 0.13) {
+    rearWheels.forEach((w) => {
+      w.pivot.getWorldPosition(_wheelWorld);
+      emitTireSmoke(_wheelWorld.x, _wheelWorld.y, _wheelWorld.z);
+    });
+    player.smokeAccumulator = Math.max(0, player.smokeAccumulator - 0.14);
+  }
+  rearWheels.forEach((w, i) => {
+    w.pivot.getWorldPosition(_wheelWorld);
+    const current = { x: _wheelWorld.x, z: _wheelWorld.z };
+    if (sliding && lastSkidPoints[i]) addSkidSegment(lastSkidPoints[i], current);
+    lastSkidPoints[i] = sliding ? current : null;
+  });
+  player.skidAccumulator = Math.max(0, player.skidAccumulator - dt * 2.5);
+}
+
 /* ============================ Камера ============================ */
 const camTargetPos = new THREE.Vector3();
+function wrapAnglePi(angle) {
+  let d = angle % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return d;
+}
+
 function updateCamera(dt) {
   if (gameState === 'menu') {
-    // Шоурум: камера медленно кружит вокруг выбранной машины у стартовой арки
-    menuOrbit += dt * 0.22;
+    // Шоурум: автоматический облёт, который можно перехватить перетаскиванием
+    cameraOrbit.menuIdle += dt;
+    if (cameraOrbit.menuIdle > 2.5) menuOrbit += dt * 0.22;
     const center = player.mesh ? player.mesh.group.position : new THREE.Vector3(0, 0, -170);
-    const cx = center.x + Math.cos(menuOrbit) * 7.4;
-    const cz = center.z + Math.sin(menuOrbit) * 7.4;
-    camera.position.lerp(new THREE.Vector3(cx, center.y + 1.9, cz), Math.min(dt * 1.6, 1));
-    camera.lookAt(center.x, center.y + 0.75, center.z);
+    const angle = menuOrbit + cameraOrbit.yaw;
+    const pitch = clamp(cameraOrbit.menuPitch, -0.04, 1.05);
+    const distance = clamp(cameraOrbit.menuDistance, 4.2, 16);
+    const horizontal = distance * Math.cos(pitch);
+    camTargetPos.set(
+      center.x + Math.sin(angle) * horizontal,
+      center.y + 0.78 + distance * Math.sin(pitch),
+      center.z + Math.cos(angle) * horizontal
+    );
+    camTargetPos.y = Math.max(camTargetPos.y, terrainHeight(camTargetPos.x, camTargetPos.z) + 0.5);
+    camera.position.lerp(camTargetPos, Math.min(dt * 5, 1));
+    camera.lookAt(center.x, center.y + 0.78, center.z);
     camera.fov = lerp(camera.fov, 52, dt * 2);
     camera.updateProjectionMatrix();
     return;
@@ -2081,8 +3331,16 @@ function updateCamera(dt) {
   const pos = player.mesh.group.position;
   _fwd.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
   const speedRatio = clamp(player.vel.length() / selectedCar.topSpeed, 0, 1);
+  cameraOrbit.idle += dt;
 
-  if (cameraMode === 2) {
+  const shouldRecenter = !inspectMode && gameState !== 'paused' && cameraOrbit.idle > 3.5;
+  if (shouldRecenter) {
+    cameraOrbit.yaw = angleLerp(cameraOrbit.yaw, 0, clamp(dt * 1.35, 0, 1));
+    cameraOrbit.pitch = lerp(cameraOrbit.pitch, 0, clamp(dt * 1.1, 0, 1));
+    cameraOrbit.distanceScale = lerp(cameraOrbit.distanceScale, 1, clamp(dt * 0.65, 0, 1));
+  }
+
+  if (cameraMode === 2 && !inspectMode) {
     // капот
     camTargetPos.copy(pos).addScaledVector(_fwd, 1.4);
     camTargetPos.y = pos.y + 1.25;
@@ -2091,18 +3349,27 @@ function updateCamera(dt) {
     look.y = pos.y + 1.0;
     camera.lookAt(look);
   } else {
-    const dist = cameraMode === 0 ? 7.6 + speedRatio * 1.8 : 12.5;
-    const height = cameraMode === 0 ? 2.55 : 4.6;
-    camTargetPos.copy(pos).addScaledVector(_fwd, -dist);
-    camTargetPos.y = pos.y + height;
-    // камера не должна уходить под склон позади машины
-    camTargetPos.y = Math.max(camTargetPos.y, terrainHeight(camTargetPos.x, camTargetPos.z) + 1.2);
-    camera.position.lerp(camTargetPos, Math.min(dt * (cameraMode === 0 ? 4.2 : 3), 1));
-    const look = pos.clone().addScaledVector(_fwd, 9);
-    look.y = pos.y + 1.4;
+    const baseDist = cameraMode === 0 ? 7.6 + speedRatio * 1.8 : 12.5;
+    const baseHeight = cameraMode === 0 ? 2.55 : 4.6;
+    const basePitch = Math.atan2(baseHeight, baseDist);
+    const pitch = clamp(basePitch + cameraOrbit.pitch, -0.02, 1.25);
+    const distance = clamp(baseDist * cameraOrbit.distanceScale, 3.8, 24);
+    const horizontal = distance * Math.cos(pitch);
+    const orbitYaw = player.yaw + Math.PI + cameraOrbit.yaw;
+    camTargetPos.set(
+      pos.x + Math.sin(orbitYaw) * horizontal,
+      pos.y + 0.78 + distance * Math.sin(pitch),
+      pos.z + Math.cos(orbitYaw) * horizontal
+    );
+    camTargetPos.y = Math.max(camTargetPos.y, terrainHeight(camTargetPos.x, camTargetPos.z) + 0.55);
+    const followRate = inspectMode || gameState === 'paused' ? 11 : (cameraMode === 0 ? 4.6 : 3.2);
+    camera.position.lerp(camTargetPos, Math.min(dt * followRate, 1));
+    const orbitAmount = clamp(Math.abs(wrapAnglePi(cameraOrbit.yaw)) / 1.15 + Math.abs(cameraOrbit.pitch) * 0.55, 0, 1);
+    const look = pos.clone().addScaledVector(_fwd, inspectMode ? 0 : 9 * (1 - orbitAmount));
+    look.y = pos.y + lerp(1.4, 0.78, inspectMode ? 1 : orbitAmount);
     camera.lookAt(look);
   }
-  const targetFov = 62 + (player.boosting ? 8 : speedRatio * 4);
+  const targetFov = inspectMode ? 50 : 62 + (player.boosting ? 8 : speedRatio * 4);
   camera.fov = lerp(camera.fov, targetFov, dt * 4);
   camera.updateProjectionMatrix();
 }
@@ -2120,6 +3387,27 @@ function drawMinimap() {
   minimap.arc(...toMap(0, 0), (290 / 640) * S, 0, TAU);
   minimap.fillStyle = 'rgba(70,140,60,0.35)';
   minimap.fill();
+  // уличная сеть острова
+  minimap.strokeStyle = 'rgba(203,213,225,0.72)';
+  minimap.lineWidth = 1.6;
+  SECONDARY_ROADS.forEach((road) => {
+    minimap.beginPath();
+    road.samples.forEach((pt, i) => {
+      if (i % 3 !== 0) return;
+      const [x, y] = toMap(pt.x, pt.z);
+      if (i === 0) minimap.moveTo(x, y); else minimap.lineTo(x, y);
+    });
+    if (road.closed) minimap.closePath();
+    minimap.stroke();
+  });
+  // ориентиры: фестиваль и деревенская церковь
+  [[0, -175, '#f0abfc'], [99, -23, '#facc15']].forEach(([wx, wz, color]) => {
+    const [x, y] = toMap(wx, wz);
+    minimap.beginPath();
+    minimap.arc(x, y, 3.2, 0, TAU);
+    minimap.fillStyle = color;
+    minimap.fill();
+  });
   // трасса
   minimap.beginPath();
   SAMPLES.forEach((p, i) => {
@@ -2140,6 +3428,15 @@ function drawMinimap() {
     minimap.fillStyle = '#7cfc4a';
     minimap.fill();
   }
+  // обычный трафик
+  ambientCars.forEach((car) => {
+    const p = car.mesh.group.position;
+    const [x, y] = toMap(p.x, p.z);
+    minimap.beginPath();
+    minimap.arc(x, y, 1.7, 0, TAU);
+    minimap.fillStyle = 'rgba(255,255,255,0.72)';
+    minimap.fill();
+  });
   // соперники
   rivals.forEach((r, i) => {
     const p = r.mesh.group.position;
@@ -2174,8 +3471,13 @@ function updateHUD(dt) {
   if (!player.mesh) return;
   const kmh = Math.round(player.vel.length() * 3.6);
   $('hudSpeed').textContent = kmh;
+  $('hudGear').textContent = player.gear === 0 ? 'R' : player.gear;
+  $('rpmFill').style.width = `${Math.round(player.rpmRatio * 100)}%`;
+  $('rpmFill').classList.toggle('redline', player.rpmRatio > 0.86);
+  $('hudSurface').textContent = player.surface;
   $('nitroFill').style.width = `${Math.round(player.nitro * 100)}%`;
   document.querySelector('.nitro-bar').classList.toggle('boosting', player.boosting);
+  $('offroadTag').textContent = `🌿 ${player.surface}`;
   $('offroadTag').classList.toggle('hidden', !player.offroad);
   $('hudTime').textContent = fmtTime(raceTime);
   $('hudScore').textContent = Math.floor(player.score).toLocaleString('ru-RU');
@@ -2257,6 +3559,8 @@ function animate() {
     sprite.position.x += dt * (sprite.userData.speed || 1);
     if (sprite.position.x > 620) sprite.position.x = -620;
   });
+  updateLivingWorld(gameState === 'paused' ? 0 : dt, t);
+  updateTireEffects(dt);
 
   // пульс следующего чекпоинта
   if (selectedMode === 'race' && player.mesh) {
@@ -2309,7 +3613,14 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyC') cycleCamera();
   if (e.code === 'KeyR' && gameState === 'racing') respawn();
-  if (e.code === 'Escape' && (gameState === 'racing' || gameState === 'countdown')) pauseGame();
+  if (e.code === 'KeyV') resetOrbitView(true);
+  if (e.code === 'KeyI') {
+    if (inspectMode) exitInspectMode();
+    else if (gameState === 'paused') enterInspectMode();
+    else if (gameState === 'racing' || gameState === 'countdown') { pauseGame(); enterInspectMode(); }
+  }
+  if (e.code === 'Escape' && inspectMode) exitInspectMode();
+  else if (e.code === 'Escape' && (gameState === 'racing' || gameState === 'countdown')) pauseGame();
   else if (e.code === 'Escape' && gameState === 'paused') resumeGame();
 });
 window.addEventListener('keyup', (e) => {
@@ -2322,14 +3633,18 @@ window.addEventListener('blur', () => Object.keys(input).forEach((k) => (input[k
 function showTouchControls(show) {
   const el = $('touchControls');
   el.classList.toggle('hidden', !show);
-  // На десктопе с мышью кнопки не нужны — но оставим класс для CSS
+  const useWheel = controlScheme === 'wheel';
+  $('steeringWheel').classList.toggle('hidden', !useWheel);
+  $('steeringButtons').classList.toggle('hidden', useWheel);
   const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  el.classList.toggle('force-hide', isDesktop);
+  el.classList.toggle('force-hide', isDesktop && !useWheel);
+  el.classList.toggle('desktop-wheel', isDesktop && useWheel);
 }
 
 function bindHold(btn, key) {
   const on = (e) => {
     e.preventDefault();
+    try { btn.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
     input[key] = true;
     btn.classList.add('pressed');
   };
@@ -2351,6 +3666,137 @@ bindHold($('btnLeft'), 'left');
 bindHold($('btnRight'), 'right');
 bindHold($('btnNitro'), 'nitro');
 bindHold($('btnДрифт'), 'handbrake');
+
+/* Аналоговый виртуальный руль */
+const steeringWheelEl = $('steeringWheel');
+let lastSteerPointerTime = 0;
+function steeringPointerAngle(e) {
+  const rect = steeringWheelEl.getBoundingClientRect();
+  return Math.atan2(e.clientY - (rect.top + rect.height / 2), e.clientX - (rect.left + rect.width / 2));
+}
+steeringWheelEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  steering.grabbing = true;
+  steering.pointerId = e.pointerId;
+  steering.lastPointerAngle = steeringPointerAngle(e);
+  steering.velocity = 0;
+  lastSteerPointerTime = performance.now();
+  input.left = false;
+  input.right = false;
+  steeringWheelEl.classList.add('grabbing');
+  try { steeringWheelEl.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+});
+steeringWheelEl.addEventListener('pointermove', (e) => {
+  if (!steering.grabbing || e.pointerId !== steering.pointerId) return;
+  e.preventDefault();
+  const angle = steeringPointerAngle(e);
+  const delta = wrapAnglePi(angle - steering.lastPointerAngle);
+  const now = performance.now();
+  const dt = Math.max((now - lastSteerPointerTime) / 1000, 0.001);
+  steering.rotation = clamp(steering.rotation + delta, -steering.maxRotation, steering.maxRotation);
+  steering.velocity = clamp(delta / dt, -14, 14);
+  steering.lastPointerAngle = angle;
+  lastSteerPointerTime = now;
+});
+function releaseSteeringWheel(e) {
+  if (e.pointerId !== steering.pointerId) return;
+  steering.grabbing = false;
+  steering.pointerId = null;
+  steeringWheelEl.classList.remove('grabbing');
+}
+steeringWheelEl.addEventListener('pointerup', releaseSteeringWheel);
+steeringWheelEl.addEventListener('pointercancel', releaseSteeringWheel);
+steeringWheelEl.addEventListener('dblclick', resetSteering);
+steeringWheelEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+/* Свободная орбита камеры: перетаскивание, щипок, колесо мыши, двойной тап */
+const orbitPointers = new Map();
+let orbitPinchDistance = 0;
+let lastOrbitTapTime = 0;
+function isOrbitInteractiveTarget(target) {
+  return !target || (target.closest && target.closest('button, input, select, textarea, a, .panel, #steeringWheel, .touch-btn'));
+}
+function canOrbitFromEvent(e) {
+  if (isOrbitInteractiveTarget(e.target)) return false;
+  if (gameState === 'menu') return e.target === renderer.domElement || e.target === $('menu') || (e.target.closest && e.target.closest('.logo'));
+  return !!player.mesh && e.target === renderer.domElement;
+}
+function markOrbitInteraction() {
+  if (gameState === 'menu') cameraOrbit.menuIdle = 0;
+  else cameraOrbit.idle = 0;
+}
+function resetOrbitView(announce = true) {
+  if (gameState === 'menu') {
+    cameraOrbit.yaw = 0;
+    cameraOrbit.menuPitch = 0.24;
+    cameraOrbit.menuDistance = 7.4;
+    cameraOrbit.menuIdle = 0;
+  } else {
+    resetCameraOrbit();
+  }
+  if (announce && gameState !== 'menu') showCenterMsg('⌖ Обзор камеры сброшен', 850);
+}
+window.addEventListener('pointerdown', (e) => {
+  if (e.button !== undefined && e.button > 0) return;
+  if (!canOrbitFromEvent(e)) return;
+  const now = performance.now();
+  if (e.pointerType === 'touch' && now - lastOrbitTapTime < 320 && orbitPointers.size === 0) {
+    resetOrbitView(true);
+    lastOrbitTapTime = 0;
+    return;
+  }
+  lastOrbitTapTime = now;
+  orbitPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (orbitPointers.size === 2) {
+    const [a, b] = [...orbitPointers.values()];
+    orbitPinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+});
+window.addEventListener('pointermove', (e) => {
+  const stored = orbitPointers.get(e.pointerId);
+  if (!stored) return;
+  const dx = e.clientX - stored.x;
+  const dy = e.clientY - stored.y;
+  stored.x = e.clientX;
+  stored.y = e.clientY;
+  markOrbitInteraction();
+  if (orbitPointers.size === 2) {
+    const [a, b] = [...orbitPointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (orbitPinchDistance > 0 && dist > 0) {
+      const factor = orbitPinchDistance / dist;
+      if (gameState === 'menu') cameraOrbit.menuDistance = clamp(cameraOrbit.menuDistance * factor, 4.2, 16);
+      else cameraOrbit.distanceScale = clamp(cameraOrbit.distanceScale * factor, 0.5, 2.0);
+    }
+    orbitPinchDistance = dist;
+    return;
+  }
+  cameraOrbit.yaw -= dx * 0.0072;
+  if (gameState === 'menu') {
+    cameraOrbit.menuPitch = clamp(cameraOrbit.menuPitch - dy * 0.005, -0.04, 1.05);
+  } else {
+    cameraOrbit.pitch = clamp(cameraOrbit.pitch - dy * 0.005, -0.28, 0.98);
+  }
+});
+function releaseOrbitPointer(e) {
+  orbitPointers.delete(e.pointerId);
+  if (orbitPointers.size < 2) orbitPinchDistance = 0;
+}
+window.addEventListener('pointerup', releaseOrbitPointer);
+window.addEventListener('pointercancel', releaseOrbitPointer);
+renderer.domElement.addEventListener('dblclick', () => resetOrbitView(true));
+window.addEventListener('wheel', (e) => {
+  if (isOrbitInteractiveTarget(e.target)) return;
+  if (gameState === 'menu' && e.target !== renderer.domElement) return;
+  if (gameState !== 'menu' && !player.mesh) return;
+  const factor = Math.exp(e.deltaY * 0.0011);
+  markOrbitInteraction();
+  if (gameState === 'menu') cameraOrbit.menuDistance = clamp(cameraOrbit.menuDistance * factor, 4.2, 16);
+  else cameraOrbit.distanceScale = clamp(cameraOrbit.distanceScale * factor, 0.5, 2.0);
+}, { passive: true });
+
+
 
 document.addEventListener('touchmove', (e) => {
   if (gameState === 'racing' || gameState === 'countdown') e.preventDefault();
@@ -2429,11 +3875,13 @@ document.querySelectorAll('.mode-btn').forEach((btn) => {
 
 function cycleCamera() {
   cameraMode = (cameraMode + 1) % 3;
+  if (cameraMode === 2 && !inspectMode) resetCameraOrbit();
   const names = ['Камера: погоня 🎥', 'Камера: издалека 🎥', 'Камера: капот 🎥'];
   showCenterMsg(names[cameraMode], 900);
 }
 
 function pauseGame() {
+  if (inspectMode) { exitInspectMode(); return; }
   if (gameState !== 'racing' && gameState !== 'countdown') return;
   player.prevState = gameState;
   gameState = 'paused';
@@ -2443,6 +3891,8 @@ function pauseGame() {
 }
 
 function resumeGame() {
+  inspectMode = false;
+  $('inspectBar').classList.add('hidden');
   gameState = player.prevState || 'racing';
   $('pauseMenu').classList.add('hidden');
   showTouchControls(true);
@@ -2450,6 +3900,8 @@ function resumeGame() {
 }
 
 function toMenu() {
+  inspectMode = false;
+  $('inspectBar').classList.add('hidden');
   gameState = 'menu';
   $('pauseMenu').classList.add('hidden');
   $('finishMenu').classList.add('hidden');
@@ -2462,6 +3914,48 @@ function toMenu() {
   rivals = [];
   cpMeshes.forEach((cp) => (cp.grp.visible = false));
 }
+
+
+function enterInspectMode() {
+  if (gameState !== 'paused') return;
+  inspectMode = true;
+  $('pauseMenu').classList.add('hidden');
+  $('inspectBar').classList.remove('hidden');
+  showTouchControls(false);
+  cameraOrbit.idle = 0;
+  if (cameraMode === 2) cameraMode = 0;
+  showCenterMsg('🔍 Осматривай машину со всех сторон', 1300, '#2ee6ff');
+}
+function exitInspectMode() {
+  inspectMode = false;
+  $('inspectBar').classList.add('hidden');
+  if (gameState === 'paused') $('pauseMenu').classList.remove('hidden');
+}
+function applyControlScheme(scheme, announce = false) {
+  controlScheme = scheme === 'buttons' ? 'buttons' : 'wheel';
+  safeSetItem('nh_controls', controlScheme);
+  document.querySelectorAll('.control-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.control === controlScheme);
+  });
+  resetSteering();
+  if (gameState === 'racing' || gameState === 'countdown') showTouchControls(true);
+  else showTouchControls(false);
+  if (announce) showCenterMsg(controlScheme === 'wheel' ? 'Управление: аналоговый руль 🎡' : 'Управление: кнопки ◀▶', 1000);
+}
+function applyAssistMode(mode, announce = false) {
+  assistMode = ASSIST_PROFILES[mode] ? mode : 'sport';
+  safeSetItem('nh_assist', assistMode);
+  document.querySelectorAll('.assist-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.assist === assistMode);
+  });
+  if (announce) showCenterMsg(`Ассистенты: ${ASSIST_PROFILES[assistMode].label}`, 1000);
+}
+document.querySelectorAll('.control-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyControlScheme(btn.dataset.control, true));
+});
+document.querySelectorAll('.assist-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyAssistMode(btn.dataset.assist, true));
+});
 
 function applyGraphicsQuality(quality, announce = false) {
   graphicsQuality = quality === 'fast' ? 'fast' : 'realistic';
@@ -2500,6 +3994,15 @@ $('btnToMenu').addEventListener('click', toMenu);
 $('btnRaceAgain').addEventListener('click', startGame);
 $('btnFinishToMenu').addEventListener('click', toMenu);
 $('btnCamera').addEventListener('click', cycleCamera);
+$('btnCameraReset').addEventListener('click', () => resetOrbitView(true));
+$('btnInspect').addEventListener('click', () => {
+  if (inspectMode) exitInspectMode();
+  else if (gameState === 'paused') enterInspectMode();
+  else if (gameState === 'racing' || gameState === 'countdown') { pauseGame(); enterInspectMode(); }
+});
+$('btnInspectPause').addEventListener('click', enterInspectMode);
+$('btnInspectDone').addEventListener('click', exitInspectMode);
+$('btnInspectCamera').addEventListener('click', cycleCamera);
 $('btnRespawn').addEventListener('click', () => gameState === 'racing' && respawn());
 $('btnSound').addEventListener('click', () => {
   engine.enabled = !engine.enabled;
@@ -2524,6 +4027,8 @@ window.addEventListener('resize', () => {
 
 /* ============================ Старт ============================ */
 buildCarPicker();
+applyControlScheme(controlScheme);
+applyAssistMode(assistMode);
 applyGraphicsQuality(graphicsQuality);
 previewCarInMenu();
 drawMinimap();
