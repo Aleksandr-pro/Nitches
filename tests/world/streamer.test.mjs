@@ -22,6 +22,11 @@ test('Three streamer loads, relocates and disposes chunk meshes', () => {
   const festivalGroup = streamer.loaded.get('8_13');
   assert.ok(festivalGroup, 'festival chunk loaded');
   assert.ok(festivalGroup.group.children.length >= 2, 'terrain + road meshes');
+  // Stage 4 dressing: instanced nature/buildings + live colliders.
+  assert.ok(stats.dressing.instances > 100, `dressing instances ${stats.dressing.instances}`);
+  assert.ok(stats.dressing.colliders > 100);
+  assert.equal(foundation.colliderIndex.stats().colliders, stats.dressing.colliders);
+  assert.ok(festivalGroup.group.children.some((m) => m.isInstancedMesh && m.count > 0));
 
   assert.equal(streamer.setVisible(true), true);
   assert.equal(streamer.root.visible, true);
@@ -37,5 +42,6 @@ test('Three streamer loads, relocates and disposes chunk meshes', () => {
 
   streamer.dispose();
   assert.equal(streamer.stats().loadedChunks, 0);
+  assert.equal(foundation.colliderIndex.stats().colliders, 0, 'dressing colliders cleaned up');
   assert.ok(!scene.children.includes(streamer.root));
 });

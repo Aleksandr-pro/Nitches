@@ -21,11 +21,12 @@ import { createWorldFoundationStreamer } from './world/worldStreamer.js';
 import { buildHeightTile } from './world/heightfield.js';
 import { buildTerrainTileGeometry } from './world/meshBuilders.js';
 import { roadPointAt } from './world/roadGraph.js';
+import { distanceToCollider } from './world/spatialIndex.js';
 import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.6.0: новая карта Festival Britain 4×4 км (свободная поездка),
+   v0.7.0: новая карта Festival Britain 4×4 км (свободная поездка),
    Mustang Fastback из настоящей GLB-модели, шинная физика, шоурум,
    реалистичный свет, дрифт и нитро. Старый остров: ?world=legacy.
    ===================================================================== */
@@ -513,10 +514,67 @@ function britainSpawnPoint(lane = 0) {
   return { pos: new THREE.Vector3(p.x, p.y, p.z), yaw: Math.atan2(-p.tangent.x, -p.tangent.z) };
 }
 
+let britainWheelRim = null;
+
+/** Колесо обозрения фестиваля Британии — ориентир у спавна. */
+function buildBritainFerrisWheel() {
+  const group = new THREE.Group();
+  const wx = 96;
+  const wz = 1312;
+  const wy = worldFoundation.heightAt(wx, wz);
+  group.position.set(wx, wy, wz);
+  group.rotation.y = Math.PI / 2; // круг смотрит на дорогу фестиваля
+  group.name = 'nh-britain-ferris-wheel';
+
+  const frameMat = new THREE.MeshLambertMaterial({ color: 0xdfe6ee });
+  const accentMat = new THREE.MeshLambertMaterial({ color: 0xff7a3a });
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.8, 19, 0.8), frameMat);
+    leg.position.set(side * 5.2, 8.6, 0);
+    leg.rotation.z = side * 0.3;
+    leg.castShadow = true;
+    group.add(leg);
+  }
+  const base = new THREE.Mesh(new THREE.BoxGeometry(13, 1, 4), accentMat);
+  base.position.y = 0.5;
+  group.add(base);
+
+  const rim = new THREE.Group();
+  rim.position.y = 17;
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(15, 0.35, 8, 40), frameMat);
+  torus.castShadow = true;
+  rim.add(torus);
+  const inner = new THREE.Mesh(new THREE.TorusGeometry(9.5, 0.2, 6, 32), accentMat);
+  rim.add(inner);
+  for (let i = 0; i < 4; i++) {
+    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 29.6, 6), frameMat);
+    spoke.rotation.z = (i / 4) * Math.PI;
+    rim.add(spoke);
+  }
+  const cabinColors = [0xff5e8a, 0x35c5ff, 0xffc23a, 0x7dff6a, 0xb78bff, 0xff8a5e, 0x5effd4, 0xff5e5e];
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const cabin = new THREE.Mesh(
+      new THREE.SphereGeometry(1.7, 10, 8),
+      new THREE.MeshLambertMaterial({ color: cabinColors[i] }),
+    );
+    cabin.position.set(Math.cos(angle) * 15, Math.sin(angle) * 15, 0);
+    cabin.castShadow = true;
+    rim.add(cabin);
+  }
+  const hub = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), accentMat);
+  rim.add(hub);
+  group.add(rim);
+  britainWheelRim = rim;
+
+  worldFoundation.colliderIndex.add({ id: 'landmark-ferris', kind: 'circle', x: wx, z: wz, r: 5 });
+  return group;
+}
+
 function initWorldMode() {
   const diagnostics = {
     world: 'festival-britain',
-    version: '0.6.0',
+    version: '0.7.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -570,8 +628,10 @@ function initWorldMode() {
     camera.far = 7000;
     camera.updateProjectionMatrix();
 
+    scene.add(buildBritainFerrisWheel());
+
     const spawn = britainSpawnPoint();
-    worldStreamer.update(spawn.pos.x, spawn.pos.z, { budget: 12 });
+    worldStreamer.update(spawn.pos.x, spawn.pos.z, { budget: 10 });
     selectedMode = 'free'; // гонки на новой карте — следующим этапом
     diagnostics.foundation = worldFoundation;
     diagnostics.streamer = worldStreamer;
@@ -608,7 +668,7 @@ function updateWorldFoundation(dt) {
   const pos = player.mesh && player.mesh.group ? player.mesh.group.position : null;
   const fx = pos ? pos.x : 0;
   const fz = pos ? pos.z : 1250;
-  worldStreamer.update(fx, fz, { budget: 3 });
+  worldStreamer.update(fx, fz, { budget: 2 });
 
   // Сфера неба (R=950) и облака не покрывают 4 км из начала координат —
   // едут за игроком, как и тень солнца.
@@ -3518,6 +3578,39 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   player.slipAngle = Math.atan2(v, Math.max(Math.abs(u), 0.1));
 }
 
+/** Collisions on the Britain map: SDF push-out via the foundation index. */
+function resolveBritainCollisions(pos, preSpeed) {
+  const hits = worldFoundation.colliderIndex.queryOverlaps(pos.x, pos.z, 1.25);
+  for (const hit of hits) {
+    if (hit.penetrationM <= 0) continue;
+    const c = hit.collider;
+    const e = 0.35;
+    const gx = distanceToCollider(c, pos.x + e, pos.z) - distanceToCollider(c, pos.x - e, pos.z);
+    const gz = distanceToCollider(c, pos.x, pos.z + e) - distanceToCollider(c, pos.x, pos.z - e);
+    const gl = Math.hypot(gx, gz);
+    if (gl < 1e-6) continue;
+    const nx = gx / gl;
+    const nz = gz / gl;
+    pos.x += nx * hit.penetrationM;
+    pos.z += nz * hit.penetrationM;
+    const vn = player.vel.x * nx + player.vel.z * nz;
+    if (vn < 0) {
+      const restitution = preSpeed > 14 ? 0.12 : 0.04;
+      player.vel.x -= vn * (1 + restitution) * nx;
+      player.vel.z -= vn * (1 + restitution) * nz;
+      player.yawRate *= 0.88;
+    }
+    player.yawRate *= 0.68;
+    if (preSpeed > 6 && crashCooldown <= 0) {
+      showCenterMsg('СТОЛКНОВЕНИЕ!', 800, '#ff8a6a', 'alert-triangle');
+      player.driftChain = 0;
+      vibrate(70);
+      engine.beep(110, 0.2, 0.3);
+      crashCooldown = 0.7;
+    }
+  }
+}
+
 function updatePlayer(dt) {
   const car = selectedCar;
   const profile = ASSIST_PROFILES[assistMode] || ASSIST_PROFILES.sport;
@@ -3619,6 +3712,7 @@ function updatePlayer(dt) {
 
   // Столкновения с объектами: убираем скорость в препятствие, касательную частично сохраняем
   crashCooldown -= dt;
+  if (britain) resolveBritainCollisions(pos, preCollisionSpeed);
   for (const col of colliders) {
     const dx = pos.x - col.x;
     const dz = pos.z - col.z;
@@ -4495,6 +4589,7 @@ function animate() {
   }
   if (foamRing) foamRing.material.opacity = 0.11 + Math.sin(t * 0.8) * 0.045;
   if (festivalWheel) festivalWheel.rotation.z += dt * 0.11;
+  if (britainWheelRim) britainWheelRim.rotation.z += dt * 0.14;
   windTurbines.forEach((rotor, i) => {
     rotor.rotation.z += dt * (0.65 + i * 0.13);
   });
