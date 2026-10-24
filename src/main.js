@@ -10,6 +10,11 @@ import {
   shapePedalInput,
   updatePowertrain,
 } from './vehicle/powertrain.js';
+import {
+  createAxleWheelState,
+  resetAxleWheelState,
+  updateAxleWheel,
+} from './vehicle/wheelDynamics.js';
 import './style.css';
 
 /* =====================================================================
@@ -263,7 +268,15 @@ const player = {
   engineRpm: 850,
   rpmRatio: 0.12,
   clutch: 0,
+  engineLoad: 0,
+  shifting: false,
   powertrain: null,
+  wheelAxles: null,
+  frontWheelOmega: 0,
+  rearWheelOmega: 0,
+  frontLongSlip: 0,
+  rearLongSlip: 0,
+  longitudinalSlip: 0,
   slipAngle: 0,
   frontSlip: 0,
   rearSlip: 0,
@@ -310,11 +323,32 @@ function syncPowertrainTelemetry() {
   player.engineRpm = state.engineRpm;
   player.rpmRatio = state.rpmRatio;
   player.clutch = state.clutch;
+  player.engineLoad = state.engineLoad || 0;
+  player.shifting = Boolean(state.shifting);
+}
+function resetPlayerWheelAxles(car = selectedCar) {
+  const spec = getPowertrainSpec(car);
+  if (!player.wheelAxles) {
+    player.wheelAxles = {
+      front: createAxleWheelState(),
+      rear: createAxleWheelState(),
+    };
+  } else {
+    resetAxleWheelState(player.wheelAxles.front, 0, spec.wheelRadiusM);
+    resetAxleWheelState(player.wheelAxles.rear, 0, spec.wheelRadiusM);
+  }
+  player.frontWheelOmega = 0;
+  player.rearWheelOmega = 0;
+  player.frontLongSlip = 0;
+  player.rearLongSlip = 0;
+  player.longitudinalSlip = 0;
+  return player.wheelAxles;
 }
 function resetPlayerPowertrain(car = selectedCar) {
   const spec = getPowertrainSpec(car);
   if (!player.powertrain) player.powertrain = createPowertrainState(spec);
   else resetPowertrainState(player.powertrain, spec);
+  resetPlayerWheelAxles(car);
   syncPowertrainTelemetry();
   return player.powertrain;
 }
@@ -2733,15 +2767,21 @@ const engine = {
     o.start();
     o.stop(this.ctx.currentTime + dur);
   },
-  update(speedRatio, boosting) {
+  update(speedRatio, boosting, engineLoad = 0, shifting = false) {
     if (!this.ctx) return;
     const on = this.enabled && (gameState === 'racing' || gameState === 'countdown');
-    const targetGain = on ? 0.045 + speedRatio * 0.05 : 0;
-    this.gain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.08);
-    const rpm = 55 + speedRatio * 190 + (boosting ? 35 : 0);
+    const load = clamp(engineLoad, 0, 1);
+    const shiftDip = shifting ? 0.52 : 1;
+    const targetGain = on ? (0.038 + speedRatio * 0.038 + load * 0.055) * shiftDip : 0;
+    this.gain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, shifting ? 0.025 : 0.08);
+    const rpm = 55 + speedRatio * 190 + load * 14 + (boosting ? 35 : 0);
     this.osc.frequency.setTargetAtTime(rpm, this.ctx.currentTime, 0.05);
-    this.osc2.frequency.setTargetAtTime(rpm * 0.5 + 3, this.ctx.currentTime, 0.05);
-    this.filter.frequency.setTargetAtTime(420 + speedRatio * 900, this.ctx.currentTime, 0.1);
+    this.osc2.frequency.setTargetAtTime(rpm * (0.5 + load * 0.035) + 3, this.ctx.currentTime, 0.05);
+    this.filter.frequency.setTargetAtTime(
+      (360 + speedRatio * 780 + load * 720) * (shifting ? 0.72 : 1),
+      this.ctx.currentTime,
+      shifting ? 0.03 : 0.1,
+    );
   },
 };
 
@@ -3039,15 +3079,18 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   let frontLatWheel = tireLateralForce(alphaFront, loadFront, muFront) * tireSpeedFactor;
   let rearLat = tireLateralForce(alphaRear, loadRear, muRear) * tireSpeedFactor;
 
-  // Physics v2: настоящий момент двигателя, передачи, сцепление и D/N/R.
-  // Шинная модель ниже по-прежнему ограничивает суммарную силу кругом сцепления.
+  // Physics v2.1: настоящий момент двигателя, передачи, сцепление и D/N/R.
+  // Коробка видит скорость ведущих колёс, поэтому пробуксовка даёт flare RPM.
   const powertrainSpec = getPowertrainSpec(car);
-  if (!player.powertrain) resetPlayerPowertrain(car);
+  if (!player.powertrain || !player.wheelAxles) resetPlayerPowertrain(car);
+  const drivenWheelSpeedMps = player.wheelAxles.front.surfaceSpeedMps * car.driveFrontBias
+    + player.wheelAxles.rear.surfaceSpeedMps * (1 - car.driveFrontBias);
   const surfaceTopFactor = surface.name === 'asphalt' ? 1 : lerp(0.7, 0.98, car.offroad);
   const effectiveTop = car.topSpeed * surfaceTopFactor * (player.boosting ? 1.16 : 1) * (inWater ? 0.3 : 1);
   const powertrain = updatePowertrain(player.powertrain, powertrainSpec, {
     dt: h,
     longitudinalSpeedMps: u,
+    drivenWheelSpeedMps,
     throttlePedal: player.throttle,
     brakePedal: player.brakePedal,
     canDrive,
@@ -3058,30 +3101,90 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   });
   syncPowertrainTelemetry();
 
-  let driveFront = powertrain.driveForceN * car.driveFrontBias;
-  let driveRear = powertrain.driveForceN * (1 - car.driveFrontBias);
-  let brakeFront = powertrain.serviceBrakeForceN * powertrainSpec.brakeFrontBias;
-  let brakeRear = powertrain.serviceBrakeForceN * (1 - powertrainSpec.brakeFrontBias);
-  if (canDrive && input.handbrake && Math.abs(u) > 0.2) {
-    brakeRear += -Math.sign(u) * mass * 4.3;
+  // Physics v2.1: продольная сила рождается из угловой скорости оси и
+  // slip ratio, а не из мгновенной обрезки force demand по кругу сцепления.
+  const wheelRadiusM = powertrainSpec.wheelRadiusM;
+  let driveTorqueFront = powertrain.driveForceN * wheelRadiusM * car.driveFrontBias;
+  let driveTorqueRear = powertrain.driveForceN * wheelRadiusM * (1 - car.driveFrontBias);
+
+  // TCS профиля помощи смотрит на фактическую пробуксовку прошлого шага.
+  // Arcade сильно душит момент, Sport оставляет заметный slip, Drift почти
+  // не вмешивается. Engine braking при отпущенном газе TCS не ослабляет.
+  if (powertrain.drivePedal > 0.03) {
+    const tractionScale = (wheelState, torqueNm) => {
+      if (Math.abs(torqueNm) < 1) return 1;
+      const drivingSlip = torqueNm >= 0 ? wheelState.slipRatio : -wheelState.slipRatio;
+      // Target-slip TCS: Arcade stays near the tire peak, Sport permits a
+      // visible but controlled launch slip, Drift mostly lets it spin.
+      const targetSlip = lerp(0.30, 0.13, profile.traction);
+      const excessSlip = Math.max(0, drivingSlip - targetSlip);
+      const gain = lerp(1.1, 5.2, profile.traction);
+      const floorScale = lerp(0.72, 0.14, profile.traction);
+      return clamp(1 - excessSlip * gain, floorScale, 1);
+    };
+    driveTorqueFront *= tractionScale(player.wheelAxles.front, driveTorqueFront);
+    driveTorqueRear *= tractionScale(player.wheelAxles.rear, driveTorqueRear);
   }
 
-  // Круг сцепления: продольная сила не может забрать у шины всё
-  const maxFront = muFront * loadFront;
-  const maxRear = muRear * loadRear;
-  const availFront = Math.sqrt(Math.max(0, maxFront * maxFront - frontLatWheel * frontLatWheel));
-  const availRear = Math.sqrt(Math.max(0, maxRear * maxRear - rearLat * rearLat));
-  const demandFront = driveFront + brakeFront;
-  const demandRear = driveRear + brakeRear;
-  let frontLongWheel = clamp(demandFront, -availFront, availFront);
-  let rearLong = clamp(demandRear, -availRear, availRear);
-  const frontSpin = powertrain.drivePedal > 0.25 && Math.abs(driveFront) > maxFront * 0.92;
-  const rearSpin = powertrain.drivePedal > 0.25 && Math.abs(driveRear) > maxRear * 0.92;
+  const serviceBrakeTorqueNm = Math.abs(powertrain.serviceBrakeForceN) * wheelRadiusM;
+  const brakeTorqueFront = serviceBrakeTorqueNm * powertrainSpec.brakeFrontBias;
+  let brakeTorqueRear = serviceBrakeTorqueNm * (1 - powertrainSpec.brakeFrontBias);
+  if (canDrive && input.handbrake && Math.abs(u) > 0.2) {
+    brakeTorqueRear += mass * 4.3 * wheelRadiusM;
+  }
+
+  // Effective axle inertia is gear-dependent: in first gear the engine and
+  // shafts reflected through a ~19:1 total ratio resist instant wheel
+  // runaway, while a free-rolling axle only has wheels/brakes to spin.
+  const activeGearForInertia = Math.max(1, Math.abs(powertrain.gear) || 1);
+  const activeTotalRatio = (powertrainSpec.gearRatios[activeGearForInertia - 1] || powertrainSpec.gearRatios[0])
+    * powertrainSpec.finalDrive;
+  const reflectedInertia = Math.min(
+    15,
+    0.035 * activeTotalRatio * activeTotalRatio * (0.25 + 0.75 * powertrain.clutch),
+  );
+  const frontInertiaKgM2 = 2.1 + reflectedInertia * car.driveFrontBias;
+  const rearInertiaKgM2 = 2.3 + reflectedInertia * (1 - car.driveFrontBias);
+
+  const frontAxle = updateAxleWheel(player.wheelAxles.front, {
+    dt: h,
+    groundSpeedMps: frontWheelLong,
+    driveTorqueNm: driveTorqueFront,
+    brakeTorqueNm: brakeTorqueFront,
+    loadN: loadFront,
+    mu: muFront,
+    lateralForceN: frontLatWheel,
+    wheelRadiusM,
+    inertiaKgM2: frontInertiaKgM2,
+    absStrength: profile.traction,
+  });
+  const rearAxle = updateAxleWheel(player.wheelAxles.rear, {
+    dt: h,
+    groundSpeedMps: u,
+    driveTorqueNm: driveTorqueRear,
+    brakeTorqueNm: brakeTorqueRear,
+    loadN: loadRear,
+    mu: muRear,
+    lateralForceN: rearLat,
+    wheelRadiusM,
+    inertiaKgM2: rearInertiaKgM2,
+    absStrength: profile.traction,
+  });
+
+  let frontLongWheel = frontAxle.tireForceN;
+  let rearLong = rearAxle.tireForceN;
+  const frontSpin = powertrain.drivePedal > 0.2 && Math.abs(frontAxle.slipRatio) > 0.19;
+  const rearSpin = powertrain.drivePedal > 0.2 && Math.abs(rearAxle.slipRatio) > 0.19;
   player.wheelspin = frontSpin || rearSpin;
+  player.frontWheelOmega = frontAxle.omegaRadPerS;
+  player.rearWheelOmega = rearAxle.omegaRadPerS;
+  player.frontLongSlip = frontAxle.slipRatio;
+  player.rearLongSlip = rearAxle.slipRatio;
+  player.longitudinalSlip = Math.max(Math.abs(frontAxle.slipRatio), Math.abs(rearAxle.slipRatio));
   if (frontSpin) frontLatWheel *= lerp(0.48, 0.9, profile.traction);
   if (rearSpin) rearLat *= lerp(0.4, 0.9, profile.traction);
-  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(brakeFront) > maxFront * 0.95) frontLatWheel *= lerp(0.72, 0.94, profile.traction);
-  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(brakeRear) > maxRear * 0.95) rearLat *= lerp(0.62, 0.9, profile.traction);
+  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(frontAxle.slipRatio) > 0.2) frontLatWheel *= lerp(0.72, 0.94, profile.traction);
+  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(rearAxle.slipRatio) > 0.2) rearLat *= lerp(0.62, 0.9, profile.traction);
 
   // Передняя ось: из координат повернутого колеса в координаты кузова
   const frontLongBody = frontLongWheel * cosD - frontLatWheel * sinD;
@@ -3335,22 +3438,26 @@ function updatePlayer(dt) {
   }
 
   const maxTireSlip = Math.max(Math.abs(player.frontSlip), Math.abs(player.rearSlip));
-  if (velLen > 5 && (maxTireSlip > 0.18 || player.wheelspin)) {
-    player.smokeAccumulator = Math.min(1, player.smokeAccumulator + dt * (2 + maxTireSlip * 8));
-    player.skidAccumulator = Math.min(1, player.skidAccumulator + dt * 3);
+  const burningOut = player.longitudinalSlip > 0.2 && (player.wheelspin || velLen > 3);
+  if ((velLen > 5 && maxTireSlip > 0.18) || (velLen > 0.8 && burningOut)) {
+    player.smokeAccumulator = Math.min(1, player.smokeAccumulator + dt * (2 + maxTireSlip * 8 + player.longitudinalSlip * 7));
+    player.skidAccumulator = Math.min(1, player.skidAccumulator + dt * (2.4 + player.longitudinalSlip * 3));
   }
 
   // Кузов: рельеф + крен/тангаж от измеренных ускорений
   const g = player.mesh.group;
   g.rotation.y = player.yaw;
-  const rollTarget = player.groundRoll - clamp(player.latAccel * 0.011, -0.13, 0.13) * (car.cgHeight / 0.52);
-  const pitchTarget = player.groundPitch - clamp(player.longAccel * 0.006, -0.075, 0.095);
-  g.rotation.z = lerp(g.rotation.z, rollTarget, clamp(dt * 7, 0, 1));
-  g.rotation.x = lerp(g.rotation.x, pitchTarget, clamp(dt * 6, 0, 1));
+  const rollTarget = player.groundRoll - clamp(player.latAccel * 0.015, -0.16, 0.16) * (car.cgHeight / 0.52);
+  const pitchTarget = player.groundPitch - clamp(player.longAccel * 0.010, -0.105, 0.125);
+  g.rotation.z = lerp(g.rotation.z, rollTarget, clamp(dt * 6.2, 0, 1));
+  g.rotation.x = lerp(g.rotation.x, pitchTarget, clamp(dt * 5.4, 0, 1));
   const wheelR = player.mesh.wheelRadius || 0.4;
   player.wheels.forEach((w) => {
     if (w.front) w.pivot.rotation.y = player.steerAngle;
-    w.spin.rotation.x += (fwdSpeed / wheelR) * dt;
+    // Visual wheel speed is the physical axle speed, so wheelspin/lock-up
+    // is visible instead of every wheel simply following body speed.
+    const omega = w.front ? player.frontWheelOmega : player.rearWheelOmega;
+    w.spin.rotation.x += (Number.isFinite(omega) ? omega : fwdSpeed / wheelR) * dt;
   });
   player.mesh.flame.visible = player.boosting;
   if (player.boosting) player.mesh.flame.scale.set(1, 1, 0.8 + Math.random() * 0.55);
@@ -3391,7 +3498,7 @@ function updatePlayer(dt) {
   }
 
 
-  engine.update(player.rpmRatio, player.boosting);
+  engine.update(player.rpmRatio, player.boosting, player.engineLoad, player.shifting);
 }
 
 /* ============================ Соперники (ИИ) ============================ */
@@ -3632,7 +3739,8 @@ function updateTireEffects(dt) {
     return;
   }
   const maxSlip = Math.max(Math.abs(player.frontSlip), Math.abs(player.rearSlip));
-  const sliding = player.vel.length() > 5 && (maxSlip > 0.18 || player.wheelspin);
+  const sliding = (player.vel.length() > 5 && maxSlip > 0.18)
+    || (player.vel.length() > 0.8 && player.longitudinalSlip > 0.2 && player.wheelspin);
   const rearWheels = player.wheels.filter((w) => !w.front);
   if (sliding && player.smokeAccumulator > 0.13) {
     rearWheels.forEach((w) => {

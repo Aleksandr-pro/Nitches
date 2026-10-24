@@ -257,3 +257,52 @@ test('engine braking and speed limiter are distinct from service braking', () =>
   assert.equal(limited.limiterActive, true);
   assert.equal(limited.engineTorqueNm, 0);
 });
+
+test('automatic gearbox does not hunt 1-2-1 after a full-throttle upshift', () => {
+  const spec = createPowertrainSpec(MUSTANG);
+  const state = createPowertrainState(spec);
+  state.clutch = 1;
+  const speed = speedAtEngineRpm(spec, 1, spec.redlineRpm * 0.99);
+
+  for (let i = 0; i < 100 && state.gear !== 2; i++) {
+    updatePowertrain(state, spec, {
+      dt: 1 / 240,
+      longitudinalSpeedMps: speed,
+      throttlePedal: 1,
+      brakePedal: 0,
+    });
+  }
+  assert.equal(state.gear, 2);
+
+  for (let i = 0; i < 180; i++) {
+    updatePowertrain(state, spec, {
+      dt: 1 / 240,
+      longitudinalSpeedMps: speed,
+      throttlePedal: 1,
+      brakePedal: 0,
+    });
+    assert.notEqual(state.pendingGear, 1, 'kickdown must not immediately undo the 1→2 upshift');
+  }
+  assert.equal(state.gear, 2);
+});
+
+test('driven-wheel speed can flare engine RPM independently of body speed', () => {
+  const spec = createPowertrainSpec(MUSTANG);
+  const state = createPowertrainState(spec);
+  state.clutch = 1;
+  const spinningWheelSpeed = speedAtEngineRpm(spec, 1, spec.redlineRpm * 0.82);
+
+  for (let i = 0; i < 45; i++) {
+    updatePowertrain(state, spec, {
+      dt: 1 / 240,
+      longitudinalSpeedMps: 1.2,
+      drivenWheelSpeedMps: spinningWheelSpeed,
+      throttlePedal: 1,
+      brakePedal: 0,
+    });
+  }
+
+  assert.ok(state.engineRpm > spec.redlineRpm * 0.62);
+  assert.ok(state.engineRpm > coupledEngineRpm(spec, 1, 1.2) + 2500);
+  assert.ok(state.engineLoad > 0.7);
+});
