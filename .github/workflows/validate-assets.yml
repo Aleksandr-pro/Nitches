@@ -12,6 +12,8 @@ on:
       - 'docs/ASSET_PIPELINE.md'
       - 'docs/CLOUD_ASSETS.md'
       - 'docs/CLOUD_ASSETS_PLAN.md'
+      - 'docs/PHYSICS_V2.md'
+      - 'docs/WORLD_REBUILD_PLAN.md'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
@@ -25,7 +27,9 @@ on:
       - 'src/main.js'
       - 'src/mustang.js'
       - 'src/resources/**'
+      - 'src/vehicle/**'
       - 'tests/resources/**'
+      - 'tests/vehicle/**'
   push:
     branches:
       - main
@@ -40,6 +44,8 @@ on:
       - 'docs/ASSET_PIPELINE.md'
       - 'docs/CLOUD_ASSETS.md'
       - 'docs/CLOUD_ASSETS_PLAN.md'
+      - 'docs/PHYSICS_V2.md'
+      - 'docs/WORLD_REBUILD_PLAN.md'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
@@ -53,7 +59,9 @@ on:
       - 'src/main.js'
       - 'src/mustang.js'
       - 'src/resources/**'
+      - 'src/vehicle/**'
       - 'tests/resources/**'
+      - 'tests/vehicle/**'
   workflow_dispatch:
 
 permissions:
