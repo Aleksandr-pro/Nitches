@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGTR35, GTR_PAINTS } from './gtr.js';
 import { buildMustang, preloadMustangModel, MUSTANG_PAINTS } from './mustang.js';
+import { installCloudPrototype } from './cloudPrototype.js';
 import './style.css';
 
 /* =====================================================================
@@ -4525,6 +4526,16 @@ applyGraphicsQuality(graphicsQuality);
 previewCarInMenu();
 drawMinimap();
 animate();
+
+// Необязательный облачный контент не должен блокировать встроенный мир/APK.
+// Если CDN не настроен или недоступен, игра продолжит работу без прототипа.
+void installCloudPrototype({
+  scene,
+  colliders,
+  terrainHeight,
+  pointAtS,
+  roadDistanceApprox,
+});
 
 // PWA: офлайн-кэш только в продакшен-сборке
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

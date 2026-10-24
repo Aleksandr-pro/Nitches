@@ -3,35 +3,57 @@ name: Validate 3D assets
 on:
   pull_request:
     paths:
+      - '.env.example'
       - '.gitattributes'
       - '.github/workflows/build-apk.yml'
+      - '.github/workflows/cloud-assets-bundle.yml'
       - '.github/workflows/validate-assets.yml'
       - 'asset-source/**'
       - 'docs/ASSET_PIPELINE.md'
+      - 'docs/CLOUD_ASSETS.md'
+      - 'docs/CLOUD_ASSETS_PLAN.md'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
+      - 'scripts/build-cloud-catalog.mjs'
       - 'scripts/check-lfs-assets.mjs'
+      - 'scripts/generate-cloud-prototype-tree.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/validate-cloud-catalog.mjs'
       - 'scripts/validate-glb-loader.mjs'
+      - 'src/cloudPrototype.js'
+      - 'src/main.js'
       - 'src/mustang.js'
+      - 'src/resources/**'
+      - 'tests/resources/**'
   push:
     branches:
       - main
       - 'arena/**'
     paths:
+      - '.env.example'
       - '.gitattributes'
       - '.github/workflows/build-apk.yml'
+      - '.github/workflows/cloud-assets-bundle.yml'
       - '.github/workflows/validate-assets.yml'
       - 'asset-source/**'
       - 'docs/ASSET_PIPELINE.md'
+      - 'docs/CLOUD_ASSETS.md'
+      - 'docs/CLOUD_ASSETS_PLAN.md'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
+      - 'scripts/build-cloud-catalog.mjs'
       - 'scripts/check-lfs-assets.mjs'
+      - 'scripts/generate-cloud-prototype-tree.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/validate-cloud-catalog.mjs'
       - 'scripts/validate-glb-loader.mjs'
+      - 'src/cloudPrototype.js'
+      - 'src/main.js'
       - 'src/mustang.js'
+      - 'src/resources/**'
+      - 'tests/resources/**'
   workflow_dispatch:
 
 permissions:
@@ -48,6 +70,7 @@ jobs:
     timeout-minutes: 20
     env:
       FIXTURE: public/assets/models/_pipeline/pipeline-smoke.glb
+      VITE_ASSET_CDN_BASE_URL: ${{ vars.VITE_ASSET_CDN_BASE_URL }}
     steps:
       - name: Checkout (runtime LFS assets are pulled explicitly below)
         uses: actions/checkout@v4
@@ -80,6 +103,11 @@ jobs:
 
       - name: Install dependencies (clean)
         run: npm ci
+
+      - name: Test cloud resource client and staging bundle
+        run: |
+          npm test
+          npm run cloud:bundle
 
       - name: Parse runtime car GLBs with Three.js GLTFLoader
         run: |

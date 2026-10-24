@@ -1,0 +1,103 @@
+name: Cloud asset staging bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset_base_url:
+        description: 'Optional public asset base URL to validate after upload'
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.env.example'
+      - '.github/workflows/cloud-assets-bundle.yml'
+      - 'docs/CLOUD_ASSETS.md'
+      - 'docs/CLOUD_ASSETS_PLAN.md'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'scripts/build-cloud-catalog.mjs'
+      - 'scripts/generate-cloud-prototype-tree.mjs'
+      - 'scripts/validate-cloud-catalog.mjs'
+      - 'src/cloudPrototype.js'
+      - 'src/resources/**'
+      - 'tests/resources/**'
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - '.env.example'
+      - '.github/workflows/cloud-assets-bundle.yml'
+      - 'docs/CLOUD_ASSETS.md'
+      - 'docs/CLOUD_ASSETS_PLAN.md'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'scripts/build-cloud-catalog.mjs'
+      - 'scripts/generate-cloud-prototype-tree.mjs'
+      - 'scripts/validate-cloud-catalog.mjs'
+      - 'src/cloudPrototype.js'
+      - 'src/resources/**'
+      - 'tests/resources/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-assets-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Test and build R2 staging bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Test cloud resource client
+        run: npm test
+
+      - name: Build versioned cloud catalog
+        run: node scripts/build-cloud-catalog.mjs --clean --report .cloud-assets/publishing.json
+
+      - name: Validate local staging bundle
+        run: node scripts/validate-cloud-catalog.mjs --bundle .cloud-assets/staging
+
+      - name: Validate published catalog
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.asset_base_url != '' }}
+        env:
+          ASSET_BASE_URL: ${{ inputs.asset_base_url }}
+        run: node scripts/validate-cloud-catalog.mjs --base-url "$ASSET_BASE_URL"
+
+      - name: Write publishing summary
+        run: |
+          {
+            echo '## Cloud asset staging bundle'
+            echo
+            echo 'Upload objects in `uploadOrder` order: model, versioned manifest, current pointer last.'
+            echo
+            echo '```json'
+            cat .cloud-assets/publishing.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload staging bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nitches-cloud-assets-staging
+          path: .cloud-assets/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
