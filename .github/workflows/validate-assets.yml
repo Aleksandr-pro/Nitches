@@ -1,0 +1,91 @@
+name: Validate 3D assets
+
+on:
+  pull_request:
+    paths:
+      - '.gitattributes'
+      - '.github/workflows/build-apk.yml'
+      - '.github/workflows/validate-assets.yml'
+      - 'asset-source/**'
+      - 'docs/ASSET_PIPELINE.md'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'public/assets/models/**'
+      - 'scripts/check-lfs-assets.mjs'
+      - 'scripts/generate-pipeline-smoke-glb.mjs'
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - '.gitattributes'
+      - '.github/workflows/build-apk.yml'
+      - '.github/workflows/validate-assets.yml'
+      - 'asset-source/**'
+      - 'docs/ASSET_PIPELINE.md'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'public/assets/models/**'
+      - 'scripts/check-lfs-assets.mjs'
+      - 'scripts/generate-pipeline-smoke-glb.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-assets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Clean LFS checkout, web build and Capacitor sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIXTURE: public/assets/models/_pipeline/pipeline-smoke.glb
+    steps:
+      - name: Checkout (with Git LFS assets)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Fetch and verify Git LFS assets
+        run: |
+          git lfs version
+          git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""
+          git lfs ls-files
+          node scripts/check-lfs-assets.mjs
+
+      - name: Verify pipeline fixture is byte-identical to its generator
+        run: |
+          mkdir -p "$RUNNER_TEMP/expected"
+          node scripts/generate-pipeline-smoke-glb.mjs "$RUNNER_TEMP/expected/pipeline-smoke.glb"
+          cmp "$FIXTURE" "$RUNNER_TEMP/expected/pipeline-smoke.glb"
+          sha256sum "$FIXTURE" "$RUNNER_TEMP/expected/pipeline-smoke.glb"
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Build web game
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Verify the same real bytes reached dist and Android assets
+        run: |
+          DIST_FIXTURE="dist/assets/models/_pipeline/pipeline-smoke.glb"
+          ANDROID_FIXTURE="android/app/src/main/assets/public/assets/models/_pipeline/pipeline-smoke.glb"
+          test -f "$DIST_FIXTURE"
+          test -f "$ANDROID_FIXTURE"
+          cmp "$FIXTURE" "$DIST_FIXTURE"
+          cmp "$FIXTURE" "$ANDROID_FIXTURE"
+          sha256sum "$FIXTURE" "$DIST_FIXTURE" "$ANDROID_FIXTURE"
+          node scripts/check-lfs-assets.mjs --dist
