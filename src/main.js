@@ -2894,9 +2894,12 @@ function updatePlayer(dt) {
       pos.z = col.z + nz * rr;
       const vn = player.vel.x * nx + player.vel.z * nz;
       if (vn < 0) {
-        player.vel.x -= vn * nx;
-        player.vel.z -= vn * nz;
-        player.vel.multiplyScalar(0.82);
+        // Убираем только скорость, направленную внутрь препятствия:
+        // касательная скорость сохраняется, поэтому машина не «прилипает» к стене.
+        const restitution = preCollisionSpeed > 14 ? 0.12 : 0.04;
+        player.vel.x -= vn * (1 + restitution) * nx;
+        player.vel.z -= vn * (1 + restitution) * nz;
+        player.yawRate *= 0.88;
       }
       player.yawRate *= 0.68;
       if (preCollisionSpeed > 6 && crashCooldown <= 0) {
