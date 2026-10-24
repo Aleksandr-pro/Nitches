@@ -13,7 +13,9 @@ on:
       - 'docs/CLOUD_ASSETS.md'
       - 'docs/CLOUD_ASSETS_PLAN.md'
       - 'docs/PHYSICS_V2.md'
+      - 'docs/SVG_UI.md'
       - 'docs/WORLD_REBUILD_PLAN.md'
+      - 'index.html'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
@@ -27,8 +29,11 @@ on:
       - 'src/main.js'
       - 'src/mustang.js'
       - 'src/resources/**'
+      - 'src/style.css'
+      - 'src/ui/**'
       - 'src/vehicle/**'
       - 'tests/resources/**'
+      - 'tests/ui/**'
       - 'tests/vehicle/**'
   push:
     branches:
@@ -45,7 +50,9 @@ on:
       - 'docs/CLOUD_ASSETS.md'
       - 'docs/CLOUD_ASSETS_PLAN.md'
       - 'docs/PHYSICS_V2.md'
+      - 'docs/SVG_UI.md'
       - 'docs/WORLD_REBUILD_PLAN.md'
+      - 'index.html'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
@@ -59,8 +66,11 @@ on:
       - 'src/main.js'
       - 'src/mustang.js'
       - 'src/resources/**'
+      - 'src/style.css'
+      - 'src/ui/**'
       - 'src/vehicle/**'
       - 'tests/resources/**'
+      - 'tests/ui/**'
       - 'tests/vehicle/**'
   workflow_dispatch:
 

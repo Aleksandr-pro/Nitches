@@ -20,6 +20,61 @@
     <title>NITCHES HORIZON — мобильный гоночный фестиваль</title>
   </head>
   <body>
+    <!-- Stage 2: единый inline SVG-спрайт интерфейса (24×24, currentColor). -->
+    <svg class="svg-sprite" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-timer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5h6M12 2.5V6"/><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.6 1.8"/></g></symbol>
+        <symbol id="i-trophy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v4.5a4 4 0 0 1-8 0V4Z"/><path d="M8 5H5.2a2.8 2.8 0 0 0 2.9 4.4M16 5h2.8a2.8 2.8 0 0 1-2.9 4.4"/><path d="M12 12.5v3M8.5 20h7M10 15.5h4l.7 4.5H9.3L10 15.5Z"/></g></symbol>
+        <symbol id="i-medal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 11.2 5.8 3h4L12 7.2 14.2 3h4l-2.9 8.2"/><circle cx="12" cy="15.5" r="4.5"/><path d="m12 13.2.8 1.6 1.8.3-1.3 1.2.3 1.8-1.6-.9-1.6.9.3-1.8-1.3-1.2 1.8-.3.8-1.6Z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-flame" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5 4.4 5 9a5 5 0 0 1-10 0c0-1.8.7-3.2 1.7-4.6.4 1.2 1.1 2 2.1 2.5C10.4 7.7 10.9 5.1 12 3Z"/><path d="M12 20a2.7 2.7 0 0 1-2.7-2.7c0-1.2.7-2.1 1.4-3 .5-.6.9-1.2 1.3-2.1.4.9.8 1.5 1.3 2.1.7.9 1.4 1.8 1.4 3A2.7 2.7 0 0 1 12 20Z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-target" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="m15 10.5 6-3v9l-6-3"/><circle cx="9" cy="12" r="2.4"/></g></symbol>
+        <symbol id="i-crosshair" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></g></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S5.8 5.8 12 5.8 21.5 12 21.5 12 18.2 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></g></symbol>
+        <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.8-6.2L3 8.5"/><path d="M3 3.5v5h5"/></g></symbol>
+        <symbol id="i-rotate-cw" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.8-6.2L21 8.5"/><path d="M21 3.5v5h-5"/></g></symbol>
+        <symbol id="i-volume-2" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" fill="currentColor" stroke="none"/><path d="M15 9.2a4.2 4.2 0 0 1 0 5.6M17.8 6.7a8 8 0 0 1 0 10.6"/></g></symbol>
+        <symbol id="i-volume-x" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" fill="currentColor" stroke="none"/><path d="m16 9.5 5 5m0-5-5 5"/></g></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1.4"/><rect x="14" y="4.5" width="4" height="15" rx="1.4"/></g></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.8v14.4c0 .8.9 1.3 1.6.9l11-7.2c.6-.4.6-1.4 0-1.8l-11-7.2c-.7-.4-1.6.1-1.6.9Z" fill="currentColor"/></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12.2l-2.7 3.8 2.7 3.7H5"/><path d="M8.2 6.4h1.6v1.5H8.2zM11.5 8h1.6v1.5h-1.6z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-route" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="6" r="2.4"/><path d="M8.4 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h.5" stroke-dasharray="2.5 2.4"/></g></symbol>
+        <symbol id="i-map" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6.5 6-2 6 2 6-2v13l-6 2-6-2-6 2v-13Z"/><path d="M9 4.5v13M15 6.5v13"/></g></symbol>
+        <symbol id="i-map-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s6.5-5.4 6.5-10.4A6.5 6.5 0 0 0 12 4a6.5 6.5 0 0 0-6.5 6.6C5.5 15.6 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2.3"/></g></symbol>
+        <symbol id="i-gauge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a9 9 0 1 1 16 0"/><path d="m14.5 9.5-2 4"/><circle cx="12" cy="14" r="1.3" fill="currentColor" stroke="none"/><path d="M5.2 15.5h1.6M7.2 9.8l1.2 1.2M12 6.8v1.7M16.8 9.8 15.6 11M18.8 15.5h-1.6"/></g></symbol>
+        <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13.2 2.2 4.7 13h5.9l-1.7 8.8 8.7-11h-6l1.6-8.6Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></symbol>
+        <symbol id="i-mountain" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 19 5.2-8.2 3 3.8L15 7l6 12H3Z"/><path d="m13.7 9.4 1.3 1.5 1.3-1.5"/></g></symbol>
+        <symbol id="i-navigation" viewBox="0 0 24 24"><path d="M12 2.2 16.2 20c.1.7-.7 1.1-1.3.7L12 18.4l-2.9 2.3c-.6.4-1.4 0-1.3-.7L12 2.2Z" fill="currentColor"/></symbol>
+        <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-chevrons-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 7-7 7 7"/><path d="m5 19 7-7 7 7"/></g></symbol>
+        <symbol id="i-chevrons-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 5 7 7 7-7"/><path d="m5 11 7 7 7-7"/></g></symbol>
+        <symbol id="i-wind" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10a3 3 0 1 0-3-3.2"/><path d="M2 12.5h15a3.2 3.2 0 1 1-3.2 3.2"/><path d="M4 17h6a2.6 2.6 0 1 1-2.6 2.6"/></g></symbol>
+        <symbol id="i-phone-rotate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.8" width="7" height="13" rx="1.8"/><path d="M11.5 13.2h.01"/><path d="M4.2 15.5a8 8 0 0 0 13.7 3.2l1.6-1.6"/><path d="M19.7 12.8v4.3h-4.3"/></g></symbol>
+        <symbol id="i-car" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5 5.5 10 8 9.4 10 6h4.4L16.6 9.4 19 10l1.3 5.1c.2.8-.4 1.4-1.2 1.4h-1.6"/><path d="M4 16.5h2.2M9.6 16.5h4.8M9 9.7h6"/><circle cx="7.8" cy="16.8" r="1.8"/><circle cx="16.2" cy="16.8" r="1.8"/></g></symbol>
+        <symbol id="i-gamepad" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10a5 5 0 0 1 4.9 6.1l-.8 3A3 3 0 0 1 18.2 18l-2.7-2.1a2 2 0 0 0-1.2-.4H9.7a2 2 0 0 0-1.2.4L5.8 18a3 3 0 0 1-2.9-1.9l-.8-3A5 5 0 0 1 7 7Z"/><path d="M7 10v4M5 12h4"/><circle cx="16.2" cy="10.8" r=".9" fill="currentColor" stroke="none"/><circle cx="18" cy="13.1" r=".9" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-steering-wheel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M9.9 12H4M20 12h-5.9M12 14.2v5.3M12 3.5v1.4"/></g></symbol>
+        <symbol id="i-sparkles" viewBox="0 0 24 24"><g fill="currentColor"><path d="m12 3.2 1.5 4.3 4.3 1.5-4.3 1.5L12 14.8l-1.5-4.3L6.2 9l4.3-1.5L12 3.2Z"/><path d="m18.5 12.8.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4ZM5.2 13.4l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7.7-1.9Z"/></g></symbol>
+        <symbol id="i-smartphone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.8h3"/></g></symbol>
+        <symbol id="i-home" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 10.5 8.5-7 8.5 7"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-6h5v6"/></g></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5L19.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-move-horizontal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="m7.5 7.5-4.5 4.5 4.5 4.5M16.5 7.5l4.5 4.5-4.5 4.5"/></g></symbol>
+        <symbol id="i-palette" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.8 0-.8-.5-1.3-.5-2.1 0-.9.7-1.6 1.7-1.6H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5Z"/><circle cx="7.4" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10.7" cy="6.8" r="1" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="15" r="1" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="i-alert-triangle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 4.1 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.3 4.1a1.6 1.6 0 0 0-2.6 0Z"/><path d="M12 9v4.5M12 17.2h.01"/></g></symbol>
+        <symbol id="i-traffic-light" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><circle cx="12" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" opacity=".55"/><circle cx="12" cy="17" r="1.5" fill="currentColor" stroke="none" opacity=".25"/></g></symbol>
+        <symbol id="i-fuel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3.5 21h13M15 10l2.2-2.2a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 .6 1.4V16a2.5 2.5 0 0 1-5 0v-3"/><path d="M7.5 7h5v4h-5z"/></g></symbol>
+        <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M20.6 7.2a5.2 5.2 0 0 1-6.9 4.9L7 18.8a2.1 2.1 0 0 1-3-3l6.7-6.7A5.2 5.2 0 0 1 15.6 2l-2.5 2.5.8 2.8 2.8.8 2.5-2.5c.8.4 1.4 1 1.4 1.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.7M12 18.5v2.7M2.8 12h2.7M18.5 12h2.7M5.5 5.5l1.9 1.9M16.6 16.6l1.9 1.9M18.5 5.5l-1.9 1.9M7.4 16.6l-1.9 1.9"/></g></symbol>
+        <symbol id="i-disc-brake" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2"/><circle cx="8.8" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8.5" r=".7" fill="currentColor" stroke="none"/><circle cx="8.8" cy="15.5" r=".7" fill="currentColor" stroke="none"/><circle cx="15.2" cy="15.5" r=".7" fill="currentColor" stroke="none"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 6" stroke-width="3.2" stroke-linecap="round"/></g></symbol>
+        <symbol id="i-car-coupe" viewBox="0 0 24 24"><g><path d="M3 15.1 4.7 11l2.4-.7 2.3-3h4.9l2.4 3 2.8.8 1.4 3c.2.7-.3 1.2-1 1.2h-1.2a3 3 0 0 0-5.9 0H10a3 3 0 0 0-5.9 0H4c-.7 0-1.2-.6-1-1.2Z" fill="currentColor"/><path d="M8.2 10.2 10 7.9h3.8l1.8 2.3H8.2Z" fill="#0a0e1b" opacity=".58"/><circle cx="7" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="16.8" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="7" cy="15.4" r=".65" fill="currentColor"/><circle cx="16.8" cy="15.4" r=".65" fill="currentColor"/></g></symbol>
+        <symbol id="i-car-muscle" viewBox="0 0 24 24"><g><path d="M2.7 15.2 3.8 11c2.8-.5 4.9-.8 6.8-1l1.7-2.5h4L19 10.3l2.2.8.7 3.1c.1.7-.4 1.1-1.1 1.1h-1.4a3 3 0 0 0-5.8 0H9.8a3 3 0 0 0-5.8 0H3.7c-.7 0-1.2-.5-1-1.1Z" fill="currentColor"/><path d="M11.4 10 13 8.1h2.8l1.8 1.9h-6.2Z" fill="#0a0e1b" opacity=".58"/><circle cx="6.8" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="16.6" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="6.8" cy="15.4" r=".65" fill="currentColor"/><circle cx="16.6" cy="15.4" r=".65" fill="currentColor"/></g></symbol>
+        <symbol id="i-car-sport" viewBox="0 0 24 24"><g><path d="M2.8 15 5 11.3c2.2-.5 3.8-.7 5.2-.8l1.8-2.7h3.5l2.5 2.7 2.5.7 1 2.7c.2.7-.3 1.3-1 1.3h-1.2a3 3 0 0 0-5.9 0H9.9a3 3 0 0 0-5.9 0h-.3c-.7 0-1.2-.6-.9-1.2Z" fill="currentColor"/><path d="m11.2 10.4 1.6-1.9h2.3l1.7 1.9h-5.6Z" fill="#0a0e1b" opacity=".58"/><circle cx="6.9" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="16.4" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="6.9" cy="15.4" r=".65" fill="currentColor"/><circle cx="16.4" cy="15.4" r=".65" fill="currentColor"/></g></symbol>
+        <symbol id="i-car-hyper" viewBox="0 0 24 24"><g><path d="M20.2 7.4h2.2l-.8 2-2.5.5.7-1.5.4-1Z" fill="currentColor"/><path d="M2.5 15.1 5 11.8c2-.4 3.6-.6 5-.7l2-2.6h3.2l2.5 2.6 3 .7.9 2.2c.2.7-.3 1.3-1 1.3h-1.2a3 3 0 0 0-5.9 0H9.9a3 3 0 0 0-5.9 0h-.4c-.8 0-1.3-.6-1.1-1.2Z" fill="currentColor"/><path d="m11.2 11 1.6-1.8h2l1.7 1.8h-5.3Z" fill="#0a0e1b" opacity=".6"/><circle cx="6.9" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="16.5" cy="15.4" r="1.8" fill="#0a0e1b"/><circle cx="6.9" cy="15.4" r=".65" fill="currentColor"/><circle cx="16.5" cy="15.4" r=".65" fill="currentColor"/></g></symbol>
+        <symbol id="i-car-pickup" viewBox="0 0 24 24"><g><path d="M3 15.3V10h6.2l1.8-3.2h4.2L17 10h4.2v5.3h-1.8a3 3 0 0 0-5.9 0H9.9a3 3 0 0 0-5.9 0H3Z" fill="currentColor"/><path d="M10.7 10 12 7.6h2.7L16 10h-5.3ZM3.9 10.8h4.5v1.7H3.9z" fill="#0a0e1b" opacity=".58"/><circle cx="6.9" cy="15.5" r="1.8" fill="#0a0e1b"/><circle cx="16.5" cy="15.5" r="1.8" fill="#0a0e1b"/><circle cx="6.9" cy="15.5" r=".65" fill="currentColor"/><circle cx="16.5" cy="15.5" r=".65" fill="currentColor"/></g></symbol>
+      </defs>
+    </svg>
+
     <canvas id="game"></canvas>
 
     <!-- ===== HUD ===== -->
@@ -32,25 +87,25 @@
             <span id="hudLap">КРУГ 1/3</span>
           </div>
           <div class="race-sub">
-            <span>⏱ <b id="hudTime">0:00.0</b></span>
-            <span>🏆 <b id="hudЛучший">—</b></span>
+            <span class="hud-meta"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-timer"></use></svg><b id="hudTime">0:00.0</b></span>
+            <span class="hud-meta"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-trophy"></use></svg><b id="hudЛучший">—</b></span>
           </div>
           <div class="race-progress"><span id="hudProgressPct">0%</span><div class="progress-track"><div id="hudProgressBar"></div></div></div>
           <div class="race-sub score-row">
-            <span>🔥 ДРИФТ <b id="hudScore">0</b></span>
-            <span id="hudCheckpoint">🎯 0 м</span>
+            <span class="hud-meta"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-flame"></use></svg>ДРИФТ <b id="hudScore">0</b></span>
+            <span class="hud-meta"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-target"></use></svg><span id="hudCheckpoint">0 м</span></span>
           </div>
         </div>
         <canvas id="minimap" width="132" height="132"></canvas>
       </div>
 
       <div class="hud-top-right">
-        <button class="icon-btn" id="btnCamera" title="Камера (C)">🎥</button>
-        <button class="icon-btn" id="btnCameraReset" title="Сбросить обзор камеры (V)">⌖</button>
-        <button class="icon-btn" id="btnInspect" title="Осмотреть машину (I)">🔍</button>
-        <button class="icon-btn" id="btnRespawn" title="Вернуться на трассу (R)">⟲</button>
-        <button class="icon-btn" id="btnSound" title="Звук">🔊</button>
-        <button class="icon-btn" id="btnPause" title="Пауза">⏸</button>
+        <button class="icon-btn" id="btnCamera" type="button" title="Камера (C)" aria-label="Переключить камеру"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg></button>
+        <button class="icon-btn" id="btnCameraReset" type="button" title="Сбросить обзор камеры (V)" aria-label="Сбросить обзор камеры"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-crosshair"></use></svg></button>
+        <button class="icon-btn" id="btnInspect" type="button" title="Осмотреть машину (I)" aria-label="Осмотреть машину"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg></button>
+        <button class="icon-btn" id="btnRespawn" type="button" title="Вернуться на трассу (R)" aria-label="Вернуться на трассу"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg></button>
+        <button class="icon-btn" id="btnSound" type="button" title="Звук" aria-label="Включить или выключить звук" aria-pressed="true"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg></button>
+        <button class="icon-btn" id="btnPause" type="button" title="Пауза" aria-label="Пауза"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg></button>
       </div>
 
       <div id="centerMsg"></div>
@@ -64,20 +119,20 @@
           <div class="rpm-wrap"><div class="rpm-label">ОБ/МИН</div><div class="rpm-bar"><div id="rpmFill"></div></div></div>
           <span id="hudSurface">АСФАЛЬТ</span>
         </div>
-        <div class="nitro-label">⚡ НИТРО</div>
+        <div class="nitro-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-zap"></use></svg>НИТРО</div>
         <div class="nitro-bar"><div id="nitroFill"></div></div>
-        <div id="offroadTag" class="offroad-tag hidden">🌿 БЕЗДОРОЖЬЕ</div>
+        <div id="offroadTag" class="offroad-tag hidden"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-mountain"></use></svg><span id="offroadLabel">БЕЗДОРОЖЬЕ</span></div>
       </div>
 
-      <div id="checkpointArrow">▲</div>
+      <div id="checkpointArrow" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#i-navigation"></use></svg></div>
     </div>
 
     <!-- ===== Сенсорное управление ===== -->
     <div id="touchControls" class="hidden">
       <div class="touch-left">
         <div id="steeringButtons" class="steering-buttons hidden">
-          <button class="touch-btn steer" id="btnLeft">◀</button>
-          <button class="touch-btn steer" id="btnRight">▶</button>
+          <button class="touch-btn steer" id="btnLeft" type="button" aria-label="Руль влево"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <button class="touch-btn steer" id="btnRight" type="button" aria-label="Руль вправо"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-chevron-right"></use></svg></button>
         </div>
         <div id="steeringWheel" aria-label="Виртуальный руль. Вращайте перетаскиванием">
           <div id="steeringWheelRot">
@@ -115,23 +170,23 @@
       </div>
       <div class="touch-right">
         <div class="touch-col">
-          <button class="touch-btn mini nitro" id="btnNitro">⚡<span>НИТРО</span></button>
-          <button class="touch-btn mini handbrake" id="btnДрифт">💨<span>ДРИФТ</span></button>
+          <button class="touch-btn mini nitro" id="btnNitro" type="button" aria-label="Нитро"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-zap"></use></svg><span>НИТРО</span></button>
+          <button class="touch-btn mini handbrake" id="btnДрифт" type="button" aria-label="Ручник и дрифт"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-wind"></use></svg><span>ДРИФТ</span></button>
         </div>
-        <button class="touch-btn brake" id="btnBrake">▼<span>ТОРМОЗ</span></button>
-        <button class="touch-btn gas" id="btnGas">▲<span>ГАЗ</span></button>
+        <button class="touch-btn brake" id="btnBrake" type="button" aria-label="Тормоз и задний ход"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-chevrons-down"></use></svg><span>ТОРМОЗ</span></button>
+        <button class="touch-btn gas" id="btnGas" type="button" aria-label="Газ"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-chevrons-up"></use></svg><span>ГАЗ</span></button>
       </div>
     </div>
 
     <!-- ===== Подсказка: поверни телефон ===== -->
-    <div id="rotateHint" class="hidden">📱↻ Поверни телефон горизонтально — так удобнее!</div>
+    <div id="rotateHint" class="hidden"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-phone-rotate"></use></svg><span>Поверни телефон горизонтально — так удобнее!</span></div>
 
     <!-- ===== Главное меню ===== -->
     <div id="menu">
       <div class="menu-inner">
         <header class="menu-topbar">
           <div class="logo">
-            <div class="logo-badge">🏁 ФЕСТИВАЛЬ СКОРОСТИ • Шоурум + ГРАФИКА</div>
+            <div class="logo-badge"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-flag"></use></svg><span>ФЕСТИВАЛЬ СКОРОСТИ • Шоурум + ГРАФИКА</span></div>
             <h1>NITCHES<br /><span>HORIZON</span></h1>
             <p class="logo-sub">
               Выбирай машину в гараже, осматривай её в шоуруме и сразу выезжай
@@ -143,7 +198,7 @@
             <div class="profile-main">
               <span>ПИЛОТ ФЕСТИВАЛЯ</span>
               <b>NITCHES DRIVER</b>
-              <small>🏆 Лучший круг: <b id="menuЛучшийLap">—</b></small>
+              <small class="profile-best"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-trophy"></use></svg>Лучший круг: <b id="menuЛучшийLap">—</b></small>
             </div>
             <div class="profile-level"><span>КЛАСС</span><b id="menuProfileClass">S1</b></div>
           </div>
@@ -152,19 +207,21 @@
         <div class="menu-layout">
           <aside class="menu-sidebar" aria-label="Гараж и режим игры">
             <div class="menu-section-title">
-              <span>🚗 ГАРАЖ</span><b id="menuCarsOwned">4 АВТО</b>
+              <span class="section-title-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-car"></use></svg>ГАРАЖ</span><b id="menuCarsOwned">5 АВТО</b>
             </div>
             <div class="car-picker" id="carPicker"></div>
 
             <div class="menu-section-title modes-title">
-              <span>🎮 РЕЖИМ</span><b>ФЕСТИВАЛЬ</b>
+              <span class="section-title-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-gamepad"></use></svg>РЕЖИМ</span><b>ФЕСТИВАЛЬ</b>
             </div>
             <div class="mode-picker">
-              <button class="mode-btn active" data-mode="race">
-                🏁 Гонка<small>3 круга • 5 соперников • чекпоинты</small>
+              <button class="mode-btn active" type="button" data-mode="race" aria-pressed="true">
+                <span class="mode-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-flag"></use></svg></span>
+                <span class="mode-copy">Гонка<small>3 круга • 5 соперников • чекпоинты</small></span>
               </button>
-              <button class="mode-btn" data-mode="free">
-                🌅 Свободный заезд<small>открытый остров • дрифт • исследование</small>
+              <button class="mode-btn" type="button" data-mode="free" aria-pressed="false">
+                <span class="mode-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-route"></use></svg></span>
+                <span class="mode-copy">Свободный заезд<small>открытый остров • дрифт • исследование</small></span>
               </button>
             </div>
 
@@ -188,7 +245,7 @@
                 <span><b id="heroTopSpeed">230 км/ч</b><small>МАКС. СКОРОСТЬ</small></span>
                 <span><b id="heroMass">1765 кг</b><small>МАССА</small></span>
               </div>
-              <div class="showroom-hint">↔ Вращай камеру свайпом или мышью • щипок / колесо — зум</div>
+              <div class="showroom-hint"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-move-horizontal"></use></svg><span>Вращай камеру свайпом или мышью • щипок / колесо — зум</span></div>
             </div>
           </section>
         </div>
@@ -197,24 +254,24 @@
           <div id="paintPicker" class="paint-picker hidden"></div>
           <div class="settings-stack" aria-label="Настройки перед стартом">
             <div class="gfx-picker setting-picker" aria-label="Управление">
-              <span class="gfx-label">🎮 Управление:</span>
-              <button class="control-btn gfx-btn active" data-control="wheel">Руль</button>
-              <button class="control-btn gfx-btn" data-control="buttons">Кнопки</button>
+              <span class="gfx-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-steering-wheel"></use></svg>Управление:</span>
+              <button class="control-btn gfx-btn active" type="button" data-control="wheel" aria-pressed="true">Руль</button>
+              <button class="control-btn gfx-btn" type="button" data-control="buttons" aria-pressed="false">Кнопки</button>
             </div>
             <div class="gfx-picker setting-picker" aria-label="Стиль вождения">
-              <span class="gfx-label">🏎️ Стиль:</span>
-              <button class="assist-btn gfx-btn" data-assist="arcade">Аркада</button>
-              <button class="assist-btn gfx-btn active" data-assist="sport">Спорт</button>
-              <button class="assist-btn gfx-btn" data-assist="drift">Дрифт</button>
+              <span class="gfx-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-car"></use></svg>Стиль:</span>
+              <button class="assist-btn gfx-btn" type="button" data-assist="arcade" aria-pressed="false">Аркада</button>
+              <button class="assist-btn gfx-btn active" type="button" data-assist="sport" aria-pressed="true">Спорт</button>
+              <button class="assist-btn gfx-btn" type="button" data-assist="drift" aria-pressed="false">Дрифт</button>
             </div>
             <div class="gfx-picker setting-picker" aria-label="Качество графики">
-              <span class="gfx-label">📱 Графика:</span>
-              <button class="gfx-btn" data-gfx="fast">Быстрая</button>
-              <button class="gfx-btn active" data-gfx="realistic">Реалистичная</button>
+              <span class="gfx-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-sparkles"></use></svg>Графика:</span>
+              <button class="gfx-btn" type="button" data-gfx="fast" aria-pressed="false">Быстрая</button>
+              <button class="gfx-btn active" type="button" data-gfx="realistic" aria-pressed="true">Реалистичная</button>
             </div>
           </div>
-          <button id="btnStart">
-            <span>🚦 НА СТАРТ!</span>
+          <button id="btnStart" type="button">
+            <span class="start-label"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-traffic-light"></use></svg>НА СТАРТ!</span>
             <small id="startModeLabel">Гонка • 3 круга • 5 соперников</small>
           </button>
         </div>
@@ -230,30 +287,30 @@
     <!-- ===== Пауза ===== -->
     <div id="pauseMenu" class="overlay hidden">
       <div class="panel">
-        <h2>⏸ Пауза</h2>
-        <button id="btnResume" class="panel-btn primary">▶ Продолжить</button>
-        <button id="btnInspectPause" class="panel-btn">🔍 Осмотреть машину</button>
-        <button id="btnRestart" class="panel-btn">🔁 Заново</button>
-        <button id="btnToMenu" class="panel-btn">🏠 В меню фестиваля</button>
+        <h2 class="panel-title"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-pause"></use></svg>Пауза</h2>
+        <button id="btnResume" type="button" class="panel-btn primary"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>Продолжить</button>
+        <button id="btnInspectPause" type="button" class="panel-btn"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>Осмотреть машину</button>
+        <button id="btnRestart" type="button" class="panel-btn"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-rotate-cw"></use></svg>Заново</button>
+        <button id="btnToMenu" type="button" class="panel-btn"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-home"></use></svg>В меню фестиваля</button>
       </div>
     </div>
 
     <div id="inspectBar" class="hidden">
-      <div class="inspect-text">🔍 <b>Осмотр машины</b><span>Перетаскивай для орбиты • щипок/колесо — зум • двойной тап — сброс</span></div>
-      <button id="btnInspectCamera">🎥 Ракурс</button>
-      <button id="btnInspectDone" class="primary">✓ Готово</button>
+      <div class="inspect-text"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-eye"></use></svg><b>Осмотр машины</b><span>Перетаскивай для орбиты • щипок/колесо — зум • двойной тап — сброс</span></div>
+      <button id="btnInspectCamera" type="button"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-camera"></use></svg>Ракурс</button>
+      <button id="btnInspectDone" type="button" class="primary"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg>Готово</button>
     </div>
 
     <!-- ===== Финиш ===== -->
     <div id="finishMenu" class="overlay hidden">
       <div class="panel finish-panel">
-        <div class="finish-flag">🏁</div>
+        <div class="finish-flag" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#i-flag"></use></svg></div>
         <h2 id="finishTitle">Финиш!</h2>
         <div id="finishPlace"></div>
         <table id="finishTable"></table>
         <div id="finishStats"></div>
-        <button id="btnRaceAgain" class="panel-btn primary">🏎️ Ещё гонку</button>
-        <button id="btnFinishToMenu" class="panel-btn">🏠 В меню фестиваля</button>
+        <button id="btnRaceAgain" type="button" class="panel-btn primary"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-car"></use></svg>Ещё гонку</button>
+        <button id="btnFinishToMenu" type="button" class="panel-btn"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="#i-home"></use></svg>В меню фестиваля</button>
       </div>
     </div>
 
