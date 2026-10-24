@@ -44,6 +44,8 @@
 
       <div class="hud-top-right">
         <button class="icon-btn" id="btnCamera" title="Камера (C)">🎥</button>
+        <button class="icon-btn" id="btnCameraReset" title="Сбросить обзор камеры (V)">⌖</button>
+        <button class="icon-btn" id="btnInspect" title="Осмотреть машину (I)">🔍</button>
         <button class="icon-btn" id="btnRespawn" title="Вернуться на трассу (R)">⟲</button>
         <button class="icon-btn" id="btnSound" title="Звук">🔊</button>
         <button class="icon-btn" id="btnPause" title="Пауза">⏸</button>
@@ -55,6 +57,11 @@
 
       <div class="speedo">
         <div class="speed-value"><span id="hudSpeed">0</span><small>км/ч</small></div>
+        <div class="telemetry">
+          <span id="hudGear">1</span>
+          <div class="rpm-wrap"><div class="rpm-label">ОБ/МИН</div><div class="rpm-bar"><div id="rpmFill"></div></div></div>
+          <span id="hudSurface">АСФАЛЬТ</span>
+        </div>
         <div class="nitro-label">⚡ НИТРО</div>
         <div class="nitro-bar"><div id="nitroFill"></div></div>
         <div id="offroadTag" class="offroad-tag hidden">🌿 БЕЗДОРОЖЬЕ</div>
@@ -66,8 +73,43 @@
     <!-- ===== Сенсорное управление ===== -->
     <div id="touchControls" class="hidden">
       <div class="touch-left">
-        <button class="touch-btn steer" id="btnLeft">◀</button>
-        <button class="touch-btn steer" id="btnRight">▶</button>
+        <div id="steeringButtons" class="steering-buttons hidden">
+          <button class="touch-btn steer" id="btnLeft">◀</button>
+          <button class="touch-btn steer" id="btnRight">▶</button>
+        </div>
+        <div id="steeringWheel" aria-label="Виртуальный руль. Вращайте перетаскиванием">
+          <div id="steeringWheelRot">
+            <svg viewBox="0 0 200 200" role="img" aria-hidden="true">
+              <defs>
+                <linearGradient id="rimGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#4b5563"/><stop offset="0.38" stop-color="#111827"/>
+                  <stop offset="0.62" stop-color="#020617"/><stop offset="1" stop-color="#374151"/>
+                </linearGradient>
+                <radialGradient id="hubGrad" cx="38%" cy="30%" r="75%">
+                  <stop offset="0" stop-color="#64748b"/><stop offset="0.55" stop-color="#1f2937"/><stop offset="1" stop-color="#020617"/>
+                </radialGradient>
+                <linearGradient id="spokeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#9ca3af"/><stop offset="0.45" stop-color="#374151"/><stop offset="1" stop-color="#111827"/>
+                </linearGradient>
+              </defs>
+              <circle cx="100" cy="100" r="91" fill="rgba(3,7,18,0.28)"/>
+              <circle cx="100" cy="100" r="83" fill="none" stroke="url(#rimGrad)" stroke-width="19"/>
+              <circle cx="100" cy="100" r="83" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2" stroke-dasharray="3 7" opacity="0.55"/>
+              <circle cx="100" cy="100" r="72" fill="none" stroke="#020617" stroke-width="3" opacity="0.9"/>
+              <rect x="94" y="7" width="12" height="22" rx="5" fill="#ff5e3a" stroke="#ffb03a" stroke-width="2"/>
+              <path d="M78 92 L25 82 Q18 99 27 111 L78 108 Z" fill="url(#spokeGrad)" stroke="#020617" stroke-width="3"/>
+              <path d="M122 92 L175 82 Q182 99 173 111 L122 108 Z" fill="url(#spokeGrad)" stroke="#020617" stroke-width="3"/>
+              <path d="M89 122 L111 122 L119 176 Q100 187 81 176 Z" fill="url(#spokeGrad)" stroke="#020617" stroke-width="3"/>
+              <circle cx="100" cy="100" r="31" fill="url(#hubGrad)" stroke="#94a3b8" stroke-width="2"/>
+              <circle cx="100" cy="100" r="22" fill="#0b1120" stroke="#475569" stroke-width="1.5"/>
+              <text x="100" y="107" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="900" font-style="italic" fill="#ffb03a">NH</text>
+              <circle cx="55" cy="98" r="4" fill="#0f172a" stroke="#cbd5e1"/>
+              <circle cx="145" cy="98" r="4" fill="#0f172a" stroke="#cbd5e1"/>
+              <circle cx="100" cy="153" r="4" fill="#0f172a" stroke="#cbd5e1"/>
+            </svg>
+          </div>
+          <div id="steerAngleLabel">0°</div>
+        </div>
       </div>
       <div class="touch-right">
         <div class="touch-col">
@@ -86,17 +128,30 @@
     <div id="menu">
       <div class="menu-inner">
         <div class="logo">
-          <div class="logo-badge">ФЕСТИВАЛЬ СКОРОСТИ • СЕЗОН 2 • REALISM UPDATE</div>
+          <div class="logo-badge">ФЕСТИВАЛЬ СКОРОСТИ • PHYSICS + CITY UPDATE</div>
           <h1>NITCHES<br /><span>HORIZON</span></h1>
           <p class="logo-sub">
-            Реалистичный тропический остров с рельефом, закатным светом и отражениями.<br />
-            Флагман гаража — детализированный <b>GT-R35 «Godzilla»</b> в духе Nissan GT-R (R35).
+            Живой тропический остров: асфальтовые улицы деревни, горный серпантин, прибрежная дорога, трафик и пешеходы.<br />
+            Новая шинная физика, аналоговый руль и свободная камера вокруг <b>GT-R35 «Godzilla»</b>.
           </p>
         </div>
 
         <div class="car-picker" id="carPicker"></div>
 
         <div id="paintPicker" class="paint-picker hidden"></div>
+
+        <div class="gfx-picker setting-picker" aria-label="Схема управления">
+          <span>🕹️ Управление</span>
+          <button class="gfx-btn control-btn active" data-control="wheel">🎡 Руль</button>
+          <button class="gfx-btn control-btn" data-control="buttons">◀▶ Кнопки</button>
+        </div>
+
+        <div class="gfx-picker setting-picker" aria-label="Помощь в управлении">
+          <span>🧭 Ассистенты</span>
+          <button class="gfx-btn assist-btn" data-assist="arcade">Аркада</button>
+          <button class="gfx-btn assist-btn active" data-assist="sport">Спорт</button>
+          <button class="gfx-btn assist-btn" data-assist="drift">Дрифт</button>
+        </div>
 
         <div class="gfx-picker" aria-label="Качество графики">
           <span>🎨 Графика</span>
@@ -118,8 +173,8 @@
         <button id="btnStart">🏎️ НА СТАРТ!</button>
 
         <div class="menu-hints">
-          <div>📱 <b>На телефоне:</b> кнопки руля слева, газ / тормоз / нитро / дрифт — справа</div>
-          <div>⌨️ <b>На ПК:</b> WASD / стрелки — руль, Shift — нитро, Пробел — дрифт, C — камера, R — рестарт на трассу</div>
+          <div>📱 <b>На телефоне:</b> вращай руль пальцем слева; газ / тормоз / нитро / дрифт — справа. Свайп по экрану вращает камеру, щипок — масштаб.</div>
+          <div>⌨️ <b>На ПК:</b> WASD / стрелки, Shift — нитро, Пробел — дрифт, мышь — орбита камеры, колесо — зум, C — ракурс, V — сброс обзора, I — осмотр.</div>
           <div>📲 <b>Как приложение:</b> меню браузера → «Добавить на главный экран»</div>
         </div>
 
@@ -136,9 +191,16 @@
       <div class="panel">
         <h2>⏸ Пауза</h2>
         <button id="btnResume" class="panel-btn primary">▶ Продолжить</button>
+        <button id="btnInspectPause" class="panel-btn">🔍 Осмотреть машину</button>
         <button id="btnRestart" class="panel-btn">🔁 Заново</button>
         <button id="btnToMenu" class="panel-btn">🏠 В меню фестиваля</button>
       </div>
+    </div>
+
+    <div id="inspectBar" class="hidden">
+      <div class="inspect-text">🔍 <b>Осмотр машины</b><span>Перетаскивай для орбиты • щипок/колесо — зум • двойной тап — сброс</span></div>
+      <button id="btnInspectCamera">🎥 Ракурс</button>
+      <button id="btnInspectDone" class="primary">✓ Готово</button>
     </div>
 
     <!-- ===== Финиш ===== -->
