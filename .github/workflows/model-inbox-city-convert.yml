@@ -267,6 +267,8 @@ jobs:
         run: |
           set -euo pipefail
           CONVERT_ROOT="$RUNNER_TEMP/model-city-convert"
+          mkdir -p "$CONVERT_ROOT"
+          exec > >(tee -a "$CONVERT_ROOT/copy-step.log") 2>&1
           test -s "$CONVERT_ROOT/outputs.tsv"
 
           git lfs version
@@ -339,7 +341,29 @@ jobs:
             echo "Working tree is not clean after LFS redownload verification" >&2
             exit 1
           fi
-          git push origin "HEAD:${BRANCH}"
+
+          # Another workflow may have advanced this branch while Blender was
+          # running (run 40135664884 lost its push to a concurrent car-import
+          # commit). Rebase onto the current branch tip and retry the push.
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin "${BRANCH}"
+            if ! git rebase "origin/${BRANCH}"; then
+              git rebase --abort || true
+              echo "Could not rebase city import onto origin/${BRANCH}" >&2
+              exit 1
+            fi
+            if git push origin "HEAD:${BRANCH}"; then
+              pushed=1
+              break
+            fi
+            echo "Push attempt ${attempt} rejected; retrying after rebase..."
+            sleep 5
+          done
+          if [ "$pushed" != "1" ]; then
+            echo "Could not push city import to ${BRANCH} after 3 attempts" >&2
+            exit 1
+          fi
 
       - name: Upload conversion logs and reports
         if: always()
@@ -347,6 +371,8 @@ jobs:
         with:
           name: model-inbox-city-conversion-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/model-city-convert/download-convert-step.log
+            ${{ runner.temp }}/model-city-convert/copy-step.log
             ${{ runner.temp }}/model-city-convert/**/blender-convert.log
             ${{ runner.temp }}/model-city-convert/**/conversion.json
             ${{ runner.temp }}/model-city-convert/**/conversion.md
@@ -391,6 +417,7 @@ jobs:
               echo
               for log in \
                 "$CONVERT_ROOT/download-convert-step.log" \
+                "$CONVERT_ROOT/copy-step.log" \
                 "$work/blender-convert.log" \
                 "$work/conversion.json" \
                 "$work/conversion.md" \
@@ -413,9 +440,32 @@ jobs:
             exit 0
           fi
           git add "${diag_paths[@]}"
-          if git diff --cached --quiet; then
+          if git diff --cached --quiet -- "${diag_paths[@]}"; then
             echo "Diagnostics are unchanged"
             exit 0
           fi
-          git commit -m "chore(world): add city conversion failure diagnostics"
-          git push origin "HEAD:${BRANCH}"
+          # Commit only the diagnostics files even if the failed copy step left
+          # other staged changes behind, then drop any leftover debris so the
+          # rebase below can run on a clean tree. Commits already made by the
+          # copy step are kept and will be pushed together with diagnostics.
+          git commit -m "chore(world): add city conversion failure diagnostics" -- "${diag_paths[@]}"
+          git reset --hard HEAD
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin "${BRANCH}"
+            if ! git rebase "origin/${BRANCH}"; then
+              git rebase --abort || true
+              echo "Could not rebase diagnostics onto origin/${BRANCH}" >&2
+              exit 1
+            fi
+            if git push origin "HEAD:${BRANCH}"; then
+              pushed=1
+              break
+            fi
+            echo "Diagnostics push attempt ${attempt} rejected; retrying after rebase..."
+            sleep 5
+          done
+          if [ "$pushed" != "1" ]; then
+            echo "Could not push diagnostics to ${BRANCH} after 3 attempts" >&2
+            exit 1
+          fi
