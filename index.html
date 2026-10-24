@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#ff5e3a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Nitches Horizon" />
+    <meta
+      name="description"
+      content="Nitches Horizon — мобильный гоночный фестиваль: открытый остров, гонки, дрифт и нитро прямо в браузере телефона."
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <title>NITCHES HORIZON — мобильный гоночный фестиваль</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- ===== HUD ===== -->
+    <div id="hud" class="hidden">
+      <div class="hud-top-left">
+        <div class="hud-card race-card">
+          <div class="race-main">
+            <span id="hudPosition">6/6</span>
+            <span id="hudLap">КРУГ 1/3</span>
+          </div>
+          <div class="race-sub">
+            <span>⏱ <b id="hudTime">0:00.0</b></span>
+            <span>🏆 <b id="hudЛучший">—</b></span>
+          </div>
+          <div class="race-sub score-row">
+            <span>🔥 ДРИФТ <b id="hudScore">0</b></span>
+            <span id="hudCheckpoint">🎯 0 м</span>
+          </div>
+        </div>
+        <canvas id="minimap" width="132" height="132"></canvas>
+      </div>
+
+      <div class="hud-top-right">
+        <button class="icon-btn" id="btnCamera" title="Камера (C)">🎥</button>
+        <button class="icon-btn" id="btnRespawn" title="Вернуться на трассу (R)">⟲</button>
+        <button class="icon-btn" id="btnSound" title="Звук">🔊</button>
+        <button class="icon-btn" id="btnPause" title="Пауза">⏸</button>
+      </div>
+
+      <div id="centerMsg"></div>
+      <div id="countdown"></div>
+      <div id="driftPopup"></div>
+
+      <div class="speedo">
+        <div class="speed-value"><span id="hudSpeed">0</span><small>км/ч</small></div>
+        <div class="nitro-label">⚡ НИТРО</div>
+        <div class="nitro-bar"><div id="nitroFill"></div></div>
+        <div id="offroadTag" class="offroad-tag hidden">🌿 БЕЗДОРОЖЬЕ</div>
+      </div>
+
+      <div id="checkpointArrow">▲</div>
+    </div>
+
+    <!-- ===== Сенсорное управление ===== -->
+    <div id="touchControls" class="hidden">
+      <div class="touch-left">
+        <button class="touch-btn steer" id="btnLeft">◀</button>
+        <button class="touch-btn steer" id="btnRight">▶</button>
+      </div>
+      <div class="touch-right">
+        <div class="touch-col">
+          <button class="touch-btn mini nitro" id="btnNitro">⚡<span>НИТРО</span></button>
+          <button class="touch-btn mini handbrake" id="btnДрифт">💨<span>ДРИФТ</span></button>
+        </div>
+        <button class="touch-btn brake" id="btnBrake">▼<span>ТОРМОЗ</span></button>
+        <button class="touch-btn gas" id="btnGas">▲<span>ГАЗ</span></button>
+      </div>
+    </div>
+
+    <!-- ===== Подсказка: поверни телефон ===== -->
+    <div id="rotateHint" class="hidden">📱↻ Поверни телефон горизонтально — так удобнее!</div>
+
+    <!-- ===== Главное меню ===== -->
+    <div id="menu">
+      <div class="menu-inner">
+        <div class="logo">
+          <div class="logo-badge">ФЕСТИВАЛЬ СКОРОСТИ • СЕЗОН 1</div>
+          <h1>NITCHES<br /><span>HORIZON</span></h1>
+          <p class="logo-sub">
+            Мобильная гонка с открытым миром в духе Forza Horizon:<br />
+            тропический остров, соперники, дрифт и нитро — прямо на телефоне.
+          </p>
+        </div>
+
+        <div class="car-picker" id="carPicker"></div>
+
+        <div class="mode-picker">
+          <button class="mode-btn active" data-mode="race">
+            🏁 ГОНКА
+            <small>3 круга • 5 соперников • чекпоинты</small>
+          </button>
+          <button class="mode-btn" data-mode="free">
+            🗺️ СВОБОДНАЯ ПОЕЗДКА
+            <small>катайся по острову, жги резину, бей рекорды дрифта</small>
+          </button>
+        </div>
+
+        <button id="btnStart">🏎️ НА СТАРТ!</button>
+
+        <div class="menu-hints">
+          <div>📱 <b>На телефоне:</b> кнопки руля слева, газ / тормоз / нитро / дрифт — справа</div>
+          <div>⌨️ <b>На ПК:</b> WASD / стрелки — руль, Shift — нитро, Пробел — дрифт, C — камера, R — рестарт на трассу</div>
+          <div>📲 <b>Как приложение:</b> меню браузера → «Добавить на главный экран»</div>
+        </div>
+
+        <div class="fan-note">
+          Фанатский прототип в духе CounterFlame: оригинальная игра, вдохновлённая жанром
+          фестивальных аркадных гонок. Не аффилирована с Microsoft / Xbox / Turn 10.
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Пауза ===== -->
+    <div id="pauseMenu" class="overlay hidden">
+      <div class="panel">
+        <h2>⏸ Пауза</h2>
+        <button id="btnResume" class="panel-btn primary">▶ Продолжить</button>
+        <button id="btnRestart" class="panel-btn">🔁 Заново</button>
+        <button id="btnToMenu" class="panel-btn">🏠 В меню фестиваля</button>
+      </div>
+    </div>
+
+    <!-- ===== Финиш ===== -->
+    <div id="finishMenu" class="overlay hidden">
+      <div class="panel finish-panel">
+        <div class="finish-flag">🏁</div>
+        <h2 id="finishTitle">Финиш!</h2>
+        <div id="finishPlace"></div>
+        <table id="finishTable"></table>
+        <div id="finishStats"></div>
+        <button id="btnRaceAgain" class="panel-btn primary">🏎️ Ещё гонку</button>
+        <button id="btnFinishToMenu" class="panel-btn">🏠 В меню фестиваля</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
