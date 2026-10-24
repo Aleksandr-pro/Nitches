@@ -1,0 +1,29 @@
+{
+  "assetKey": "kingsford-manhattan-city",
+  "displayName": "New York City - Manhattan",
+  "category": "city",
+  "intendedUse": "Replace the procedural Kingsford City district with the owner-provided Manhattan FBX, using deterministic vertex-colour fallback materials until the missing external textures are supplied.",
+  "releaseTag": "model-inbox-001",
+  "releaseId": 422728278,
+  "assetId": 673283843,
+  "assetName": "NewYork-City-Manhattan.fbx",
+  "expectedSize": 40847916,
+  "expectedSha256": "42d948589eb8e93d70e1322a3c3420882d4ffb07c3c4fa08088786d5756e96c7",
+  "source": "Uploaded by the repository owner from phone to the draft GitHub Release Model Inbox. The FBX references 13 missing PNG files; conversion intentionally ignores them at the owner's request.",
+  "conversion": {
+    "scaleXYMPerUnit": 250,
+    "scaleZMPerUnit": 230,
+    "groundSourceZ": 0.008,
+    "targetTriangles": 340000,
+    "chunkSizeM": 250,
+    "colliderCellSizeM": 4,
+    "obstacleHeightM": 2,
+    "rootName": "KingsfordManhattanCity"
+  },
+  "outputs": {
+    "runtimeGlb": "public/assets/models/cities/kingsford-manhattan-city/kingsford-manhattan-city.glb",
+    "sourceModel": "asset-source/cities/kingsford-manhattan-city/NewYork-City-Manhattan.fbx",
+    "generatedData": "src/world/manhattanCityData.js",
+    "reportDir": "asset-inbox/city-conversions/kingsford-manhattan-city"
+  }
+}
