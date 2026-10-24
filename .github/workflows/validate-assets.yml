@@ -45,10 +45,10 @@ jobs:
     env:
       FIXTURE: public/assets/models/_pipeline/pipeline-smoke.glb
     steps:
-      - name: Checkout (with Git LFS assets)
+      - name: Checkout (runtime LFS assets are pulled explicitly below)
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -56,10 +56,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Fetch and verify Git LFS assets
+      - name: Fetch and verify runtime Git LFS assets
         run: |
           git lfs version
-          git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""
+          git lfs install --local
+          # Editable packages in asset-source/ may be hundreds of MB and are
+          # not needed for a game build; only shipped runtime models are
+          # materialized here. The checker still fails on any public pointer.
+          git lfs pull --include="public/assets/models/**" --exclude=""
           git lfs ls-files
           node scripts/check-lfs-assets.mjs
 

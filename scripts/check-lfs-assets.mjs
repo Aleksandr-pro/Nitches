@@ -20,7 +20,7 @@ const MODEL_EXTENSIONS = new Set([
   '.obj', '.mtl', '.stl', '.ply', '.usdz', '.usdc',
 ]);
 const TEXTURE_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.webp', '.ktx2', '.basis', '.tga', '.hdr', '.exr', '.dds', '.psd', '.xcf',
+  '.png', '.jpg', '.jpeg', '.webp', '.ktx2', '.basis', '.tga', '.hdr', '.exr', '.dds', '.psd', '.xcf', '.tif', '.tiff',
 ]);
 const ARCHIVE_EXTENSIONS = new Set(['.zip', '.7z', '.rar', '.tar', '.tgz']);
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', '.gradle']);
@@ -28,6 +28,11 @@ const WHEEL_NODE_NAMES = ['Wheel_FL', 'Wheel_FR', 'Wheel_RL', 'Wheel_RR'];
 
 const args = new Set(process.argv.slice(2));
 const checkDist = args.has('--dist');
+// Runtime builds must never ship pointer files from public/. Editable source
+// packages in asset-source/ can be large and are not needed to build the
+// game, so by default an unmaterialized source pointer is only a warning.
+// Use --all/--strict-source after `git lfs pull` when editing sources.
+const strictSource = args.has('--all') || args.has('--strict-source');
 
 function posixRelative(file) {
   return path.relative(ROOT, file).split(path.sep).join('/');
@@ -227,9 +232,18 @@ async function inspectAsset(file, errors, warnings) {
   const size = (await stat(file)).size;
   const pointer = await inspectPointer(file, size);
   if (pointer) {
+    if (rel.startsWith('asset-source/') && !strictSource) {
+      warnings.push(
+        `${rel}: source LFS pointer is not materialized (oid ${pointer.oid}, real size ${pointer.declaredSize} bytes); ` +
+        'not required for a runtime build. Pull asset-source/** and run npm run assets:check-all before editing this source.'
+      );
+      return null;
+    }
+    const pullHint = rel.startsWith('asset-source/')
+      ? 'git lfs pull --include="asset-source/**" --exclude=""'
+      : 'git lfs pull --include="public/assets/models/**" --exclude=""';
     errors.push(
-      `${rel}: still a Git LFS pointer (oid ${pointer.oid}, real size ${pointer.declaredSize} bytes). ` +
-      'Run: git lfs pull --include="public/assets/models/**,asset-source/**" --exclude=""'
+      `${rel}: still a Git LFS pointer (oid ${pointer.oid}, real size ${pointer.declaredSize} bytes). Run: ${pullHint}`
     );
     return null;
   }

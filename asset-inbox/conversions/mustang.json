@@ -1,0 +1,14 @@
+{
+  "carId": "mustang",
+  "displayName": "Mustang",
+  "releaseId": 422728278,
+  "releaseTag": "model-inbox-001",
+  "assetId": 672275730,
+  "assetName": "Mustang.zip",
+  "expectedSize": 101934251,
+  "expectedSha256": "8c70f0255531cd1358397c529ac536deeeab951c8aa30e7947b0092c5ade9db6",
+  "inputObj": "Mustang/Mustang.obj",
+  "inputBlend": "Mustang/Mustang.blend",
+  "targetLength": 4.66,
+  "defaultPaint": "#9b1420"
+}

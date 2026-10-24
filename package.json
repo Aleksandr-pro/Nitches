@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "assets:check": "node scripts/check-lfs-assets.mjs",
+    "assets:check-all": "node scripts/check-lfs-assets.mjs --all",
     "assets:check-dist": "node scripts/check-lfs-assets.mjs --dist",
     "assets:fixture": "node scripts/generate-pipeline-smoke-glb.mjs",
     "prebuild": "npm run assets:check",
