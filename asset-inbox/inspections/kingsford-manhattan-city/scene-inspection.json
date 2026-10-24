@@ -1,0 +1,1494 @@
+{
+  "assetKey": "kingsford-manhattan-city",
+  "displayName": "New York City - Manhattan",
+  "input": {
+    "name": "NewYork-City-Manhattan.fbx",
+    "size": 40847916,
+    "sha256": "42d948589eb8e93d70e1322a3c3420882d4ffb07c3c4fa08088786d5756e96c7"
+  },
+  "blenderVersion": "4.0.2",
+  "import": {
+    "method": "import_scene.fbx",
+    "newObjectCountHint": 14
+  },
+  "sceneUnits": {
+    "system": "METRIC",
+    "scaleLength": 1.0,
+    "lengthUnit": "METERS"
+  },
+  "worldBounds": {
+    "min": [
+      -1.0906,
+      -3.9713,
+      -0.0629
+    ],
+    "max": [
+      6.8519,
+      3.9713,
+      0.4254
+    ],
+    "sizeXYZ": [
+      7.9425,
+      7.9425,
+      0.4883
+    ],
+    "centerXYZ": [
+      2.8807,
+      0.0,
+      0.1812
+    ],
+    "note": "Blender world axes: X width, Y depth, Z height. Bounds are from evaluated object AABBs."
+  },
+  "summary": {
+    "objects": 14,
+    "meshObjects": 12,
+    "objectsByType": {
+      "CAMERA": 1,
+      "EMPTY": 1,
+      "MESH": 12
+    },
+    "evaluatedVertices": 440959,
+    "evaluatedTriangles": 733182,
+    "materials": 12,
+    "images": 13,
+    "packedImages": 0,
+    "existingExternalImages": 0,
+    "missingExternalImages": 13,
+    "collections": 0,
+    "meshFootprintsByCategory": {
+      "uncategorized": 12
+    }
+  },
+  "collections": [
+    {
+      "name": "Scene Collection",
+      "depth": 0,
+      "directObjects": 14,
+      "children": 0
+    }
+  ],
+  "materials": [
+    {
+      "name": "NewYork-Mnhtprt-0",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-0.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-1",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-1.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-10",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-10.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-2",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-2.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-3",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-3.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-4",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-4.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-5",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-5.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-6",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-6.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-7",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-7.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-8",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-8.png"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-9",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.8,
+        0.8,
+        0.8,
+        1.0
+      ],
+      "images": [
+        "NewYork-Mnhtprt-9.png"
+      ]
+    },
+    {
+      "name": "Watter",
+      "users": 1,
+      "useNodes": true,
+      "diffuseColor": [
+        0.0283,
+        0.035,
+        0.0325,
+        1.0
+      ],
+      "images": [
+        "Watter.nr.png",
+        "Watter.png"
+      ]
+    }
+  ],
+  "images": [
+    {
+      "name": "NewYork-Mnhtprt-0.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-0.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-0.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-1.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-1.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-1.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-10.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-10.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-10.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-2.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-2.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-2.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-3.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-3.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-3.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-4.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-4.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-4.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-5.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-5.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-5.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-6.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-6.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-6.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-7.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-7.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-7.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-8.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-8.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-8.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "NewYork-Mnhtprt-9.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-9.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/NewYork-Mnhtprt-9.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    },
+    {
+      "name": "Watter.nr.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/Watter.nr.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/Watter.nr.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "Non-Color"
+    },
+    {
+      "name": "Watter.png",
+      "source": "FILE",
+      "filepath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/Watter.png",
+      "absolutePath": "/home/runner/work/_temp/model-inspect/kingsford-manhattan-city/Textures/Watter.png",
+      "exists": false,
+      "packed": false,
+      "packedBytes": null,
+      "size": [
+        0,
+        0
+      ],
+      "alphaMode": "STRAIGHT",
+      "colorspace": "sRGB"
+    }
+  ],
+  "largestFootprints": [
+    {
+      "name": "Watter",
+      "category": "uncategorized",
+      "worldMin": [
+        -1.0906,
+        -3.9713,
+        -0.0
+      ],
+      "worldMax": [
+        6.8519,
+        3.9713,
+        0.0
+      ],
+      "dimensions": [
+        7.9425,
+        7.9425,
+        0.0
+      ],
+      "footprintAreaM2": 63.0837,
+      "vertices": 4,
+      "triangles": 2,
+      "materials": [
+        "Watter"
+      ],
+      "parent": null,
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-0",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.2668,
+        -0.0496
+      ],
+      "worldMax": [
+        4.7618,
+        2.3318,
+        0.2499
+      ],
+      "dimensions": [
+        4.7702,
+        3.5986,
+        0.2995
+      ],
+      "footprintAreaM2": 17.1661,
+      "vertices": 170510,
+      "triangles": 285595,
+      "materials": [
+        "NewYork-Mnhtprt-0"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-2",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.201,
+        -0.0432
+      ],
+      "worldMax": [
+        1.4521,
+        0.8712,
+        0.3241
+      ],
+      "dimensions": [
+        1.4605,
+        2.0722,
+        0.3674
+      ],
+      "footprintAreaM2": 3.0265,
+      "vertices": 27766,
+      "triangles": 57018,
+      "materials": [
+        "NewYork-Mnhtprt-2"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-3",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4365,
+        0.8004,
+        -0.0314
+      ],
+      "worldMax": [
+        4.3566,
+        1.5978,
+        0.0932
+      ],
+      "dimensions": [
+        2.9202,
+        0.7975,
+        0.1246
+      ],
+      "footprintAreaM2": 2.3287,
+      "vertices": 9480,
+      "triangles": 13818,
+      "materials": [
+        "NewYork-Mnhtprt-3"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-4",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4091,
+        -1.3411,
+        -0.0163
+      ],
+      "worldMax": [
+        2.4242,
+        0.8635,
+        0.1244
+      ],
+      "dimensions": [
+        1.0152,
+        2.2045,
+        0.1406
+      ],
+      "footprintAreaM2": 2.238,
+      "vertices": 19165,
+      "triangles": 29619,
+      "materials": [
+        "NewYork-Mnhtprt-4"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-1",
+      "category": "uncategorized",
+      "worldMin": [
+        1.5255,
+        1.5976,
+        -0.0398
+      ],
+      "worldMax": [
+        3.9289,
+        2.3361,
+        0.1212
+      ],
+      "dimensions": [
+        2.4034,
+        0.7385,
+        0.1611
+      ],
+      "footprintAreaM2": 1.7748,
+      "vertices": 7218,
+      "triangles": 10645,
+      "materials": [
+        "NewYork-Mnhtprt-1"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-6",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4141,
+        -1.5023,
+        -0.0281
+      ],
+      "worldMax": [
+        3.3884,
+        0.1483,
+        0.2012
+      ],
+      "dimensions": [
+        0.9743,
+        1.6506,
+        0.2294
+      ],
+      "footprintAreaM2": 1.6082,
+      "vertices": 39958,
+      "triangles": 63687,
+      "materials": [
+        "NewYork-Mnhtprt-6"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-5",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4143,
+        0.0901,
+        -0.0393
+      ],
+      "worldMax": [
+        4.3625,
+        0.8693,
+        0.2009
+      ],
+      "dimensions": [
+        1.9482,
+        0.7792,
+        0.2402
+      ],
+      "footprintAreaM2": 1.518,
+      "vertices": 17640,
+      "triangles": 27625,
+      "materials": [
+        "NewYork-Mnhtprt-5"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-8",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3728,
+        -0.332,
+        -0.0271
+      ],
+      "worldMax": [
+        4.6015,
+        0.1602,
+        0.1154
+      ],
+      "dimensions": [
+        1.2288,
+        0.4921,
+        0.1425
+      ],
+      "footprintAreaM2": 0.6047,
+      "vertices": 15771,
+      "triangles": 25350,
+      "materials": [
+        "NewYork-Mnhtprt-8"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-7",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3724,
+        -1.6386,
+        -0.0231
+      ],
+      "worldMax": [
+        4.7308,
+        -1.2478,
+        0.1916
+      ],
+      "dimensions": [
+        1.3584,
+        0.3908,
+        0.2147
+      ],
+      "footprintAreaM2": 0.5309,
+      "vertices": 79835,
+      "triangles": 127150,
+      "materials": [
+        "NewYork-Mnhtprt-7"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-9",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3716,
+        -1.2667,
+        -0.0629
+      ],
+      "worldMax": [
+        3.8783,
+        -0.3252,
+        0.4254
+      ],
+      "dimensions": [
+        0.5067,
+        0.9415,
+        0.4883
+      ],
+      "footprintAreaM2": 0.4771,
+      "vertices": 41000,
+      "triangles": 73414,
+      "materials": [
+        "NewYork-Mnhtprt-9"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-10",
+      "category": "uncategorized",
+      "worldMin": [
+        3.8703,
+        -0.7033,
+        -0.0157
+      ],
+      "worldMax": [
+        4.3808,
+        -0.3253,
+        0.1632
+      ],
+      "dimensions": [
+        0.5104,
+        0.378,
+        0.179
+      ],
+      "footprintAreaM2": 0.193,
+      "vertices": 12612,
+      "triangles": 19259,
+      "materials": [
+        "NewYork-Mnhtprt-10"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    }
+  ],
+  "heaviestMeshes": [
+    {
+      "name": "NewYork-Mnhtprt-0",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.2668,
+        -0.0496
+      ],
+      "worldMax": [
+        4.7618,
+        2.3318,
+        0.2499
+      ],
+      "dimensions": [
+        4.7702,
+        3.5986,
+        0.2995
+      ],
+      "footprintAreaM2": 17.1661,
+      "vertices": 170510,
+      "triangles": 285595,
+      "materials": [
+        "NewYork-Mnhtprt-0"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-7",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3724,
+        -1.6386,
+        -0.0231
+      ],
+      "worldMax": [
+        4.7308,
+        -1.2478,
+        0.1916
+      ],
+      "dimensions": [
+        1.3584,
+        0.3908,
+        0.2147
+      ],
+      "footprintAreaM2": 0.5309,
+      "vertices": 79835,
+      "triangles": 127150,
+      "materials": [
+        "NewYork-Mnhtprt-7"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-9",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3716,
+        -1.2667,
+        -0.0629
+      ],
+      "worldMax": [
+        3.8783,
+        -0.3252,
+        0.4254
+      ],
+      "dimensions": [
+        0.5067,
+        0.9415,
+        0.4883
+      ],
+      "footprintAreaM2": 0.4771,
+      "vertices": 41000,
+      "triangles": 73414,
+      "materials": [
+        "NewYork-Mnhtprt-9"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-6",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4141,
+        -1.5023,
+        -0.0281
+      ],
+      "worldMax": [
+        3.3884,
+        0.1483,
+        0.2012
+      ],
+      "dimensions": [
+        0.9743,
+        1.6506,
+        0.2294
+      ],
+      "footprintAreaM2": 1.6082,
+      "vertices": 39958,
+      "triangles": 63687,
+      "materials": [
+        "NewYork-Mnhtprt-6"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-2",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.201,
+        -0.0432
+      ],
+      "worldMax": [
+        1.4521,
+        0.8712,
+        0.3241
+      ],
+      "dimensions": [
+        1.4605,
+        2.0722,
+        0.3674
+      ],
+      "footprintAreaM2": 3.0265,
+      "vertices": 27766,
+      "triangles": 57018,
+      "materials": [
+        "NewYork-Mnhtprt-2"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-4",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4091,
+        -1.3411,
+        -0.0163
+      ],
+      "worldMax": [
+        2.4242,
+        0.8635,
+        0.1244
+      ],
+      "dimensions": [
+        1.0152,
+        2.2045,
+        0.1406
+      ],
+      "footprintAreaM2": 2.238,
+      "vertices": 19165,
+      "triangles": 29619,
+      "materials": [
+        "NewYork-Mnhtprt-4"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-5",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4143,
+        0.0901,
+        -0.0393
+      ],
+      "worldMax": [
+        4.3625,
+        0.8693,
+        0.2009
+      ],
+      "dimensions": [
+        1.9482,
+        0.7792,
+        0.2402
+      ],
+      "footprintAreaM2": 1.518,
+      "vertices": 17640,
+      "triangles": 27625,
+      "materials": [
+        "NewYork-Mnhtprt-5"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-8",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3728,
+        -0.332,
+        -0.0271
+      ],
+      "worldMax": [
+        4.6015,
+        0.1602,
+        0.1154
+      ],
+      "dimensions": [
+        1.2288,
+        0.4921,
+        0.1425
+      ],
+      "footprintAreaM2": 0.6047,
+      "vertices": 15771,
+      "triangles": 25350,
+      "materials": [
+        "NewYork-Mnhtprt-8"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-10",
+      "category": "uncategorized",
+      "worldMin": [
+        3.8703,
+        -0.7033,
+        -0.0157
+      ],
+      "worldMax": [
+        4.3808,
+        -0.3253,
+        0.1632
+      ],
+      "dimensions": [
+        0.5104,
+        0.378,
+        0.179
+      ],
+      "footprintAreaM2": 0.193,
+      "vertices": 12612,
+      "triangles": 19259,
+      "materials": [
+        "NewYork-Mnhtprt-10"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-3",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4365,
+        0.8004,
+        -0.0314
+      ],
+      "worldMax": [
+        4.3566,
+        1.5978,
+        0.0932
+      ],
+      "dimensions": [
+        2.9202,
+        0.7975,
+        0.1246
+      ],
+      "footprintAreaM2": 2.3287,
+      "vertices": 9480,
+      "triangles": 13818,
+      "materials": [
+        "NewYork-Mnhtprt-3"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-1",
+      "category": "uncategorized",
+      "worldMin": [
+        1.5255,
+        1.5976,
+        -0.0398
+      ],
+      "worldMax": [
+        3.9289,
+        2.3361,
+        0.1212
+      ],
+      "dimensions": [
+        2.4034,
+        0.7385,
+        0.1611
+      ],
+      "footprintAreaM2": 1.7748,
+      "vertices": 7218,
+      "triangles": 10645,
+      "materials": [
+        "NewYork-Mnhtprt-1"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "Watter",
+      "category": "uncategorized",
+      "worldMin": [
+        -1.0906,
+        -3.9713,
+        -0.0
+      ],
+      "worldMax": [
+        6.8519,
+        3.9713,
+        0.0
+      ],
+      "dimensions": [
+        7.9425,
+        7.9425,
+        0.0
+      ],
+      "footprintAreaM2": 63.0837,
+      "vertices": 4,
+      "triangles": 2,
+      "materials": [
+        "Watter"
+      ],
+      "parent": null,
+      "collections": [
+        "Scene Collection"
+      ]
+    }
+  ],
+  "footprints": [
+    {
+      "name": "Watter",
+      "category": "uncategorized",
+      "worldMin": [
+        -1.0906,
+        -3.9713,
+        -0.0
+      ],
+      "worldMax": [
+        6.8519,
+        3.9713,
+        0.0
+      ],
+      "dimensions": [
+        7.9425,
+        7.9425,
+        0.0
+      ],
+      "footprintAreaM2": 63.0837,
+      "vertices": 4,
+      "triangles": 2,
+      "materials": [
+        "Watter"
+      ],
+      "parent": null,
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-0",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.2668,
+        -0.0496
+      ],
+      "worldMax": [
+        4.7618,
+        2.3318,
+        0.2499
+      ],
+      "dimensions": [
+        4.7702,
+        3.5986,
+        0.2995
+      ],
+      "footprintAreaM2": 17.1661,
+      "vertices": 170510,
+      "triangles": 285595,
+      "materials": [
+        "NewYork-Mnhtprt-0"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-2",
+      "category": "uncategorized",
+      "worldMin": [
+        -0.0084,
+        -1.201,
+        -0.0432
+      ],
+      "worldMax": [
+        1.4521,
+        0.8712,
+        0.3241
+      ],
+      "dimensions": [
+        1.4605,
+        2.0722,
+        0.3674
+      ],
+      "footprintAreaM2": 3.0265,
+      "vertices": 27766,
+      "triangles": 57018,
+      "materials": [
+        "NewYork-Mnhtprt-2"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-3",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4365,
+        0.8004,
+        -0.0314
+      ],
+      "worldMax": [
+        4.3566,
+        1.5978,
+        0.0932
+      ],
+      "dimensions": [
+        2.9202,
+        0.7975,
+        0.1246
+      ],
+      "footprintAreaM2": 2.3287,
+      "vertices": 9480,
+      "triangles": 13818,
+      "materials": [
+        "NewYork-Mnhtprt-3"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-4",
+      "category": "uncategorized",
+      "worldMin": [
+        1.4091,
+        -1.3411,
+        -0.0163
+      ],
+      "worldMax": [
+        2.4242,
+        0.8635,
+        0.1244
+      ],
+      "dimensions": [
+        1.0152,
+        2.2045,
+        0.1406
+      ],
+      "footprintAreaM2": 2.238,
+      "vertices": 19165,
+      "triangles": 29619,
+      "materials": [
+        "NewYork-Mnhtprt-4"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-1",
+      "category": "uncategorized",
+      "worldMin": [
+        1.5255,
+        1.5976,
+        -0.0398
+      ],
+      "worldMax": [
+        3.9289,
+        2.3361,
+        0.1212
+      ],
+      "dimensions": [
+        2.4034,
+        0.7385,
+        0.1611
+      ],
+      "footprintAreaM2": 1.7748,
+      "vertices": 7218,
+      "triangles": 10645,
+      "materials": [
+        "NewYork-Mnhtprt-1"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-6",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4141,
+        -1.5023,
+        -0.0281
+      ],
+      "worldMax": [
+        3.3884,
+        0.1483,
+        0.2012
+      ],
+      "dimensions": [
+        0.9743,
+        1.6506,
+        0.2294
+      ],
+      "footprintAreaM2": 1.6082,
+      "vertices": 39958,
+      "triangles": 63687,
+      "materials": [
+        "NewYork-Mnhtprt-6"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-5",
+      "category": "uncategorized",
+      "worldMin": [
+        2.4143,
+        0.0901,
+        -0.0393
+      ],
+      "worldMax": [
+        4.3625,
+        0.8693,
+        0.2009
+      ],
+      "dimensions": [
+        1.9482,
+        0.7792,
+        0.2402
+      ],
+      "footprintAreaM2": 1.518,
+      "vertices": 17640,
+      "triangles": 27625,
+      "materials": [
+        "NewYork-Mnhtprt-5"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-8",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3728,
+        -0.332,
+        -0.0271
+      ],
+      "worldMax": [
+        4.6015,
+        0.1602,
+        0.1154
+      ],
+      "dimensions": [
+        1.2288,
+        0.4921,
+        0.1425
+      ],
+      "footprintAreaM2": 0.6047,
+      "vertices": 15771,
+      "triangles": 25350,
+      "materials": [
+        "NewYork-Mnhtprt-8"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-7",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3724,
+        -1.6386,
+        -0.0231
+      ],
+      "worldMax": [
+        4.7308,
+        -1.2478,
+        0.1916
+      ],
+      "dimensions": [
+        1.3584,
+        0.3908,
+        0.2147
+      ],
+      "footprintAreaM2": 0.5309,
+      "vertices": 79835,
+      "triangles": 127150,
+      "materials": [
+        "NewYork-Mnhtprt-7"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-9",
+      "category": "uncategorized",
+      "worldMin": [
+        3.3716,
+        -1.2667,
+        -0.0629
+      ],
+      "worldMax": [
+        3.8783,
+        -0.3252,
+        0.4254
+      ],
+      "dimensions": [
+        0.5067,
+        0.9415,
+        0.4883
+      ],
+      "footprintAreaM2": 0.4771,
+      "vertices": 41000,
+      "triangles": 73414,
+      "materials": [
+        "NewYork-Mnhtprt-9"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    },
+    {
+      "name": "NewYork-Mnhtprt-10",
+      "category": "uncategorized",
+      "worldMin": [
+        3.8703,
+        -0.7033,
+        -0.0157
+      ],
+      "worldMax": [
+        4.3808,
+        -0.3253,
+        0.1632
+      ],
+      "dimensions": [
+        0.5104,
+        0.378,
+        0.179
+      ],
+      "footprintAreaM2": 0.193,
+      "vertices": 12612,
+      "triangles": 19259,
+      "materials": [
+        "NewYork-Mnhtprt-10"
+      ],
+      "parent": "NewYork-City-Manhattan",
+      "collections": [
+        "Scene Collection"
+      ]
+    }
+  ],
+  "footprintsTruncated": false,
+  "evaluationErrors": [],
+  "warnings": [
+    "13 external image paths do not exist beside the imported file; original texture files or an archive may be required.",
+    "Footprint is under 20 Blender units; source may be a miniature/scaled scene rather than metres."
+  ]
+}
