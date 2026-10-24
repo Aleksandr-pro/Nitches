@@ -87,6 +87,10 @@ jobs:
         run: |
           set -euo pipefail
           CONVERT_ROOT="$RUNNER_TEMP/model-convert"
+          mkdir -p "$CONVERT_ROOT"
+          # Keep a copy of this step's stdout/stderr for the failure-diagnostic
+          # commit below; sandbox log downloads from Actions can be blocked.
+          exec > >(tee -a "$CONVERT_ROOT/download-convert-step.log") 2>&1
           : > "$CONVERT_ROOT/outputs.tsv"
 
           while IFS= read -r manifest; do
@@ -183,7 +187,7 @@ jobs:
               echo "Dumping material colors from Blender source (best effort)..."
               if ! blender -b "$extract/$input_blend_rel" -noaudio \
                 --python scripts/blender_convert_car.py -- \
-                --mode dump --output-json "$blend_dump"; then
+                --mode dump --output-json "$blend_dump" 2>&1 | tee "$work/blender-dump.log"; then
                 echo "Warning: Blender material dump failed; semantic fallback colors will be used."
                 rm -f "$blend_dump"
               fi
@@ -201,7 +205,7 @@ jobs:
               --report-json "$conversion_report" \
               --target-length "$target_length" \
               --default-paint "$default_paint" \
-              --root-name "$(jq -r '.displayName // .carId' "$manifest")"
+              --root-name "$(jq -r '.displayName // .carId' "$manifest")" 2>&1 | tee "$work/blender-convert.log"
 
             test -s "$generated_glb"
             triangles="$(jq -r '.finalEstimatedTriangles' "$conversion_report")"
@@ -293,4 +297,63 @@ jobs:
             echo "Working tree is not clean after LFS redownload verification" >&2
             exit 1
           fi
+          git push origin "HEAD:${BRANCH}"
+
+      - name: Commit conversion failure diagnostics
+        if: failure()
+        run: |
+          set -euo pipefail
+          CONVERT_ROOT="$RUNNER_TEMP/model-convert"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          manifests_file="$CONVERT_ROOT/manifests.txt"
+          if [ ! -s "$manifests_file" ]; then
+            find asset-inbox/conversions -maxdepth 1 -type f -name '*.json' | sort > "$manifests_file"
+          fi
+
+          diag_paths=()
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            car_id="$(jq -r '.carId // "unknown"' "$manifest")"
+            work="$CONVERT_ROOT/$car_id"
+            report_dir="asset-inbox/imports/$car_id"
+            report="$report_dir/conversion-failure.md"
+            mkdir -p "$report_dir"
+            {
+              echo "# Conversion failure diagnostics: $car_id"
+              echo
+              echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              echo "Commit: ${GITHUB_SHA}"
+              echo
+              for log in \
+                "$CONVERT_ROOT/download-convert-step.log" \
+                "$work/blender-dump.log" \
+                "$work/blender-convert.log" \
+                "$work/inventory.stdout.json" \
+                "$work/conversion.json" \
+                "$work/blend-materials.json"; do
+                if [ -s "$log" ]; then
+                  echo "## ${log#$CONVERT_ROOT/}"
+                  echo
+                  echo '```text'
+                  tail -n 400 "$log" | sed 's/```/``\x60/g'
+                  echo '```'
+                  echo
+                fi
+              done
+            } > "$report"
+            diag_paths+=("$report")
+          done < "$manifests_file"
+
+          if [ "${#diag_paths[@]}" -eq 0 ]; then
+            echo "No diagnostics to commit"
+            exit 0
+          fi
+          git add "${diag_paths[@]}"
+          if git diff --cached --quiet; then
+            echo "Diagnostics are unchanged"
+            exit 0
+          fi
+          git commit -m "chore(assets): add conversion failure diagnostics"
           git push origin "HEAD:${BRANCH}"
