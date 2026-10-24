@@ -286,8 +286,6 @@ def semantic_material_name(original: str, primary_paint_original: str | None) ->
         return "Glass"
     if "tire" in lower or "tyre" in lower:
         return "Tire"
-    if "rim" in lower or "wheel" in lower:
-        return "Rim"
     if "brake" in lower:
         return "Brake"
     if "headlight" in lower or "head_light" in lower or "frontlight" in lower or "front_light" in lower:
@@ -300,9 +298,16 @@ def semantic_material_name(original: str, primary_paint_original: str | None) ->
         return "Mirror"
     if "exhaust" in lower:
         return "Exhaust"
+    # Check black/chrome before "rim": every *Trim name contains the
+    # substring "rim", which would otherwise turn black/chrome trim into
+    # bright wheel metal.
+    if "black" in lower or "dark" in lower or "grill" in lower:
+        return "BlackTrim"
     if "chrome" in lower:
         return "Chrome"
-    if "black" in lower or "dark" in lower or "grill" in lower or "trim" in lower:
+    if "rim" in lower or "wheel" in lower:
+        return "Rim"
+    if "trim" in lower:
         return "BlackTrim"
     return "Trim"
 
@@ -354,41 +359,43 @@ def decimation_ratio(obj: bpy.types.Object) -> float:
     if count < 250:
         return 1.0
     lower = obj.name.lower()
-    if "tire" in lower or "tyre" in lower:
-        return 0.16
-    if "rim" in lower:
-        return 0.12
-    if "spoke" in lower:
-        return 0.10
-    if "brake" in lower or "axle" in lower:
+    # Wheel parts are identified by their corner code first; a plain
+    # substring test would mistake every *Trim part for a rim.
+    if wheel_code(obj.name):
+        if "tire" in lower or "tyre" in lower:
+            return 0.13
+        if "spoke" in lower:
+            return 0.08
+        if "rim" in lower:
+            return 0.10
+        if "brake" in lower or "axle" in lower:
+            return 0.10
         return 0.14
-    if "wheel" in lower:
-        return 0.18
     if "body_plane" in lower:
-        return 0.52
+        return 0.40
     if "backpanel" in lower:
-        return 0.45
+        return 0.34
     if "intake1" in lower or "intake2" in lower:
-        return 0.35
+        return 0.25
     if "honeycomb" in lower or "grill" in lower:
-        return 0.30
+        return 0.22
     if "logo" in lower or "text" in lower:
-        return 0.30
+        return 0.22
     if "light" in lower or "bulb" in lower:
-        return 0.30
+        return 0.22
     if "window" in lower or "windshield" in lower or "glass" in lower:
-        return 0.65
-    if "bumper" in lower or "spoiler" in lower:
         return 0.50
+    if "bumper" in lower or "spoiler" in lower:
+        return 0.40
     if count > 10000:
-        return 0.38
+        return 0.28
     if count > 4000:
-        return 0.48
+        return 0.36
     if count > 1500:
-        return 0.62
+        return 0.48
     if count > 600:
-        return 0.75
-    return 0.86
+        return 0.60
+    return 0.72
 
 
 def apply_decimate(obj: bpy.types.Object, ratio: float) -> None:
