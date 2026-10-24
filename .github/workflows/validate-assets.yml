@@ -15,14 +15,17 @@ on:
       - 'docs/PHYSICS_V2.md'
       - 'docs/SVG_UI.md'
       - 'docs/WORLD_REBUILD_PLAN.md'
+      - 'docs/WORLD_STAGE3.md'
       - 'index.html'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
+      - 'public/assets/world/**'
       - 'scripts/build-cloud-catalog.mjs'
       - 'scripts/check-lfs-assets.mjs'
       - 'scripts/generate-cloud-prototype-tree.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/generate-world-manifest.mjs'
       - 'scripts/validate-cloud-catalog.mjs'
       - 'scripts/validate-glb-loader.mjs'
       - 'src/cloudPrototype.js'
@@ -32,9 +35,11 @@ on:
       - 'src/style.css'
       - 'src/ui/**'
       - 'src/vehicle/**'
+      - 'src/world/**'
       - 'tests/resources/**'
       - 'tests/ui/**'
       - 'tests/vehicle/**'
+      - 'tests/world/**'
   push:
     branches:
       - main
@@ -52,14 +57,17 @@ on:
       - 'docs/PHYSICS_V2.md'
       - 'docs/SVG_UI.md'
       - 'docs/WORLD_REBUILD_PLAN.md'
+      - 'docs/WORLD_STAGE3.md'
       - 'index.html'
       - 'package-lock.json'
       - 'package.json'
       - 'public/assets/models/**'
+      - 'public/assets/world/**'
       - 'scripts/build-cloud-catalog.mjs'
       - 'scripts/check-lfs-assets.mjs'
       - 'scripts/generate-cloud-prototype-tree.mjs'
       - 'scripts/generate-pipeline-smoke-glb.mjs'
+      - 'scripts/generate-world-manifest.mjs'
       - 'scripts/validate-cloud-catalog.mjs'
       - 'scripts/validate-glb-loader.mjs'
       - 'src/cloudPrototype.js'
@@ -69,9 +77,11 @@ on:
       - 'src/style.css'
       - 'src/ui/**'
       - 'src/vehicle/**'
+      - 'src/world/**'
       - 'tests/resources/**'
       - 'tests/ui/**'
       - 'tests/vehicle/**'
+      - 'tests/world/**'
   workflow_dispatch:
 
 permissions:
@@ -125,6 +135,7 @@ jobs:
       - name: Test cloud resource client and staging bundle
         run: |
           npm test
+          npm run world:check
           npm run cloud:bundle
 
       - name: Parse runtime car GLBs with Three.js GLTFLoader

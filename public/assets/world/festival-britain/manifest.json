@@ -1,0 +1,8817 @@
+{
+  "schemaVersion": 1,
+  "id": "festival-britain",
+  "version": "0.1.0-stage3",
+  "seed": 20261025,
+  "world": {
+    "sizeM": 4000,
+    "halfSizeM": 2000,
+    "chunkSizeM": 250,
+    "chunksPerAxis": 16,
+    "totalChunks": 256,
+    "waterLevelM": 0,
+    "units": "metres"
+  },
+  "districts": [
+    {
+      "id": "festival-vale",
+      "name": "Festival Vale",
+      "x": 0,
+      "z": 1250,
+      "radiusM": 560,
+      "biome": "festival"
+    },
+    {
+      "id": "kingsford-city",
+      "name": "Kingsford City",
+      "x": 1250,
+      "z": -1050,
+      "radiusM": 600,
+      "biome": "urban"
+    },
+    {
+      "id": "castle-hill",
+      "name": "Castle Hill",
+      "x": 850,
+      "z": -1450,
+      "radiusM": 430,
+      "biome": "castle"
+    },
+    {
+      "id": "lake-district",
+      "name": "Lake District & Fells",
+      "x": -1200,
+      "z": -1050,
+      "radiusM": 650,
+      "biome": "lake"
+    },
+    {
+      "id": "moorland",
+      "name": "Moorland",
+      "x": -100,
+      "z": -1250,
+      "radiusM": 670,
+      "biome": "moor"
+    },
+    {
+      "id": "cotswold-farms",
+      "name": "Cotswold Farms",
+      "x": -950,
+      "z": 250,
+      "radiusM": 590,
+      "biome": "farms"
+    },
+    {
+      "id": "east-coast",
+      "name": "East Coast Village",
+      "x": 1650,
+      "z": 200,
+      "radiusM": 470,
+      "biome": "coast"
+    },
+    {
+      "id": "forest-quarry",
+      "name": "Forest & Quarry",
+      "x": 1050,
+      "z": 850,
+      "radiusM": 580,
+      "biome": "forest"
+    },
+    {
+      "id": "south-beach-airfield",
+      "name": "South Beach & Airfield",
+      "x": 650,
+      "z": 1725,
+      "radiusM": 470,
+      "biome": "coast"
+    },
+    {
+      "id": "west-highlands",
+      "name": "West Highlands",
+      "x": -1550,
+      "z": -250,
+      "radiusM": 620,
+      "biome": "highlands"
+    }
+  ],
+  "surfaces": {
+    "asphalt": {
+      "id": "asphalt",
+      "label": "АСФАЛЬТ",
+      "mu": 1,
+      "rollingResistance": 0.012
+    },
+    "cobble": {
+      "id": "cobble",
+      "label": "БРУСЧАТКА",
+      "mu": 0.86,
+      "rollingResistance": 0.02
+    },
+    "concrete": {
+      "id": "concrete",
+      "label": "БЕТОН",
+      "mu": 0.94,
+      "rollingResistance": 0.014
+    },
+    "dirt": {
+      "id": "dirt",
+      "label": "ГРУНТ",
+      "mu": 0.72,
+      "rollingResistance": 0.055
+    },
+    "gravel": {
+      "id": "gravel",
+      "label": "ГРАВИЙ",
+      "mu": 0.68,
+      "rollingResistance": 0.04
+    },
+    "grass": {
+      "id": "grass",
+      "label": "ТРАВА",
+      "mu": 0.66,
+      "rollingResistance": 0.05
+    },
+    "moor": {
+      "id": "moor",
+      "label": "ВЕРЕСК",
+      "mu": 0.6,
+      "rollingResistance": 0.06
+    },
+    "forest": {
+      "id": "forest",
+      "label": "ЛЕСНАЯ ПОЧВА",
+      "mu": 0.58,
+      "rollingResistance": 0.065
+    },
+    "field": {
+      "id": "field",
+      "label": "ПОЛЕ",
+      "mu": 0.62,
+      "rollingResistance": 0.055
+    },
+    "rock": {
+      "id": "rock",
+      "label": "СКАЛА",
+      "mu": 0.55,
+      "rollingResistance": 0.05
+    },
+    "sand": {
+      "id": "sand",
+      "label": "ПЕСОК",
+      "mu": 0.48,
+      "rollingResistance": 0.09
+    },
+    "water": {
+      "id": "water",
+      "label": "ВОДА",
+      "mu": 0.18,
+      "rollingResistance": 0.2
+    }
+  },
+  "roadGraph": {
+    "id": "festival-britain-roads",
+    "version": "0.1.0-stage3",
+    "totalLengthM": 46710.77446407835,
+    "nodes": [
+      {
+        "id": "festival",
+        "x": 0,
+        "z": 1250,
+        "type": "district",
+        "districtId": "festival-vale"
+      },
+      {
+        "id": "festival-north",
+        "x": 0,
+        "z": 850,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "festival-west",
+        "x": -450,
+        "z": 1150,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "festival-east",
+        "x": 450,
+        "z": 1200,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "center",
+        "x": 0,
+        "z": 250,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "city",
+        "x": 1250,
+        "z": -1050,
+        "type": "district",
+        "districtId": "kingsford-city"
+      },
+      {
+        "id": "city-west",
+        "x": 950,
+        "z": -900,
+        "type": "city",
+        "districtId": null
+      },
+      {
+        "id": "city-east",
+        "x": 1550,
+        "z": -900,
+        "type": "city",
+        "districtId": null
+      },
+      {
+        "id": "city-north",
+        "x": 1250,
+        "z": -1350,
+        "type": "city",
+        "districtId": null
+      },
+      {
+        "id": "city-south",
+        "x": 1250,
+        "z": -700,
+        "type": "city",
+        "districtId": null
+      },
+      {
+        "id": "city-port",
+        "x": 1620,
+        "z": -450,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "castle",
+        "x": 850,
+        "z": -1450,
+        "type": "district",
+        "districtId": "castle-hill"
+      },
+      {
+        "id": "castle-gate",
+        "x": 700,
+        "z": -1250,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "lake-town",
+        "x": -880,
+        "z": -900,
+        "type": "district",
+        "districtId": "lake-district"
+      },
+      {
+        "id": "lake-west",
+        "x": -1450,
+        "z": -1250,
+        "type": "pass",
+        "districtId": null
+      },
+      {
+        "id": "lake-south",
+        "x": -1050,
+        "z": -450,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "moor",
+        "x": -100,
+        "z": -1250,
+        "type": "district",
+        "districtId": "moorland"
+      },
+      {
+        "id": "moor-east",
+        "x": 450,
+        "z": -1150,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "north-gate",
+        "x": 350,
+        "z": -1350,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "farms",
+        "x": -950,
+        "z": 250,
+        "type": "district",
+        "districtId": "cotswold-farms"
+      },
+      {
+        "id": "farm-north",
+        "x": -1100,
+        "z": 650,
+        "type": "village",
+        "districtId": null
+      },
+      {
+        "id": "coast",
+        "x": 1650,
+        "z": 200,
+        "type": "district",
+        "districtId": "east-coast"
+      },
+      {
+        "id": "forest",
+        "x": 1050,
+        "z": 850,
+        "type": "district",
+        "districtId": "forest-quarry"
+      },
+      {
+        "id": "forest-north",
+        "x": 1150,
+        "z": 350,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "quarry",
+        "x": 1320,
+        "z": 1120,
+        "type": "industrial",
+        "districtId": null
+      },
+      {
+        "id": "airfield",
+        "x": 650,
+        "z": 1725,
+        "type": "district",
+        "districtId": "south-beach-airfield"
+      },
+      {
+        "id": "highlands",
+        "x": -1550,
+        "z": -250,
+        "type": "district",
+        "districtId": "west-highlands"
+      },
+      {
+        "id": "west-gate",
+        "x": -1500,
+        "z": 650,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "east-gate",
+        "x": 1450,
+        "z": 500,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "south-gate",
+        "x": -450,
+        "z": 1550,
+        "type": "junction",
+        "districtId": null
+      },
+      {
+        "id": "ring-nw",
+        "x": -1650,
+        "z": -1550,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-n",
+        "x": 0,
+        "z": -1650,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-ne",
+        "x": 1650,
+        "z": -1550,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-e",
+        "x": 1780,
+        "z": 0,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-se",
+        "x": 1550,
+        "z": 1550,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-s",
+        "x": 0,
+        "z": 1780,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-sw",
+        "x": -1550,
+        "z": 1550,
+        "type": "ring",
+        "districtId": null
+      },
+      {
+        "id": "ring-w",
+        "x": -1780,
+        "z": 0,
+        "type": "ring",
+        "districtId": null
+      }
+    ],
+    "edges": [
+      {
+        "id": "ring-nw-n",
+        "name": "ring-nw-n",
+        "from": "ring-nw",
+        "to": "ring-n",
+        "points": [
+          [
+            -1650,
+            -1550
+          ],
+          [
+            -900,
+            -1720
+          ],
+          [
+            0,
+            -1650
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1674.1807127649868,
+        "bounds": {
+          "minX": -1653.65,
+          "minZ": -1726.0551235964608,
+          "maxX": 3.65,
+          "maxZ": -1546.35
+        }
+      },
+      {
+        "id": "ring-n-ne",
+        "name": "ring-n-ne",
+        "from": "ring-n",
+        "to": "ring-ne",
+        "points": [
+          [
+            0,
+            -1650
+          ],
+          [
+            900,
+            -1700
+          ],
+          [
+            1650,
+            -1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1667.9745439575124,
+        "bounds": {
+          "minX": -3.65,
+          "minZ": -1706.6277354525266,
+          "maxX": 1653.65,
+          "maxZ": -1546.35
+        }
+      },
+      {
+        "id": "ring-ne-e",
+        "name": "ring-ne-e",
+        "from": "ring-ne",
+        "to": "ring-e",
+        "points": [
+          [
+            1650,
+            -1550
+          ],
+          [
+            1830,
+            -750
+          ],
+          [
+            1780,
+            0
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1573.7449399627576,
+        "bounds": {
+          "minX": 1646.35,
+          "minZ": -1553.65,
+          "maxX": 1838.1402555975965,
+          "maxZ": 3.65
+        }
+      },
+      {
+        "id": "ring-e-se",
+        "name": "ring-e-se",
+        "from": "ring-e",
+        "to": "ring-se",
+        "points": [
+          [
+            1780,
+            0
+          ],
+          [
+            1750,
+            800
+          ],
+          [
+            1550,
+            1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1578.0296075625847,
+        "bounds": {
+          "minX": 1546.35,
+          "minZ": -3.65,
+          "maxX": 1783.65,
+          "maxZ": 1553.65
+        }
+      },
+      {
+        "id": "ring-se-s",
+        "name": "ring-se-s",
+        "from": "ring-se",
+        "to": "ring-s",
+        "points": [
+          [
+            1550,
+            1550
+          ],
+          [
+            800,
+            1800
+          ],
+          [
+            0,
+            1780
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1593.8283270200372,
+        "bounds": {
+          "minX": -3.65,
+          "minZ": 1546.35,
+          "maxX": 1553.65,
+          "maxZ": 1817.172113655898
+        }
+      },
+      {
+        "id": "ring-s-sw",
+        "name": "ring-s-sw",
+        "from": "ring-s",
+        "to": "ring-sw",
+        "points": [
+          [
+            0,
+            1780
+          ],
+          [
+            -800,
+            1750
+          ],
+          [
+            -1550,
+            1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1578.0296075625847,
+        "bounds": {
+          "minX": -1553.65,
+          "minZ": 1546.35,
+          "maxX": 3.65,
+          "maxZ": 1783.65
+        }
+      },
+      {
+        "id": "ring-sw-w",
+        "name": "ring-sw-w",
+        "from": "ring-sw",
+        "to": "ring-w",
+        "points": [
+          [
+            -1550,
+            1550
+          ],
+          [
+            -1750,
+            800
+          ],
+          [
+            -1780,
+            0
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1578.0296075625852,
+        "bounds": {
+          "minX": -1783.65,
+          "minZ": -3.65,
+          "maxX": -1546.35,
+          "maxZ": 1553.65
+        }
+      },
+      {
+        "id": "ring-w-nw",
+        "name": "ring-w-nw",
+        "from": "ring-w",
+        "to": "ring-nw",
+        "points": [
+          [
+            -1780,
+            0
+          ],
+          [
+            -1800,
+            -800
+          ],
+          [
+            -1650,
+            -1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1566.3450534900644,
+        "bounds": {
+          "minX": -1810.2498191830362,
+          "minZ": -1553.65,
+          "maxX": -1646.35,
+          "maxZ": 3.65
+        }
+      },
+      {
+        "id": "nw-lake-west",
+        "name": "nw-lake-west",
+        "from": "ring-nw",
+        "to": "lake-west",
+        "points": [
+          [
+            -1650,
+            -1550
+          ],
+          [
+            -1580,
+            -1420
+          ],
+          [
+            -1450,
+            -1250
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.1,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 361.81911688290216,
+        "bounds": {
+          "minX": -1653.05,
+          "minZ": -1553.05,
+          "maxX": -1446.95,
+          "maxZ": -1246.95
+        }
+      },
+      {
+        "id": "lake-west-town",
+        "name": "lake-west-town",
+        "from": "lake-west",
+        "to": "lake-town",
+        "points": [
+          [
+            -1450,
+            -1250
+          ],
+          [
+            -1300,
+            -760
+          ],
+          [
+            -1050,
+            -720
+          ],
+          [
+            -880,
+            -900
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.1,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 1037.2615169514577,
+        "bounds": {
+          "minX": -1453.05,
+          "minZ": -1253.05,
+          "maxX": -876.95,
+          "maxZ": -694.8860879299817
+        }
+      },
+      {
+        "id": "lake-town-moor",
+        "name": "lake-town-moor",
+        "from": "lake-town",
+        "to": "moor",
+        "points": [
+          [
+            -880,
+            -900
+          ],
+          [
+            -520,
+            -1060
+          ],
+          [
+            -250,
+            -1260
+          ],
+          [
+            -100,
+            -1250
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 885.6802494509745,
+        "bounds": {
+          "minX": -883,
+          "minZ": -1275.1506495250244,
+          "maxX": -97,
+          "maxZ": -897
+        }
+      },
+      {
+        "id": "moor-north-gate",
+        "name": "moor-north-gate",
+        "from": "moor",
+        "to": "north-gate",
+        "points": [
+          [
+            -100,
+            -1250
+          ],
+          [
+            120,
+            -1380
+          ],
+          [
+            350,
+            -1350
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 490.60677945664685,
+        "bounds": {
+          "minX": -103.65,
+          "minZ": -1387.5589604422912,
+          "maxX": 353.65,
+          "maxZ": -1246.35
+        }
+      },
+      {
+        "id": "north-gate-castle-gate",
+        "name": "north-gate-castle-gate",
+        "from": "north-gate",
+        "to": "castle-gate",
+        "points": [
+          [
+            350,
+            -1350
+          ],
+          [
+            530,
+            -1260
+          ],
+          [
+            700,
+            -1250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 372.5039177989033,
+        "bounds": {
+          "minX": 346.35,
+          "minZ": -1353.65,
+          "maxX": 703.65,
+          "maxZ": -1245.7099999999998
+        }
+      },
+      {
+        "id": "castle-switchback",
+        "name": "castle-switchback",
+        "from": "castle-gate",
+        "to": "castle",
+        "points": [
+          [
+            700,
+            -1250
+          ],
+          [
+            760,
+            -1380
+          ],
+          [
+            920,
+            -1320
+          ],
+          [
+            850,
+            -1450
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 5.8,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 471.6961840675403,
+        "bounds": {
+          "minX": 697.1,
+          "minZ": -1452.9,
+          "maxX": 924.9,
+          "maxZ": -1247.1
+        }
+      },
+      {
+        "id": "castle-city-north",
+        "name": "castle-city-north",
+        "from": "castle",
+        "to": "city-north",
+        "points": [
+          [
+            850,
+            -1450
+          ],
+          [
+            1040,
+            -1470
+          ],
+          [
+            1250,
+            -1350
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.2,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 435.480148832891,
+        "bounds": {
+          "minX": 846.9,
+          "minZ": -1477.7352770613124,
+          "maxX": 1253.1,
+          "maxZ": -1346.9
+        }
+      },
+      {
+        "id": "moor-moor-east",
+        "name": "moor-moor-east",
+        "from": "moor",
+        "to": "moor-east",
+        "points": [
+          [
+            -100,
+            -1250
+          ],
+          [
+            180,
+            -1110
+          ],
+          [
+            450,
+            -1150
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 589.253527130715,
+        "bounds": {
+          "minX": -103.65,
+          "minZ": -1253.65,
+          "maxX": 453.65,
+          "maxZ": -1102.9701652892563
+        }
+      },
+      {
+        "id": "moor-east-city-west",
+        "name": "moor-east-city-west",
+        "from": "moor-east",
+        "to": "city-west",
+        "points": [
+          [
+            450,
+            -1150
+          ],
+          [
+            700,
+            -1030
+          ],
+          [
+            950,
+            -900
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 559.0978336114088,
+        "bounds": {
+          "minX": 446.35,
+          "minZ": -1153.65,
+          "maxX": 953.65,
+          "maxZ": -896.35
+        }
+      },
+      {
+        "id": "castle-city-west",
+        "name": "castle-city-west",
+        "from": "castle-gate",
+        "to": "city-west",
+        "points": [
+          [
+            700,
+            -1250
+          ],
+          [
+            820,
+            -1080
+          ],
+          [
+            950,
+            -900
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.2,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 430.1233726008428,
+        "bounds": {
+          "minX": 696.9,
+          "minZ": -1253.1,
+          "maxX": 953.1,
+          "maxZ": -896.9
+        }
+      },
+      {
+        "id": "ring-n-moor",
+        "name": "ring-n-moor",
+        "from": "ring-n",
+        "to": "moor",
+        "points": [
+          [
+            0,
+            -1650
+          ],
+          [
+            -60,
+            -1450
+          ],
+          [
+            -100,
+            -1250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 412.8259879390991,
+        "bounds": {
+          "minX": -103.65,
+          "minZ": -1653.65,
+          "maxX": 3.65,
+          "maxZ": -1246.35
+        }
+      },
+      {
+        "id": "moor-center",
+        "name": "moor-center",
+        "from": "moor",
+        "to": "center",
+        "points": [
+          [
+            -100,
+            -1250
+          ],
+          [
+            -250,
+            -680
+          ],
+          [
+            -140,
+            -80
+          ],
+          [
+            0,
+            250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 100,
+        "lengthM": 1562.6644260756764,
+        "bounds": {
+          "minX": -254.06607282107313,
+          "minZ": -1253.65,
+          "maxX": 3.65,
+          "maxZ": 253.65
+        }
+      },
+      {
+        "id": "center-festival-north",
+        "name": "center-festival-north",
+        "from": "center",
+        "to": "festival-north",
+        "points": [
+          [
+            0,
+            250
+          ],
+          [
+            90,
+            560
+          ],
+          [
+            0,
+            850
+          ]
+        ],
+        "roadClass": "motorway",
+        "surface": "asphalt",
+        "widthM": 10.4,
+        "lanes": 4,
+        "speedLimitKmh": 110,
+        "lengthM": 629.617541130821,
+        "bounds": {
+          "minX": -5.2,
+          "minZ": 244.8,
+          "maxX": 95.2,
+          "maxZ": 855.2
+        }
+      },
+      {
+        "id": "festival-north-festival",
+        "name": "festival-north-festival",
+        "from": "festival-north",
+        "to": "festival",
+        "points": [
+          [
+            0,
+            850
+          ],
+          [
+            -50,
+            1050
+          ],
+          [
+            0,
+            1250
+          ]
+        ],
+        "roadClass": "motorway",
+        "surface": "asphalt",
+        "widthM": 10.4,
+        "lanes": 4,
+        "speedLimitKmh": 110,
+        "lengthM": 413.8170384619048,
+        "bounds": {
+          "minX": -55.2,
+          "minZ": 844.8,
+          "maxX": 5.2,
+          "maxZ": 1255.2
+        }
+      },
+      {
+        "id": "festival-ring-s",
+        "name": "festival-ring-s",
+        "from": "festival",
+        "to": "ring-s",
+        "points": [
+          [
+            0,
+            1250
+          ],
+          [
+            -30,
+            1540
+          ],
+          [
+            0,
+            1780
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 533.8677846480406,
+        "bounds": {
+          "minX": -33.65,
+          "minZ": 1246.35,
+          "maxX": 3.65,
+          "maxZ": 1783.65
+        }
+      },
+      {
+        "id": "ring-w-west-gate",
+        "name": "ring-w-west-gate",
+        "from": "ring-w",
+        "to": "west-gate",
+        "points": [
+          [
+            -1780,
+            0
+          ],
+          [
+            -1650,
+            350
+          ],
+          [
+            -1500,
+            650
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 708.9081473998162,
+        "bounds": {
+          "minX": -1783.65,
+          "minZ": -3.65,
+          "maxX": -1496.35,
+          "maxZ": 653.65
+        }
+      },
+      {
+        "id": "west-gate-farms",
+        "name": "west-gate-farms",
+        "from": "west-gate",
+        "to": "farms",
+        "points": [
+          [
+            -1500,
+            650
+          ],
+          [
+            -1240,
+            430
+          ],
+          [
+            -950,
+            250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 682.145664306964,
+        "bounds": {
+          "minX": -1503.65,
+          "minZ": 246.35,
+          "maxX": -946.35,
+          "maxZ": 653.65
+        }
+      },
+      {
+        "id": "farms-center",
+        "name": "farms-center",
+        "from": "farms",
+        "to": "center",
+        "points": [
+          [
+            -950,
+            250
+          ],
+          [
+            -480,
+            300
+          ],
+          [
+            0,
+            250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 955.9238756116376,
+        "bounds": {
+          "minX": -953.65,
+          "minZ": 246.35,
+          "maxX": 3.65,
+          "maxZ": 303.65
+        }
+      },
+      {
+        "id": "center-forest-north",
+        "name": "center-forest-north",
+        "from": "center",
+        "to": "forest-north",
+        "points": [
+          [
+            0,
+            250
+          ],
+          [
+            550,
+            300
+          ],
+          [
+            1150,
+            350
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 100,
+        "lengthM": 1154.3488446085107,
+        "bounds": {
+          "minX": -3.65,
+          "minZ": 246.35,
+          "maxX": 1153.65,
+          "maxZ": 353.65
+        }
+      },
+      {
+        "id": "forest-north-east-gate",
+        "name": "forest-north-east-gate",
+        "from": "forest-north",
+        "to": "east-gate",
+        "points": [
+          [
+            1150,
+            350
+          ],
+          [
+            1320,
+            430
+          ],
+          [
+            1450,
+            500
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 335.54772392402117,
+        "bounds": {
+          "minX": 1146.35,
+          "minZ": 346.35,
+          "maxX": 1453.65,
+          "maxZ": 503.65
+        }
+      },
+      {
+        "id": "east-gate-coast",
+        "name": "east-gate-coast",
+        "from": "east-gate",
+        "to": "coast",
+        "points": [
+          [
+            1450,
+            500
+          ],
+          [
+            1600,
+            350
+          ],
+          [
+            1650,
+            200
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.4,
+        "lanes": 2,
+        "speedLimitKmh": 80,
+        "lengthM": 371.5387904930547,
+        "bounds": {
+          "minX": 1446.8,
+          "minZ": 196.8,
+          "maxX": 1653.2,
+          "maxZ": 503.2
+        }
+      },
+      {
+        "id": "coast-ring-e",
+        "name": "coast-ring-e",
+        "from": "coast",
+        "to": "ring-e",
+        "points": [
+          [
+            1650,
+            200
+          ],
+          [
+            1740,
+            90
+          ],
+          [
+            1780,
+            0
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.2,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 240.9144826608145,
+        "bounds": {
+          "minX": 1646.9,
+          "minZ": -3.1,
+          "maxX": 1783.1,
+          "maxZ": 203.1
+        }
+      },
+      {
+        "id": "lake-west-highlands",
+        "name": "lake-west-highlands",
+        "from": "lake-west",
+        "to": "highlands",
+        "points": [
+          [
+            -1450,
+            -1250
+          ],
+          [
+            -1620,
+            -780
+          ],
+          [
+            -1550,
+            -250
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 5.7,
+        "lanes": 2,
+        "speedLimitKmh": 60,
+        "lengthM": 1038.0326122649287,
+        "bounds": {
+          "minX": -1625.2522258810507,
+          "minZ": -1252.85,
+          "maxX": -1447.15,
+          "maxZ": -247.15
+        }
+      },
+      {
+        "id": "highlands-ring-w",
+        "name": "highlands-ring-w",
+        "from": "highlands",
+        "to": "ring-w",
+        "points": [
+          [
+            -1550,
+            -250
+          ],
+          [
+            -1710,
+            -120
+          ],
+          [
+            -1780,
+            0
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 345.8592712823572,
+        "bounds": {
+          "minX": -1783,
+          "minZ": -253,
+          "maxX": -1547,
+          "maxZ": 3
+        }
+      },
+      {
+        "id": "highlands-farms",
+        "name": "highlands-farms",
+        "from": "highlands",
+        "to": "farms",
+        "points": [
+          [
+            -1550,
+            -250
+          ],
+          [
+            -1240,
+            -20
+          ],
+          [
+            -950,
+            250
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 782.3944716402109,
+        "bounds": {
+          "minX": -1553,
+          "minZ": -253,
+          "maxX": -947,
+          "maxZ": 253
+        }
+      },
+      {
+        "id": "lake-town-south",
+        "name": "lake-town-south",
+        "from": "lake-town",
+        "to": "lake-south",
+        "points": [
+          [
+            -880,
+            -900
+          ],
+          [
+            -900,
+            -650
+          ],
+          [
+            -1050,
+            -450
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 5.9,
+        "lanes": 2,
+        "speedLimitKmh": 60,
+        "lengthM": 503.1728894013794,
+        "bounds": {
+          "minX": -1052.95,
+          "minZ": -902.95,
+          "maxX": -877.05,
+          "maxZ": -447.05
+        }
+      },
+      {
+        "id": "lake-south-farms",
+        "name": "lake-south-farms",
+        "from": "lake-south",
+        "to": "farms",
+        "points": [
+          [
+            -1050,
+            -450
+          ],
+          [
+            -1020,
+            -80
+          ],
+          [
+            -950,
+            250
+          ]
+        ],
+        "roadClass": "dirt",
+        "surface": "dirt",
+        "widthM": 4.6,
+        "lanes": 1,
+        "speedLimitKmh": 45,
+        "lengthM": 708.745910980051,
+        "bounds": {
+          "minX": -1052.3,
+          "minZ": -452.3,
+          "maxX": -947.7,
+          "maxZ": 252.3
+        }
+      },
+      {
+        "id": "farms-farm-north",
+        "name": "farms-farm-north",
+        "from": "farms",
+        "to": "farm-north",
+        "points": [
+          [
+            -950,
+            250
+          ],
+          [
+            -1040,
+            460
+          ],
+          [
+            -1100,
+            650
+          ]
+        ],
+        "roadClass": "dirt",
+        "surface": "dirt",
+        "widthM": 4.3,
+        "lanes": 1,
+        "speedLimitKmh": 40,
+        "lengthM": 427.79048336233654,
+        "bounds": {
+          "minX": -1102.15,
+          "minZ": 247.85,
+          "maxX": -947.85,
+          "maxZ": 652.15
+        }
+      },
+      {
+        "id": "farm-north-festival-west",
+        "name": "farm-north-festival-west",
+        "from": "farm-north",
+        "to": "festival-west",
+        "points": [
+          [
+            -1100,
+            650
+          ],
+          [
+            -760,
+            910
+          ],
+          [
+            -450,
+            1150
+          ]
+        ],
+        "roadClass": "dirt",
+        "surface": "dirt",
+        "widthM": 4.8,
+        "lanes": 1,
+        "speedLimitKmh": 50,
+        "lengthM": 820.0650820823404,
+        "bounds": {
+          "minX": -1102.4,
+          "minZ": 647.6,
+          "maxX": -447.6,
+          "maxZ": 1152.4
+        }
+      },
+      {
+        "id": "farm-north-center",
+        "name": "farm-north-center",
+        "from": "farm-north",
+        "to": "center",
+        "points": [
+          [
+            -1100,
+            650
+          ],
+          [
+            -520,
+            560
+          ],
+          [
+            0,
+            250
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 1195.0762870282763,
+        "bounds": {
+          "minX": -1103,
+          "minZ": 247,
+          "maxX": 3,
+          "maxZ": 653
+        }
+      },
+      {
+        "id": "west-gate-farm-north",
+        "name": "west-gate-farm-north",
+        "from": "west-gate",
+        "to": "farm-north",
+        "points": [
+          [
+            -1500,
+            650
+          ],
+          [
+            -1300,
+            690
+          ],
+          [
+            -1100,
+            650
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 5.8,
+        "lanes": 2,
+        "speedLimitKmh": 60,
+        "lengthM": 408.9107666015151,
+        "bounds": {
+          "minX": -1502.9,
+          "minZ": 647.1,
+          "maxX": -1097.1,
+          "maxZ": 692.9
+        }
+      },
+      {
+        "id": "city-ring-ne",
+        "name": "city-ring-ne",
+        "from": "city",
+        "to": "ring-ne",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1490,
+            -1300
+          ],
+          [
+            1650,
+            -1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 643.7733605553949,
+        "bounds": {
+          "minX": 1246.35,
+          "minZ": -1553.65,
+          "maxX": 1653.65,
+          "maxZ": -1046.35
+        }
+      },
+      {
+        "id": "city-city-port",
+        "name": "city-city-port",
+        "from": "city",
+        "to": "city-port",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1460,
+            -760
+          ],
+          [
+            1620,
+            -450
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 80,
+        "lengthM": 707.1631672847456,
+        "bounds": {
+          "minX": 1246.35,
+          "minZ": -1053.65,
+          "maxX": 1623.65,
+          "maxZ": -446.35
+        }
+      },
+      {
+        "id": "city-port-coast",
+        "name": "city-port-coast",
+        "from": "city-port",
+        "to": "coast",
+        "points": [
+          [
+            1620,
+            -450
+          ],
+          [
+            1710,
+            -120
+          ],
+          [
+            1650,
+            200
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.4,
+        "lanes": 2,
+        "speedLimitKmh": 80,
+        "lengthM": 669.7268180423691,
+        "bounds": {
+          "minX": 1616.8,
+          "minZ": -453.2,
+          "maxX": 1713.5197783621338,
+          "maxZ": 203.2
+        }
+      },
+      {
+        "id": "city-south-forest-north",
+        "name": "city-south-forest-north",
+        "from": "city-south",
+        "to": "forest-north",
+        "points": [
+          [
+            1250,
+            -700
+          ],
+          [
+            1210,
+            -220
+          ],
+          [
+            1150,
+            350
+          ]
+        ],
+        "roadClass": "motorway",
+        "surface": "asphalt",
+        "widthM": 10.4,
+        "lanes": 4,
+        "speedLimitKmh": 110,
+        "lengthM": 1054.8212407542053,
+        "bounds": {
+          "minX": 1144.8,
+          "minZ": -705.2,
+          "maxX": 1255.2,
+          "maxZ": 355.2
+        }
+      },
+      {
+        "id": "forest-north-forest",
+        "name": "forest-north-forest",
+        "from": "forest-north",
+        "to": "forest",
+        "points": [
+          [
+            1150,
+            350
+          ],
+          [
+            1080,
+            600
+          ],
+          [
+            1050,
+            850
+          ]
+        ],
+        "roadClass": "motorway",
+        "surface": "asphalt",
+        "widthM": 10.4,
+        "lanes": 4,
+        "speedLimitKmh": 110,
+        "lengthM": 511.60321267252755,
+        "bounds": {
+          "minX": 1044.8,
+          "minZ": 344.8,
+          "maxX": 1155.2,
+          "maxZ": 855.2
+        }
+      },
+      {
+        "id": "forest-east-gate",
+        "name": "forest-east-gate",
+        "from": "forest",
+        "to": "east-gate",
+        "points": [
+          [
+            1050,
+            850
+          ],
+          [
+            1280,
+            650
+          ],
+          [
+            1450,
+            500
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.3,
+        "lanes": 2,
+        "speedLimitKmh": 80,
+        "lengthM": 531.5111738132498,
+        "bounds": {
+          "minX": 1046.85,
+          "minZ": 496.85,
+          "maxX": 1453.15,
+          "maxZ": 853.15
+        }
+      },
+      {
+        "id": "forest-quarry",
+        "name": "forest-quarry",
+        "from": "forest",
+        "to": "quarry",
+        "points": [
+          [
+            1050,
+            850
+          ],
+          [
+            1180,
+            980
+          ],
+          [
+            1320,
+            1120
+          ]
+        ],
+        "roadClass": "dirt",
+        "surface": "dirt",
+        "widthM": 4.8,
+        "lanes": 1,
+        "speedLimitKmh": 45,
+        "lengthM": 381.8376618407356,
+        "bounds": {
+          "minX": 1047.6,
+          "minZ": 847.6,
+          "maxX": 1322.4,
+          "maxZ": 1122.4
+        }
+      },
+      {
+        "id": "quarry-ring-se",
+        "name": "quarry-ring-se",
+        "from": "quarry",
+        "to": "ring-se",
+        "points": [
+          [
+            1320,
+            1120
+          ],
+          [
+            1450,
+            1340
+          ],
+          [
+            1550,
+            1550
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 488.19608603692757,
+        "bounds": {
+          "minX": 1317,
+          "minZ": 1117,
+          "maxX": 1553,
+          "maxZ": 1553
+        }
+      },
+      {
+        "id": "forest-festival-east",
+        "name": "forest-festival-east",
+        "from": "forest",
+        "to": "festival-east",
+        "points": [
+          [
+            1050,
+            850
+          ],
+          [
+            790,
+            1060
+          ],
+          [
+            450,
+            1200
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 702.8464382777723,
+        "bounds": {
+          "minX": 446.35,
+          "minZ": 846.35,
+          "maxX": 1053.65,
+          "maxZ": 1203.65
+        }
+      },
+      {
+        "id": "festival-east-festival",
+        "name": "festival-east-festival",
+        "from": "festival-east",
+        "to": "festival",
+        "points": [
+          [
+            450,
+            1200
+          ],
+          [
+            220,
+            1280
+          ],
+          [
+            0,
+            1250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 467.1366787049911,
+        "bounds": {
+          "minX": -3.65,
+          "minZ": 1196.35,
+          "maxX": 453.65,
+          "maxZ": 1284.9805898491086
+        }
+      },
+      {
+        "id": "festival-west-festival",
+        "name": "festival-west-festival",
+        "from": "festival-west",
+        "to": "festival",
+        "points": [
+          [
+            -450,
+            1150
+          ],
+          [
+            -220,
+            1260
+          ],
+          [
+            0,
+            1250
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 476.95163198241085,
+        "bounds": {
+          "minX": -453.65,
+          "minZ": 1146.35,
+          "maxX": 3.65,
+          "maxZ": 1269.352496570645
+        }
+      },
+      {
+        "id": "festival-airfield",
+        "name": "festival-airfield",
+        "from": "festival",
+        "to": "airfield",
+        "points": [
+          [
+            0,
+            1250
+          ],
+          [
+            330,
+            1530
+          ],
+          [
+            650,
+            1725
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 807.8378525885241,
+        "bounds": {
+          "minX": -3.65,
+          "minZ": 1246.35,
+          "maxX": 653.65,
+          "maxZ": 1728.65
+        }
+      },
+      {
+        "id": "airfield-ring-se",
+        "name": "airfield-ring-se",
+        "from": "airfield",
+        "to": "ring-se",
+        "points": [
+          [
+            650,
+            1725
+          ],
+          [
+            1100,
+            1710
+          ],
+          [
+            1550,
+            1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 929.2475885961838,
+        "bounds": {
+          "minX": 646.35,
+          "minZ": 1546.35,
+          "maxX": 1553.65,
+          "maxZ": 1731.1594450290684
+        }
+      },
+      {
+        "id": "festival-south-gate",
+        "name": "festival-south-gate",
+        "from": "festival",
+        "to": "south-gate",
+        "points": [
+          [
+            0,
+            1250
+          ],
+          [
+            -240,
+            1420
+          ],
+          [
+            -450,
+            1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 541.1250283158344,
+        "bounds": {
+          "minX": -453.65,
+          "minZ": 1246.35,
+          "maxX": 3.65,
+          "maxZ": 1553.65
+        }
+      },
+      {
+        "id": "south-gate-ring-sw",
+        "name": "south-gate-ring-sw",
+        "from": "south-gate",
+        "to": "ring-sw",
+        "points": [
+          [
+            -450,
+            1550
+          ],
+          [
+            -980,
+            1600
+          ],
+          [
+            -1550,
+            1550
+          ]
+        ],
+        "roadClass": "A",
+        "surface": "asphalt",
+        "widthM": 7.3,
+        "lanes": 2,
+        "speedLimitKmh": 90,
+        "lengthM": 1105.1300920735548,
+        "bounds": {
+          "minX": -1553.65,
+          "minZ": 1546.35,
+          "maxX": -446.35,
+          "maxZ": 1603.65
+        }
+      },
+      {
+        "id": "festival-west-east-loop",
+        "name": "festival-west-east-loop",
+        "from": "festival-west",
+        "to": "festival-east",
+        "points": [
+          [
+            -450,
+            1150
+          ],
+          [
+            -120,
+            1450
+          ],
+          [
+            240,
+            1420
+          ],
+          [
+            450,
+            1200
+          ]
+        ],
+        "roadClass": "B",
+        "surface": "asphalt",
+        "widthM": 6.5,
+        "lanes": 2,
+        "speedLimitKmh": 70,
+        "lengthM": 1125.7399820753742,
+        "bounds": {
+          "minX": -453.25,
+          "minZ": 1146.75,
+          "maxX": 453.25,
+          "maxZ": 1474.7329943164439
+        }
+      },
+      {
+        "id": "city-west-link",
+        "name": "city-west-link",
+        "from": "city",
+        "to": "city-west",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1100,
+            -980
+          ],
+          [
+            950,
+            -900
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 7,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 335.54490442995865,
+        "bounds": {
+          "minX": 946.5,
+          "minZ": -1053.5,
+          "maxX": 1253.5,
+          "maxZ": -896.5
+        }
+      },
+      {
+        "id": "city-east-link",
+        "name": "city-east-link",
+        "from": "city",
+        "to": "city-east",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1410,
+            -980
+          ],
+          [
+            1550,
+            -900
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 7,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 335.94971403244864,
+        "bounds": {
+          "minX": 1246.5,
+          "minZ": -1053.5,
+          "maxX": 1553.5,
+          "maxZ": -896.5
+        }
+      },
+      {
+        "id": "city-north-link",
+        "name": "city-north-link",
+        "from": "city",
+        "to": "city-north",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1250,
+            -1200
+          ],
+          [
+            1250,
+            -1350
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 7,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 300,
+        "bounds": {
+          "minX": 1246.5,
+          "minZ": -1353.5,
+          "maxX": 1253.5,
+          "maxZ": -1046.5
+        }
+      },
+      {
+        "id": "city-south-link",
+        "name": "city-south-link",
+        "from": "city",
+        "to": "city-south",
+        "points": [
+          [
+            1250,
+            -1050
+          ],
+          [
+            1250,
+            -870
+          ],
+          [
+            1250,
+            -700
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 7,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 350,
+        "bounds": {
+          "minX": 1246.5,
+          "minZ": -1053.5,
+          "maxX": 1253.5,
+          "maxZ": -696.5
+        }
+      },
+      {
+        "id": "city-loop-west",
+        "name": "city-loop-west",
+        "from": "city-west",
+        "to": "city-north",
+        "points": [
+          [
+            950,
+            -900
+          ],
+          [
+            1020,
+            -1180
+          ],
+          [
+            1250,
+            -1350
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 6.6,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 578.5344711819718,
+        "bounds": {
+          "minX": 946.7,
+          "minZ": -1353.3,
+          "maxX": 1253.3,
+          "maxZ": -896.7
+        }
+      },
+      {
+        "id": "city-loop-east",
+        "name": "city-loop-east",
+        "from": "city-north",
+        "to": "city-east",
+        "points": [
+          [
+            1250,
+            -1350
+          ],
+          [
+            1480,
+            -1180
+          ],
+          [
+            1550,
+            -900
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 6.6,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 578.5344711819721,
+        "bounds": {
+          "minX": 1246.7,
+          "minZ": -1353.3,
+          "maxX": 1553.3,
+          "maxZ": -896.7
+        }
+      },
+      {
+        "id": "city-loop-south",
+        "name": "city-loop-south",
+        "from": "city-east",
+        "to": "city-south",
+        "points": [
+          [
+            1550,
+            -900
+          ],
+          [
+            1450,
+            -720
+          ],
+          [
+            1250,
+            -700
+          ]
+        ],
+        "roadClass": "city",
+        "surface": "asphalt",
+        "widthM": 6.6,
+        "lanes": 2,
+        "speedLimitKmh": 50,
+        "lengthM": 411.7097610660493,
+        "bounds": {
+          "minX": 1246.7,
+          "minZ": -903.3,
+          "maxX": 1553.3,
+          "maxZ": -695.4153407524558
+        }
+      }
+    ]
+  },
+  "chunks": [
+    {
+      "key": "0_0",
+      "cx": 0,
+      "cz": 0,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -2000,
+        "maxX": -1750,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -1875,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 18.62267460592005,
+        "max": 41.88658357287312
+      }
+    },
+    {
+      "key": "1_0",
+      "cx": 1,
+      "cz": 0,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -2000,
+        "maxX": -1500,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -1625,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 24.78882421095394,
+        "max": 48.34630705533484
+      }
+    },
+    {
+      "key": "2_0",
+      "cx": 2,
+      "cz": 0,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -2000,
+        "maxX": -1250,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -1375,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 25.62105807712264,
+        "max": 49.359577658557896
+      }
+    },
+    {
+      "key": "3_0",
+      "cx": 3,
+      "cz": 0,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -2000,
+        "maxX": -1000,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -1125,
+        "z": -1875
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 25.31632933286509,
+        "max": 48.0313702529847
+      }
+    },
+    {
+      "key": "4_0",
+      "cx": 4,
+      "cz": 0,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -2000,
+        "maxX": -750,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -875,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 22.726232626327945,
+        "max": 42.17501821474019
+      }
+    },
+    {
+      "key": "5_0",
+      "cx": 5,
+      "cz": 0,
+      "bounds": {
+        "minX": -750,
+        "minZ": -2000,
+        "maxX": -500,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -625,
+        "z": -1875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 21.915569143090988,
+        "max": 33.23634803371438
+      }
+    },
+    {
+      "key": "6_0",
+      "cx": 6,
+      "cz": 0,
+      "bounds": {
+        "minX": -500,
+        "minZ": -2000,
+        "maxX": -250,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -375,
+        "z": -1875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 20.828091554831296,
+        "max": 28.717730918945943
+      }
+    },
+    {
+      "key": "7_0",
+      "cx": 7,
+      "cz": 0,
+      "bounds": {
+        "minX": -250,
+        "minZ": -2000,
+        "maxX": 0,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": -125,
+        "z": -1875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 19.49048152353548,
+        "max": 27.638209952434465
+      }
+    },
+    {
+      "key": "8_0",
+      "cx": 8,
+      "cz": 0,
+      "bounds": {
+        "minX": 0,
+        "minZ": -2000,
+        "maxX": 250,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 125,
+        "z": -1875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.373984530231606,
+        "max": 26.73116601725191
+      }
+    },
+    {
+      "key": "9_0",
+      "cx": 9,
+      "cz": 0,
+      "bounds": {
+        "minX": 250,
+        "minZ": -2000,
+        "maxX": 500,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 375,
+        "z": -1875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 16.596514139559222,
+        "max": 33.87333222167236
+      }
+    },
+    {
+      "key": "10_0",
+      "cx": 10,
+      "cz": 0,
+      "bounds": {
+        "minX": 500,
+        "minZ": -2000,
+        "maxX": 750,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 625,
+        "z": -1875
+      },
+      "districtIds": [
+        "castle-hill"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.53480471839376,
+        "max": 42.70315311960569
+      }
+    },
+    {
+      "key": "11_0",
+      "cx": 11,
+      "cz": 0,
+      "bounds": {
+        "minX": 750,
+        "minZ": -2000,
+        "maxX": 1000,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 875,
+        "z": -1875
+      },
+      "districtIds": [
+        "castle-hill"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.41025537627341,
+        "max": 43.47087314218541
+      }
+    },
+    {
+      "key": "12_0",
+      "cx": 12,
+      "cz": 0,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -2000,
+        "maxX": 1250,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 1125,
+        "z": -1875
+      },
+      "districtIds": [
+        "castle-hill"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 13.414440314328353,
+        "max": 40.428612850741416
+      }
+    },
+    {
+      "key": "13_0",
+      "cx": 13,
+      "cz": 0,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -2000,
+        "maxX": 1500,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 1375,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.782798650400705,
+        "max": 24.523851811297487
+      }
+    },
+    {
+      "key": "14_0",
+      "cx": 14,
+      "cz": 0,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -2000,
+        "maxX": 1750,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 1625,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 3.55039188012791,
+        "max": 11.668705699143425
+      }
+    },
+    {
+      "key": "15_0",
+      "cx": 15,
+      "cz": 0,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -2000,
+        "maxX": 2000,
+        "maxZ": -1750
+      },
+      "center": {
+        "x": 1875,
+        "z": -1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.0209172887401494,
+        "max": 3.9993636157243975
+      }
+    },
+    {
+      "key": "0_1",
+      "cx": 0,
+      "cz": 1,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -1750,
+        "maxX": -1750,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -1875,
+        "z": -1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 29.53228375624359,
+        "max": 62.033366213216325
+      }
+    },
+    {
+      "key": "1_1",
+      "cx": 1,
+      "cz": 1,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -1750,
+        "maxX": -1500,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -1625,
+        "z": -1625
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "nw-lake-west",
+        "ring-nw-n",
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 41.88658357287312,
+        "max": 74.3316274706197
+      }
+    },
+    {
+      "key": "2_1",
+      "cx": 2,
+      "cz": 1,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -1750,
+        "maxX": -1250,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -1375,
+        "z": -1625
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 48.0313702529847,
+        "max": 76.57215393499536
+      }
+    },
+    {
+      "key": "3_1",
+      "cx": 3,
+      "cz": 1,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -1750,
+        "maxX": -1000,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -1125,
+        "z": -1625
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 42.17501821474019,
+        "max": 73.72387492441901
+      }
+    },
+    {
+      "key": "4_1",
+      "cx": 4,
+      "cz": 1,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -1750,
+        "maxX": -750,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -875,
+        "z": -1625
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 33.23634803371438,
+        "max": 60.01093916659326
+      }
+    },
+    {
+      "key": "5_1",
+      "cx": 5,
+      "cz": 1,
+      "bounds": {
+        "minX": -750,
+        "minZ": -1750,
+        "maxX": -500,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -625,
+        "z": -1625
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 28.717730918945943,
+        "max": 45.703323203980354
+      }
+    },
+    {
+      "key": "6_1",
+      "cx": 6,
+      "cz": 1,
+      "bounds": {
+        "minX": -500,
+        "minZ": -1750,
+        "maxX": -250,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -375,
+        "z": -1625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 27.01265885871776,
+        "max": 37.302343792130195
+      }
+    },
+    {
+      "key": "7_1",
+      "cx": 7,
+      "cz": 1,
+      "bounds": {
+        "minX": -250,
+        "minZ": -1750,
+        "maxX": 0,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": -125,
+        "z": -1625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-n-moor",
+        "ring-n-ne",
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 26.73116601725191,
+        "max": 34.27792768028856
+      }
+    },
+    {
+      "key": "8_1",
+      "cx": 8,
+      "cz": 1,
+      "bounds": {
+        "minX": 0,
+        "minZ": -1750,
+        "maxX": 250,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 125,
+        "z": -1625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-n-moor",
+        "ring-n-ne",
+        "ring-nw-n"
+      ],
+      "heightRangeM": {
+        "min": 25.2247786865644,
+        "max": 35.85805503403696
+      }
+    },
+    {
+      "key": "9_1",
+      "cx": 9,
+      "cz": 1,
+      "bounds": {
+        "minX": 250,
+        "minZ": -1750,
+        "maxX": 500,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 375,
+        "z": -1625
+      },
+      "districtIds": [
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-n-ne"
+      ],
+      "heightRangeM": {
+        "min": 25.543326131706486,
+        "max": 48.73605020814568
+      }
+    },
+    {
+      "key": "10_1",
+      "cx": 10,
+      "cz": 1,
+      "bounds": {
+        "minX": 500,
+        "minZ": -1750,
+        "maxX": 750,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 625,
+        "z": -1625
+      },
+      "districtIds": [
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "ring-n-ne"
+      ],
+      "heightRangeM": {
+        "min": 33.87333222167236,
+        "max": 61.022633109869915
+      }
+    },
+    {
+      "key": "11_1",
+      "cx": 11,
+      "cz": 1,
+      "bounds": {
+        "minX": 750,
+        "minZ": -1750,
+        "maxX": 1000,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 875,
+        "z": -1625
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "ring-n-ne"
+      ],
+      "heightRangeM": {
+        "min": 38.48706206358705,
+        "max": 61.022633109869915
+      }
+    },
+    {
+      "key": "12_1",
+      "cx": 12,
+      "cz": 1,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -1750,
+        "maxX": 1250,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 1125,
+        "z": -1625
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "ring-n-ne"
+      ],
+      "heightRangeM": {
+        "min": 18.562526705721673,
+        "max": 47.59221280879392
+      }
+    },
+    {
+      "key": "13_1",
+      "cx": 13,
+      "cz": 1,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -1750,
+        "maxX": 1500,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 1375,
+        "z": -1625
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "ring-n-ne"
+      ],
+      "heightRangeM": {
+        "min": 11.668705699143425,
+        "max": 26.50858561796383
+      }
+    },
+    {
+      "key": "14_1",
+      "cx": 14,
+      "cz": 1,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -1750,
+        "maxX": 1750,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 1625,
+        "z": -1625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-ring-ne",
+        "ring-n-ne",
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 3.9993636157243975,
+        "max": 13.654402160073316
+      }
+    },
+    {
+      "key": "15_1",
+      "cx": 15,
+      "cz": 1,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -1750,
+        "maxX": 2000,
+        "maxZ": -1500
+      },
+      "center": {
+        "x": 1875,
+        "z": -1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.0021787996504243,
+        "max": 4.614323359246892
+      }
+    },
+    {
+      "key": "0_2",
+      "cx": 0,
+      "cz": 2,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -1500,
+        "maxX": -1750,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -1875,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 41.525263724565896,
+        "max": 77.84779892539925
+      }
+    },
+    {
+      "key": "1_2",
+      "cx": 1,
+      "cz": 2,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -1500,
+        "maxX": -1500,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -1625,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "nw-lake-west",
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 62.033366213216325,
+        "max": 91.82705696042677
+      }
+    },
+    {
+      "key": "2_2",
+      "cx": 2,
+      "cz": 2,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -1500,
+        "maxX": -1250,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -1375,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "lake-west-highlands",
+        "lake-west-town",
+        "nw-lake-west"
+      ],
+      "heightRangeM": {
+        "min": 11.597690968720016,
+        "max": 90.65675800291176
+      }
+    },
+    {
+      "key": "3_2",
+      "cx": 3,
+      "cz": 2,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -1500,
+        "maxX": -1000,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -1125,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.69793644401615,
+        "max": 79.60583153574018
+      }
+    },
+    {
+      "key": "4_2",
+      "cx": 4,
+      "cz": 2,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -1500,
+        "maxX": -750,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -875,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 41.79779334899125,
+        "max": 68.27520272275194
+      }
+    },
+    {
+      "key": "5_2",
+      "cx": 5,
+      "cz": 2,
+      "bounds": {
+        "minX": -750,
+        "minZ": -1500,
+        "maxX": -500,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -625,
+        "z": -1375
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 37.302343792130195,
+        "max": 52.81487012658297
+      }
+    },
+    {
+      "key": "6_2",
+      "cx": 6,
+      "cz": 2,
+      "bounds": {
+        "minX": -500,
+        "minZ": -1500,
+        "maxX": -250,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -375,
+        "z": -1375
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor"
+      ],
+      "heightRangeM": {
+        "min": 34.27792768028856,
+        "max": 42.25711798159615
+      }
+    },
+    {
+      "key": "7_2",
+      "cx": 7,
+      "cz": 2,
+      "bounds": {
+        "minX": -250,
+        "minZ": -1500,
+        "maxX": 0,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": -125,
+        "z": -1375
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor",
+        "moor-center",
+        "moor-moor-east",
+        "moor-north-gate",
+        "ring-n-moor"
+      ],
+      "heightRangeM": {
+        "min": 34.04183077507288,
+        "max": 37.982139265368204
+      }
+    },
+    {
+      "key": "8_2",
+      "cx": 8,
+      "cz": 2,
+      "bounds": {
+        "minX": 0,
+        "minZ": -1500,
+        "maxX": 250,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 125,
+        "z": -1375
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-north-gate"
+      ],
+      "heightRangeM": {
+        "min": 33.97324279017547,
+        "max": 38.356352604789535
+      }
+    },
+    {
+      "key": "9_2",
+      "cx": 9,
+      "cz": 2,
+      "bounds": {
+        "minX": 250,
+        "minZ": -1500,
+        "maxX": 500,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 375,
+        "z": -1375
+      },
+      "districtIds": [
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-north-gate",
+        "north-gate-castle-gate"
+      ],
+      "heightRangeM": {
+        "min": 35.85805503403696,
+        "max": 50.13519051509859
+      }
+    },
+    {
+      "key": "10_2",
+      "cx": 10,
+      "cz": 2,
+      "bounds": {
+        "minX": 500,
+        "minZ": -1500,
+        "maxX": 750,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 625,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "castle-city-west",
+        "castle-switchback",
+        "north-gate-castle-gate"
+      ],
+      "heightRangeM": {
+        "min": 41.553236257980444,
+        "max": 61.14922238473281
+      }
+    },
+    {
+      "key": "11_2",
+      "cx": 11,
+      "cz": 2,
+      "bounds": {
+        "minX": 750,
+        "minZ": -1500,
+        "maxX": 1000,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 875,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "castle-city-north",
+        "castle-switchback"
+      ],
+      "heightRangeM": {
+        "min": 17.73145335408967,
+        "max": 61.022633109869915
+      }
+    },
+    {
+      "key": "12_2",
+      "cx": 12,
+      "cz": 2,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -1500,
+        "maxX": 1250,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 1125,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "castle-city-north",
+        "city-loop-east",
+        "city-loop-west",
+        "city-north-link"
+      ],
+      "heightRangeM": {
+        "min": 13.753202005581155,
+        "max": 38.48706206358705
+      }
+    },
+    {
+      "key": "13_2",
+      "cx": 13,
+      "cz": 2,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -1500,
+        "maxX": 1500,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 1375,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "castle-city-north",
+        "city-loop-east",
+        "city-loop-west",
+        "city-north-link",
+        "city-ring-ne"
+      ],
+      "heightRangeM": {
+        "min": 10.551250554868513,
+        "max": 18.562526705721673
+      }
+    },
+    {
+      "key": "14_2",
+      "cx": 14,
+      "cz": 2,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -1500,
+        "maxX": 1750,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 1625,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-ring-ne",
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 4.614323359246892,
+        "max": 12.8414096116895
+      }
+    },
+    {
+      "key": "15_2",
+      "cx": 15,
+      "cz": 2,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -1500,
+        "maxX": 2000,
+        "maxZ": -1250
+      },
+      "center": {
+        "x": 1875,
+        "z": -1375
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.0021787996504243,
+        "max": 4.778060790103268
+      }
+    },
+    {
+      "key": "0_3",
+      "cx": 0,
+      "cz": 3,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -1250,
+        "maxX": -1750,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -1875,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 49.21352967803471,
+        "max": 84.79404051901807
+      }
+    },
+    {
+      "key": "1_3",
+      "cx": 1,
+      "cz": 3,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -1250,
+        "maxX": -1500,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -1625,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "lake-west-highlands",
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 69.70506776858043,
+        "max": 96.04404850426138
+      }
+    },
+    {
+      "key": "2_3",
+      "cx": 2,
+      "cz": 3,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -1250,
+        "maxX": -1250,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -1375,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "lake-west-highlands",
+        "lake-west-town",
+        "nw-lake-west"
+      ],
+      "heightRangeM": {
+        "min": -1.4364760920909276,
+        "max": 90.65675800291176
+      }
+    },
+    {
+      "key": "3_3",
+      "cx": 3,
+      "cz": 3,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -1250,
+        "maxX": -1000,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -1125,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": -1.9958750183323275,
+        "max": 41.79779334899125
+      }
+    },
+    {
+      "key": "4_3",
+      "cx": 4,
+      "cz": 3,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -1250,
+        "maxX": -750,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -875,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 6.645381237299048,
+        "max": 62.30144226028202
+      }
+    },
+    {
+      "key": "5_3",
+      "cx": 5,
+      "cz": 3,
+      "bounds": {
+        "minX": -750,
+        "minZ": -1250,
+        "maxX": -500,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -625,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor"
+      ],
+      "heightRangeM": {
+        "min": 39.40352033219113,
+        "max": 53.843331040923594
+      }
+    },
+    {
+      "key": "6_3",
+      "cx": 6,
+      "cz": 3,
+      "bounds": {
+        "minX": -500,
+        "minZ": -1250,
+        "maxX": -250,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -375,
+        "z": -1125
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor"
+      ],
+      "heightRangeM": {
+        "min": 35.08667612884974,
+        "max": 42.25711798159615
+      }
+    },
+    {
+      "key": "7_3",
+      "cx": 7,
+      "cz": 3,
+      "bounds": {
+        "minX": -250,
+        "minZ": -1250,
+        "maxX": 0,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": -125,
+        "z": -1125
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor",
+        "moor-center",
+        "moor-moor-east",
+        "moor-north-gate",
+        "ring-n-moor"
+      ],
+      "heightRangeM": {
+        "min": 32.302203612272365,
+        "max": 37.93997976397196
+      }
+    },
+    {
+      "key": "8_3",
+      "cx": 8,
+      "cz": 3,
+      "bounds": {
+        "minX": 0,
+        "minZ": -1250,
+        "maxX": 250,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 125,
+        "z": -1125
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-moor-east"
+      ],
+      "heightRangeM": {
+        "min": 31.762687204684713,
+        "max": 37.993663788334786
+      }
+    },
+    {
+      "key": "9_3",
+      "cx": 9,
+      "cz": 3,
+      "bounds": {
+        "minX": 250,
+        "minZ": -1250,
+        "maxX": 500,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 375,
+        "z": -1125
+      },
+      "districtIds": [
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-east-city-west",
+        "moor-moor-east"
+      ],
+      "heightRangeM": {
+        "min": 33.10516470089545,
+        "max": 47.58185866892591
+      }
+    },
+    {
+      "key": "10_3",
+      "cx": 10,
+      "cz": 3,
+      "bounds": {
+        "minX": 500,
+        "minZ": -1250,
+        "maxX": 750,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 625,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "castle-city-west",
+        "castle-switchback",
+        "moor-east-city-west",
+        "north-gate-castle-gate"
+      ],
+      "heightRangeM": {
+        "min": 23.399720934135033,
+        "max": 51.03763552613055
+      }
+    },
+    {
+      "key": "11_3",
+      "cx": 11,
+      "cz": 3,
+      "bounds": {
+        "minX": 750,
+        "minZ": -1250,
+        "maxX": 1000,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 875,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "castle-city-west",
+        "city-loop-west",
+        "moor-east-city-west"
+      ],
+      "heightRangeM": {
+        "min": 13.266322236155121,
+        "max": 41.553236257980444
+      }
+    },
+    {
+      "key": "12_3",
+      "cx": 12,
+      "cz": 3,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -1250,
+        "maxX": 1250,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 1125,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "city-city-port",
+        "city-east-link",
+        "city-loop-west",
+        "city-north-link",
+        "city-ring-ne",
+        "city-south-link",
+        "city-west-link"
+      ],
+      "heightRangeM": {
+        "min": 11.681912408332808,
+        "max": 17.73145335408967
+      }
+    },
+    {
+      "key": "13_3",
+      "cx": 13,
+      "cz": 3,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -1250,
+        "maxX": 1500,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 1375,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-city-port",
+        "city-east-link",
+        "city-loop-east",
+        "city-north-link",
+        "city-ring-ne",
+        "city-south-link",
+        "city-west-link"
+      ],
+      "heightRangeM": {
+        "min": 9.764874525991674,
+        "max": 13.753202005581155
+      }
+    },
+    {
+      "key": "14_3",
+      "cx": 14,
+      "cz": 3,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -1250,
+        "maxX": 1750,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 1625,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-loop-east",
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 4.382158089680116,
+        "max": 10.551250554868513
+      }
+    },
+    {
+      "key": "15_3",
+      "cx": 15,
+      "cz": 3,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -1250,
+        "maxX": 2000,
+        "maxZ": -1000
+      },
+      "center": {
+        "x": 1875,
+        "z": -1125
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 2.0511204768188156,
+        "max": 4.756869775104394
+      }
+    },
+    {
+      "key": "0_4",
+      "cx": 0,
+      "cz": 4,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -1000,
+        "maxX": -1750,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -1875,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 53.89175069101939,
+        "max": 86.41495394337957
+      }
+    },
+    {
+      "key": "1_4",
+      "cx": 1,
+      "cz": 4,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -1000,
+        "maxX": -1500,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -1625,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-west-highlands"
+      ],
+      "heightRangeM": {
+        "min": 72.32124977050464,
+        "max": 101.13214853508194
+      }
+    },
+    {
+      "key": "2_4",
+      "cx": 2,
+      "cz": 4,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -1000,
+        "maxX": -1250,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -1375,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": -1.3911612910988538,
+        "max": 101.13214853508194
+      }
+    },
+    {
+      "key": "3_4",
+      "cx": 3,
+      "cz": 4,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -1000,
+        "maxX": -1000,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -1125,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": -1.9958750183323275,
+        "max": 64.46386434984399
+      }
+    },
+    {
+      "key": "4_4",
+      "cx": 4,
+      "cz": 4,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -1000,
+        "maxX": -750,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -875,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor",
+        "lake-town-south",
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": 8.515183793099808,
+        "max": 64.42178449126423
+      }
+    },
+    {
+      "key": "5_4",
+      "cx": 5,
+      "cz": 4,
+      "bounds": {
+        "minX": -750,
+        "minZ": -1000,
+        "maxX": -500,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -625,
+        "z": -875
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "lake-town-moor"
+      ],
+      "heightRangeM": {
+        "min": 31.610768374056626,
+        "max": 52.37049571127796
+      }
+    },
+    {
+      "key": "6_4",
+      "cx": 6,
+      "cz": 4,
+      "bounds": {
+        "minX": -500,
+        "minZ": -1000,
+        "maxX": -250,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -375,
+        "z": -875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 28.59611161680935,
+        "max": 39.40352033219113
+      }
+    },
+    {
+      "key": "7_4",
+      "cx": 7,
+      "cz": 4,
+      "bounds": {
+        "minX": -250,
+        "minZ": -1000,
+        "maxX": 0,
+        "maxZ": -750
+      },
+      "center": {
+        "x": -125,
+        "z": -875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 28.156446832443812,
+        "max": 35.08667612884974
+      }
+    },
+    {
+      "key": "8_4",
+      "cx": 8,
+      "cz": 4,
+      "bounds": {
+        "minX": 0,
+        "minZ": -1000,
+        "maxX": 250,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 125,
+        "z": -875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 26.169392896350505,
+        "max": 33.10516470089545
+      }
+    },
+    {
+      "key": "9_4",
+      "cx": 9,
+      "cz": 4,
+      "bounds": {
+        "minX": 250,
+        "minZ": -1000,
+        "maxX": 500,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 375,
+        "z": -875
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 24.978931294449374,
+        "max": 34.2331263363563
+      }
+    },
+    {
+      "key": "10_4",
+      "cx": 10,
+      "cz": 4,
+      "bounds": {
+        "minX": 500,
+        "minZ": -1000,
+        "maxX": 750,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 625,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city",
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-east-city-west"
+      ],
+      "heightRangeM": {
+        "min": 18.348883519829247,
+        "max": 34.86633977445694
+      }
+    },
+    {
+      "key": "11_4",
+      "cx": 11,
+      "cz": 4,
+      "bounds": {
+        "minX": 750,
+        "minZ": -1000,
+        "maxX": 1000,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 875,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city",
+        "castle-hill"
+      ],
+      "roadEdgeIds": [
+        "castle-city-west",
+        "city-loop-west",
+        "city-west-link",
+        "moor-east-city-west"
+      ],
+      "heightRangeM": {
+        "min": 11.287293174777085,
+        "max": 23.399720934135033
+      }
+    },
+    {
+      "key": "12_4",
+      "cx": 12,
+      "cz": 4,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -1000,
+        "maxX": 1250,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 1125,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-south-link",
+        "city-west-link"
+      ],
+      "heightRangeM": {
+        "min": 10.24036494319115,
+        "max": 13.266322236155121
+      }
+    },
+    {
+      "key": "13_4",
+      "cx": 13,
+      "cz": 4,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -1000,
+        "maxX": 1500,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 1375,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-city-port",
+        "city-east-link",
+        "city-loop-south",
+        "city-south-link"
+      ],
+      "heightRangeM": {
+        "min": 8.825293170368875,
+        "max": 11.681912408332808
+      }
+    },
+    {
+      "key": "14_4",
+      "cx": 14,
+      "cz": 4,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -1000,
+        "maxX": 1750,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 1625,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-east-link",
+        "city-loop-east",
+        "city-loop-south"
+      ],
+      "heightRangeM": {
+        "min": 3.6869929593693156,
+        "max": 9.764874525991674
+      }
+    },
+    {
+      "key": "15_4",
+      "cx": 15,
+      "cz": 4,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -1000,
+        "maxX": 2000,
+        "maxZ": -750
+      },
+      "center": {
+        "x": 1875,
+        "z": -875
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 2.0347045772231502,
+        "max": 4.382158089680116
+      }
+    },
+    {
+      "key": "0_5",
+      "cx": 0,
+      "cz": 5,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -750,
+        "maxX": -1750,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -1875,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 54.08322963700367,
+        "max": 86.12194276524728
+      }
+    },
+    {
+      "key": "1_5",
+      "cx": 1,
+      "cz": 5,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -750,
+        "maxX": -1500,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -1625,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-west-highlands"
+      ],
+      "heightRangeM": {
+        "min": 85.51077713143843,
+        "max": 100.9896698408597
+      }
+    },
+    {
+      "key": "2_5",
+      "cx": 2,
+      "cz": 5,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -750,
+        "maxX": -1250,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -1375,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": 64.46386434984399,
+        "max": 100.9896698408597
+      }
+    },
+    {
+      "key": "3_5",
+      "cx": 3,
+      "cz": 5,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -750,
+        "maxX": -1000,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -1125,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-town-south",
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": 58.417621078664,
+        "max": 88.72936399733791
+      }
+    },
+    {
+      "key": "4_5",
+      "cx": 4,
+      "cz": 5,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -750,
+        "maxX": -750,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -875,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-town-south",
+        "lake-west-town"
+      ],
+      "heightRangeM": {
+        "min": 36.06283499315049,
+        "max": 64.42178449126423
+      }
+    },
+    {
+      "key": "5_5",
+      "cx": 5,
+      "cz": 5,
+      "bounds": {
+        "minX": -750,
+        "minZ": -750,
+        "maxX": -500,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -625,
+        "z": -625
+      },
+      "districtIds": [
+        "lake-district",
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 24.533404170294297,
+        "max": 42.93447583041204
+      }
+    },
+    {
+      "key": "6_5",
+      "cx": 6,
+      "cz": 5,
+      "bounds": {
+        "minX": -500,
+        "minZ": -750,
+        "maxX": -250,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -375,
+        "z": -625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 22.100537926859307,
+        "max": 31.610768374056626
+      }
+    },
+    {
+      "key": "7_5",
+      "cx": 7,
+      "cz": 5,
+      "bounds": {
+        "minX": -250,
+        "minZ": -750,
+        "maxX": 0,
+        "maxZ": -500
+      },
+      "center": {
+        "x": -125,
+        "z": -625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 21.445257094900416,
+        "max": 29.854122543489087
+      }
+    },
+    {
+      "key": "8_5",
+      "cx": 8,
+      "cz": 5,
+      "bounds": {
+        "minX": 0,
+        "minZ": -750,
+        "maxX": 250,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 125,
+        "z": -625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 18.87852628167118,
+        "max": 29.854122543489087
+      }
+    },
+    {
+      "key": "9_5",
+      "cx": 9,
+      "cz": 5,
+      "bounds": {
+        "minX": 250,
+        "minZ": -750,
+        "maxX": 500,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 375,
+        "z": -625
+      },
+      "districtIds": [
+        "moorland"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.06800036407605,
+        "max": 26.64040957841458
+      }
+    },
+    {
+      "key": "10_5",
+      "cx": 10,
+      "cz": 5,
+      "bounds": {
+        "minX": 500,
+        "minZ": -750,
+        "maxX": 750,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 625,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 13.389087027987953,
+        "max": 24.978931294449374
+      }
+    },
+    {
+      "key": "11_5",
+      "cx": 11,
+      "cz": 5,
+      "bounds": {
+        "minX": 750,
+        "minZ": -750,
+        "maxX": 1000,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 875,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 11.441716599742133,
+        "max": 18.348883519829247
+      }
+    },
+    {
+      "key": "12_5",
+      "cx": 12,
+      "cz": 5,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -750,
+        "maxX": 1250,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 1125,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-loop-south",
+        "city-south-forest-north",
+        "city-south-link"
+      ],
+      "heightRangeM": {
+        "min": 10.065157408030657,
+        "max": 12.567258641852028
+      }
+    },
+    {
+      "key": "13_5",
+      "cx": 13,
+      "cz": 5,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -750,
+        "maxX": 1500,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 1375,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-city-port",
+        "city-loop-south",
+        "city-south-forest-north",
+        "city-south-link"
+      ],
+      "heightRangeM": {
+        "min": 7.423964642836684,
+        "max": 10.24036494319115
+      }
+    },
+    {
+      "key": "14_5",
+      "cx": 14,
+      "cz": 5,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -750,
+        "maxX": 1750,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 1625,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-city-port"
+      ],
+      "heightRangeM": {
+        "min": 3.156444351374396,
+        "max": 8.844457298679314
+      }
+    },
+    {
+      "key": "15_5",
+      "cx": 15,
+      "cz": 5,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -750,
+        "maxX": 2000,
+        "maxZ": -500
+      },
+      "center": {
+        "x": 1875,
+        "z": -625
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 2.06312378363336,
+        "max": 3.6869929593693156
+      }
+    },
+    {
+      "key": "0_6",
+      "cx": 0,
+      "cz": 6,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -500,
+        "maxX": -1750,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -1875,
+        "z": -375
+      },
+      "districtIds": [
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-w-nw"
+      ],
+      "heightRangeM": {
+        "min": 52.79253814355892,
+        "max": 85.79469887574577
+      }
+    },
+    {
+      "key": "1_6",
+      "cx": 1,
+      "cz": 6,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -500,
+        "maxX": -1500,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -1625,
+        "z": -375
+      },
+      "districtIds": [
+        "lake-district",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-farms",
+        "highlands-ring-w",
+        "lake-west-highlands"
+      ],
+      "heightRangeM": {
+        "min": 80.6059413710728,
+        "max": 98.16884442775283
+      }
+    },
+    {
+      "key": "2_6",
+      "cx": 2,
+      "cz": 6,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -500,
+        "maxX": -1250,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -1375,
+        "z": -375
+      },
+      "districtIds": [
+        "lake-district",
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 74.91766873082783,
+        "max": 98.16884442775283
+      }
+    },
+    {
+      "key": "3_6",
+      "cx": 3,
+      "cz": 6,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -500,
+        "maxX": -1000,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -1125,
+        "z": -375
+      },
+      "districtIds": [
+        "lake-district",
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-south-farms",
+        "lake-town-south"
+      ],
+      "heightRangeM": {
+        "min": 47.32247739801096,
+        "max": 84.74691723282844
+      }
+    },
+    {
+      "key": "4_6",
+      "cx": 4,
+      "cz": 6,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -500,
+        "maxX": -750,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -875,
+        "z": -375
+      },
+      "districtIds": [
+        "lake-district",
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "lake-town-south"
+      ],
+      "heightRangeM": {
+        "min": 29.357799648250563,
+        "max": 59.27361165971948
+      }
+    },
+    {
+      "key": "5_6",
+      "cx": 5,
+      "cz": 6,
+      "bounds": {
+        "minX": -750,
+        "minZ": -500,
+        "maxX": -500,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -625,
+        "z": -375
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.250907608946267,
+        "max": 36.06283499315049
+      }
+    },
+    {
+      "key": "6_6",
+      "cx": 6,
+      "cz": 6,
+      "bounds": {
+        "minX": -500,
+        "minZ": -500,
+        "maxX": -250,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -375,
+        "z": -375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 16.38489374045335,
+        "max": 24.533404170294297
+      }
+    },
+    {
+      "key": "7_6",
+      "cx": 7,
+      "cz": 6,
+      "bounds": {
+        "minX": -250,
+        "minZ": -500,
+        "maxX": 0,
+        "maxZ": -250
+      },
+      "center": {
+        "x": -125,
+        "z": -375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 14.00532393155756,
+        "max": 22.20341371888585
+      }
+    },
+    {
+      "key": "8_6",
+      "cx": 8,
+      "cz": 6,
+      "bounds": {
+        "minX": 0,
+        "minZ": -500,
+        "maxX": 250,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 125,
+        "z": -375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 11.504321231322994,
+        "max": 21.445257094900416
+      }
+    },
+    {
+      "key": "9_6",
+      "cx": 9,
+      "cz": 6,
+      "bounds": {
+        "minX": 250,
+        "minZ": -500,
+        "maxX": 500,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 375,
+        "z": -375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 11.025637168936173,
+        "max": 19.079401578463344
+      }
+    },
+    {
+      "key": "10_6",
+      "cx": 10,
+      "cz": 6,
+      "bounds": {
+        "minX": 500,
+        "minZ": -500,
+        "maxX": 750,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 625,
+        "z": -375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 10.041226864981514,
+        "max": 17.06800036407605
+      }
+    },
+    {
+      "key": "11_6",
+      "cx": 11,
+      "cz": 6,
+      "bounds": {
+        "minX": 750,
+        "minZ": -500,
+        "maxX": 1000,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 875,
+        "z": -375
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 9.854261928901725,
+        "max": 13.958541315389692
+      }
+    },
+    {
+      "key": "12_6",
+      "cx": 12,
+      "cz": 6,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -500,
+        "maxX": 1250,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 1125,
+        "z": -375
+      },
+      "districtIds": [
+        "kingsford-city"
+      ],
+      "roadEdgeIds": [
+        "city-south-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 8.653777941206956,
+        "max": 12.567258641852028
+      }
+    },
+    {
+      "key": "13_6",
+      "cx": 13,
+      "cz": 6,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -500,
+        "maxX": 1500,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 1375,
+        "z": -375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "east-coast"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 6.066109785347651,
+        "max": 10.065157408030657
+      }
+    },
+    {
+      "key": "14_6",
+      "cx": 14,
+      "cz": 6,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -500,
+        "maxX": 1750,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 1625,
+        "z": -375
+      },
+      "districtIds": [
+        "kingsford-city",
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "city-city-port",
+        "city-port-coast"
+      ],
+      "heightRangeM": {
+        "min": 3.0521792750485846,
+        "max": 7.423964642836684
+      }
+    },
+    {
+      "key": "15_6",
+      "cx": 15,
+      "cz": 6,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -500,
+        "maxX": 2000,
+        "maxZ": -250
+      },
+      "center": {
+        "x": 1875,
+        "z": -375
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 1.9321224505824621,
+        "max": 3.2229847407519925
+      }
+    },
+    {
+      "key": "0_7",
+      "cx": 0,
+      "cz": 7,
+      "bounds": {
+        "minX": -2000,
+        "minZ": -250,
+        "maxX": -1750,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -1875,
+        "z": -125
+      },
+      "districtIds": [
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-ring-w",
+        "ring-sw-w",
+        "ring-w-nw",
+        "ring-w-west-gate"
+      ],
+      "heightRangeM": {
+        "min": 38.34833703948873,
+        "max": 80.6059413710728
+      }
+    },
+    {
+      "key": "1_7",
+      "cx": 1,
+      "cz": 7,
+      "bounds": {
+        "minX": -1750,
+        "minZ": -250,
+        "maxX": -1500,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -1625,
+        "z": -125
+      },
+      "districtIds": [
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-farms",
+        "highlands-ring-w",
+        "lake-west-highlands"
+      ],
+      "heightRangeM": {
+        "min": 60.859331087553656,
+        "max": 89.02398122490746
+      }
+    },
+    {
+      "key": "2_7",
+      "cx": 2,
+      "cz": 7,
+      "bounds": {
+        "minX": -1500,
+        "minZ": -250,
+        "maxX": -1250,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -1375,
+        "z": -125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-farms"
+      ],
+      "heightRangeM": {
+        "min": 46.657356755741176,
+        "max": 88.97367059615692
+      }
+    },
+    {
+      "key": "3_7",
+      "cx": 3,
+      "cz": 7,
+      "bounds": {
+        "minX": -1250,
+        "minZ": -250,
+        "maxX": -1000,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -1125,
+        "z": -125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-farms",
+        "lake-south-farms"
+      ],
+      "heightRangeM": {
+        "min": 24.50597225021409,
+        "max": 74.91766873082783
+      }
+    },
+    {
+      "key": "4_7",
+      "cx": 4,
+      "cz": 7,
+      "bounds": {
+        "minX": -1000,
+        "minZ": -250,
+        "maxX": -750,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -875,
+        "z": -125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 17.05560633526195,
+        "max": 47.32247739801096
+      }
+    },
+    {
+      "key": "5_7",
+      "cx": 5,
+      "cz": 7,
+      "bounds": {
+        "minX": -750,
+        "minZ": -250,
+        "maxX": -500,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -625,
+        "z": -125
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 15.382914281745247,
+        "max": 29.357799648250563
+      }
+    },
+    {
+      "key": "6_7",
+      "cx": 6,
+      "cz": 7,
+      "bounds": {
+        "minX": -500,
+        "minZ": -250,
+        "maxX": -250,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -375,
+        "z": -125
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 11.457965561897465,
+        "max": 17.250907608946267
+      }
+    },
+    {
+      "key": "7_7",
+      "cx": 7,
+      "cz": 7,
+      "bounds": {
+        "minX": -250,
+        "minZ": -250,
+        "maxX": 0,
+        "maxZ": 0
+      },
+      "center": {
+        "x": -125,
+        "z": -125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 9.10092193327261,
+        "max": 16.535816918051022
+      }
+    },
+    {
+      "key": "8_7",
+      "cx": 8,
+      "cz": 7,
+      "bounds": {
+        "minX": 0,
+        "minZ": -250,
+        "maxX": 250,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 125,
+        "z": -125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.89509439661512,
+        "max": 14.00532393155756
+      }
+    },
+    {
+      "key": "9_7",
+      "cx": 9,
+      "cz": 7,
+      "bounds": {
+        "minX": 250,
+        "minZ": -250,
+        "maxX": 500,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 375,
+        "z": -125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.89509439661512,
+        "max": 11.761526685029251
+      }
+    },
+    {
+      "key": "10_7",
+      "cx": 10,
+      "cz": 7,
+      "bounds": {
+        "minX": 500,
+        "minZ": -250,
+        "maxX": 750,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 625,
+        "z": -125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 9.040821988960158,
+        "max": 11.286698977828614
+      }
+    },
+    {
+      "key": "11_7",
+      "cx": 11,
+      "cz": 7,
+      "bounds": {
+        "minX": 750,
+        "minZ": -250,
+        "maxX": 1000,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 875,
+        "z": -125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.71943145462482,
+        "max": 10.542547308542229
+      }
+    },
+    {
+      "key": "12_7",
+      "cx": 12,
+      "cz": 7,
+      "bounds": {
+        "minX": 1000,
+        "minZ": -250,
+        "maxX": 1250,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 1125,
+        "z": -125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "city-south-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 8.433928561736078,
+        "max": 10.374540114173326
+      }
+    },
+    {
+      "key": "13_7",
+      "cx": 13,
+      "cz": 7,
+      "bounds": {
+        "minX": 1250,
+        "minZ": -250,
+        "maxX": 1500,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 1375,
+        "z": -125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 4.823489813221324,
+        "max": 9.447190008455758
+      }
+    },
+    {
+      "key": "14_7",
+      "cx": 14,
+      "cz": 7,
+      "bounds": {
+        "minX": 1500,
+        "minZ": -250,
+        "maxX": 1750,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 1625,
+        "z": -125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "city-port-coast"
+      ],
+      "heightRangeM": {
+        "min": 2.866492685950277,
+        "max": 6.459297496865491
+      }
+    },
+    {
+      "key": "15_7",
+      "cx": 15,
+      "cz": 7,
+      "bounds": {
+        "minX": 1750,
+        "minZ": -250,
+        "maxX": 2000,
+        "maxZ": 0
+      },
+      "center": {
+        "x": 1875,
+        "z": -125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "coast-ring-e",
+        "ring-e-se",
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 1.8873223726952992,
+        "max": 3.0769088955808632
+      }
+    },
+    {
+      "key": "0_8",
+      "cx": 0,
+      "cz": 8,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 0,
+        "maxX": -1750,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -1875,
+        "z": 125
+      },
+      "districtIds": [
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-ring-w",
+        "ring-sw-w",
+        "ring-w-nw",
+        "ring-w-west-gate"
+      ],
+      "heightRangeM": {
+        "min": 23.284326395690123,
+        "max": 60.859331087553656
+      }
+    },
+    {
+      "key": "1_8",
+      "cx": 1,
+      "cz": 8,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 0,
+        "maxX": -1500,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -1625,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-w-west-gate"
+      ],
+      "heightRangeM": {
+        "min": 33.596262826264464,
+        "max": 65.95035627768823
+      }
+    },
+    {
+      "key": "2_8",
+      "cx": 2,
+      "cz": 8,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 0,
+        "maxX": -1250,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -1375,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 23.038475057353146,
+        "max": 65.17687266834528
+      }
+    },
+    {
+      "key": "3_8",
+      "cx": 3,
+      "cz": 8,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 0,
+        "maxX": -1000,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -1125,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "highlands-farms",
+        "lake-south-farms"
+      ],
+      "heightRangeM": {
+        "min": 17.583159615384574,
+        "max": 46.657356755741176
+      }
+    },
+    {
+      "key": "4_8",
+      "cx": 4,
+      "cz": 8,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 0,
+        "maxX": -750,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -875,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "farms-center",
+        "farms-farm-north",
+        "highlands-farms",
+        "lake-south-farms",
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 14.736493517803154,
+        "max": 24.50597225021409
+      }
+    },
+    {
+      "key": "5_8",
+      "cx": 5,
+      "cz": 8,
+      "bounds": {
+        "minX": -750,
+        "minZ": 0,
+        "maxX": -500,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -625,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 13.302112519414077,
+        "max": 17.05560633526195
+      }
+    },
+    {
+      "key": "6_8",
+      "cx": 6,
+      "cz": 8,
+      "bounds": {
+        "minX": -500,
+        "minZ": 0,
+        "maxX": -250,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -375,
+        "z": 125
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 10.860681379503841,
+        "max": 15.382914281745247
+      }
+    },
+    {
+      "key": "7_8",
+      "cx": 7,
+      "cz": 8,
+      "bounds": {
+        "minX": -250,
+        "minZ": 0,
+        "maxX": 0,
+        "maxZ": 250
+      },
+      "center": {
+        "x": -125,
+        "z": 125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "center-forest-north",
+        "farm-north-center",
+        "farms-center",
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 8.910631477759562,
+        "max": 11.905984481600491
+      }
+    },
+    {
+      "key": "8_8",
+      "cx": 8,
+      "cz": 8,
+      "bounds": {
+        "minX": 0,
+        "minZ": 0,
+        "maxX": 250,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 125,
+        "z": 125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "center-forest-north",
+        "farm-north-center",
+        "farms-center",
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 7.601217506840972,
+        "max": 9.511123559019726
+      }
+    },
+    {
+      "key": "9_8",
+      "cx": 9,
+      "cz": 8,
+      "bounds": {
+        "minX": 250,
+        "minZ": 0,
+        "maxX": 500,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 375,
+        "z": 125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 7.555410079187966,
+        "max": 10.7728321059682
+      }
+    },
+    {
+      "key": "10_8",
+      "cx": 10,
+      "cz": 8,
+      "bounds": {
+        "minX": 500,
+        "minZ": 0,
+        "maxX": 750,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 625,
+        "z": 125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.504416786320084,
+        "max": 11.363684770605728
+      }
+    },
+    {
+      "key": "11_8",
+      "cx": 11,
+      "cz": 8,
+      "bounds": {
+        "minX": 750,
+        "minZ": 0,
+        "maxX": 1000,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 875,
+        "z": 125
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.746065259999817,
+        "max": 13.007667334995134
+      }
+    },
+    {
+      "key": "12_8",
+      "cx": 12,
+      "cz": 8,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 0,
+        "maxX": 1250,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 1125,
+        "z": 125
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "city-south-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 8.759968416811494,
+        "max": 13.007667334995134
+      }
+    },
+    {
+      "key": "13_8",
+      "cx": 13,
+      "cz": 8,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 0,
+        "maxX": 1500,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 1375,
+        "z": 125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 5.614345231504846,
+        "max": 12.011509368605996
+      }
+    },
+    {
+      "key": "14_8",
+      "cx": 14,
+      "cz": 8,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 0,
+        "maxX": 1750,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 1625,
+        "z": 125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "city-port-coast",
+        "coast-ring-e",
+        "east-gate-coast"
+      ],
+      "heightRangeM": {
+        "min": 3.0092522521171614,
+        "max": 8.795477635682548
+      }
+    },
+    {
+      "key": "15_8",
+      "cx": 15,
+      "cz": 8,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 0,
+        "maxX": 2000,
+        "maxZ": 250
+      },
+      "center": {
+        "x": 1875,
+        "z": 125
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "coast-ring-e",
+        "ring-e-se",
+        "ring-ne-e"
+      ],
+      "heightRangeM": {
+        "min": 1.6189423492395978,
+        "max": 3.7055546294462887
+      }
+    },
+    {
+      "key": "0_9",
+      "cx": 0,
+      "cz": 9,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 250,
+        "maxX": -1750,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -1875,
+        "z": 375
+      },
+      "districtIds": [
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 9.687090669626587,
+        "max": 33.596262826264464
+      }
+    },
+    {
+      "key": "1_9",
+      "cx": 1,
+      "cz": 9,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 250,
+        "maxX": -1500,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -1625,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "ring-w-west-gate"
+      ],
+      "heightRangeM": {
+        "min": 13.2197509946882,
+        "max": 38.32235453896239
+      }
+    },
+    {
+      "key": "2_9",
+      "cx": 2,
+      "cz": 9,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 250,
+        "maxX": -1250,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -1375,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 14.99565504306118,
+        "max": 37.79638758463815
+      }
+    },
+    {
+      "key": "3_9",
+      "cx": 3,
+      "cz": 9,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 250,
+        "maxX": -1000,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -1125,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms",
+        "west-highlands"
+      ],
+      "roadEdgeIds": [
+        "farms-farm-north",
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 13.912784991947373,
+        "max": 23.038475057353146
+      }
+    },
+    {
+      "key": "4_9",
+      "cx": 4,
+      "cz": 9,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 250,
+        "maxX": -750,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -875,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farms-center",
+        "farms-farm-north",
+        "highlands-farms",
+        "lake-south-farms",
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 13.912784991947373,
+        "max": 17.583159615384574
+      }
+    },
+    {
+      "key": "5_9",
+      "cx": 5,
+      "cz": 9,
+      "bounds": {
+        "minX": -750,
+        "minZ": 250,
+        "maxX": -500,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -625,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farms-center"
+      ],
+      "heightRangeM": {
+        "min": 14.048500194196297,
+        "max": 16.408967176137647
+      }
+    },
+    {
+      "key": "6_9",
+      "cx": 6,
+      "cz": 9,
+      "bounds": {
+        "minX": -500,
+        "minZ": 250,
+        "maxX": -250,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -375,
+        "z": 375
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-center",
+        "farms-center"
+      ],
+      "heightRangeM": {
+        "min": 11.905984481600491,
+        "max": 15.89887130158168
+      }
+    },
+    {
+      "key": "7_9",
+      "cx": 7,
+      "cz": 9,
+      "bounds": {
+        "minX": -250,
+        "minZ": 250,
+        "maxX": 0,
+        "maxZ": 500
+      },
+      "center": {
+        "x": -125,
+        "z": 375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "center-forest-north",
+        "farm-north-center",
+        "farms-center",
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 8.772402181283987,
+        "max": 12.455591844081733
+      }
+    },
+    {
+      "key": "8_9",
+      "cx": 8,
+      "cz": 9,
+      "bounds": {
+        "minX": 0,
+        "minZ": 250,
+        "maxX": 250,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 125,
+        "z": 375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "center-forest-north",
+        "farm-north-center",
+        "farms-center",
+        "moor-center"
+      ],
+      "heightRangeM": {
+        "min": 6.820434282934763,
+        "max": 10.60704248590984
+      }
+    },
+    {
+      "key": "9_9",
+      "cx": 9,
+      "cz": 9,
+      "bounds": {
+        "minX": 250,
+        "minZ": 250,
+        "maxX": 500,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 375,
+        "z": 375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "center-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 6.866796128391771,
+        "max": 9.262533475493838
+      }
+    },
+    {
+      "key": "10_9",
+      "cx": 10,
+      "cz": 9,
+      "bounds": {
+        "minX": 500,
+        "minZ": 250,
+        "maxX": 750,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 625,
+        "z": 375
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "center-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 8.04503967030478,
+        "max": 15.607840570122127
+      }
+    },
+    {
+      "key": "11_9",
+      "cx": 11,
+      "cz": 9,
+      "bounds": {
+        "minX": 750,
+        "minZ": 250,
+        "maxX": 1000,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 875,
+        "z": 375
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "center-forest-north"
+      ],
+      "heightRangeM": {
+        "min": 11.363684770605728,
+        "max": 19.52987750876141
+      }
+    },
+    {
+      "key": "12_9",
+      "cx": 12,
+      "cz": 9,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 250,
+        "maxX": 1250,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 1125,
+        "z": 375
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "center-forest-north",
+        "city-south-forest-north",
+        "forest-north-east-gate",
+        "forest-north-forest"
+      ],
+      "heightRangeM": {
+        "min": 12.011509368605996,
+        "max": 19.52987750876141
+      }
+    },
+    {
+      "key": "13_9",
+      "cx": 13,
+      "cz": 9,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 250,
+        "maxX": 1500,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 1375,
+        "z": 375
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "east-gate-coast",
+        "forest-east-gate",
+        "forest-north-east-gate"
+      ],
+      "heightRangeM": {
+        "min": 8.795477635682548,
+        "max": 17.257429717000832
+      }
+    },
+    {
+      "key": "14_9",
+      "cx": 14,
+      "cz": 9,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 250,
+        "maxX": 1750,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 1625,
+        "z": 375
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "east-gate-coast"
+      ],
+      "heightRangeM": {
+        "min": 3.429207735537511,
+        "max": 11.85817692657397
+      }
+    },
+    {
+      "key": "15_9",
+      "cx": 15,
+      "cz": 9,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 250,
+        "maxX": 2000,
+        "maxZ": 500
+      },
+      "center": {
+        "x": 1875,
+        "z": 375
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 1.6612420867628803,
+        "max": 3.6255781323272287
+      }
+    },
+    {
+      "key": "0_10",
+      "cx": 0,
+      "cz": 10,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 500,
+        "maxX": -1750,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -1875,
+        "z": 625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 2.6974506049384677,
+        "max": 13.2197509946882
+      }
+    },
+    {
+      "key": "1_10",
+      "cx": 1,
+      "cz": 10,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 500,
+        "maxX": -1500,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -1625,
+        "z": 625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-w-west-gate",
+        "west-gate-farm-north",
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 4.208014863941992,
+        "max": 17.906920970688994
+      }
+    },
+    {
+      "key": "2_10",
+      "cx": 2,
+      "cz": 10,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 500,
+        "maxX": -1250,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -1375,
+        "z": 625
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "ring-w-west-gate",
+        "west-gate-farm-north",
+        "west-gate-farms"
+      ],
+      "heightRangeM": {
+        "min": 8.047422692165732,
+        "max": 17.92078169490895
+      }
+    },
+    {
+      "key": "3_10",
+      "cx": 3,
+      "cz": 10,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 500,
+        "maxX": -1000,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -1125,
+        "z": 625
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-center",
+        "farm-north-festival-west",
+        "farms-farm-north",
+        "west-gate-farm-north"
+      ],
+      "heightRangeM": {
+        "min": 10.737774088686802,
+        "max": 15.051509395873428
+      }
+    },
+    {
+      "key": "4_10",
+      "cx": 4,
+      "cz": 10,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 500,
+        "maxX": -750,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -875,
+        "z": 625
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-center",
+        "farm-north-festival-west"
+      ],
+      "heightRangeM": {
+        "min": 13.912784991947373,
+        "max": 17.26462441440653
+      }
+    },
+    {
+      "key": "5_10",
+      "cx": 5,
+      "cz": 10,
+      "bounds": {
+        "minX": -750,
+        "minZ": 500,
+        "maxX": -500,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -625,
+        "z": 625
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-center"
+      ],
+      "heightRangeM": {
+        "min": 14.282084428997901,
+        "max": 17.11208369438839
+      }
+    },
+    {
+      "key": "6_10",
+      "cx": 6,
+      "cz": 10,
+      "bounds": {
+        "minX": -500,
+        "minZ": 500,
+        "maxX": -250,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -375,
+        "z": 625
+      },
+      "districtIds": [
+        "festival-vale",
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-center"
+      ],
+      "heightRangeM": {
+        "min": 11.468006154645984,
+        "max": 15.89887130158168
+      }
+    },
+    {
+      "key": "7_10",
+      "cx": 7,
+      "cz": 10,
+      "bounds": {
+        "minX": -250,
+        "minZ": 500,
+        "maxX": 0,
+        "maxZ": 750
+      },
+      "center": {
+        "x": -125,
+        "z": 625
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 10.057620814678273,
+        "max": 12.162278607764183
+      }
+    },
+    {
+      "key": "8_10",
+      "cx": 8,
+      "cz": 10,
+      "bounds": {
+        "minX": 0,
+        "minZ": 500,
+        "maxX": 250,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 125,
+        "z": 625
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "center-festival-north"
+      ],
+      "heightRangeM": {
+        "min": 8.491209616228138,
+        "max": 12.069391307855705
+      }
+    },
+    {
+      "key": "9_10",
+      "cx": 9,
+      "cz": 10,
+      "bounds": {
+        "minX": 250,
+        "minZ": 500,
+        "maxX": 500,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 375,
+        "z": 625
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.352436627879564,
+        "max": 14.78885113864371
+      }
+    },
+    {
+      "key": "10_10",
+      "cx": 10,
+      "cz": 10,
+      "bounds": {
+        "minX": 500,
+        "minZ": 500,
+        "maxX": 750,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 625,
+        "z": 625
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 9.262533475493838,
+        "max": 19.818195973349646
+      }
+    },
+    {
+      "key": "11_10",
+      "cx": 11,
+      "cz": 10,
+      "bounds": {
+        "minX": 750,
+        "minZ": 500,
+        "maxX": 1000,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 875,
+        "z": 625
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 15.607840570122127,
+        "max": 24.99761150757836
+      }
+    },
+    {
+      "key": "12_10",
+      "cx": 12,
+      "cz": 10,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 500,
+        "maxX": 1250,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 1125,
+        "z": 625
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "forest-east-gate",
+        "forest-north-forest"
+      ],
+      "heightRangeM": {
+        "min": 17.257429717000832,
+        "max": 24.805705785795872
+      }
+    },
+    {
+      "key": "13_10",
+      "cx": 13,
+      "cz": 10,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 500,
+        "maxX": 1500,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 1375,
+        "z": 625
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "east-gate-coast",
+        "forest-east-gate",
+        "forest-north-east-gate"
+      ],
+      "heightRangeM": {
+        "min": 11.85817692657397,
+        "max": 22.91554281464767
+      }
+    },
+    {
+      "key": "14_10",
+      "cx": 14,
+      "cz": 10,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 500,
+        "maxX": 1750,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 1625,
+        "z": 625
+      },
+      "districtIds": [
+        "east-coast",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 3.4803845049599973,
+        "max": 14.658653652855097
+      }
+    },
+    {
+      "key": "15_10",
+      "cx": 15,
+      "cz": 10,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 500,
+        "maxX": 2000,
+        "maxZ": 750
+      },
+      "center": {
+        "x": 1875,
+        "z": 625
+      },
+      "districtIds": [
+        "east-coast"
+      ],
+      "roadEdgeIds": [
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 1.545385052980576,
+        "max": 3.9812639419496527
+      }
+    },
+    {
+      "key": "0_11",
+      "cx": 0,
+      "cz": 11,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 750,
+        "maxX": -1750,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -1875,
+        "z": 875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 0.2444218077088907,
+        "max": 4.208014863941992
+      }
+    },
+    {
+      "key": "1_11",
+      "cx": 1,
+      "cz": 11,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 750,
+        "maxX": -1500,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -1625,
+        "z": 875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 3.59832995779458,
+        "max": 8.047422692165732
+      }
+    },
+    {
+      "key": "2_11",
+      "cx": 2,
+      "cz": 11,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 750,
+        "maxX": -1250,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -1375,
+        "z": 875
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 4.358200446112628,
+        "max": 10.737774088686802
+      }
+    },
+    {
+      "key": "3_11",
+      "cx": 3,
+      "cz": 11,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 750,
+        "maxX": -1000,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -1125,
+        "z": 875
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 5.651538713577467,
+        "max": 14.651402623286168
+      }
+    },
+    {
+      "key": "4_11",
+      "cx": 4,
+      "cz": 11,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 750,
+        "maxX": -750,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -875,
+        "z": 875
+      },
+      "districtIds": [
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-festival-west"
+      ],
+      "heightRangeM": {
+        "min": 10.410855268174043,
+        "max": 16.45177331737407
+      }
+    },
+    {
+      "key": "5_11",
+      "cx": 5,
+      "cz": 11,
+      "bounds": {
+        "minX": -750,
+        "minZ": 750,
+        "maxX": -500,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -625,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale",
+        "cotswold-farms"
+      ],
+      "roadEdgeIds": [
+        "farm-north-festival-west"
+      ],
+      "heightRangeM": {
+        "min": 10.412210355908265,
+        "max": 16.45177331737407
+      }
+    },
+    {
+      "key": "6_11",
+      "cx": 6,
+      "cz": 11,
+      "bounds": {
+        "minX": -500,
+        "minZ": 750,
+        "maxX": -250,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -375,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 7.467621493511775,
+        "max": 14.282084428997901
+      }
+    },
+    {
+      "key": "7_11",
+      "cx": 7,
+      "cz": 11,
+      "bounds": {
+        "minX": -250,
+        "minZ": 750,
+        "maxX": 0,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": -125,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "festival-north-festival"
+      ],
+      "heightRangeM": {
+        "min": 6.642456030585394,
+        "max": 11.468006154645984
+      }
+    },
+    {
+      "key": "8_11",
+      "cx": 8,
+      "cz": 11,
+      "bounds": {
+        "minX": 0,
+        "minZ": 750,
+        "maxX": 250,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 125,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "center-festival-north",
+        "festival-north-festival"
+      ],
+      "heightRangeM": {
+        "min": 6.60473083250228,
+        "max": 12.069391307855705
+      }
+    },
+    {
+      "key": "9_11",
+      "cx": 9,
+      "cz": 11,
+      "bounds": {
+        "minX": 250,
+        "minZ": 750,
+        "maxX": 500,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 375,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 7.45649393368618,
+        "max": 14.78885113864371
+      }
+    },
+    {
+      "key": "10_11",
+      "cx": 10,
+      "cz": 11,
+      "bounds": {
+        "minX": 500,
+        "minZ": 750,
+        "maxX": 750,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 625,
+        "z": 875
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 11.920803030766349,
+        "max": 19.818195973349646
+      }
+    },
+    {
+      "key": "11_11",
+      "cx": 11,
+      "cz": 11,
+      "bounds": {
+        "minX": 750,
+        "minZ": 750,
+        "maxX": 1000,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 875,
+        "z": 875
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "forest-festival-east"
+      ],
+      "heightRangeM": {
+        "min": 17.87754514990994,
+        "max": 24.99761150757836
+      }
+    },
+    {
+      "key": "12_11",
+      "cx": 12,
+      "cz": 11,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 750,
+        "maxX": 1250,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 1125,
+        "z": 875
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "forest-east-gate",
+        "forest-festival-east",
+        "forest-north-forest",
+        "forest-quarry"
+      ],
+      "heightRangeM": {
+        "min": 19.72098946875707,
+        "max": 24.805705785795872
+      }
+    },
+    {
+      "key": "13_11",
+      "cx": 13,
+      "cz": 11,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 750,
+        "maxX": 1500,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 1375,
+        "z": 875
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 12.474419649859454,
+        "max": 22.91554281464767
+      }
+    },
+    {
+      "key": "14_11",
+      "cx": 14,
+      "cz": 11,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 750,
+        "maxX": 1750,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 1625,
+        "z": 875
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 3.40893440976957,
+        "max": 14.5755777591116
+      }
+    },
+    {
+      "key": "15_11",
+      "cx": 15,
+      "cz": 11,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 750,
+        "maxX": 2000,
+        "maxZ": 1000
+      },
+      "center": {
+        "x": 1875,
+        "z": 875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 1.545385052980576,
+        "max": 3.9370251170373733
+      }
+    },
+    {
+      "key": "0_12",
+      "cx": 0,
+      "cz": 12,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 1000,
+        "maxX": -1750,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -1875,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.1474399796266943,
+        "max": 5.088895523960249
+      }
+    },
+    {
+      "key": "1_12",
+      "cx": 1,
+      "cz": 12,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 1000,
+        "maxX": -1500,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -1625,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 2.9338255582120936,
+        "max": 5.165150778955821
+      }
+    },
+    {
+      "key": "2_12",
+      "cx": 2,
+      "cz": 12,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 1000,
+        "maxX": -1250,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -1375,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.7080843239057573,
+        "max": 5.651538713577467
+      }
+    },
+    {
+      "key": "3_12",
+      "cx": 3,
+      "cz": 12,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 1000,
+        "maxX": -1000,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -1125,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 3.170274803005464,
+        "max": 10.410855268174043
+      }
+    },
+    {
+      "key": "4_12",
+      "cx": 4,
+      "cz": 12,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 1000,
+        "maxX": -750,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -875,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 3.587110001768979,
+        "max": 11.873544338909184
+      }
+    },
+    {
+      "key": "5_12",
+      "cx": 5,
+      "cz": 12,
+      "bounds": {
+        "minX": -750,
+        "minZ": 1000,
+        "maxX": -500,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -625,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "farm-north-festival-west"
+      ],
+      "heightRangeM": {
+        "min": 4.0731205096860625,
+        "max": 11.873544338909184
+      }
+    },
+    {
+      "key": "6_12",
+      "cx": 6,
+      "cz": 12,
+      "bounds": {
+        "minX": -500,
+        "minZ": 1000,
+        "maxX": -250,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -375,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "farm-north-festival-west",
+        "festival-west-east-loop",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 4.967635092080572,
+        "max": 10.412210355908265
+      }
+    },
+    {
+      "key": "7_12",
+      "cx": 7,
+      "cz": 12,
+      "bounds": {
+        "minX": -250,
+        "minZ": 1000,
+        "maxX": 0,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": -125,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield",
+        "festival-east-festival",
+        "festival-north-festival",
+        "festival-ring-s",
+        "festival-south-gate",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 6.195013597472365,
+        "max": 7.467621493511775
+      }
+    },
+    {
+      "key": "8_12",
+      "cx": 8,
+      "cz": 12,
+      "bounds": {
+        "minX": 0,
+        "minZ": 1000,
+        "maxX": 250,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 125,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield",
+        "festival-east-festival",
+        "festival-north-festival",
+        "festival-ring-s",
+        "festival-south-gate",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 6.195013597472365,
+        "max": 7.45649393368618
+      }
+    },
+    {
+      "key": "9_12",
+      "cx": 9,
+      "cz": 12,
+      "bounds": {
+        "minX": 250,
+        "minZ": 1000,
+        "maxX": 500,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 375,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "festival-east-festival",
+        "festival-west-east-loop",
+        "forest-festival-east"
+      ],
+      "heightRangeM": {
+        "min": 6.335071047579272,
+        "max": 11.920803030766349
+      }
+    },
+    {
+      "key": "10_12",
+      "cx": 10,
+      "cz": 12,
+      "bounds": {
+        "minX": 500,
+        "minZ": 1000,
+        "maxX": 750,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 625,
+        "z": 1125
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "forest-festival-east"
+      ],
+      "heightRangeM": {
+        "min": 8.821084399033332,
+        "max": 17.87754514990994
+      }
+    },
+    {
+      "key": "11_12",
+      "cx": 11,
+      "cz": 12,
+      "bounds": {
+        "minX": 750,
+        "minZ": 1000,
+        "maxX": 1000,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 875,
+        "z": 1125
+      },
+      "districtIds": [
+        "forest-quarry",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "forest-festival-east"
+      ],
+      "heightRangeM": {
+        "min": 13.479544369237852,
+        "max": 21.583698343457836
+      }
+    },
+    {
+      "key": "12_12",
+      "cx": 12,
+      "cz": 12,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 1000,
+        "maxX": 1250,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 1125,
+        "z": 1125
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "forest-quarry"
+      ],
+      "heightRangeM": {
+        "min": 12.873637750578837,
+        "max": 22.457971634049358
+      }
+    },
+    {
+      "key": "13_12",
+      "cx": 13,
+      "cz": 12,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 1000,
+        "maxX": 1500,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 1375,
+        "z": 1125
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "forest-quarry",
+        "quarry-ring-se"
+      ],
+      "heightRangeM": {
+        "min": 8.906469600145588,
+        "max": 19.72098946875707
+      }
+    },
+    {
+      "key": "14_12",
+      "cx": 14,
+      "cz": 12,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 1000,
+        "maxX": 1750,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 1625,
+        "z": 1125
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 3.4639564022259925,
+        "max": 12.474419649859454
+      }
+    },
+    {
+      "key": "15_12",
+      "cx": 15,
+      "cz": 12,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 1000,
+        "maxX": 2000,
+        "maxZ": 1250
+      },
+      "center": {
+        "x": 1875,
+        "z": 1125
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.8474607833588168,
+        "max": 3.9758975040529467
+      }
+    },
+    {
+      "key": "0_13",
+      "cx": 0,
+      "cz": 13,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 1250,
+        "maxX": -1750,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -1875,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.7899871128759797,
+        "max": 5.088895523960249
+      }
+    },
+    {
+      "key": "1_13",
+      "cx": 1,
+      "cz": 13,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 1250,
+        "maxX": -1500,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -1625,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-sw-w"
+      ],
+      "heightRangeM": {
+        "min": 1.8799941522099033,
+        "max": 5.088895523960249
+      }
+    },
+    {
+      "key": "2_13",
+      "cx": 2,
+      "cz": 13,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 1250,
+        "maxX": -1250,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -1375,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.3347599009734064,
+        "max": 3.574754332955881
+      }
+    },
+    {
+      "key": "3_13",
+      "cx": 3,
+      "cz": 13,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 1250,
+        "maxX": -1000,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -1125,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.1044793837218747,
+        "max": 3.6012956082404566
+      }
+    },
+    {
+      "key": "4_13",
+      "cx": 4,
+      "cz": 13,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 1250,
+        "maxX": -750,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -875,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.059738433500212,
+        "max": 4.239263616393699
+      }
+    },
+    {
+      "key": "5_13",
+      "cx": 5,
+      "cz": 13,
+      "bounds": {
+        "minX": -750,
+        "minZ": 1250,
+        "maxX": -500,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -625,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 0.7227784550768058,
+        "max": 4.967635092080572
+      }
+    },
+    {
+      "key": "6_13",
+      "cx": 6,
+      "cz": 13,
+      "bounds": {
+        "minX": -500,
+        "minZ": 1250,
+        "maxX": -250,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -375,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-south-gate",
+        "festival-west-east-loop",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 1.741835413221143,
+        "max": 6.604575801557439
+      }
+    },
+    {
+      "key": "7_13",
+      "cx": 7,
+      "cz": 13,
+      "bounds": {
+        "minX": -250,
+        "minZ": 1250,
+        "maxX": 0,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": -125,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield",
+        "festival-east-festival",
+        "festival-north-festival",
+        "festival-ring-s",
+        "festival-south-gate",
+        "festival-west-east-loop",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 5.094189374078151,
+        "max": 6.604575801557439
+      }
+    },
+    {
+      "key": "8_13",
+      "cx": 8,
+      "cz": 13,
+      "bounds": {
+        "minX": 0,
+        "minZ": 1250,
+        "maxX": 250,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 125,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield",
+        "festival-east-festival",
+        "festival-north-festival",
+        "festival-ring-s",
+        "festival-south-gate",
+        "festival-west-east-loop",
+        "festival-west-festival"
+      ],
+      "heightRangeM": {
+        "min": 5.8683190778258805,
+        "max": 6.445761200865089
+      }
+    },
+    {
+      "key": "9_13",
+      "cx": 9,
+      "cz": 13,
+      "bounds": {
+        "minX": 250,
+        "minZ": 1250,
+        "maxX": 500,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 375,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield",
+        "festival-east-festival",
+        "festival-west-east-loop"
+      ],
+      "heightRangeM": {
+        "min": 5.606207265643209,
+        "max": 8.821084399033332
+      }
+    },
+    {
+      "key": "10_13",
+      "cx": 10,
+      "cz": 13,
+      "bounds": {
+        "minX": 500,
+        "minZ": 1250,
+        "maxX": 750,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 625,
+        "z": 1375
+      },
+      "districtIds": [
+        "festival-vale",
+        "forest-quarry",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 6.859916257878398,
+        "max": 13.479544369237852
+      }
+    },
+    {
+      "key": "11_13",
+      "cx": 11,
+      "cz": 13,
+      "bounds": {
+        "minX": 750,
+        "minZ": 1250,
+        "maxX": 1000,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 875,
+        "z": 1375
+      },
+      "districtIds": [
+        "forest-quarry",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.052383054011782,
+        "max": 14.34009031583809
+      }
+    },
+    {
+      "key": "12_13",
+      "cx": 12,
+      "cz": 13,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 1250,
+        "maxX": 1250,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 1125,
+        "z": 1375
+      },
+      "districtIds": [
+        "forest-quarry",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 8.220411470976195,
+        "max": 14.3917807610148
+      }
+    },
+    {
+      "key": "13_13",
+      "cx": 13,
+      "cz": 13,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 1250,
+        "maxX": 1500,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 1375,
+        "z": 1375
+      },
+      "districtIds": [
+        "forest-quarry"
+      ],
+      "roadEdgeIds": [
+        "quarry-ring-se"
+      ],
+      "heightRangeM": {
+        "min": 6.343221451834388,
+        "max": 12.873637750578837
+      }
+    },
+    {
+      "key": "14_13",
+      "cx": 14,
+      "cz": 13,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 1250,
+        "maxX": 1750,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 1625,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "quarry-ring-se",
+        "ring-e-se"
+      ],
+      "heightRangeM": {
+        "min": 3.8085505978881167,
+        "max": 8.906469600145588
+      }
+    },
+    {
+      "key": "15_13",
+      "cx": 15,
+      "cz": 13,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 1250,
+        "maxX": 2000,
+        "maxZ": 1500
+      },
+      "center": {
+        "x": 1875,
+        "z": 1375
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.0819982167685778,
+        "max": 3.989902109760113
+      }
+    },
+    {
+      "key": "0_14",
+      "cx": 0,
+      "cz": 14,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 1500,
+        "maxX": -1750,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -1875,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.853788314896694,
+        "max": 4.933356055961716
+      }
+    },
+    {
+      "key": "1_14",
+      "cx": 1,
+      "cz": 14,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 1500,
+        "maxX": -1500,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -1625,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw",
+        "ring-sw-w",
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.816501629056162,
+        "max": 4.251181887587512
+      }
+    },
+    {
+      "key": "2_14",
+      "cx": 2,
+      "cz": 14,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 1500,
+        "maxX": -1250,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -1375,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw",
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 0.8989645016800684,
+        "max": 2.787899012968687
+      }
+    },
+    {
+      "key": "3_14",
+      "cx": 3,
+      "cz": 14,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 1500,
+        "maxX": -1000,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -1125,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw",
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 0.8989645016800684,
+        "max": 2.4691753323052112
+      }
+    },
+    {
+      "key": "4_14",
+      "cx": 4,
+      "cz": 14,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 1500,
+        "maxX": -750,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -875,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw",
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.219726802304236,
+        "max": 2.7690429739993427
+      }
+    },
+    {
+      "key": "5_14",
+      "cx": 5,
+      "cz": 14,
+      "bounds": {
+        "minX": -750,
+        "minZ": 1500,
+        "maxX": -500,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -625,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 0.7227784550768058,
+        "max": 2.1305423778774006
+      }
+    },
+    {
+      "key": "6_14",
+      "cx": 6,
+      "cz": 14,
+      "bounds": {
+        "minX": -500,
+        "minZ": 1500,
+        "maxX": -250,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -375,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-south-gate",
+        "south-gate-ring-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.331271902911821,
+        "max": 5.094189374078151
+      }
+    },
+    {
+      "key": "7_14",
+      "cx": 7,
+      "cz": 14,
+      "bounds": {
+        "minX": -250,
+        "minZ": 1500,
+        "maxX": 0,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": -125,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-ring-s"
+      ],
+      "heightRangeM": {
+        "min": 1.9514025541680158,
+        "max": 6.094385947275453
+      }
+    },
+    {
+      "key": "8_14",
+      "cx": 8,
+      "cz": 14,
+      "bounds": {
+        "minX": 0,
+        "minZ": 1500,
+        "maxX": 250,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 125,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "festival-ring-s"
+      ],
+      "heightRangeM": {
+        "min": 2.9800242219209374,
+        "max": 6.094385947275453
+      }
+    },
+    {
+      "key": "9_14",
+      "cx": 9,
+      "cz": 14,
+      "bounds": {
+        "minX": 250,
+        "minZ": 1500,
+        "maxX": 500,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 375,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "festival-airfield"
+      ],
+      "heightRangeM": {
+        "min": 3.212821160330334,
+        "max": 6.859916257878398
+      }
+    },
+    {
+      "key": "10_14",
+      "cx": 10,
+      "cz": 14,
+      "bounds": {
+        "minX": 500,
+        "minZ": 1500,
+        "maxX": 750,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 625,
+        "z": 1625
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "airfield-ring-se",
+        "festival-airfield"
+      ],
+      "heightRangeM": {
+        "min": 3.377822440389031,
+        "max": 8.44479064412668
+      }
+    },
+    {
+      "key": "11_14",
+      "cx": 11,
+      "cz": 14,
+      "bounds": {
+        "minX": 750,
+        "minZ": 1500,
+        "maxX": 1000,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 875,
+        "z": 1625
+      },
+      "districtIds": [
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "airfield-ring-se",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 3.3320748577233217,
+        "max": 8.351388075092059
+      }
+    },
+    {
+      "key": "12_14",
+      "cx": 12,
+      "cz": 14,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 1500,
+        "maxX": 1250,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 1125,
+        "z": 1625
+      },
+      "districtIds": [
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "airfield-ring-se",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 3.4239087720332813,
+        "max": 9.131459955994288
+      }
+    },
+    {
+      "key": "13_14",
+      "cx": 13,
+      "cz": 14,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 1500,
+        "maxX": 1500,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 1375,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "airfield-ring-se",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 3.232604274263581,
+        "max": 8.77199257557446
+      }
+    },
+    {
+      "key": "14_14",
+      "cx": 14,
+      "cz": 14,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 1500,
+        "maxX": 1750,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 1625,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "airfield-ring-se",
+        "quarry-ring-se",
+        "ring-e-se",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 3.29487049616107,
+        "max": 6.343221451834388
+      }
+    },
+    {
+      "key": "15_14",
+      "cx": 15,
+      "cz": 14,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 1500,
+        "maxX": 2000,
+        "maxZ": 1750
+      },
+      "center": {
+        "x": 1875,
+        "z": 1625
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.259460698963771,
+        "max": 3.8085505978881167
+      }
+    },
+    {
+      "key": "0_15",
+      "cx": 0,
+      "cz": 15,
+      "bounds": {
+        "minX": -2000,
+        "minZ": 1750,
+        "maxX": -1750,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -1875,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.851035654021854,
+        "max": 3.020572092622387
+      }
+    },
+    {
+      "key": "1_15",
+      "cx": 1,
+      "cz": 15,
+      "bounds": {
+        "minX": -1750,
+        "minZ": 1750,
+        "maxX": -1500,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -1625,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.5362213206950521,
+        "max": 3.020572092622387
+      }
+    },
+    {
+      "key": "2_15",
+      "cx": 2,
+      "cz": 15,
+      "bounds": {
+        "minX": -1500,
+        "minZ": 1750,
+        "maxX": -1250,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -1375,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.1772967503549916,
+        "max": 1.816501629056162
+      }
+    },
+    {
+      "key": "3_15",
+      "cx": 3,
+      "cz": 15,
+      "bounds": {
+        "minX": -1250,
+        "minZ": 1750,
+        "maxX": -1000,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -1125,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 1.1772967503549916,
+        "max": 1.8332825402498922
+      }
+    },
+    {
+      "key": "4_15",
+      "cx": 4,
+      "cz": 15,
+      "bounds": {
+        "minX": -1000,
+        "minZ": 1750,
+        "maxX": -750,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -875,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.3884535249363323,
+        "max": 2.0999957067413906
+      }
+    },
+    {
+      "key": "5_15",
+      "cx": 5,
+      "cz": 15,
+      "bounds": {
+        "minX": -750,
+        "minZ": 1750,
+        "maxX": -500,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -625,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [
+        "ring-s-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.3571677658495231,
+        "max": 1.730142176164331
+      }
+    },
+    {
+      "key": "6_15",
+      "cx": 6,
+      "cz": 15,
+      "bounds": {
+        "minX": -500,
+        "minZ": 1750,
+        "maxX": -250,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -375,
+        "z": 1875
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "ring-s-sw"
+      ],
+      "heightRangeM": {
+        "min": 1.3571677658495231,
+        "max": 1.9514025541680158
+      }
+    },
+    {
+      "key": "7_15",
+      "cx": 7,
+      "cz": 15,
+      "bounds": {
+        "minX": -250,
+        "minZ": 1750,
+        "maxX": 0,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": -125,
+        "z": 1875
+      },
+      "districtIds": [
+        "festival-vale"
+      ],
+      "roadEdgeIds": [
+        "festival-ring-s",
+        "ring-s-sw",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 1.5257974903401368,
+        "max": 2.9800242219209374
+      }
+    },
+    {
+      "key": "8_15",
+      "cx": 8,
+      "cz": 15,
+      "bounds": {
+        "minX": 0,
+        "minZ": 1750,
+        "maxX": 250,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 125,
+        "z": 1875
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "festival-ring-s",
+        "ring-s-sw",
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 1.7714530638176083,
+        "max": 3.4228063821631483
+      }
+    },
+    {
+      "key": "9_15",
+      "cx": 9,
+      "cz": 15,
+      "bounds": {
+        "minX": 250,
+        "minZ": 1750,
+        "maxX": 500,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 375,
+        "z": 1875
+      },
+      "districtIds": [
+        "festival-vale",
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 1.9277712778727314,
+        "max": 3.752457921757416
+      }
+    },
+    {
+      "key": "10_15",
+      "cx": 10,
+      "cz": 15,
+      "bounds": {
+        "minX": 500,
+        "minZ": 1750,
+        "maxX": 750,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 625,
+        "z": 1875
+      },
+      "districtIds": [
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 2.018082153537478,
+        "max": 3.856694462782125
+      }
+    },
+    {
+      "key": "11_15",
+      "cx": 11,
+      "cz": 15,
+      "bounds": {
+        "minX": 750,
+        "minZ": 1750,
+        "maxX": 1000,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 875,
+        "z": 1875
+      },
+      "districtIds": [
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 1.919276861718262,
+        "max": 3.461171817660955
+      }
+    },
+    {
+      "key": "12_15",
+      "cx": 12,
+      "cz": 15,
+      "bounds": {
+        "minX": 1000,
+        "minZ": 1750,
+        "maxX": 1250,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 1125,
+        "z": 1875
+      },
+      "districtIds": [
+        "south-beach-airfield"
+      ],
+      "roadEdgeIds": [
+        "ring-se-s"
+      ],
+      "heightRangeM": {
+        "min": 2.0579964082517144,
+        "max": 3.8576439834716143
+      }
+    },
+    {
+      "key": "13_15",
+      "cx": 13,
+      "cz": 15,
+      "bounds": {
+        "minX": 1250,
+        "minZ": 1750,
+        "maxX": 1500,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 1375,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.000886138276379,
+        "max": 3.77001185953688
+      }
+    },
+    {
+      "key": "14_15",
+      "cx": 14,
+      "cz": 15,
+      "bounds": {
+        "minX": 1500,
+        "minZ": 1750,
+        "maxX": 1750,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 1625,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.023644159982241,
+        "max": 3.7975019963310284
+      }
+    },
+    {
+      "key": "15_15",
+      "cx": 15,
+      "cz": 15,
+      "bounds": {
+        "minX": 1750,
+        "minZ": 1750,
+        "maxX": 2000,
+        "maxZ": 2000
+      },
+      "center": {
+        "x": 1875,
+        "z": 1875
+      },
+      "districtIds": [],
+      "roadEdgeIds": [],
+      "heightRangeM": {
+        "min": 2.114094591139147,
+        "max": 3.29487049616107
+      }
+    }
+  ]
+}
