@@ -16,6 +16,8 @@ import {
   updateAxleWheel,
 } from './vehicle/wheelDynamics.js';
 import { iconMarkup, setIcon } from './ui/icons.js';
+import { createFestivalBritainFoundation } from './world/festivalBritain.js';
+import { createWorldFoundationStreamer } from './world/worldStreamer.js';
 import './style.css';
 
 /* =====================================================================
@@ -461,6 +463,76 @@ scene.fog = new THREE.Fog(0xdca16f, 150, 880);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
+
+/* =====================================================================
+   ЭТАП 3: фундамент мира 4×4 км (Festival Britain) — ЗА ФИЧЕФЛАГОМ.
+   По умолчанию legacy-карта 640 м остаётся играбельной основой; фундамент
+   не создаётся и не влияет на физику, коллизии и геймплей. Включение для
+   QA: ?world=foundation (плюс &worldPreview=1 — показать меши под старой
+   картой) или localStorage nh_world_foundation=1. Диагностика для тестов:
+   window.__NH_WORLD__ (stats(), setPreview(bool)).
+   ===================================================================== */
+let worldFoundation = null;
+let worldStreamer = null;
+let worldStreamAccumS = 0;
+
+function worldFoundationFlag() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('world') === 'foundation') {
+      return { enabled: true, preview: params.get('worldPreview') === '1', source: 'url' };
+    }
+    if (window.localStorage && window.localStorage.getItem('nh_world_foundation') === '1') {
+      return { enabled: true, preview: params.get('worldPreview') === '1', source: 'localStorage' };
+    }
+  } catch { /* флаг недоступен — остаёмся на legacy-мире */ }
+  return { enabled: false, preview: false, source: 'off' };
+}
+
+function initWorldFoundation() {
+  const flag = worldFoundationFlag();
+  const diagnostics = {
+    stage: 3,
+    ...flag,
+    foundation: null,
+    streamer: null,
+    error: null,
+    stats: () => (worldStreamer ? worldStreamer.stats() : (worldFoundation ? worldFoundation.stats() : null)),
+    setPreview: (visible) => (worldStreamer ? worldStreamer.setVisible(Boolean(visible)) : false),
+  };
+  window.__NH_WORLD__ = diagnostics;
+  if (!flag.enabled) return diagnostics;
+  try {
+    worldFoundation = createFestivalBritainFoundation();
+    worldStreamer = createWorldFoundationStreamer({
+      THREE,
+      scene,
+      foundation: worldFoundation,
+      visible: flag.preview,
+    });
+    // Фокус стартового стриминга — фестиваль новой карты.
+    worldStreamer.update(0, 1250, { budget: 9 });
+    diagnostics.foundation = worldFoundation;
+    diagnostics.streamer = worldStreamer;
+    console.info('[world] Festival Britain foundation enabled:', worldFoundation.stats());
+  } catch (error) {
+    diagnostics.error = String((error && error.message) || error);
+    console.warn('[world] foundation init failed; legacy world unchanged:', error);
+  }
+  return diagnostics;
+}
+
+const worldDiagnostics = initWorldFoundation();
+void worldDiagnostics;
+
+function updateWorldFoundation(dt) {
+  if (!worldStreamer) return;
+  worldStreamAccumS += dt;
+  if (worldStreamAccumS < 0.25) return;
+  worldStreamAccumS = 0;
+  const pos = player.mesh && player.mesh.group ? player.mesh.group.position : null;
+  worldStreamer.update(pos ? pos.x : 0, pos ? pos.z : 1250, { budget: 2 });
+}
 
 // Свет заката фестиваля — более насыщенный и объёмный
 scene.add(new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.66));
@@ -4141,6 +4213,7 @@ function animate() {
   });
   updateLivingWorld(gameState === 'paused' ? 0 : dt, t);
   updateTireEffects(dt);
+  updateWorldFoundation(dt); // no-op, пока флаг мира 4×4 км не включён
 
   // пульс следующего чекпоинта
   if (selectedMode === 'race' && player.mesh) {
