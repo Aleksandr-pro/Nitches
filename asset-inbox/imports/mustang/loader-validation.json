@@ -1,7 +1,10 @@
 {
   "file": "public/assets/models/cars/mustang/mustang.glb",
-  "bytes": 5874616,
+  "mode": "car",
+  "bytes": 5874584,
   "meshes": 22,
+  "vertices": 163971,
+  "meshesWithVertexColors": 0,
   "triangles": 157759,
   "nodes": [
     "Scene",
@@ -53,6 +56,14 @@
     "Tire",
     "TurnSignal"
   ],
+  "gltf": {
+    "images": 0,
+    "textures": 0,
+    "extensionsUsed": [
+      "KHR_materials_emissive_strength"
+    ],
+    "extensionsRequired": []
+  },
   "bounds": {
     "min": [
       -0.917831,

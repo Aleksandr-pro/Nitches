@@ -22,13 +22,20 @@ import { buildHeightTile } from './world/heightfield.js';
 import { buildTerrainTileGeometry } from './world/meshBuilders.js';
 import { roadPointAt } from './world/roadGraph.js';
 import { distanceToCollider } from './world/spatialIndex.js';
+import {
+  MANHATTAN_CITY_MODEL_URL,
+  loadManhattanCityGroup,
+  registerManhattanCityColliders,
+  updateManhattanCityVisibility,
+} from './world/manhattanCityModel.js';
 import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.7.0: новая карта Festival Britain 4×4 км (свободная поездка),
-   Mustang Fastback из настоящей GLB-модели, шинная физика, шоурум,
-   реалистичный свет, дрифт и нитро. Старый остров: ?world=legacy.
+   v0.8.0: карта Festival Britain 4×4 км (свободная поездка) и настоящий
+   импортный город Манхэттен вместо процедурного Kingsford, Mustang
+   Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт и нитро.
+   Старый остров: ?world=legacy.
    ===================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -480,6 +487,7 @@ camera.position.set(0, 26, -140);
 let worldFoundation = null;
 let worldStreamer = null;
 let worldBackdrop = null;
+let manhattanCityHandle = null;
 let worldStreamAccumS = 0;
 let britainDistrictId = 'festival-vale';
 let skyMesh = null;      // заполняются в блоке «Небо» ниже
@@ -574,10 +582,11 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'festival-britain',
-    version: '0.7.0',
+    version: '0.8.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
+    city: null,
     error: null,
     stats: () => (worldStreamer ? worldStreamer.stats() : (worldFoundation ? worldFoundation.stats() : null)),
     setPreview: (visible) => (worldStreamer ? worldStreamer.setVisible(Boolean(visible)) : false),
@@ -632,6 +641,25 @@ function initWorldMode() {
 
     const spawn = britainSpawnPoint();
     worldStreamer.update(spawn.pos.x, spawn.pos.z, { budget: 10 });
+
+    // Импортный Манхэттен вместо процедурного Kingsford: GLB грузится
+    // асинхронно, чтобы старт мира не ждал 46 МБ; плато, подавление
+    // процедурной застройки и маскировка дорог уже действуют без него.
+    diagnostics.city = { status: 'loading', url: MANHATTAN_CITY_MODEL_URL };
+    loadManhattanCityGroup()
+      .then((handle) => {
+        manhattanCityHandle = handle;
+        scene.add(handle.group);
+        const colliders = registerManhattanCityColliders(worldFoundation);
+        updateManhattanCityVisibility(handle, spawn.pos.x, spawn.pos.z);
+        diagnostics.city = { status: 'ready', colliders, ...handle.stats };
+        console.info('[world] Manhattan city loaded:', diagnostics.city);
+      })
+      .catch((error) => {
+        diagnostics.city = { status: 'error', error: String((error && error.message) || error) };
+        console.warn('[world] Manhattan city failed to load; flat Kingsford plateau remains:', error);
+      });
+
     selectedMode = 'free'; // гонки на новой карте — следующим этапом
     diagnostics.foundation = worldFoundation;
     diagnostics.streamer = worldStreamer;
@@ -669,6 +697,7 @@ function updateWorldFoundation(dt) {
   const fx = pos ? pos.x : 0;
   const fz = pos ? pos.z : 1250;
   worldStreamer.update(fx, fz, { budget: 2 });
+  if (manhattanCityHandle) updateManhattanCityVisibility(manhattanCityHandle, fx, fz);
 
   // Сфера неба (R=950) и облака не покрывают 4 км из начала координат —
   // едут за игроком, как и тень солнца.

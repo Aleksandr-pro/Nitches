@@ -8,6 +8,11 @@ import {
 import { buildRoadGraph, buildRoadSegments, findRoute } from './roadGraph.js';
 import { ColliderIndex, RoadSpatialIndex, segmentBounds } from './spatialIndex.js';
 import { ChunkGrid } from './chunks.js';
+import {
+  MANHATTAN_CITY_BASE_HEIGHT_M,
+  isInsideManhattanCity,
+  manhattanCityPlateauFactor,
+} from './manhattanCity.js';
 
 export const FESTIVAL_BRITAIN_ID = 'festival-britain';
 export const FESTIVAL_BRITAIN_VERSION = '0.1.0-stage3';
@@ -347,9 +352,17 @@ export function createFestivalBritainFoundation({
   function heightAt(x, z) {
     const raw = rawHeightAt(x, z);
     const nearest = roadIndex.nearest(x, z, { maxDistanceM: 85 });
-    if (!nearest) return raw;
-    const blend = 1 - smoothstep(1.0, 19, nearest.edgeDistanceM);
-    return lerp(raw, nearest.point.y, blend);
+    let h = raw;
+    if (nearest) {
+      const blend = 1 - smoothstep(1.0, 19, nearest.edgeDistanceM);
+      h = lerp(raw, nearest.point.y, blend);
+    }
+    // Imported Manhattan city plate: perfectly flat inside its footprint so
+    // the photogrammetry ground sits on the terrain, easing back to the
+    // landform across the blend apron. Applied last so neither the coast
+    // falloff nor road-profile blending can tilt the city.
+    const plateau = manhattanCityPlateauFactor(x, z);
+    return plateau > 0 ? lerp(h, MANHATTAN_CITY_BASE_HEIGHT_M, plateau) : h;
   }
 
   function slopeAt(x, z) {
@@ -372,6 +385,11 @@ export function createFestivalBritainFoundation({
     }
     if (h <= WORLD_WATER_LEVEL_M + 0.08) {
       return { ...WORLD_SURFACES.water, heightM: h, road: nearest, district: getDistrict(x, z) };
+    }
+    // Inside the imported city the ground is its own street plate: concrete
+    // grip everywhere off the (masked) Kingsford road corridors.
+    if (isInsideManhattanCity(x, z)) {
+      return { ...WORLD_SURFACES.concrete, heightM: h, road: nearest, district: getDistrict(x, z) };
     }
     const slope = slopeAt(x, z).magnitude;
     const district = getDistrict(x, z);
@@ -401,6 +419,10 @@ export function createFestivalBritainFoundation({
     if (h <= 0.25) color = colorMix(color, [0.36, 0.39, 0.3], 0.72);
     const rockBlend = clamp(smoothstep(0.34, 0.72, slope) + smoothstep(58, 92, h) * 0.55, 0, 1);
     color = colorMix(color, [0.43, 0.42, 0.4], rockBlend);
+    // Concrete apron under the imported city so terrain showing through
+    // gaps in the photogrammetry plate reads as city ground, not grass.
+    const cityPlateau = manhattanCityPlateauFactor(x, z);
+    if (cityPlateau > 0) color = colorMix(color, [0.43, 0.44, 0.45], cityPlateau * 0.92);
     return color;
   }
 
