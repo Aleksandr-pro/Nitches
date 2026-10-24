@@ -1,0 +1,12 @@
+{
+  "appId": "com.profitniche.nitcheshorizon",
+  "appName": "Nitches Horizon",
+  "webDir": "dist",
+  "backgroundColor": "#0a0c18",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

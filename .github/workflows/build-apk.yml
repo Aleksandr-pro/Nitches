@@ -1,0 +1,125 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # нужно, чтобы публиковать релиз с APK при пуше тега v*
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Android SDK уже предустановлен на ubuntu-раннерах GitHub
+      # ($ANDROID_SDK_ROOT) — сторонний setup-android не нужен.
+      - name: Install Android SDK packages (API 36)
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          SDKMANAGER="$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web game
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build release APK (unsigned)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      # Подпись: ключ генерируется прямо на CI-раннере и нигде не публикуется.
+      # Для стабильной подписи будущих обновлений добавьте секреты репозитория
+      # ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD (см. README).
+      - name: Generate signing key and sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          VERSION="$(node -p "require('./package.json').version")"
+          OUT="NitchesHorizon-v${VERSION}.apk"
+
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "Используем постоянный ключ из секретов"
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
+            KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+          else
+            echo "Секретов нет — генерируем одноразовый ключ на раннере"
+            KS_PASS="$(openssl rand -base64 24)"
+            keytool -genkeypair -keystore "$KS" -alias nitches \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Nitches Horizon, O=ProfitNiche"
+          fi
+          export KS_PASS
+
+          "$BT/zipalign" -p 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$KS" --ks-key-alias nitches \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+            --out "$OUT" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --verbose "$OUT"
+          ls -lh "$OUT"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizon-apk
+          path: ${{ env.APK_PATH }}
+          retention-days: 90
+
+      - name: Publish GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_PATH }}
+          name: Nitches Horizon ${{ github.ref_name }} — Android APK
+          fail_on_unmatched_files: true
+          body: |
+            ## 📱 Nitches Horizon для Android
+
+            **⬇️ Скачай файл `NitchesHorizon-v0.1.0.apk` ниже (раздел Assets) и открой его на телефоне.**
+
+            ### Установка
+            1. Скачай APK (Android 7.0 и новее).
+            2. Открой файл — если Android попросит, разреши «Установку из неизвестных источников» для браузера/файлового менеджера (стандартное предупреждение для приложений не из Google Play).
+            3. Нажми «Установить». Игра появится на рабочем столе: полноэкранная, горизонтальная, работает офлайн.
+
+            ### Что в этой версии
+            - 🏝️ Открытый остров: кольцевая трасса, горы, деревня, фестиваль
+            - 🏆 Гонки на 3 круга против 5 соперников + свободная поездка
+            - 🚗 3 машины, 💨 дрифт с очками, ⚡ нитро, миникарта
+            - 📱 Сенсорное управление
+
+            > ⚠️ Подпись этой сборки сгенерирована на CI. Если следующая версия не встанет поверх — удали старую и поставь заново (рекорд круга сбросится).
