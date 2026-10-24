@@ -3,6 +3,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGTR35, GTR_PAINTS } from './gtr.js';
 import { buildMustang, preloadMustangModel, MUSTANG_PAINTS } from './mustang.js';
 import { installCloudPrototype } from './cloudPrototype.js';
+import {
+  createPowertrainSpec,
+  createPowertrainState,
+  resetPowertrainState,
+  shapePedalInput,
+  updatePowertrain,
+} from './vehicle/powertrain.js';
 import './style.css';
 
 /* =====================================================================
@@ -85,7 +92,12 @@ const CARS = [
     grip: 10,
     offroad: 0.5,
     mass: 1765, powerKW: 421, driveFrontBias: 0.42, wheelbase: 2.78, cgToFront: 1.30, cgHeight: 0.52,
-    tireMu: 1.18, dragArea: 0.62, brakeDecel: 10.5, launchAccel: 6.4, maxSteer: 0.56,
+    tireMu: 1.18, dragArea: 0.62, brakeDecel: 10.5, maxSteer: 0.56,
+    powertrain: {
+      engineType: 'turbo', idleRpm: 850, redlineRpm: 7200, limiterRpm: 7450,
+      peakPowerRpm: 6600, peakTorqueNm: 637, gearCount: 6, wheelRadiusM: 0.35,
+      efficiency: 0.88, shiftUpMs: 105, shiftDownMs: 125, brakeFrontBias: 0.68,
+    },
     stats: { spd: 0.98, acc: 0.99, hnd: 0.96, off: 0.3 },
   },
   {
@@ -100,7 +112,12 @@ const CARS = [
     grip: 8.2,
     offroad: 0.55,
     mass: 1470, powerKW: 271, driveFrontBias: 0, wheelbase: 2.613, cgToFront: 1.37, cgHeight: 0.53,
-    tireMu: 1.02, dragArea: 0.78, brakeDecel: 9.2, launchAccel: 5.7, maxSteer: 0.58,
+    tireMu: 1.02, dragArea: 0.78, brakeDecel: 9.2, maxSteer: 0.58,
+    powertrain: {
+      engineType: 'na', idleRpm: 800, redlineRpm: 6800, limiterRpm: 7050,
+      peakPowerRpm: 5400, peakTorqueNm: 540, gearCount: 6, wheelRadiusM: 0.338,
+      efficiency: 0.86, shiftUpMs: 150, shiftDownMs: 170, brakeFrontBias: 0.67,
+    },
     stats: { spd: 0.84, acc: 0.84, hnd: 0.78, off: 0.38 },
   },
   {
@@ -115,7 +132,12 @@ const CARS = [
     grip: 8.5,
     offroad: 0.62,
     mass: 1380, powerKW: 255, driveFrontBias: 0, wheelbase: 2.70, cgToFront: 1.32, cgHeight: 0.50,
-    tireMu: 1.08, dragArea: 0.60, brakeDecel: 9.8, launchAccel: 5.8, maxSteer: 0.58,
+    tireMu: 1.08, dragArea: 0.60, brakeDecel: 9.8, maxSteer: 0.58,
+    powertrain: {
+      engineType: 'turbo', idleRpm: 850, redlineRpm: 7000, limiterRpm: 7250,
+      peakPowerRpm: 6000, peakTorqueNm: 450, gearCount: 7, wheelRadiusM: 0.335,
+      efficiency: 0.88, shiftUpMs: 120, shiftDownMs: 140, brakeFrontBias: 0.68,
+    },
     stats: { spd: 0.78, acc: 0.8, hnd: 0.82, off: 0.45 },
   },
   {
@@ -130,7 +152,12 @@ const CARS = [
     grip: 9.5,
     offroad: 0.5,
     mass: 1240, powerKW: 545, driveFrontBias: 0, wheelbase: 2.65, cgToFront: 1.43, cgHeight: 0.42,
-    tireMu: 1.28, dragArea: 0.58, brakeDecel: 11.5, launchAccel: 7.2, maxSteer: 0.52,
+    tireMu: 1.28, dragArea: 0.58, brakeDecel: 11.5, maxSteer: 0.52,
+    powertrain: {
+      engineType: 'na', idleRpm: 900, redlineRpm: 8500, limiterRpm: 8750,
+      peakPowerRpm: 8000, peakTorqueNm: 650, gearCount: 7, wheelRadiusM: 0.345,
+      efficiency: 0.89, shiftUpMs: 95, shiftDownMs: 115, brakeFrontBias: 0.66,
+    },
     stats: { spd: 0.97, acc: 0.95, hnd: 0.9, off: 0.28 },
   },
   {
@@ -145,7 +172,12 @@ const CARS = [
     grip: 7,
     offroad: 0.94,
     mass: 1550, powerKW: 210, driveFrontBias: 0.5, wheelbase: 2.85, cgToFront: 1.38, cgHeight: 0.72,
-    tireMu: 0.98, dragArea: 0.92, brakeDecel: 8.8, launchAccel: 5.0, maxSteer: 0.62,
+    tireMu: 0.98, dragArea: 0.92, brakeDecel: 8.8, maxSteer: 0.62,
+    powertrain: {
+      engineType: 'diesel', idleRpm: 750, redlineRpm: 5200, limiterRpm: 5450,
+      peakPowerRpm: 3600, peakTorqueNm: 560, gearCount: 6, wheelRadiusM: 0.39,
+      efficiency: 0.84, shiftUpMs: 180, shiftDownMs: 200, brakeFrontBias: 0.64,
+    },
     stats: { spd: 0.62, acc: 0.78, hnd: 0.66, off: 0.97 },
   },
 ];
@@ -227,7 +259,11 @@ const player = {
   throttle: 0,
   brakePedal: 0,
   gear: 1,
-  rpmRatio: 0.18,
+  selector: 'D',
+  engineRpm: 850,
+  rpmRatio: 0.12,
+  clutch: 0,
+  powertrain: null,
   slipAngle: 0,
   frontSlip: 0,
   rearSlip: 0,
@@ -250,7 +286,42 @@ let cameraMode = 0; // 0 — погоня, 1 — далеко, 2 — капот
 let menuOrbit = 0;
 let crashCooldown = 0;
 
-const input = { gas: false, brake: false, left: false, right: false, nitro: false, handbrake: false };
+const input = {
+  gas: false,
+  brake: false,
+  left: false,
+  right: false,
+  nitro: false,
+  handbrake: false,
+  gasValue: 0,
+  brakeValue: 0,
+};
+
+const powertrainSpecs = new Map();
+function getPowertrainSpec(car = selectedCar) {
+  if (!powertrainSpecs.has(car)) powertrainSpecs.set(car, createPowertrainSpec(car));
+  return powertrainSpecs.get(car);
+}
+function syncPowertrainTelemetry() {
+  const state = player.powertrain;
+  if (!state) return;
+  player.gear = state.gear;
+  player.selector = state.selector;
+  player.engineRpm = state.engineRpm;
+  player.rpmRatio = state.rpmRatio;
+  player.clutch = state.clutch;
+}
+function resetPlayerPowertrain(car = selectedCar) {
+  const spec = getPowertrainSpec(car);
+  if (!player.powertrain) player.powertrain = createPowertrainState(spec);
+  else resetPowertrainState(player.powertrain, spec);
+  syncPowertrainTelemetry();
+  return player.powertrain;
+}
+function pedalTargetValue(key) {
+  const touchValue = clamp(Number(input[`${key}Value`]) || 0, 0, 1);
+  return shapePedalInput(Math.max(input[key] ? 1 : 0, touchValue));
+}
 
 /* Виртуальный руль: rotation — угол обода в радианах, + по часовой (поворот вправо).
    Значение для физики, наоборот, + = влево, диапазон -1..1. */
@@ -960,7 +1031,7 @@ const TRACK_POINTS = [
 const curve = new THREE.CatmullRomCurve3(TRACK_POINTS, true, 'catmullrom', 0.6);
 const TRACK_LENGTH = curve.getLength();
 const SAMPLES = curve.getSpacedPoints(800);
-const ROAD_HALF = 5.6; // асфальт 11.2 м: две гоночные полосы + края (шкала мира: 1 ед. = 1 м)
+const ROAD_HALF = 4.7; // асфальт 9.4 м: две реальные полосы + узкие обочины (1 ед. = 1 м)
 
 function nearestSampleIdx(pos) {
   let лучший = 0;
@@ -2709,8 +2780,7 @@ function resetPlayerToStart() {
   player.steerAngle = 0;
   player.throttle = 0;
   player.brakePedal = 0;
-  player.gear = 1;
-  player.rpmRatio = 0.18;
+  resetPlayerPowertrain();
   player.longAccel = 0;
   player.latAccel = 0;
   player.surfaceMuSmooth = 1;
@@ -2852,8 +2922,7 @@ function respawn() {
   player.steerAngle = 0;
   player.throttle = 0;
   player.brakePedal = 0;
-  player.gear = 1;
-  player.rpmRatio = 0.18;
+  resetPlayerPowertrain();
   player.longAccel = 0;
   player.latAccel = 0;
   player.surfaceMuSmooth = 1;
@@ -2900,26 +2969,6 @@ function surfaceInfoAt(x, z, groundH) {
     rolling: lerp(0.052, 0.034, selectedCar.offroad),
     roadInfo,
   };
-}
-
-function updateGearAndRpm(dt, u) {
-  const thresholds = [0, 11, 20, 30, 41, 53, 67];
-  if (u < -0.15 && player.throttle < 0.05) {
-    player.gear = 0;
-    const target = 0.2 + clamp(Math.abs(u) / 8, 0, 1) * 0.55 + player.brakePedal * 0.1;
-    player.rpmRatio = lerp(player.rpmRatio, target, clamp(dt * 9, 0, 1));
-    return;
-  }
-  let gear = 1;
-  while (gear < 7 && u > thresholds[gear]) gear++;
-  player.gear = gear;
-  const low = thresholds[gear - 1];
-  const high = thresholds[gear] || selectedCar.topSpeed * 1.08;
-  const inGear = clamp((u - low) / Math.max(high - low, 1), 0, 1);
-  let target = 0.17 + inGear * 0.72 + player.throttle * 0.07;
-  if (player.wheelspin) target = Math.max(target, 0.9);
-  if (Math.abs(u) < 0.1 && player.throttle < 0.03) target = 0.17;
-  player.rpmRatio = lerp(player.rpmRatio, clamp(target, 0.14, 1), clamp(dt * 10, 0, 1));
 }
 
 function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canDrive, inWater) {
@@ -2990,33 +3039,29 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   let frontLatWheel = tireLateralForce(alphaFront, loadFront, muFront) * tireSpeedFactor;
   let rearLat = tireLateralForce(alphaRear, loadRear, muRear) * tireSpeedFactor;
 
-  // Тяга двигателя: мощность на скорости + ограничение старта
-  const gearFactor = [0.86, 1.24, 1.08, 0.97, 0.88, 0.8, 0.73, 0.67][player.gear] || 0.75;
+  // Physics v2: настоящий момент двигателя, передачи, сцепление и D/N/R.
+  // Шинная модель ниже по-прежнему ограничивает суммарную силу кругом сцепления.
+  const powertrainSpec = getPowertrainSpec(car);
+  if (!player.powertrain) resetPlayerPowertrain(car);
   const surfaceTopFactor = surface.name === 'asphalt' ? 1 : lerp(0.7, 0.98, car.offroad);
-  const effectiveTop = car.topSpeed * surfaceTopFactor * (player.boosting ? 1.22 : 1) * (inWater ? 0.24 : 1);
-  let driveFront = 0;
-  let driveRear = 0;
-  let brakeFront = 0;
-  let brakeRear = 0;
-  if (canDrive && player.throttle > 0.01 && player.gear > 0) {
-    const powerForce = (car.powerKW * 1000 * 0.88) / Math.max(u, 3.6);
-    let totalDrive = Math.min(mass * car.launchAccel * gearFactor, powerForce) * player.throttle;
-    totalDrive *= clamp((effectiveTop * 1.05 - u) / Math.max(effectiveTop * 0.18, 3), 0, 1);
-    if (player.boosting && u < effectiveTop * 1.08) totalDrive += mass * 3.7;
-    driveFront = totalDrive * car.driveFrontBias;
-    driveRear = totalDrive * (1 - car.driveFrontBias);
-  }
-  if (canDrive && player.brakePedal > 0.01) {
-    if (u > 0.45) {
-      const totalBrake = -mass * car.brakeDecel * player.brakePedal;
-      brakeFront = totalBrake * 0.68;
-      brakeRear = totalBrake * 0.32;
-    } else if (u > -8.5) {
-      const reverseForce = -mass * 3.9 * player.brakePedal;
-      driveFront += reverseForce * car.driveFrontBias;
-      driveRear += reverseForce * (1 - car.driveFrontBias);
-    }
-  }
+  const effectiveTop = car.topSpeed * surfaceTopFactor * (player.boosting ? 1.16 : 1) * (inWater ? 0.3 : 1);
+  const powertrain = updatePowertrain(player.powertrain, powertrainSpec, {
+    dt: h,
+    longitudinalSpeedMps: u,
+    throttlePedal: player.throttle,
+    brakePedal: player.brakePedal,
+    canDrive,
+    speedLimiterMps: effectiveTop,
+    boostForceN: canDrive && player.boosting && player.throttle > 0.01 && u < effectiveTop * 1.08
+      ? mass * 3.7
+      : 0,
+  });
+  syncPowertrainTelemetry();
+
+  let driveFront = powertrain.driveForceN * car.driveFrontBias;
+  let driveRear = powertrain.driveForceN * (1 - car.driveFrontBias);
+  let brakeFront = powertrain.serviceBrakeForceN * powertrainSpec.brakeFrontBias;
+  let brakeRear = powertrain.serviceBrakeForceN * (1 - powertrainSpec.brakeFrontBias);
   if (canDrive && input.handbrake && Math.abs(u) > 0.2) {
     brakeRear += -Math.sign(u) * mass * 4.3;
   }
@@ -3030,13 +3075,13 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   const demandRear = driveRear + brakeRear;
   let frontLongWheel = clamp(demandFront, -availFront, availFront);
   let rearLong = clamp(demandRear, -availRear, availRear);
-  const frontSpin = player.throttle > 0.25 && driveFront > maxFront * 0.92;
-  const rearSpin = player.throttle > 0.25 && driveRear > maxRear * 0.92;
+  const frontSpin = powertrain.drivePedal > 0.25 && Math.abs(driveFront) > maxFront * 0.92;
+  const rearSpin = powertrain.drivePedal > 0.25 && Math.abs(driveRear) > maxRear * 0.92;
   player.wheelspin = frontSpin || rearSpin;
   if (frontSpin) frontLatWheel *= lerp(0.48, 0.9, profile.traction);
   if (rearSpin) rearLat *= lerp(0.4, 0.9, profile.traction);
-  if (player.brakePedal > 0.82 && Math.abs(brakeFront) > maxFront * 0.95) frontLatWheel *= lerp(0.72, 0.94, profile.traction);
-  if (player.brakePedal > 0.82 && Math.abs(brakeRear) > maxRear * 0.95) rearLat *= lerp(0.62, 0.9, profile.traction);
+  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(brakeFront) > maxFront * 0.95) frontLatWheel *= lerp(0.72, 0.94, profile.traction);
+  if (powertrain.serviceBrakePedal > 0.82 && Math.abs(brakeRear) > maxRear * 0.95) rearLat *= lerp(0.62, 0.9, profile.traction);
 
   // Передняя ось: из координат повернутого колеса в координаты кузова
   const frontLongBody = frontLongWheel * cosD - frontLatWheel * sinD;
@@ -3045,10 +3090,9 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   const aeroLong = -0.5 * 1.225 * car.dragArea * u * Math.abs(u);
   const aeroLat = -1.15 * v * Math.abs(v);
   const rollingLong = -mass * gravity * surface.rolling * Math.tanh(u / 0.65);
-  const engineBrake = canDrive && player.throttle < 0.03 && u > 0.2 ? -mass * 0.38 * Math.tanh(u / 1.5) : 0;
   const slopeLongForce = -mass * gravity * slopeLong;
   const slopeLatForce = -mass * gravity * slopeLat;
-  const totalLong = frontLongBody + rearLong + aeroLong + rollingLong + engineBrake + slopeLongForce;
+  const totalLong = frontLongBody + rearLong + aeroLong + rollingLong + slopeLongForce;
   const totalLat = frontLatBody + rearLat + aeroLat + slopeLatForce;
 
   // Момент рыскания + электронная стабилизация профиля помощи
@@ -3070,9 +3114,10 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   const kinematicV = u * (b / wheelbase) * Math.tan(delta);
   v = lerp(v, kinematicV, (1 - dynamicBlend) * clamp(h * 16, 0, 1));
 
-  const reverseRequested = canDrive && player.brakePedal > 0.03 && u <= 0.5;
-  if (Math.abs(u) < 0.13 && player.throttle < 0.03 && !reverseRequested && Math.abs(slopeLong) < 0.035) u = 0;
-  if (Math.hypot(u, v) < 0.06 && player.throttle < 0.03 && !reverseRequested) {
+  const reverseRequested = powertrain.selector === 'R';
+  const holdingAtStop = reverseRequested || powertrain.braking || powertrain.drivePedal > 0.03;
+  if (Math.abs(u) < 0.13 && !holdingAtStop && Math.abs(slopeLong) < 0.035) u = 0;
+  if (Math.hypot(u, v) < 0.06 && !holdingAtStop) {
     v = 0;
     yawRate = 0;
   }
@@ -3083,7 +3128,8 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   }
   const hardForward = Math.max(effectiveTop * 1.16 + 4, 9);
   if (u > hardForward) u = lerp(u, hardForward, clamp(h * 3, 0, 1));
-  if (u < -9.2) u = -9.2;
+  const hardReverse = -powertrainSpec.maxReverseSpeedMps * 1.12;
+  if (u < hardReverse) u = lerp(u, hardReverse, clamp(h * 5, 0, 1));
 
   player.yawRate = yawRate;
   player.yaw += yawRate * h;
@@ -3110,15 +3156,15 @@ function updatePlayer(dt) {
   const canDrive = gameState === 'racing';
 
   updateSteeringInput(dt);
-  const throttleTarget = canDrive && input.gas ? 1 : 0;
-  const brakeTarget = canDrive && input.brake ? 1 : 0;
-  player.throttle = approachValue(player.throttle, throttleTarget, (throttleTarget > player.throttle ? 4.8 : 6.5) * dt);
-  player.brakePedal = approachValue(player.brakePedal, brakeTarget, (brakeTarget > player.brakePedal ? 7.5 : 9.5) * dt);
+  if (!player.powertrain) resetPlayerPowertrain(car);
+  const throttleTarget = canDrive ? pedalTargetValue('gas') : 0;
+  const brakeTarget = canDrive ? pedalTargetValue('brake') : 0;
+  player.throttle = approachValue(player.throttle, throttleTarget, (throttleTarget > player.throttle ? 5.2 : 7.2) * dt);
+  player.brakePedal = approachValue(player.brakePedal, brakeTarget, (brakeTarget > player.brakePedal ? 8.2 : 10.5) * dt);
 
   _fwd.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
   _right.set(_fwd.z, 0, -_fwd.x);
   let fwdSpeed = player.vel.dot(_fwd);
-  updateGearAndRpm(dt, fwdSpeed);
 
   const near = nearestSampleIdx(pos);
   const roadInfoForGround = nearestRoadInfoApprox(pos.x, pos.z);
@@ -3169,7 +3215,7 @@ function updatePlayer(dt) {
   const latSpeed = player.vel.dot(_right);
   const speedAbs = Math.abs(fwdSpeed);
   const velLen = player.vel.length();
-  updateGearAndRpm(dt, fwdSpeed);
+  syncPowertrainTelemetry();
 
   const newGroundH = terrainHeight(pos.x, pos.z, nearestRoadInfoApprox(pos.x, pos.z).dist);
   player.groundH = newGroundH;
@@ -3671,8 +3717,9 @@ function updateCamera(dt) {
     look.y = pos.y + 1.0;
     camera.lookAt(look);
   } else {
-    const baseDist = cameraMode === 0 ? 7.6 + speedRatio * 1.8 : 12.5;
-    const baseHeight = cameraMode === 0 ? 2.55 : 4.6;
+    const absoluteSpeedRatio = clamp(player.vel.length() / 60, 0, 1);
+    const baseDist = cameraMode === 0 ? 7.05 + absoluteSpeedRatio * 1.75 : 12.5;
+    const baseHeight = cameraMode === 0 ? 2.38 + absoluteSpeedRatio * 0.28 : 4.6;
     const basePitch = Math.atan2(baseHeight, baseDist);
     const pitch = clamp(basePitch + cameraOrbit.pitch, -0.02, 1.25);
     const distance = clamp(baseDist * cameraOrbit.distanceScale, 3.8, 24);
@@ -3691,7 +3738,9 @@ function updateCamera(dt) {
     look.y = pos.y + lerp(1.4, 0.78, inspectMode ? 1 : orbitAmount);
     camera.lookAt(look);
   }
-  const targetFov = inspectMode ? 50 : 62 + (player.boosting ? 8 : speedRatio * 4);
+  const targetFov = inspectMode
+    ? 50
+    : 60 + clamp(player.vel.length() / 60, 0, 1) * 7 + (player.boosting ? 5 : 0);
   camera.fov = lerp(camera.fov, targetFov, dt * 4);
   camera.updateProjectionMatrix();
 }
@@ -3870,7 +3919,7 @@ function updateHUD(dt) {
       : '0';
   }
   $('hudSpeed').textContent = kmh;
-  $('hudGear').textContent = player.gear === 0 ? 'R' : player.gear;
+  $('hudGear').textContent = player.gear === -1 ? 'R' : (player.gear === 0 ? 'N' : player.gear);
   $('rpmFill').style.width = `${Math.round(player.rpmRatio * 100)}%`;
   $('rpmFill').classList.toggle('redline', player.rpmRatio > 0.86);
   $('hudSurface').textContent = player.surface;
@@ -4029,7 +4078,11 @@ window.addEventListener('keyup', (e) => {
   const k = KEYMAP[e.code];
   if (k) input[k] = false;
 });
-window.addEventListener('blur', () => Object.keys(input).forEach((k) => (input[k] = false)));
+window.addEventListener('blur', () => {
+  ['gas', 'brake', 'left', 'right', 'nitro', 'handbrake'].forEach((k) => (input[k] = false));
+  input.gasValue = 0;
+  input.brakeValue = 0;
+});
 
 /* ============================ Управление: тач ============================ */
 function showTouchControls(show) {
@@ -4062,8 +4115,52 @@ function bindHold(btn, key) {
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
-bindHold($('btnGas'), 'gas');
-bindHold($('btnBrake'), 'brake');
+function bindPedal(btn, key) {
+  const valueKey = `${key}Value`;
+  let activePointerId = null;
+  let startY = 0;
+
+  const setValue = (value) => {
+    const next = clamp(Number(value) || 0, 0, 1);
+    input[valueKey] = next;
+    btn.classList.toggle('pressed', next > 0.02);
+    btn.dataset.pedalValue = next.toFixed(2);
+    btn.style.setProperty('--pedal-value', next.toFixed(3));
+    btn.style.transform = next > 0.02 ? `scale(${(1 - next * 0.08).toFixed(3)})` : '';
+  };
+
+  const on = (e) => {
+    e.preventDefault();
+    activePointerId = e.pointerId;
+    startY = e.clientY;
+    try { btn.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    // A normal tap is full travel.  Dragging down feathers the pedal;
+    // dragging back up restores full travel without lifting the finger.
+    const pressure = Number(e.pressure);
+    setValue(pressure > 0.02 && pressure < 0.98 ? Math.max(0.25, pressure) : 1);
+  };
+  const move = (e) => {
+    if (e.pointerId !== activePointerId) return;
+    e.preventDefault();
+    const dragDownPx = e.clientY - startY;
+    setValue(dragDownPx > 0 ? 1 - dragDownPx / 115 : 1);
+  };
+  const off = (e) => {
+    if (e.pointerId !== activePointerId) return;
+    e.preventDefault();
+    activePointerId = null;
+    setValue(0);
+  };
+
+  btn.addEventListener('pointerdown', on);
+  btn.addEventListener('pointermove', move);
+  btn.addEventListener('pointerup', off);
+  btn.addEventListener('pointercancel', off);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+bindPedal($('btnGas'), 'gas');
+bindPedal($('btnBrake'), 'brake');
 bindHold($('btnLeft'), 'left');
 bindHold($('btnRight'), 'right');
 bindHold($('btnNitro'), 'nitro');
