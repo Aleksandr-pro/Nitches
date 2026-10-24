@@ -1,0 +1,772 @@
+{
+  "carId": "mustang",
+  "releaseId": 422728278,
+  "assetId": 672275730,
+  "archive": {
+    "name": "Mustang.zip",
+    "size": 101934251,
+    "sha256": "8c70f0255531cd1358397c529ac536deeeab951c8aa30e7947b0092c5ade9db6"
+  },
+  "summary": {
+    "entryCount": 22,
+    "fileCount": 20,
+    "totalUncompressedBytes": 243581056,
+    "extractionEnabled": true,
+    "unsafeEntryCount": 0,
+    "extractionErrorCount": 0
+  },
+  "byExtension": [
+    {
+      "extension": ".obj",
+      "count": 2,
+      "uncompressedBytes": 94425542,
+      "compressedBytes": 21681220
+    },
+    {
+      "extension": ".stl",
+      "count": 2,
+      "uncompressedBytes": 71712368,
+      "compressedBytes": 28274160
+    },
+    {
+      "extension": ".fbx",
+      "count": 2,
+      "uncompressedBytes": 30217144,
+      "compressedBytes": 27220090
+    },
+    {
+      "extension": ".blend",
+      "count": 2,
+      "uncompressedBytes": 17282080,
+      "compressedBytes": 6317748
+    },
+    {
+      "extension": ".blend1",
+      "count": 2,
+      "uncompressedBytes": 17281824,
+      "compressedBytes": 6324960
+    },
+    {
+      "extension": ".tif",
+      "count": 3,
+      "uncompressedBytes": 11058802,
+      "compressedBytes": 10757630
+    },
+    {
+      "extension": ".tiff",
+      "count": 1,
+      "uncompressedBytes": 898032,
+      "compressedBytes": 871715
+    },
+    {
+      "extension": ".png",
+      "count": 3,
+      "uncompressedBytes": 599089,
+      "compressedBytes": 385959
+    },
+    {
+      "extension": ".jpg",
+      "count": 1,
+      "uncompressedBytes": 97235,
+      "compressedBytes": 97059
+    },
+    {
+      "extension": ".mtl",
+      "count": 2,
+      "uncompressedBytes": 8940,
+      "compressedBytes": 590
+    }
+  ],
+  "candidates": {
+    "runtime": [],
+    "source": [
+      {
+        "path": "Mustang/Mustang.blend",
+        "normalizedPath": "Mustang/Mustang.blend",
+        "size": 8641040,
+        "compressedSize": 3158874,
+        "extension": ".blend",
+        "sha256": "0f94dca59b5dc71506c160ad9b3171082650587464cb6e3c7161a012be60f582",
+        "parsed": {
+          "valid": true,
+          "blendVersion": "279",
+          "pointerSize": "64-bit",
+          "endianness": "little"
+        }
+      },
+      {
+        "path": "Mustang/Mustang.blend1",
+        "normalizedPath": "Mustang/Mustang.blend1",
+        "size": 8640912,
+        "compressedSize": 3162480,
+        "extension": ".blend1",
+        "sha256": "8bc59ec05c75f23fd8ac063bfaa1f11a8e3a356fb88cfc3d522c0b43e5955759",
+        "parsed": {
+          "valid": true,
+          "blendVersion": "279",
+          "pointerSize": "64-bit",
+          "endianness": "little"
+        }
+      },
+      {
+        "path": "Mustang/Mustang.fbx",
+        "normalizedPath": "Mustang/Mustang.fbx",
+        "size": 15108572,
+        "compressedSize": 13610045,
+        "extension": ".fbx",
+        "sha256": "96ee4e6740d708605416ac11b49a271e5d7893486498e45a7e7326034a0581f5",
+        "parsed": {
+          "valid": true,
+          "format": "binary",
+          "fbxVersion": 7400
+        }
+      },
+      {
+        "path": "Mustang/Mustang.mtl",
+        "normalizedPath": "Mustang/Mustang.mtl",
+        "size": 4470,
+        "compressedSize": 295,
+        "extension": ".mtl",
+        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+      },
+      {
+        "path": "Mustang/Mustang.obj",
+        "normalizedPath": "Mustang/Mustang.obj",
+        "size": 47212771,
+        "compressedSize": 10840610,
+        "extension": ".obj",
+        "sha256": "5926416e6dbcfd5f1df190699f735edea71c9d0538c13c09707837e7f0efd130",
+        "parsed": {
+          "valid": true,
+          "counts": {
+            "vertices": 480964,
+            "normals": 281117,
+            "faces": 362632,
+            "uvs": 110624
+          },
+          "materialLibraries": [
+            "Mustang.mtl"
+          ],
+          "objects": [
+            "M_Wiper1_Cube.038",
+            "M_Spoiler1_Cube.036",
+            "M_Spoiler2_Cube.035",
+            "M_BackWindowClips_Cube.034",
+            "M_BackWindowFlaps_Cube.033",
+            "M_BackWindowTrim_Plane.003",
+            "M_Mirrors_Cube.032",
+            "M_SideWindowTrim_Cube.031",
+            "M_DoorKeyHoles_Cylinder.034",
+            "M_IntakeText2_CUText.002",
+            "M_IntakeText1_CUText.001",
+            "M_WheelFRBrakePad_Cylinder.033",
+            "M_HoodClips_Cylinder.032",
+            "M_DoorHandleButtonL_Cylinder.031",
+            "M_DoorHandleL_Cube.030",
+            "M_DoorHandleButtonR_Cylinder.029",
+            "M_DoorHandleR_Cube.023",
+            "M_GrillLogo2_Cube.017",
+            "M_GrillLogo1_CUpath12.001",
+            "M_BackSideLightGlass_Cube.029",
+            "M_BackSideLight_Cube.028",
+            "M_FrontSignalGlass_Cube.022",
+            "M_FrontSignal_Cube.020",
+            "M_WheelWell1_Plane.005",
+            "M_WheelWell2_Plane.004",
+            "M_GasCapLogo_CUpath12",
+            "M_TrunkKeyHole_Cylinder.030",
+            "M_GasCap_Cylinder.002",
+            "M_BackLogo1_CUText",
+            "M_SideWindows2_Cube.016",
+            "M_SideWindows1_Cube.013",
+            "M_BackWindow_Cube.008",
+            "M_Windshield_Cube.005",
+            "M_WheelFLBrakePad_Cylinder.033",
+            "M_WheelFLRim_Cylinder.027",
+            "M_WheelFLAxle_Cylinder.020",
+            "M_WheelFLSpoke1_Cube.027",
+            "M_WheelFLSpoke5_Cube.027",
+            "M_WheelFLSpoke4_Cube.027",
+            "M_WheelFLSpoke3_Cube.027",
+            "M_WheelFLSpoke2_Cube.027",
+            "M_WheelFLTire_Cylinder.019",
+            "M_WheelBLTire_Cylinder.018",
+            "M_WheelBLSpoke2_Cube.026",
+            "M_WheelBLSpoke3_Cube.026",
+            "M_WheelBLSpoke4_Cube.026",
+            "M_WheelBLSpoke5_Cube.026",
+            "M_WheelBLSpoke1_Cube.026",
+            "M_WheelBLAxle_Cylinder.016",
+            "M_WheelBLRim_Cylinder.015"
+          ],
+          "countTruncated": false
+        }
+      },
+      {
+        "path": "Mustang/Mustang.stl",
+        "normalizedPath": "Mustang/Mustang.stl",
+        "size": 35856184,
+        "compressedSize": 14137080,
+        "extension": ".stl",
+        "sha256": "2a66cb1b91044e6a6864ab9c24c1f613058052af5d7da01716786ab115c8bf83"
+      },
+      {
+        "path": "Mustang/Textures/Mustang.blend",
+        "normalizedPath": "Mustang/Textures/Mustang.blend",
+        "size": 8641040,
+        "compressedSize": 3158874,
+        "extension": ".blend",
+        "sha256": "0f94dca59b5dc71506c160ad9b3171082650587464cb6e3c7161a012be60f582",
+        "parsed": {
+          "valid": true,
+          "blendVersion": "279",
+          "pointerSize": "64-bit",
+          "endianness": "little"
+        }
+      },
+      {
+        "path": "Mustang/Textures/Mustang.blend1",
+        "normalizedPath": "Mustang/Textures/Mustang.blend1",
+        "size": 8640912,
+        "compressedSize": 3162480,
+        "extension": ".blend1",
+        "sha256": "8bc59ec05c75f23fd8ac063bfaa1f11a8e3a356fb88cfc3d522c0b43e5955759",
+        "parsed": {
+          "valid": true,
+          "blendVersion": "279",
+          "pointerSize": "64-bit",
+          "endianness": "little"
+        }
+      },
+      {
+        "path": "Mustang/Textures/Mustang.fbx",
+        "normalizedPath": "Mustang/Textures/Mustang.fbx",
+        "size": 15108572,
+        "compressedSize": 13610045,
+        "extension": ".fbx",
+        "sha256": "96ee4e6740d708605416ac11b49a271e5d7893486498e45a7e7326034a0581f5",
+        "parsed": {
+          "valid": true,
+          "format": "binary",
+          "fbxVersion": 7400
+        }
+      },
+      {
+        "path": "Mustang/Textures/Mustang.mtl",
+        "normalizedPath": "Mustang/Textures/Mustang.mtl",
+        "size": 4470,
+        "compressedSize": 295,
+        "extension": ".mtl",
+        "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+      },
+      {
+        "path": "Mustang/Textures/Mustang.obj",
+        "normalizedPath": "Mustang/Textures/Mustang.obj",
+        "size": 47212771,
+        "compressedSize": 10840610,
+        "extension": ".obj",
+        "sha256": "5926416e6dbcfd5f1df190699f735edea71c9d0538c13c09707837e7f0efd130",
+        "parsed": {
+          "valid": true,
+          "counts": {
+            "vertices": 480964,
+            "normals": 281117,
+            "faces": 362632,
+            "uvs": 110624
+          },
+          "materialLibraries": [
+            "Mustang.mtl"
+          ],
+          "objects": [
+            "M_Wiper1_Cube.038",
+            "M_Spoiler1_Cube.036",
+            "M_Spoiler2_Cube.035",
+            "M_BackWindowClips_Cube.034",
+            "M_BackWindowFlaps_Cube.033",
+            "M_BackWindowTrim_Plane.003",
+            "M_Mirrors_Cube.032",
+            "M_SideWindowTrim_Cube.031",
+            "M_DoorKeyHoles_Cylinder.034",
+            "M_IntakeText2_CUText.002",
+            "M_IntakeText1_CUText.001",
+            "M_WheelFRBrakePad_Cylinder.033",
+            "M_HoodClips_Cylinder.032",
+            "M_DoorHandleButtonL_Cylinder.031",
+            "M_DoorHandleL_Cube.030",
+            "M_DoorHandleButtonR_Cylinder.029",
+            "M_DoorHandleR_Cube.023",
+            "M_GrillLogo2_Cube.017",
+            "M_GrillLogo1_CUpath12.001",
+            "M_BackSideLightGlass_Cube.029",
+            "M_BackSideLight_Cube.028",
+            "M_FrontSignalGlass_Cube.022",
+            "M_FrontSignal_Cube.020",
+            "M_WheelWell1_Plane.005",
+            "M_WheelWell2_Plane.004",
+            "M_GasCapLogo_CUpath12",
+            "M_TrunkKeyHole_Cylinder.030",
+            "M_GasCap_Cylinder.002",
+            "M_BackLogo1_CUText",
+            "M_SideWindows2_Cube.016",
+            "M_SideWindows1_Cube.013",
+            "M_BackWindow_Cube.008",
+            "M_Windshield_Cube.005",
+            "M_WheelFLBrakePad_Cylinder.033",
+            "M_WheelFLRim_Cylinder.027",
+            "M_WheelFLAxle_Cylinder.020",
+            "M_WheelFLSpoke1_Cube.027",
+            "M_WheelFLSpoke5_Cube.027",
+            "M_WheelFLSpoke4_Cube.027",
+            "M_WheelFLSpoke3_Cube.027",
+            "M_WheelFLSpoke2_Cube.027",
+            "M_WheelFLTire_Cylinder.019",
+            "M_WheelBLTire_Cylinder.018",
+            "M_WheelBLSpoke2_Cube.026",
+            "M_WheelBLSpoke3_Cube.026",
+            "M_WheelBLSpoke4_Cube.026",
+            "M_WheelBLSpoke5_Cube.026",
+            "M_WheelBLSpoke1_Cube.026",
+            "M_WheelBLAxle_Cylinder.016",
+            "M_WheelBLRim_Cylinder.015"
+          ],
+          "countTruncated": false
+        }
+      },
+      {
+        "path": "Mustang/Textures/Mustang.stl",
+        "normalizedPath": "Mustang/Textures/Mustang.stl",
+        "size": 35856184,
+        "compressedSize": 14137080,
+        "extension": ".stl",
+        "sha256": "2a66cb1b91044e6a6864ab9c24c1f613058052af5d7da01716786ab115c8bf83"
+      }
+    ],
+    "textures": [
+      {
+        "path": "Mustang/Textures/LightDisplacement.jpg",
+        "normalizedPath": "Mustang/Textures/LightDisplacement.jpg",
+        "size": 97235,
+        "compressedSize": 97059,
+        "extension": ".jpg",
+        "sha256": "95152fe4cb6c12f864671f3f858bc7d89698abacf494ba17df72a5647c004f87",
+        "image": {
+          "signatureOk": true,
+          "width": 513,
+          "height": 513
+        }
+      },
+      {
+        "path": "Mustang/Textures/MustangBodyStripe1.png",
+        "normalizedPath": "Mustang/Textures/MustangBodyStripe1.png",
+        "size": 103286,
+        "compressedSize": 25855,
+        "extension": ".png",
+        "sha256": "72f0e2ec0f50ee1843e19476d25e9f834573af6f0e70b6f8c4b4b1ce248f0117",
+        "image": {
+          "signatureOk": true,
+          "width": 4096,
+          "height": 4096
+        }
+      },
+      {
+        "path": "Mustang/Textures/MustangBodyStripe2.png",
+        "normalizedPath": "Mustang/Textures/MustangBodyStripe2.png",
+        "size": 97980,
+        "compressedSize": 20219,
+        "extension": ".png",
+        "sha256": "be725843604474a239d7a194a43204670b8680726a0eb91d5294185077069677",
+        "image": {
+          "signatureOk": true,
+          "width": 4096,
+          "height": 4096
+        }
+      },
+      {
+        "path": "Mustang/Textures/UV_Mustang.png",
+        "normalizedPath": "Mustang/Textures/UV_Mustang.png",
+        "size": 397823,
+        "compressedSize": 339885,
+        "extension": ".png",
+        "sha256": "c400bc4d82276f59938638f9384c4842da3c13cf9e08b5aea922eabd11ab859f",
+        "image": {
+          "signatureOk": true,
+          "width": 2048,
+          "height": 2048
+        }
+      }
+    ],
+    "nestedArchives": []
+  },
+  "textPreviews": [],
+  "extractionErrors": [],
+  "warnings": [
+    "Найдено текстур крупнее 2048 px: 2; для мобильной runtime-версии их обычно нужно уменьшать/сжимать."
+  ],
+  "largestFiles": [
+    {
+      "path": "Mustang/Mustang.obj",
+      "size": 47212771,
+      "extension": ".obj"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.obj",
+      "size": 47212771,
+      "extension": ".obj"
+    },
+    {
+      "path": "Mustang/Mustang.stl",
+      "size": 35856184,
+      "extension": ".stl"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.stl",
+      "size": 35856184,
+      "extension": ".stl"
+    },
+    {
+      "path": "Mustang/Mustang.fbx",
+      "size": 15108572,
+      "extension": ".fbx"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.fbx",
+      "size": 15108572,
+      "extension": ".fbx"
+    },
+    {
+      "path": "Mustang/Mustang.blend",
+      "size": 8641040,
+      "extension": ".blend"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.blend",
+      "size": 8641040,
+      "extension": ".blend"
+    },
+    {
+      "path": "Mustang/Mustang.blend1",
+      "size": 8640912,
+      "extension": ".blend1"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.blend1",
+      "size": 8640912,
+      "extension": ".blend1"
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif",
+      "size": 4977110,
+      "extension": ".tif"
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif",
+      "size": 4815080,
+      "extension": ".tif"
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif",
+      "size": 1266612,
+      "extension": ".tif"
+    },
+    {
+      "path": "Mustang/Textures/grunge1.tiff",
+      "size": 898032,
+      "extension": ".tiff"
+    },
+    {
+      "path": "Mustang/Textures/UV_Mustang.png",
+      "size": 397823,
+      "extension": ".png"
+    },
+    {
+      "path": "Mustang/Textures/MustangBodyStripe1.png",
+      "size": 103286,
+      "extension": ".png"
+    },
+    {
+      "path": "Mustang/Textures/MustangBodyStripe2.png",
+      "size": 97980,
+      "extension": ".png"
+    },
+    {
+      "path": "Mustang/Textures/LightDisplacement.jpg",
+      "size": 97235,
+      "extension": ".jpg"
+    },
+    {
+      "path": "Mustang/Mustang.mtl",
+      "size": 4470,
+      "extension": ".mtl"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.mtl",
+      "size": 4470,
+      "extension": ".mtl"
+    }
+  ],
+  "entries": [
+    {
+      "path": "Mustang/Mustang.blend",
+      "normalizedPath": "Mustang/Mustang.blend",
+      "isDirectory": false,
+      "size": 8641040,
+      "compressedSize": 3158874,
+      "crc32": "ae9ddda1",
+      "extension": ".blend",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "0f94dca59b5dc71506c160ad9b3171082650587464cb6e3c7161a012be60f582"
+    },
+    {
+      "path": "Mustang/Mustang.blend1",
+      "normalizedPath": "Mustang/Mustang.blend1",
+      "isDirectory": false,
+      "size": 8640912,
+      "compressedSize": 3162480,
+      "crc32": "fba37f86",
+      "extension": ".blend1",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "8bc59ec05c75f23fd8ac063bfaa1f11a8e3a356fb88cfc3d522c0b43e5955759"
+    },
+    {
+      "path": "Mustang/Mustang.fbx",
+      "normalizedPath": "Mustang/Mustang.fbx",
+      "isDirectory": false,
+      "size": 15108572,
+      "compressedSize": 13610045,
+      "crc32": "6e51ca32",
+      "extension": ".fbx",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "96ee4e6740d708605416ac11b49a271e5d7893486498e45a7e7326034a0581f5"
+    },
+    {
+      "path": "Mustang/Mustang.mtl",
+      "normalizedPath": "Mustang/Mustang.mtl",
+      "isDirectory": false,
+      "size": 4470,
+      "compressedSize": 295,
+      "crc32": "e0e709c5",
+      "extension": ".mtl",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+    },
+    {
+      "path": "Mustang/Mustang.obj",
+      "normalizedPath": "Mustang/Mustang.obj",
+      "isDirectory": false,
+      "size": 47212771,
+      "compressedSize": 10840610,
+      "crc32": "d2593487",
+      "extension": ".obj",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "5926416e6dbcfd5f1df190699f735edea71c9d0538c13c09707837e7f0efd130"
+    },
+    {
+      "path": "Mustang/Mustang.stl",
+      "normalizedPath": "Mustang/Mustang.stl",
+      "isDirectory": false,
+      "size": 35856184,
+      "compressedSize": 14137080,
+      "crc32": "d8a9638b",
+      "extension": ".stl",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "2a66cb1b91044e6a6864ab9c24c1f613058052af5d7da01716786ab115c8bf83"
+    },
+    {
+      "path": "Mustang/Textures/",
+      "normalizedPath": "Mustang/Textures",
+      "isDirectory": true,
+      "size": 0,
+      "compressedSize": 0,
+      "crc32": "00000000",
+      "extension": "(directory)",
+      "safePath": true,
+      "isSymlink": false
+    },
+    {
+      "path": "Mustang/Textures/Ground/",
+      "normalizedPath": "Mustang/Textures/Ground",
+      "isDirectory": true,
+      "size": 0,
+      "compressedSize": 0,
+      "crc32": "00000000",
+      "extension": "(directory)",
+      "safePath": true,
+      "isSymlink": false
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif",
+      "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_height.tif",
+      "isDirectory": false,
+      "size": 1266612,
+      "compressedSize": 1255254,
+      "crc32": "3fcb7a66",
+      "extension": ".tif",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "5d081761ab7550a39ec36ba5ef1f8a60dbd3fe254849d6846907b0288ea2a080"
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif",
+      "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1024_normal.tif",
+      "isDirectory": false,
+      "size": 4977110,
+      "compressedSize": 4874744,
+      "crc32": "d0f4f754",
+      "extension": ".tif",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "50bd047592c8314dc5ee646eda18c296acce338323ee1f3affbe9de7a91bc482"
+    },
+    {
+      "path": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif",
+      "normalizedPath": "Mustang/Textures/Ground/TexturesCom_GalvanizedMetal_1600_roughness.tif",
+      "isDirectory": false,
+      "size": 4815080,
+      "compressedSize": 4627632,
+      "crc32": "aed03034",
+      "extension": ".tif",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "41c2f290bee68f1997408cc1fd502808d7cbf70e7e47f5b369a772d4d4f84100"
+    },
+    {
+      "path": "Mustang/Textures/grunge1.tiff",
+      "normalizedPath": "Mustang/Textures/grunge1.tiff",
+      "isDirectory": false,
+      "size": 898032,
+      "compressedSize": 871715,
+      "crc32": "bea51dda",
+      "extension": ".tiff",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "f03020bfdeb1fb854101b6887f8fbd9e48d995cdd550cc0babea628671702bd1"
+    },
+    {
+      "path": "Mustang/Textures/LightDisplacement.jpg",
+      "normalizedPath": "Mustang/Textures/LightDisplacement.jpg",
+      "isDirectory": false,
+      "size": 97235,
+      "compressedSize": 97059,
+      "crc32": "9e4707a9",
+      "extension": ".jpg",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "95152fe4cb6c12f864671f3f858bc7d89698abacf494ba17df72a5647c004f87"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.blend",
+      "normalizedPath": "Mustang/Textures/Mustang.blend",
+      "isDirectory": false,
+      "size": 8641040,
+      "compressedSize": 3158874,
+      "crc32": "ae9ddda1",
+      "extension": ".blend",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "0f94dca59b5dc71506c160ad9b3171082650587464cb6e3c7161a012be60f582"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.blend1",
+      "normalizedPath": "Mustang/Textures/Mustang.blend1",
+      "isDirectory": false,
+      "size": 8640912,
+      "compressedSize": 3162480,
+      "crc32": "fba37f86",
+      "extension": ".blend1",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "8bc59ec05c75f23fd8ac063bfaa1f11a8e3a356fb88cfc3d522c0b43e5955759"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.fbx",
+      "normalizedPath": "Mustang/Textures/Mustang.fbx",
+      "isDirectory": false,
+      "size": 15108572,
+      "compressedSize": 13610045,
+      "crc32": "6e51ca32",
+      "extension": ".fbx",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "96ee4e6740d708605416ac11b49a271e5d7893486498e45a7e7326034a0581f5"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.mtl",
+      "normalizedPath": "Mustang/Textures/Mustang.mtl",
+      "isDirectory": false,
+      "size": 4470,
+      "compressedSize": 295,
+      "crc32": "e0e709c5",
+      "extension": ".mtl",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "bd672fe323876a0829ff18463035115795d6c2620b5ce2f007057363d08ba5d2"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.obj",
+      "normalizedPath": "Mustang/Textures/Mustang.obj",
+      "isDirectory": false,
+      "size": 47212771,
+      "compressedSize": 10840610,
+      "crc32": "d2593487",
+      "extension": ".obj",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "5926416e6dbcfd5f1df190699f735edea71c9d0538c13c09707837e7f0efd130"
+    },
+    {
+      "path": "Mustang/Textures/Mustang.stl",
+      "normalizedPath": "Mustang/Textures/Mustang.stl",
+      "isDirectory": false,
+      "size": 35856184,
+      "compressedSize": 14137080,
+      "crc32": "d8a9638b",
+      "extension": ".stl",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "2a66cb1b91044e6a6864ab9c24c1f613058052af5d7da01716786ab115c8bf83"
+    },
+    {
+      "path": "Mustang/Textures/MustangBodyStripe1.png",
+      "normalizedPath": "Mustang/Textures/MustangBodyStripe1.png",
+      "isDirectory": false,
+      "size": 103286,
+      "compressedSize": 25855,
+      "crc32": "3ee88ed1",
+      "extension": ".png",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "72f0e2ec0f50ee1843e19476d25e9f834573af6f0e70b6f8c4b4b1ce248f0117"
+    },
+    {
+      "path": "Mustang/Textures/MustangBodyStripe2.png",
+      "normalizedPath": "Mustang/Textures/MustangBodyStripe2.png",
+      "isDirectory": false,
+      "size": 97980,
+      "compressedSize": 20219,
+      "crc32": "ed0defaa",
+      "extension": ".png",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "be725843604474a239d7a194a43204670b8680726a0eb91d5294185077069677"
+    },
+    {
+      "path": "Mustang/Textures/UV_Mustang.png",
+      "normalizedPath": "Mustang/Textures/UV_Mustang.png",
+      "isDirectory": false,
+      "size": 397823,
+      "compressedSize": 339885,
+      "crc32": "7c7d1ee0",
+      "extension": ".png",
+      "safePath": true,
+      "isSymlink": false,
+      "sha256": "c400bc4d82276f59938638f9384c4842da3c13cf9e08b5aea922eabd11ab859f"
+    }
+  ],
+  "entriesTruncated": false
+}
