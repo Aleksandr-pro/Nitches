@@ -92,6 +92,7 @@ export function mergeGeometryData(geometries) {
   if (!list.length) {
     return {
       positions: new Float32Array(),
+      normals: null,
       uvs: new Float32Array(),
       indices: new Uint32Array(),
       vertexCount: 0,
@@ -104,7 +105,9 @@ export function mergeGeometryData(geometries) {
     vertexCount += geometry.positions.length / 3;
     indexCount += geometry.indices.length;
   }
+  const hasNormals = list.every((geometry) => geometry.normals?.length === geometry.positions.length);
   const positions = new Float32Array(vertexCount * 3);
+  const normals = hasNormals ? new Float32Array(vertexCount * 3) : null;
   const uvs = new Float32Array(vertexCount * 2);
   const indices = new Uint32Array(indexCount);
   let vertexOffset = 0;
@@ -113,6 +116,7 @@ export function mergeGeometryData(geometries) {
   let indexOffset = 0;
   for (const geometry of list) {
     positions.set(geometry.positions, positionOffset);
+    if (normals) normals.set(geometry.normals, positionOffset);
     if (geometry.uvs) uvs.set(geometry.uvs, uvOffset);
     for (let i = 0; i < geometry.indices.length; i++) indices[indexOffset + i] = geometry.indices[i] + vertexOffset;
     vertexOffset += geometry.positions.length / 3;
@@ -122,6 +126,7 @@ export function mergeGeometryData(geometries) {
   }
   return {
     positions,
+    normals,
     uvs,
     indices,
     vertexCount,

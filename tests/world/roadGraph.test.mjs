@@ -81,6 +81,9 @@ test('segments and ribbon geometry are chunk-clippable and face up', () => {
   const full = buildRoadRibbonGeometry(edge);
   assert.ok(full.triangleCount > 0);
   assert.equal(full.positions.length / 3, full.vertexCount);
+  assert.equal(full.normals.length, full.positions.length);
+  assert.ok(Math.abs(Math.hypot(full.normals[0], full.normals[1], full.normals[2]) - 1) < 1e-3);
+  assert.ok(full.normals[1] > 0, 'ribbon normals point up');
 
   const [i0, i1, i2] = full.indices;
   const p = full.positions;
