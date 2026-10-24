@@ -5,7 +5,7 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   Аркадная физика, гонки с соперниками, чекпоинты, дрифт и нитро.
+   Шинная физика v0.3.1, реалистичный свет, гонки, дрифт и нитро.
    ===================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -165,9 +165,9 @@ let controlScheme = safeGetItem('nh_controls') === 'buttons' ? 'buttons' : 'whee
 let assistMode = ['arcade', 'sport', 'drift'].includes(safeGetItem('nh_assist'))
   ? safeGetItem('nh_assist') : 'sport';
 const ASSIST_PROFILES = {
-  arcade: { label: 'Аркада', grip: 1.16, yawDamping: 2.2, stability: 2.5, traction: 0.9, steering: 0.92, handbrakeRearGrip: 0.34, maxYawRate: 2.1 },
-  sport: { label: 'Спорт', grip: 1.0, yawDamping: 1.45, stability: 1.05, traction: 0.45, steering: 1.0, handbrakeRearGrip: 0.24, maxYawRate: 2.7 },
-  drift: { label: 'Дрифт', grip: 0.92, yawDamping: 0.85, stability: 0.22, traction: 0.08, steering: 1.14, handbrakeRearGrip: 0.13, maxYawRate: 3.4 },
+  arcade: { label: 'Аркада', grip: 1.18, yawDamping: 2.25, stability: 2.55, traction: 0.92, steering: 0.94, handbrakeRearGrip: 0.36, maxYawRate: 2.15 },
+  sport: { label: 'Спорт', grip: 1.02, yawDamping: 1.38, stability: 1.0, traction: 0.42, steering: 1.04, handbrakeRearGrip: 0.22, maxYawRate: 2.85 },
+  drift: { label: 'Дрифт', grip: 0.90, yawDamping: 0.78, stability: 0.18, traction: 0.06, steering: 1.18, handbrakeRearGrip: 0.12, maxYawRate: 3.55 },
 };
 
 /* ============================ Состояние игры ============================ */
@@ -214,6 +214,7 @@ const player = {
   wheelspin: false,
   surface: 'asphalt',
   surfaceMu: 1,
+  surfaceMuSmooth: 1,
   travelDistance: 0,
   smokeAccumulator: 0,
   skidAccumulator: 0,
@@ -324,28 +325,29 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.28;
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xe8a06d, 150, 780);
+scene.fog = new THREE.Fog(0xe4a06a, 120, 820);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
 
-// Свет заката фестиваля
-scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x8a5a34, 0.55));
-const sun = new THREE.DirectionalLight(0xffb377, 2.7);
+// Свет заката фестиваля — более насыщенный и объёмный
+scene.add(new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.62));
+const sun = new THREE.DirectionalLight(0xffb070, 2.95);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.radius = 4;
-sun.shadow.normalBias = 0.02;
-sun.shadow.camera.left = -55;
-sun.shadow.camera.right = 55;
-sun.shadow.camera.top = 55;
-sun.shadow.camera.bottom = -55;
-sun.shadow.camera.far = 320;
-sun.shadow.bias = -0.0015;
+sun.shadow.radius = 3.2;
+sun.shadow.normalBias = 0.018;
+sun.shadow.camera.left = -48;
+sun.shadow.camera.right = 48;
+sun.shadow.camera.top = 48;
+sun.shadow.camera.bottom = -48;
+sun.shadow.camera.far = 280;
+sun.shadow.bias = -0.0012;
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
 scene.add(sun.target);
 
@@ -815,7 +817,7 @@ function makeBannerTexture() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envSource = makeEnvironmentTexture();
   scene.environment = pmrem.fromEquirectangular(envSource).texture;
-  if ('environmentIntensity' in scene) scene.environmentIntensity = 0.8;
+  if ('environmentIntensity' in scene) scene.environmentIntensity = 1.05;
   envSource.dispose();
   pmrem.dispose();
 }
@@ -2439,6 +2441,9 @@ function resetPlayerToStart() {
   player.brakePedal = 0;
   player.gear = 1;
   player.rpmRatio = 0.18;
+  player.longAccel = 0;
+  player.latAccel = 0;
+  player.surfaceMuSmooth = 1;
   resetSteering();
   resetCameraOrbit();
   player.nitro = 0.7;
@@ -2575,6 +2580,7 @@ function respawn() {
   player.rpmRatio = 0.18;
   player.longAccel = 0;
   player.latAccel = 0;
+  player.surfaceMuSmooth = 1;
   resetSteering();
   player.prevSampleIdx = nearestSampleIdx(near.pos).idx;
   showCenterMsg('На трассу! ⟲', 900);
@@ -2586,8 +2592,14 @@ const _right = new THREE.Vector3();
 
 function tireLateralForce(alpha, load, mu) {
   const peak = Math.max(mu * load, 0);
-  // Насыщающаяся кривая шины: пик около 7–9°, дальше скольжение чуть слабее
-  return -peak * Math.sin(1.45 * Math.atan(alpha / 0.13));
+  // Pacejka-подобная кривая: alpha в радианах, B — жёсткость на радиан увода.
+  // Пик широкий (~10–17°), при глубоком скольжении остаётся ~85% пика.
+  const B = 10.5;
+  const C = 1.35;
+  const E = 0.85;
+  const Bx = B * alpha;
+  const shape = Math.sin(C * Math.atan(Bx - E * (Bx - Math.atan(Bx))));
+  return -peak * shape;
 }
 
 function surfaceInfoAt(x, z, groundH) {
@@ -2652,33 +2664,50 @@ function simulateVehicleStep(h, car, profile, surface, slopeLong, slopeLat, canD
   let yawRate = player.yawRate;
   const speed = Math.hypot(u, v);
 
-  // Рулевая рейка: угол передних колёс уменьшается со скоростью
-  const speedSensitiveSteer = car.maxSteer / (1 + Math.pow(Math.abs(u) / 17, 1.22));
+  // Рулевая рейка: нелинейное уменьшение угла + быстрее отклик
+  const absU = Math.abs(u);
+  const speedSensitiveSteer = car.maxSteer / (1 + Math.pow(absU / 15.5, 1.35));
   const steerTarget = canDrive ? steering.value * speedSensitiveSteer * profile.steering : 0;
-  const rackRate = Math.abs(steerTarget) > Math.abs(player.steerAngle) ? 3.4 : 4.8;
+  const rackRate = Math.abs(steerTarget) > Math.abs(player.steerAngle) ? 4.2 : 5.6;
   player.steerAngle = approachValue(player.steerAngle, steerTarget, rackRate * h);
   player.steerVis = player.steerAngle;
   const delta = player.steerAngle;
   const cosD = Math.cos(delta);
   const sinD = Math.sin(delta);
 
-  // Нагрузки на оси с продольным переносом веса
+  // Нагрузки на оси: продольный + поперечный перенос веса
   const staticFront = mass * gravity * b / wheelbase;
   const staticRear = mass * gravity * a / wheelbase;
   const transfer = mass * player.longAccel * car.cgHeight / wheelbase;
   const loadFront = clamp(staticFront - transfer, staticFront * 0.08, mass * gravity * 0.92);
   const loadRear = clamp(staticRear + transfer, staticRear * 0.08, mass * gravity * 0.92);
+  // Поперечный перенос не меняет суммарную нагрузку оси в bicycle-модели:
+  // внешнее колесо перегружается, внутреннее разгружается, а суммарный запас
+  // оси слегка падает из-за чувствительности шины к нагрузке (load sensitivity).
+  const trackWidth = 1.56;
+  const latTransferTotal = Math.abs(mass * player.latAccel * car.cgHeight / trackWidth);
+  const frontLatTransfer = latTransferTotal * (staticFront / (staticFront + staticRear));
+  const rearLatTransfer = latTransferTotal - frontLatTransfer;
+  const loadSensitivity = (axleTransfer, axleLoad) => {
+    const r = clamp((2 * axleTransfer) / Math.max(axleLoad, 1), 0, 0.95);
+    return clamp(0.5 * (Math.pow(1 + r, 0.85) + Math.pow(1 - r, 0.85)), 0.86, 1);
+  };
+  const frontLoadSensitivity = loadSensitivity(frontLatTransfer, loadFront);
+  const rearLoadSensitivity = loadSensitivity(rearLatTransfer, loadRear);
 
-  // Углы увода шин передней и задней оси
+  // Углы увода шин (меньший порог на малых скоростях)
   const frontAxleLat = v + a * yawRate;
   const rearAxleLat = v - b * yawRate;
   const frontWheelLong = u * cosD + frontAxleLat * sinD;
   const frontWheelLat = -u * sinD + frontAxleLat * cosD;
-  const alphaFront = Math.atan2(frontWheelLat, Math.max(Math.abs(frontWheelLong), 2.0));
-  const alphaRear = Math.atan2(rearAxleLat, Math.max(Math.abs(u), 2.0));
+  const longFloor = lerp(1.05, 2.0, smoothstep(1.0, 8.0, Math.abs(u)));
+  const alphaFront = Math.atan2(frontWheelLat, Math.max(Math.abs(frontWheelLong), longFloor));
+  const alphaRear = Math.atan2(rearAxleLat, Math.max(Math.abs(u), longFloor));
 
-  let muFront = car.tireMu * surface.mu * profile.grip;
-  let muRear = muFront;
+  // Плавный переход сцепления при смене покрытия
+  player.surfaceMuSmooth = lerp(player.surfaceMuSmooth ?? surface.mu, surface.mu, clamp(h * 6, 0, 1));
+  let muFront = car.tireMu * player.surfaceMuSmooth * profile.grip * frontLoadSensitivity;
+  let muRear = car.tireMu * player.surfaceMuSmooth * profile.grip * rearLoadSensitivity;
   if (canDrive && input.handbrake) muRear *= profile.handbrakeRearGrip;
   if (inWater) { muFront *= 0.28; muRear *= 0.28; }
   const tireSpeedFactor = smoothstep(0.35, 3.2, speed);
@@ -3969,6 +3998,14 @@ function applyGraphicsQuality(quality, announce = false) {
   renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   const shadowSize = graphicsQuality === 'realistic' ? 2048 : 1024;
+  sun.shadow.radius = graphicsQuality === 'realistic' ? 3.2 : 2;
+  sun.shadow.camera.left = graphicsQuality === 'realistic' ? -48 : -40;
+  sun.shadow.camera.right = -sun.shadow.camera.left;
+  sun.shadow.camera.top = -sun.shadow.camera.left;
+  sun.shadow.camera.bottom = sun.shadow.camera.left;
+  sun.shadow.camera.updateProjectionMatrix();
+  renderer.toneMappingExposure = graphicsQuality === 'realistic' ? 1.28 : 1.12;
+
   if (sun.shadow.mapSize.x !== shadowSize) {
     sun.shadow.mapSize.set(shadowSize, shadowSize);
     if (sun.shadow.map) {
