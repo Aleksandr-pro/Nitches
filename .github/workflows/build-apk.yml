@@ -1,0 +1,98 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages (API 36)
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web game
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build release APK (unsigned)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      # Подпись: ключ генерируется прямо на CI-раннере и нигде не публикуется.
+      # Для стабильной подписи будущих обновлений добавьте секреты репозитория
+      # ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD (см. README).
+      - name: Generate signing key and sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          VERSION="$(node -p "require('./package.json').version")"
+          OUT="NitchesHorizon-v${VERSION}.apk"
+
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "Используем постоянный ключ из секретов"
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
+            KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+          else
+            echo "Секретов нет — генерируем одноразовый ключ на раннере"
+            KS_PASS="$(openssl rand -base64 24)"
+            keytool -genkeypair -keystore "$KS" -alias nitches \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Nitches Horizon, O=ProfitNiche"
+          fi
+          export KS_PASS
+
+          "$BT/zipalign" -p 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$KS" --ks-key-alias nitches \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+            --out "$OUT" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --verbose "$OUT"
+          ls -lh "$OUT"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizon-apk
+          path: ${{ env.APK_PATH }}
+          retention-days: 90
