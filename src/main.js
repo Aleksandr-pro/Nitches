@@ -210,7 +210,7 @@ const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xe8a06d, 150, 780);
 
-const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
 
 // Свет заката фестиваля
@@ -581,15 +581,17 @@ function makeFacadeTexture(base = '#e8dcc5', shutter = '#31556e') {
     g.fillRect(x - 17, y - 3, 11, h + 6);
     g.fillRect(x + w + 6, y - 3, 11, h + 6);
   }
-  window_(35, 42, 48, 62, false);
-  window_(172, 42, 48, 62, true);
-  window_(35, 145, 48, 62, true);
-  // дверь
+  window_(24, 38, 38, 54, false);
+  window_(109, 38, 38, 54, true);
+  window_(194, 38, 38, 54, false);
+  window_(24, 142, 38, 54, true);
+  window_(109, 142, 38, 54, false);
+  // дверь входная ~2.1 м при высоте фасада 5.8 м
   g.fillStyle = '#5a3825';
-  g.fillRect(172, 150, 50, 106);
+  g.fillRect(194, 148, 38, 108);
   g.fillStyle = '#d8b36a';
   g.beginPath();
-  g.arc(212, 205, 4, 0, Math.PI * 2);
+  g.arc(224, 204, 3.5, 0, Math.PI * 2);
   g.fill();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -681,7 +683,7 @@ const TRACK_POINTS = [
 const curve = new THREE.CatmullRomCurve3(TRACK_POINTS, true, 'catmullrom', 0.6);
 const TRACK_LENGTH = curve.getLength();
 const SAMPLES = curve.getSpacedPoints(800);
-const ROAD_HALF = 7.5;
+const ROAD_HALF = 5.6; // асфальт 11.2 м: две гоночные полосы + края (шкала мира: 1 ед. = 1 м)
 
 function nearestSampleIdx(pos) {
   let лучший = 0;
@@ -891,7 +893,7 @@ const colliders = []; // {x,z,r}
   const gravelTex = makeGroundTexture();
   gravelTex.repeat.set(2, 2);
   const shoulder = new THREE.Mesh(
-    buildRibbon(ROAD_HALF + 2.1, 0.012),
+    buildRibbon(ROAD_HALF + 1.4, 0.012),
     new THREE.MeshStandardMaterial({ color: 0x9a8563, map: gravelTex, bumpMap: gravelTex, bumpScale: 0.5, roughness: 1 })
   );
   shoulder.receiveShadow = true;
@@ -987,8 +989,8 @@ const colliders = []; // {x,z,r}
     pineParts.push(part);
   });
   const pineGeo = mergeGeometries(pineParts);
-  const trunkGeo = new THREE.CylinderGeometry(0.2, 0.46, 3.9, 8);
-  trunkGeo.translate(0, 1.95, 0);
+  const trunkGeo = new THREE.CylinderGeometry(0.13, 0.28, 3.6, 8);
+  trunkGeo.translate(0, 1.8, 0);
 
   const treePos = [];
   let guard = 0;
@@ -1001,8 +1003,8 @@ const colliders = []; // {x,z,r}
     if (near.dist < 13.5) continue;
     const h = terrainHeight(x, z, near.dist);
     if (h > 7.6 || h < -0.15) continue; // на голых скалах и в воде деревья не растут
-    treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.75 + rnd() * 1.05, rot: rnd() * TAU });
-    if (treePos.length % 3 === 0) colliders.push({ x, z, r: 1.0 });
+    treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.8 + rnd() * 0.55, rot: rnd() * TAU });
+    if (treePos.length % 3 === 0) colliders.push({ x, z, r: 0.4 });
   }
   const broadList = treePos.filter((t) => !t.pine);
   const pineList = treePos.filter((t) => t.pine);
@@ -1074,7 +1076,7 @@ const colliders = []; // {x,z,r}
       h = terrainHeight(x, z, near.dist);
       break;
     }
-    const sc = 0.5 + rnd() * 1.9;
+    const sc = 0.35 + rnd() * 1.15;
     dummy.position.set(x, h + sc * 0.22, z);
     dummy.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
     dummy.scale.set(sc * (0.8 + rnd() * 0.5), sc * (0.55 + rnd() * 0.5), sc);
@@ -1085,8 +1087,8 @@ const colliders = []; // {x,z,r}
   scene.add(rocks);
 
   // пучки травы крест-накрест
-  const bladePlane = new THREE.PlaneGeometry(1.15, 0.78);
-  bladePlane.translate(0, 0.37, 0);
+  const bladePlane = new THREE.PlaneGeometry(0.75, 0.48);
+  bladePlane.translate(0, 0.23, 0);
   const bladePlane2 = bladePlane.clone();
   bladePlane2.rotateY(Math.PI / 2);
   const grassGeo = mergeGeometries([bladePlane, bladePlane2]);
@@ -1111,8 +1113,8 @@ const colliders = []; // {x,z,r}
     if (h < 0.05 || h > 8.5) continue;
     dummy.position.set(x, h - 0.03, z);
     dummy.rotation.set(0, rnd() * TAU, 0);
-    const gs = 0.65 + rnd() * 1.15;
-    dummy.scale.set(gs, gs * (0.8 + rnd() * 0.65), gs);
+    const gs = 0.7 + rnd() * 0.7;
+    dummy.scale.set(gs, gs * (0.75 + rnd() * 0.5), gs);
     dummy.updateMatrix();
     grassMesh.setMatrixAt(placedGrass, dummy.matrix);
     grassMesh.setColorAt(placedGrass, tmpC.setHSL(0.26 + rnd() * 0.09, 0.3, 0.64 + rnd() * 0.24));
@@ -1130,22 +1132,22 @@ const balloons = [];
   const arch = new THREE.Group();
   const pillarMat = new THREE.MeshStandardMaterial({ color: 0x22263a, roughness: 0.6 });
   [-1, 1].forEach((side) => {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 9, 1.4), pillarMat);
-    pillar.position.set(side * (ROAD_HALF + 1.4), 4.5, 0);
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.1, 7.6, 1.1), pillarMat);
+    pillar.position.set(side * (ROAD_HALF + 1.2), 3.8, 0);
     pillar.castShadow = true;
     arch.add(pillar);
     const ball = new THREE.Mesh(
       new THREE.SphereGeometry(0.8, 10, 10),
       new THREE.MeshStandardMaterial({ color: side > 0 ? 0xff5e3a : 0x2ee6ff, emissive: 0x442200 })
     );
-    ball.position.set(side * (ROAD_HALF + 1.4), 9.6, 0);
+    ball.position.set(side * (ROAD_HALF + 1.2), 8.0, 0);
     arch.add(ball);
   });
   const banner = new THREE.Mesh(
-    new THREE.BoxGeometry(ROAD_HALF * 2 + 4.5, 2.6, 0.4),
+    new THREE.BoxGeometry(ROAD_HALF * 2 + 3.6, 2.2, 0.35),
     new THREE.MeshBasicMaterial({ map: makeBannerTexture() })
   );
-  banner.position.y = 8.2;
+  banner.position.y = 6.7;
   arch.add(banner);
   arch.position.copy(start.pos);
   arch.rotation.y = start.yaw;
@@ -1156,23 +1158,23 @@ const balloons = [];
   for (let i = 0; i < 10; i++) {
     const s = -30 + i * 9 + rnd() * 4;
     const side = i % 2 ? 1 : -1;
-    const p = pointAtS(s, side * (ROAD_HALF + 9 + rnd() * 5));
+    const p = pointAtS(s, side * (ROAD_HALF + 7.5 + rnd() * 4));
     const tent = new THREE.Group();
     const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(3.4, 3.2, 8),
+      new THREE.ConeGeometry(2.8, 2.5, 8),
       new THREE.MeshStandardMaterial({ color: tentColors[i % tentColors.length], roughness: 0.8, flatShading: true })
     );
-    cone.position.y = 2.6;
+    cone.position.y = 2.15;
     cone.castShadow = true;
     const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(3.2, 3.2, 1.6, 8),
+      new THREE.CylinderGeometry(2.65, 2.65, 1.5, 8),
       new THREE.MeshStandardMaterial({ color: 0xf5f0e6, roughness: 0.9 })
     );
-    base.position.y = 0.8;
+    base.position.y = 0.75;
     tent.add(cone, base);
     tent.position.copy(p.pos);
     scene.add(tent);
-    colliders.push({ x: p.pos.x, z: p.pos.z, r: 3.4 });
+    colliders.push({ x: p.pos.x, z: p.pos.z, r: 2.8 });
   }
 
   // домики деревни с текстурированными фасадами
@@ -1190,37 +1192,40 @@ const balloons = [];
   for (let i = 0; i < 14; i++) {
     const s = (TRACK_LENGTH / 14) * i + 42;
     const side = i % 2 ? 1 : -1;
-    const p = pointAtS(s, side * (ROAD_HALF + 17 + rnd() * 13));
-    if (Math.hypot(p.pos.x, p.pos.z) > 262) continue;
+    const p = pointAtS(s, side * (ROAD_HALF + 21 + rnd() * 15));
+    if (Math.hypot(p.pos.x, p.pos.z) > 255) continue;
     const groundY = terrainHeight(p.pos.x, p.pos.z);
     const house = new THREE.Group();
-    const w = 5.5 + rnd() * 3;
+    const w = 8.5 + rnd() * 3; // ширина фасада 8.5–11.5 м
+    const d = 7 + rnd() * 2;   // глубина 7–9 м
     const facadeMat = facades[i % facades.length];
     const walls = new THREE.Mesh(
-      new THREE.BoxGeometry(w, 3.5, w * 0.82),
+      new THREE.BoxGeometry(w, 5.8, d), // два этажа по 2.9 м
       [facadeMat, facadeMat, plainWallMat, plainWallMat, facadeMat, facadeMat]
     );
-    walls.position.y = 1.75;
+    walls.position.y = 2.9;
     walls.castShadow = walls.receiveShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.8, 2.5, 4), roofMats[i % roofMats.length]);
-    roof.position.y = 4.75;
-    roof.rotation.y = Math.PI / 4;
+    const roofGeo = new THREE.ConeGeometry(1, 3.0, 4);
+    roofGeo.rotateY(Math.PI / 4);
+    roofGeo.scale(w * 0.79, 1, d * 0.79);
+    const roof = new THREE.Mesh(roofGeo, roofMats[i % roofMats.length]);
+    roof.position.y = 7.3;
     roof.castShadow = true;
-    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.4, 0.55), chimneyMat);
-    chimney.position.set(w * 0.22, 5.5, 0);
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.5, 0.55), chimneyMat);
+    chimney.position.set(w * 0.22, 8.2, 0);
     chimney.castShadow = true;
     house.add(walls, roof, chimney);
-    house.position.set(p.pos.x, groundY - 0.05, p.pos.z);
+    house.position.set(p.pos.x, groundY - 0.3, p.pos.z);
     house.rotation.y = rnd() * TAU;
     scene.add(house);
-    colliders.push({ x: p.pos.x, z: p.pos.z, r: w * 0.62 });
+    colliders.push({ x: p.pos.x, z: p.pos.z, r: Math.max(w, d) * 0.58 });
   }
 
   // воздушные шары праздника
   for (let i = 0; i < 5; i++) {
     const b = new THREE.Group();
     const env = new THREE.Mesh(
-      new THREE.SphereGeometry(4.5, 12, 10),
+      new THREE.SphereGeometry(6.2, 14, 12),
       new THREE.MeshStandardMaterial({ color: tentColors[i % tentColors.length], roughness: 0.5, flatShading: true })
     );
     env.scale.y = 1.15;
@@ -1228,10 +1233,10 @@ const balloons = [];
       new THREE.BoxGeometry(1.4, 1.2, 1.4),
       new THREE.MeshStandardMaterial({ color: 0x7a4a2a })
     );
-    basket.position.y = -6.4;
+    basket.position.y = -8.6;
     b.add(env, basket);
     const a = (i / 5) * TAU;
-    b.position.set(Math.cos(a) * (90 + rnd() * 90), 52 + rnd() * 26, Math.sin(a) * (90 + rnd() * 90));
+    b.position.set(Math.cos(a) * (90 + rnd() * 90), 62 + rnd() * 30, Math.sin(a) * (90 + rnd() * 90));
     b.userData.phase = rnd() * TAU;
     scene.add(b);
     balloons.push(b);
@@ -1258,27 +1263,27 @@ const balloons = [];
 // Ворота чекпоинтов
 const cpMeshes = [];
 {
-  const poleGeo = new THREE.CylinderGeometry(0.28, 0.28, 7, 8);
+  const poleGeo = new THREE.CylinderGeometry(0.16, 0.16, 4.6, 8);
   CHECKPOINTS.forEach((cp, i) => {
     const grp = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({ color: 0x7cfc4a, transparent: true, opacity: 0.0 });
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x223, roughness: 0.6 });
     [-1, 1].forEach((side) => {
       const pole = new THREE.Mesh(poleGeo, poleMat);
-      pole.position.set(side * (ROAD_HALF + 0.6), 3.5, 0);
+      pole.position.set(side * (ROAD_HALF + 0.6), 2.3, 0);
       grp.add(pole);
     });
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_HALF * 2 + 1.2, 6.6, 0.5), mat);
-    beam.position.y = 3.3;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_HALF * 2 + 1.2, 4.4, 0.5), mat);
+    beam.position.y = 2.2;
     grp.add(beam);
     // световой столб следующего чекпоинта
     const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.6, 2.6, 46, 12, 1, true),
+      new THREE.CylinderGeometry(2.6, 2.6, 34, 12, 1, true),
       new THREE.MeshBasicMaterial({
         color: 0x7cfc4a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
       })
     );
-    pillar.position.y = 23;
+    pillar.position.y = 17;
     grp.add(pillar);
     grp.position.copy(cp.pos);
     grp.rotation.y = cp.yaw;
@@ -1313,7 +1318,7 @@ const cpMeshes = [];
   }
 
   // Стопки шин на внешней стороне поворотов
-  const tireGeo = new THREE.TorusGeometry(0.52, 0.19, 8, 18);
+  const tireGeo = new THREE.TorusGeometry(0.34, 0.125, 8, 18);
   const tirePositions = [];
   for (let i = 0; i < 16; i++) {
     const s = (TRACK_LENGTH / 16) * i + 34;
@@ -1322,9 +1327,9 @@ const cpMeshes = [];
     const crossY = here.tangent.z * ahead.tangent.x - here.tangent.x * ahead.tangent.z;
     const outside = crossY >= 0 ? -1 : 1;
     for (let k = -1; k <= 2; k++) {
-      const p = pointAtS(s + k * 2.1, outside * (ROAD_HALF + 1.7));
+      const p = pointAtS(s + k * 1.35, outside * (ROAD_HALF + 1.15));
       tirePositions.push(p.pos);
-      colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.68 });
+      colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.5 });
     }
   }
   const tireStacks = new THREE.InstancedMesh(
@@ -1338,7 +1343,7 @@ const cpMeshes = [];
   tirePositions.forEach((pos, colIdx) => {
     const gy = terrainHeight(pos.x, pos.z);
     for (let level = 0; level < 3; level++) {
-      dummy2.position.set(pos.x, gy + 0.2 + level * 0.34, pos.z);
+      dummy2.position.set(pos.x, gy + 0.14 + level * 0.23, pos.z);
       dummy2.rotation.set(Math.PI / 2, 0, colIdx * 0.7 + level);
       dummy2.scale.setScalar(1);
       dummy2.updateMatrix();
@@ -1358,21 +1363,21 @@ const cpMeshes = [];
   wheelBase.rotation.y = 0.22;
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xd9dce2, metalness: 0.7, roughness: 0.35 });
   [-1, 1].forEach((side) => {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 17.6, 8), frameMat);
-    leg.position.set(side * 3.6, 8.2, 0);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.36, 14.8, 8), frameMat);
+    leg.position.set(side * 3.0, 6.9, 0);
     leg.rotation.z = side * 0.42;
     leg.castShadow = true;
     wheelBase.add(leg);
   });
   festivalWheel = new THREE.Group();
-  festivalWheel.position.y = 16;
+  festivalWheel.position.y = 13.4;
   [0, 0.9].forEach((zo) => {
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(12, 0.24, 8, 48), frameMat);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(10, 0.22, 8, 48), frameMat);
     rim.position.z = zo - 0.45;
     festivalWheel.add(rim);
   });
   for (let i = 0; i < 6; i++) {
-    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 23.8, 6), frameMat);
+    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 19.8, 6), frameMat);
     spoke.rotation.z = (i / 6) * Math.PI;
     festivalWheel.add(spoke);
   }
@@ -1386,14 +1391,14 @@ const cpMeshes = [];
       new THREE.BoxGeometry(1.5, 1.25, 1.3),
       new THREE.MeshStandardMaterial({ color: gondolaColors[i % gondolaColors.length], roughness: 0.5, emissive: gondolaColors[i % gondolaColors.length], emissiveIntensity: 0.18 })
     );
-    gondola.position.set(Math.cos(a) * 12, Math.sin(a) * 12, 0);
+    gondola.position.set(Math.cos(a) * 10, Math.sin(a) * 10, 0);
     gondola.castShadow = true;
     festivalWheel.add(gondola);
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.16, 8, 6),
       new THREE.MeshStandardMaterial({ color: 0xffe8b0, emissive: 0xffca70, emissiveIntensity: 2 })
     );
-    bulb.position.set(Math.cos(a + 0.31) * 12, Math.sin(a + 0.31) * 12, 0.55);
+    bulb.position.set(Math.cos(a + 0.31) * 10, Math.sin(a + 0.31) * 10, 0.55);
     festivalWheel.add(bulb);
   }
   wheelBase.add(festivalWheel);
@@ -1456,10 +1461,11 @@ const cpMeshes = [];
   spire.rotation.y = Math.PI / 4;
   spire.castShadow = true;
   church.add(nave, churchRoof, tower, spire);
+  church.scale.setScalar(1.18);
   church.position.set(churchPos.x, churchY, churchPos.z);
   church.rotation.y = -0.5;
   scene.add(church);
-  colliders.push({ x: churchPos.x, z: churchPos.z, r: 7 });
+  colliders.push({ x: churchPos.x, z: churchPos.z, r: 8.2 });
 }
 
 /* ============================ Модель машины ============================ */
@@ -1474,18 +1480,18 @@ function buildCarMesh(color, accent, isBuggy = false) {
     color: 0x0e1a28, roughness: 0.07, metalness: 0.9, clearcoat: 1, envMapIntensity: 1.8,
   });
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.52, 4.3), paint);
-  body.position.y = isBuggy ? 0.78 : 0.56;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.5, 3.9), paint);
+  body.position.set(0, isBuggy ? 0.76 : 0.55, -0.05);
   body.castShadow = true;
   car.add(body);
 
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.34, 1.1), paint);
-  nose.position.set(0, (isBuggy ? 0.68 : 0.47), 2.15);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.32, 0.85), paint);
+  nose.position.set(0, (isBuggy ? 0.66 : 0.46), 1.95);
   nose.castShadow = true;
   car.add(nose);
 
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.5, 1.9), glass);
-  cabin.position.set(0, (isBuggy ? 1.28 : 1.0), -0.25);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.48, 1.75), glass);
+  cabin.position.set(0, (isBuggy ? 1.24 : 0.98), -0.2);
   cabin.castShadow = true;
   car.add(cabin);
 
@@ -1501,18 +1507,18 @@ function buildCarMesh(color, accent, isBuggy = false) {
     top.position.set(0, 1.82, -0.3);
     car.add(top);
   } else {
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.09, 0.45), dark);
-    spoiler.position.set(0, 1.12, -2.05);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.08, 0.4), dark);
+    spoiler.position.set(0, 1.08, -1.9);
     spoiler.castShadow = true;
     car.add(spoiler);
-    [-0.7, 0.7].forEach((x) => {
+    [-0.62, 0.62].forEach((x) => {
       const strut = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.12), dark);
-      strut.position.set(x, 0.9, -2.05);
+      strut.position.set(x, 0.88, -1.9);
       car.add(strut);
     });
     // гоночная полоса
     const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.55, 0.04, 4.32),
+      new THREE.BoxGeometry(0.5, 0.04, 3.95),
       new THREE.MeshStandardMaterial({ color: accent, roughness: 0.4, emissive: accent, emissiveIntensity: 0.25 })
     );
     stripe.position.y = 0.84;
@@ -1522,18 +1528,18 @@ function buildCarMesh(color, accent, isBuggy = false) {
   // фары / стопы
   const headMat = new THREE.MeshStandardMaterial({ color: 0xfff6c8, emissive: 0xffe9a0, emissiveIntensity: 1.6 });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff2222, emissiveIntensity: 1.2 });
-  [-0.62, 0.62].forEach((x) => {
-    const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.08), headMat);
-    h.position.set(x, 0.6, 2.71);
+  [-0.56, 0.56].forEach((x) => {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.15, 0.08), headMat);
+    h.position.set(x, 0.6, 2.39);
     car.add(h);
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.08), tailMat);
-    t.position.set(x, 0.68, -2.16);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.13, 0.08), tailMat);
+    t.position.set(x, 0.68, -2.01);
     car.add(t);
   });
 
   // неоновая подсветка снизу
   const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.9, 5.2),
+    new THREE.PlaneGeometry(2.5, 4.9),
     new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.3, depthWrite: false })
   );
   glow.rotation.x = -Math.PI / 2;
@@ -1546,24 +1552,24 @@ function buildCarMesh(color, accent, isBuggy = false) {
     new THREE.MeshBasicMaterial({ color: 0x4ad2ff, transparent: true, opacity: 0.9 })
   );
   flame.rotation.x = -Math.PI / 2;
-  flame.position.set(0, 0.5, -3.0);
+  flame.position.set(0, 0.42, -2.8);
   flame.visible = false;
   flame.name = 'flame';
   car.add(flame);
 
   // колёса
-  const wheelGeo = new THREE.CylinderGeometry(isBuggy ? 0.48 : 0.4, isBuggy ? 0.48 : 0.4, 0.34, 14);
+  const wheelGeo = new THREE.CylinderGeometry(isBuggy ? 0.43 : 0.34, isBuggy ? 0.43 : 0.34, 0.3, 18);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
   const hubMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.8 });
   const wheels = [];
-  const wy = isBuggy ? 0.48 : 0.4;
-  [[-1.02, 1.45], [1.02, 1.45], [-1.02, -1.45], [1.02, -1.45]].forEach(([x, z], i) => {
+  const wy = isBuggy ? 0.43 : 0.34;
+  [[-0.82, 1.35], [0.82, 1.35], [-0.82, -1.35], [0.82, -1.35]].forEach(([x, z], i) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, wy, z);
     const w = new THREE.Mesh(wheelGeo, wheelMat);
     w.rotation.z = Math.PI / 2;
     w.castShadow = true;
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.38, 8), hubMat);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 10), hubMat);
     hub.rotation.z = Math.PI / 2;
     const spin = new THREE.Group();
     spin.add(w, hub);
@@ -2063,11 +2069,11 @@ function updateCamera(dt) {
     // Шоурум: камера медленно кружит вокруг выбранной машины у стартовой арки
     menuOrbit += dt * 0.22;
     const center = player.mesh ? player.mesh.group.position : new THREE.Vector3(0, 0, -170);
-    const cx = center.x + Math.cos(menuOrbit) * 8.6;
-    const cz = center.z + Math.sin(menuOrbit) * 8.6;
-    camera.position.lerp(new THREE.Vector3(cx, center.y + 2.3, cz), Math.min(dt * 1.6, 1));
-    camera.lookAt(center.x, center.y + 0.85, center.z);
-    camera.fov = lerp(camera.fov, 55, dt * 2);
+    const cx = center.x + Math.cos(menuOrbit) * 7.4;
+    const cz = center.z + Math.sin(menuOrbit) * 7.4;
+    camera.position.lerp(new THREE.Vector3(cx, center.y + 1.9, cz), Math.min(dt * 1.6, 1));
+    camera.lookAt(center.x, center.y + 0.75, center.z);
+    camera.fov = lerp(camera.fov, 52, dt * 2);
     camera.updateProjectionMatrix();
     return;
   }
@@ -2085,8 +2091,8 @@ function updateCamera(dt) {
     look.y = pos.y + 1.0;
     camera.lookAt(look);
   } else {
-    const dist = cameraMode === 0 ? 10.5 + speedRatio * 2.5 : 17;
-    const height = cameraMode === 0 ? 4.0 : 7.5;
+    const dist = cameraMode === 0 ? 7.6 + speedRatio * 1.8 : 12.5;
+    const height = cameraMode === 0 ? 2.55 : 4.6;
     camTargetPos.copy(pos).addScaledVector(_fwd, -dist);
     camTargetPos.y = pos.y + height;
     // камера не должна уходить под склон позади машины
@@ -2096,7 +2102,7 @@ function updateCamera(dt) {
     look.y = pos.y + 1.4;
     camera.lookAt(look);
   }
-  const targetFov = 68 + (player.boosting ? 10 : speedRatio * 5);
+  const targetFov = 62 + (player.boosting ? 8 : speedRatio * 4);
   camera.fov = lerp(camera.fov, targetFov, dt * 4);
   camera.updateProjectionMatrix();
 }
