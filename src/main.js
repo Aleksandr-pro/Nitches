@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildGTR35, GTR_PAINTS } from './gtr.js';
 import './style.css';
 
 /* =====================================================================
@@ -32,8 +34,55 @@ function rnd() {
   return (seed - 1) / 2147483646;
 }
 
+function smoothstep(a, b, x) {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+// Value-noise + FBM: рельеф острова и пятна на текстурах
+function hashNoise2(ix, iz) {
+  let n = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+function valueNoise2(x, z) {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fz = z - iz;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sz = fz * fz * (3 - 2 * fz);
+  const a = hashNoise2(ix, iz);
+  const b = hashNoise2(ix + 1, iz);
+  const c = hashNoise2(ix, iz + 1);
+  const d = hashNoise2(ix + 1, iz + 1);
+  return lerp(lerp(a, b, sx), lerp(c, d, sx), sz);
+}
+function fbm2(x, z, octaves = 4) {
+  let v = 0;
+  let amp = 0.5;
+  let f = 1;
+  for (let i = 0; i < octaves; i++) {
+    v += amp * valueNoise2(x * f, z * f);
+    f *= 2.03;
+    amp *= 0.5;
+  }
+  return v;
+}
+
 /* ============================ Машины игрока ============================ */
 const CARS = [
+  {
+    id: 'gtr35',
+    name: 'GT-R35 GODZILLA',
+    cls: 'Класс S1 • детализированная модель R35',
+    emoji: '🇯🇵',
+    color: 0x1167b1,
+    accent: 0x2e7bff,
+    topSpeed: 64, // ≈ 230 км/ч
+    engine: 34,
+    grip: 10,
+    offroad: 0.5,
+    stats: { spd: 0.98, acc: 0.99, hnd: 0.96, off: 0.3 },
+  },
   {
     id: 'volt',
     name: 'VOLT GT',
@@ -93,6 +142,17 @@ function safeSetЛучшийLap(v) {
     localStorage.setItem('nh_best_lap', String(v));
   } catch (e) { /* приватный режим — не страшно */ }
 }
+function safeGetItem(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function safeSetItem(key, value) {
+  try { localStorage.setItem(key, String(value)); } catch (e) { /* noop */ }
+}
+
+let selectedGTRPaint = Number(safeGetItem('nh_gtr_paint')) || GTR_PAINTS[0].hex;
+if (!GTR_PAINTS.some((paint) => paint.hex === selectedGTRPaint)) selectedGTRPaint = GTR_PAINTS[0].hex;
+CARS[0].color = selectedGTRPaint;
+let graphicsQuality = safeGetItem('nh_gfx') === 'fast' ? 'fast' : 'realistic';
 
 /* ============================ Состояние игры ============================ */
 let gameState = 'menu'; // menu | countdown | racing | paused | finished
@@ -120,6 +180,9 @@ const player = {
   driftChain: 0,
   driftChainTimer: 0,
   finishTime: null,
+  groundPitch: 0,
+  groundRoll: 0,
+  groundH: 0,
 };
 
 let rivals = [];
@@ -141,19 +204,22 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.18;
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xf2a56b, 140, 620);
+scene.fog = new THREE.Fog(0xe8a06d, 150, 780);
 
 const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
 
 // Свет заката фестиваля
-scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x8a5a34, 0.85));
-const sun = new THREE.DirectionalLight(0xffb377, 2.0);
+scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x8a5a34, 0.55));
+const sun = new THREE.DirectionalLight(0xffb377, 2.7);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.radius = 4;
+sun.shadow.normalBias = 0.02;
 sun.shadow.camera.left = -55;
 sun.shadow.camera.right = 55;
 sun.shadow.camera.top = 55;
@@ -166,70 +232,412 @@ scene.add(sun.target);
 /* ============================ Текстуры (canvas) ============================ */
 function makeRoadTexture() {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 256;
+  c.width = c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#35383f';
-  g.fillRect(0, 0, 256, 256);
-  // шум асфальта
-  for (let i = 0; i < 2600; i++) {
-    g.fillStyle = `rgba(${180 + Math.random() * 60},${180 + Math.random() * 60},${
-      180 + Math.random() * 60
-    },${Math.random() * 0.09})`;
-    g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  g.fillStyle = '#2f3136';
+  g.fillRect(0, 0, 512, 512);
+  // крупные пятна старого/нового асфальта
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(${20 + Math.random() * 35},${22 + Math.random() * 35},${26 + Math.random() * 35},${0.08 + Math.random() * 0.16})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 512, Math.random() * 512, 30 + Math.random() * 120, 18 + Math.random() * 70, Math.random() * 3, 0, Math.PI * 2);
+    g.fill();
   }
-  // бордюры красно-белые по краям
-  for (let y = 0; y < 4; y++) {
-    g.fillStyle = y % 2 ? '#e8e8e8' : '#d33b2e';
-    g.fillRect(0, y * 64, 14, 64);
-    g.fillStyle = y % 2 ? '#d33b2e' : '#e8e8e8';
-    g.fillRect(242, y * 64, 14, 64);
+  // мелкое зерно
+  for (let i = 0; i < 15000; i++) {
+    const v = 120 + Math.random() * 130;
+    g.fillStyle = `rgba(${v},${v},${v},${Math.random() * 0.13})`;
+    g.fillRect(Math.random() * 512, Math.random() * 512, 1.6, 1.6);
   }
-  g.fillStyle = '#f5f5f5';
-  g.fillRect(22, 0, 5, 256);
-  g.fillRect(229, 0, 5, 256);
+  // тёмные колеи от шин
+  [126, 386].forEach((x) => {
+    const grad = g.createLinearGradient(x - 42, 0, x + 42, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.34)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - 42, 0, 84, 512);
+  });
+  // трещины и гудронные швы
+  g.strokeStyle = 'rgba(8,8,10,0.5)';
+  for (let i = 0; i < 16; i++) {
+    g.lineWidth = 1 + Math.random() * 2;
+    g.beginPath();
+    let x = Math.random() * 512;
+    let y = Math.random() * 512;
+    g.moveTo(x, y);
+    for (let j = 0; j < 5; j++) {
+      x += (Math.random() - 0.5) * 90;
+      y += Math.random() * 55;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(10,10,12,0.35)';
+  g.fillRect(0, 250, 512, 7);
+  // красно-белые поребрики
+  for (let y = 0; y < 8; y++) {
+    g.fillStyle = y % 2 ? '#dedbd4' : '#c6372b';
+    g.fillRect(0, y * 64, 24, 64);
+    g.fillStyle = y % 2 ? '#c6372b' : '#dedbd4';
+    g.fillRect(488, y * 64, 24, 64);
+  }
+  // потёртые крайние линии
+  g.fillStyle = 'rgba(240,240,235,0.92)';
+  g.fillRect(38, 0, 8, 512);
+  g.fillRect(466, 0, 8, 512);
   // центральная прерывистая
-  g.fillStyle = '#ffd23a';
-  g.fillRect(124, 18, 8, 96);
+  g.fillStyle = 'rgba(248,207,72,0.94)';
+  g.fillRect(250, 34, 12, 150);
+  // вытираем краску зерном асфальта
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = `rgba(47,49,54,${Math.random() * 0.55})`;
+    const zones = [[0, 24], [488, 24], [38, 8], [466, 8], [250, 12]];
+    const [zx, zw] = zones[(Math.random() * zones.length) | 0];
+    g.fillRect(zx + Math.random() * zw, Math.random() * 512, 2.4, 2.4);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = MAX_ANISO;
   return tex;
 }
 
 function makeGroundTexture() {
+  // Нейтральная микродеталь: основной цвет задают вершинные цвета рельефа
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#4f9e46';
-  g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 3200; i++) {
-    const shades = ['#57ab4d', '#47913f', '#63ba57', '#5aa94e', '#3f8439'];
-    g.fillStyle = shades[(Math.random() * shades.length) | 0];
-    g.globalAlpha = 0.35 + Math.random() * 0.4;
-    g.fillRect(Math.random() * 256, Math.random() * 256, 3 + Math.random() * 8, 3 + Math.random() * 8);
+  g.fillStyle = '#c7cabb';
+  g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 240; i++) {
+    const v = 150 + Math.random() * 80;
+    g.fillStyle = `rgba(${v * 0.82},${v},${v * 0.72},${0.05 + Math.random() * 0.1})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 512, Math.random() * 512, 12 + Math.random() * 55, 8 + Math.random() * 35, Math.random() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 15000; i++) {
+    const v = 120 + Math.random() * 110;
+    g.fillStyle = `rgba(${v * 0.8},${v},${v * 0.68},${Math.random() * 0.25})`;
+    g.fillRect(Math.random() * 512, Math.random() * 512, 2, 2 + Math.random() * 3);
+  }
+  // травинки-штрихи
+  g.lineWidth = 1;
+  for (let i = 0; i < 2500; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    g.strokeStyle = `rgba(70,${110 + Math.random() * 70},55,0.35)`;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 5);
+    g.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(46, 46);
+  tex.repeat.set(72, 72);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
   return tex;
 }
 
 function makeSkyTexture() {
   const c = document.createElement('canvas');
-  c.width = 32;
+  c.width = 1024;
   c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#274a8f');
-  grad.addColorStop(0.42, '#5d7fc4');
-  grad.addColorStop(0.62, '#e88a5a');
-  grad.addColorStop(0.78, '#ffb03a');
-  grad.addColorStop(1, '#ff8a4a');
+  grad.addColorStop(0, '#1d3e74');
+  grad.addColorStop(0.34, '#4c72b5');
+  grad.addColorStop(0.55, '#b97a79');
+  grad.addColorStop(0.68, '#ff9d54');
+  grad.addColorStop(0.78, '#ffc06a');
+  grad.addColorStop(1, '#8a4b32');
   g.fillStyle = grad;
-  g.fillRect(0, 0, 32, 512);
+  g.fillRect(0, 0, 1024, 512);
+  // высокие перистые облака ленточками
+  for (let i = 0; i < 46; i++) {
+    const y = 85 + Math.random() * 215;
+    const w = 90 + Math.random() * 280;
+    const x = Math.random() * 1024;
+    const cg = g.createRadialGradient(x, y, 2, x, y, w / 2);
+    const warm = y > 210;
+    cg.addColorStop(0, warm ? 'rgba(255,190,145,0.23)' : 'rgba(240,244,255,0.18)');
+    cg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = cg;
+    g.save();
+    g.translate(x, y);
+    g.scale(1, 0.16 + Math.random() * 0.12);
+    g.beginPath();
+    g.arc(0, 0, w / 2, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  // первые звёзды в зените
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let i = 0; i < 130; i++) {
+    g.globalAlpha = Math.random() * 0.55;
+    g.fillRect(Math.random() * 1024, Math.random() * 105, 1.4, 1.4);
+  }
+  g.globalAlpha = 1;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeEnvironmentTexture() {
+  // Панорама для PBR-отражений на лаке/стекле/воде
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#2d5b9e');
+  grad.addColorStop(0.42, '#89aed4');
+  grad.addColorStop(0.58, '#ffb06a');
+  grad.addColorStop(0.62, '#6b6b58');
+  grad.addColorStop(1, '#2e2b24');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1024, 512);
+  const sunGrad = g.createRadialGradient(760, 292, 2, 760, 292, 190);
+  sunGrad.addColorStop(0, 'rgba(255,255,235,1)');
+  sunGrad.addColorStop(0.12, 'rgba(255,205,110,0.95)');
+  sunGrad.addColorStop(1, 'rgba(255,150,60,0)');
+  g.fillStyle = sunGrad;
+  g.fillRect(520, 80, 480, 390);
+  g.fillStyle = 'rgba(40,48,42,0.85)';
+  g.beginPath();
+  g.moveTo(0, 320);
+  for (let x = 0; x <= 1024; x += 64) {
+    g.lineTo(x, 306 + Math.sin(x * 0.021) * 13 + Math.sin(x * 0.007) * 9);
+  }
+  g.lineTo(1024, 512);
+  g.lineTo(0, 512);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeGlowTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 2, 128, 128, 128);
+  grad.addColorStop(0, 'rgba(255,240,200,1)');
+  grad.addColorStop(0.25, 'rgba(255,180,90,0.46)');
+  grad.addColorStop(1, 'rgba(255,140,60,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeWaterNormalTexture() {
+  // Бесшовная карта нормалей из суммы периодических волн
+  const size = 256;
+  const heights = new Float32Array(size * size);
+  const waves = [
+    [3, 1, 0.5, 1.0], [5, -2, 2.1, 0.55], [-2, 6, 4.0, 0.45],
+    [8, 3, 1.3, 0.3], [-6, -4, 5.2, 0.24], [11, 7, 0.4, 0.15],
+  ];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let h = 0;
+      waves.forEach(([kx, ky, ph, amp]) => {
+        h += Math.sin(((kx * x + ky * y) / size) * Math.PI * 2 + ph) * amp;
+      });
+      heights[y * size + x] = h;
+    }
+  }
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const img = g.createImageData(size, size);
+  const at = (x, y) => heights[((y + size) % size) * size + ((x + size) % size)];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * 1.15;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * 1.15;
+      const inv = 1 / Math.hypot(dx, dy, 1);
+      const i = (y * size + x) * 4;
+      img.data[i] = (-dx * inv * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (-dy * inv * 0.5 + 0.5) * 255;
+      img.data[i + 2] = inv * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(28, 28);
+  return tex;
+}
+
+function makeRockTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#77716a';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 300; i++) {
+    const v = 85 + Math.random() * 90;
+    g.fillStyle = `rgba(${v},${v * 0.96},${v * 0.88},${0.12 + Math.random() * 0.22})`;
+    g.beginPath();
+    g.ellipse(Math.random() * 256, Math.random() * 256, 12 + Math.random() * 55, 5 + Math.random() * 22, (Math.random() - 0.5) * 0.5, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(45,42,38,0.45)';
+  for (let i = 0; i < 42; i++) {
+    g.lineWidth = 1 + Math.random() * 2;
+    g.beginPath();
+    const y = Math.random() * 256;
+    g.moveTo(0, y);
+    g.bezierCurveTo(80, y + (Math.random() - 0.5) * 22, 170, y + (Math.random() - 0.5) * 22, 256, y + (Math.random() - 0.5) * 16);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
+  return tex;
+}
+
+function makeLeafTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#557f3d';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4200; i++) {
+    const gr = 95 + Math.random() * 105;
+    g.fillStyle = `rgba(${gr * 0.55},${gr},${gr * 0.42},${0.25 + Math.random() * 0.5})`;
+    g.save();
+    g.translate(Math.random() * 256, Math.random() * 256);
+    g.rotate(Math.random() * Math.PI);
+    g.fillRect(-3, -1, 6 + Math.random() * 5, 2.2);
+    g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeBarkTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#6f4a2f';
+  g.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 160; i++) {
+    const x = Math.random() * 128;
+    g.strokeStyle = `rgba(${35 + Math.random() * 55},${22 + Math.random() * 38},14,${0.3 + Math.random() * 0.45})`;
+    g.lineWidth = 1 + Math.random() * 3;
+    g.beginPath();
+    g.moveTo(x, -8);
+    g.bezierCurveTo(x + 8, 70, x - 8, 160, x + 5, 264);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeFacadeTexture(base = '#e8dcc5', shutter = '#31556e') {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = base;
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1800; i++) {
+    g.fillStyle = `rgba(90,75,55,${Math.random() * 0.08})`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 3, 3);
+  }
+  function window_(x, y, w, h, warm) {
+    g.fillStyle = '#f7f2e7';
+    g.fillRect(x - 5, y - 5, w + 10, h + 10);
+    const grad = g.createLinearGradient(x, y, x + w, y + h);
+    grad.addColorStop(0, warm ? '#ffd27a' : '#87b5cf');
+    grad.addColorStop(0.55, warm ? '#b97236' : '#28465e');
+    grad.addColorStop(1, '#162738');
+    g.fillStyle = grad;
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = '#f7f2e7';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(x + w / 2, y);
+    g.lineTo(x + w / 2, y + h);
+    g.moveTo(x, y + h / 2);
+    g.lineTo(x + w, y + h / 2);
+    g.stroke();
+    g.fillStyle = shutter;
+    g.fillRect(x - 17, y - 3, 11, h + 6);
+    g.fillRect(x + w + 6, y - 3, 11, h + 6);
+  }
+  window_(35, 42, 48, 62, false);
+  window_(172, 42, 48, 62, true);
+  window_(35, 145, 48, 62, true);
+  // дверь
+  g.fillStyle = '#5a3825';
+  g.fillRect(172, 150, 50, 106);
+  g.fillStyle = '#d8b36a';
+  g.beginPath();
+  g.arc(212, 205, 4, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
+  return tex;
+}
+
+function makeGrassBladeTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 128, 128);
+  for (let i = 0; i < 90; i++) {
+    const x = 8 + Math.random() * 112;
+    const h = 45 + Math.random() * 78;
+    const lean = (Math.random() - 0.5) * 34;
+    const gr = 100 + Math.random() * 110;
+    g.strokeStyle = `rgba(${gr * 0.48},${gr},${gr * 0.36},0.96)`;
+    g.lineWidth = 2 + Math.random() * 2.4;
+    g.beginPath();
+    g.moveTo(x, 128);
+    g.quadraticCurveTo(x + lean * 0.3, 128 - h * 0.62, x + lean, 128 - h);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeCloudSpriteTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 128;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 256, 128);
+  for (let i = 0; i < 42; i++) {
+    const x = 35 + Math.random() * 186;
+    const y = 48 + Math.random() * 38;
+    const r = 16 + Math.random() * 34;
+    const grad = g.createRadialGradient(x, y, 1, x, y, r);
+    grad.addColorStop(0, 'rgba(255,246,238,0.34)');
+    grad.addColorStop(0.65, 'rgba(255,205,175,0.14)');
+    grad.addColorStop(1, 'rgba(255,190,160,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -253,6 +661,15 @@ function makeBannerTexture() {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envSource = makeEnvironmentTexture();
+  scene.environment = pmrem.fromEquirectangular(envSource).texture;
+  if ('environmentIntensity' in scene) scene.environmentIntensity = 0.8;
+  envSource.dispose();
+  pmrem.dispose();
 }
 
 /* ============================ Трасса ============================ */
@@ -295,176 +712,415 @@ for (let i = 0; i < 12; i++) {
   CHECKPOINTS.push(pointAtS((TRACK_LENGTH / 12) * i));
 }
 
+/* ============================ Рельеф острова ============================ */
+const ROAD_GRID_CELL = 20;
+const roadGrid = new Map();
+SAMPLES.forEach((pt) => {
+  const key = `${Math.floor(pt.x / ROAD_GRID_CELL)},${Math.floor(pt.z / ROAD_GRID_CELL)}`;
+  if (!roadGrid.has(key)) roadGrid.set(key, []);
+  roadGrid.get(key).push(pt);
+});
+function roadDistanceApprox(x, z) {
+  const cx = Math.floor(x / ROAD_GRID_CELL);
+  const cz = Math.floor(z / ROAD_GRID_CELL);
+  let best2 = 60 * 60;
+  for (let gx = cx - 2; gx <= cx + 2; gx++) {
+    for (let gz = cz - 2; gz <= cz + 2; gz++) {
+      const cell = roadGrid.get(`${gx},${gz}`);
+      if (!cell) continue;
+      for (const pt of cell) {
+        const dx = pt.x - x;
+        const dz = pt.z - z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < best2) best2 = d2;
+      }
+    }
+  }
+  return Math.sqrt(best2);
+}
+function terrainHeight(x, z, roadDist = null) {
+  const d = roadDist === null ? roadDistanceApprox(x, z) : roadDist;
+  const roadFactor = smoothstep(15, 48, d); // сетка рельефа не должна вылезать на асфальт
+  const rolling = 1.0 + (fbm2(x * 0.011 + 7.3, z * 0.011 - 2.9) - 0.5) * 5.2
+    + (fbm2(x * 0.045 - 4.1, z * 0.045 + 6.2, 3) - 0.5) * 1.3;
+  const peak = (cx, cz, h, sigma) => {
+    const dx = x - cx;
+    const dz = z - cz;
+    return h * Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma));
+  };
+  const peaks = peak(0, 15, 19, 43) + peak(-68, -48, 12, 30) + peak(72, 62, 9, 27) + peak(-12, -102, 6, 30);
+  let h = (rolling + peaks) * roadFactor;
+  // ровная площадка фестиваля у старта
+  const festivalFlat = smoothstep(20, 68, Math.hypot(x, z + 175));
+  h *= 0.2 + 0.8 * festivalFlat;
+  const shore = smoothstep(274, 307, Math.hypot(x, z));
+  return lerp(h, -3.4, shore);
+}
+
+let waterMaterial = null;
+let foamRing = null;
+let grassMesh = null;
+let festivalWheel = null;
+const windTurbines = [];
+const cloudGroup = new THREE.Group();
+scene.add(cloudGroup);
+
 /* ============================ Мир ============================ */
 const colliders = []; // {x,z,r}
 
 // Небо
 {
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(950, 24, 16),
+    new THREE.SphereGeometry(950, 32, 20),
     new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false })
   );
   scene.add(sky);
-  // Солнце-диск
   const sunBall = new THREE.Mesh(
-    new THREE.SphereGeometry(38, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0xffd98a, fog: false })
+    new THREE.SphereGeometry(27, 20, 20),
+    new THREE.MeshBasicMaterial({ color: 0xffe6ae, fog: false })
   );
-  sunBall.position.set(-560, 120, -620);
+  sunBall.position.set(-560, 132, -620);
   scene.add(sunBall);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture(), color: 0xffc98a, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  halo.scale.set(380, 380, 1);
+  halo.position.copy(sunBall.position);
+  scene.add(halo);
 }
 
-// Океан и остров
+// Океан и остров (рельефная местность)
 {
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(2400, 2400),
-    new THREE.MeshStandardMaterial({ color: 0x1f7fa8, roughness: 0.35, metalness: 0.1 })
-  );
+  const waterNormal = makeWaterNormalTexture();
+  waterMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x166f96, roughness: 0.12, metalness: 0,
+    normalMap: waterNormal, normalScale: new THREE.Vector2(0.65, 0.65),
+    transparent: true, opacity: 0.94, envMapIntensity: 1.35,
+  });
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), waterMaterial);
   water.rotation.x = -Math.PI / 2;
-  water.position.y = -1.4;
+  water.position.y = -1.12;
   scene.add(water);
 
-  const sand = new THREE.Mesh(
-    new THREE.CircleGeometry(300, 48),
-    new THREE.MeshStandardMaterial({ color: 0xe8cf8f, roughness: 1 })
+  foamRing = new THREE.Mesh(
+    new THREE.RingGeometry(281, 300, 160),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15, depthWrite: false })
   );
-  sand.rotation.x = -Math.PI / 2;
-  sand.position.y = -0.25;
-  sand.receiveShadow = true;
-  scene.add(sand);
+  foamRing.rotation.x = -Math.PI / 2;
+  foamRing.position.y = -0.92;
+  scene.add(foamRing);
 
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(282, 48),
-    new THREE.MeshStandardMaterial({ map: makeGroundTexture(), roughness: 1 })
+  const terrainGeo = new THREE.PlaneGeometry(640, 640, 150, 150);
+  terrainGeo.rotateX(-Math.PI / 2);
+  const posAttr = terrainGeo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const z = posAttr.getZ(i);
+    posAttr.setY(i, terrainHeight(x, z));
+  }
+  terrainGeo.computeVertexNormals();
+  const normAttr = terrainGeo.attributes.normal;
+  const colors = new Float32Array(posAttr.count * 3);
+  const cGrass = new THREE.Color(0x619e48);
+  const cDry = new THREE.Color(0x99a454);
+  const cForest = new THREE.Color(0x356735);
+  const cSand = new THREE.Color(0xdcc088);
+  const cDirt = new THREE.Color(0x8a6b49);
+  const cRock = new THREE.Color(0x767068);
+  const tmpColor = new THREE.Color();
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const z = posAttr.getZ(i);
+    const h = posAttr.getY(i);
+    const ny = normAttr.getY(i);
+    const variation = fbm2(x * 0.024 + 11, z * 0.024 - 6, 3);
+    tmpColor.copy(cForest).lerp(cGrass, clamp(variation * 1.35, 0, 1));
+    if (variation > 0.62) tmpColor.lerp(cDry, (variation - 0.62) * 1.5);
+    const sandiness = 1 - smoothstep(-0.25, 0.65, h);
+    if (sandiness > 0) tmpColor.lerp(cSand, sandiness);
+    if (h < -1) tmpColor.lerp(cDirt, 0.35);
+    const rockiness = Math.max(1 - smoothstep(0.56, 0.84, ny), smoothstep(7, 15, h) * 0.7);
+    if (rockiness > 0) tmpColor.lerp(cRock, clamp(rockiness, 0, 1));
+    colors[i * 3] = tmpColor.r;
+    colors[i * 3 + 1] = tmpColor.g;
+    colors[i * 3 + 2] = tmpColor.b;
+  }
+  terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const groundTex = makeGroundTexture();
+  const terrain = new THREE.Mesh(
+    terrainGeo,
+    new THREE.MeshStandardMaterial({
+      map: groundTex, bumpMap: groundTex, bumpScale: 0.35,
+      vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.25,
+    })
   );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = 0;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  terrain.receiveShadow = true;
+  scene.add(terrain);
 }
 
-// Дорога — лента вдоль сплайна
+// Дорога — лента вдоль сплайна (+ гравийная обочина)
 {
-  const SEG = 420;
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-  for (let i = 0; i <= SEG; i++) {
-    const u = i / SEG;
-    const p = curve.getPointAt(u % 1);
-    const t = curve.getTangentAt(u % 1);
-    const n = new THREE.Vector3(-t.z, 0, t.x);
-    const l = p.clone().addScaledVector(n, ROAD_HALF);
-    const r = p.clone().addScaledVector(n, -ROAD_HALF);
-    positions.push(l.x, 0.06, l.z, r.x, 0.06, r.z);
-    uvs.push(0, (u * TRACK_LENGTH) / 14, 1, (u * TRACK_LENGTH) / 14);
-    if (i < SEG) {
-      const a = i * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  function buildRibbon(halfWidth, y) {
+    const SEG = 420;
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+    for (let i = 0; i <= SEG; i++) {
+      const u = i / SEG;
+      const p = curve.getPointAt(u % 1);
+      const t = curve.getTangentAt(u % 1);
+      const n = new THREE.Vector3(-t.z, 0, t.x);
+      const l = p.clone().addScaledVector(n, halfWidth);
+      const r = p.clone().addScaledVector(n, -halfWidth);
+      positions.push(l.x, y, l.z, r.x, y, r.z);
+      uvs.push(0, (u * TRACK_LENGTH) / 14, 1, (u * TRACK_LENGTH) / 14);
+      if (i < SEG) {
+        const a = i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
     }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
+
+  const gravelTex = makeGroundTexture();
+  gravelTex.repeat.set(2, 2);
+  const shoulder = new THREE.Mesh(
+    buildRibbon(ROAD_HALF + 2.1, 0.012),
+    new THREE.MeshStandardMaterial({ color: 0x9a8563, map: gravelTex, bumpMap: gravelTex, bumpScale: 0.5, roughness: 1 })
+  );
+  shoulder.receiveShadow = true;
+  scene.add(shoulder);
+
+  const asphaltTex = makeRoadTexture();
   const road = new THREE.Mesh(
-    geo,
-    new THREE.MeshStandardMaterial({ map: makeRoadTexture(), roughness: 0.92 })
+    buildRibbon(ROAD_HALF, 0.025),
+    new THREE.MeshStandardMaterial({
+      map: asphaltTex, bumpMap: asphaltTex, bumpScale: 0.18,
+      roughness: 0.94, metalness: 0, envMapIntensity: 0.3,
+    })
   );
   road.receiveShadow = true;
   scene.add(road);
 }
 
-// Горы по горизонту и в центре острова
+// Горные пики острова — часть рельефа; на горизонте — скалистый хребет
 {
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x7a7f8c, roughness: 1, flatShading: true });
-  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf4f7ff, roughness: 0.8, flatShading: true });
-  function mountain(x, z, h, r) {
+  colliders.push(
+    { x: 0, z: 15, r: 34 },
+    { x: -68, z: -48, r: 21 },
+    { x: 72, z: 62, r: 17 }
+  );
+  const rockTex = makeRockTexture();
+  const rockMat = new THREE.MeshStandardMaterial({
+    map: rockTex, bumpMap: rockTex, bumpScale: 0.8, roughness: 1, flatShading: true,
+  });
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xeef3fb, roughness: 0.72, flatShading: true });
+  function jaggedCone(radius, height, seedOffset) {
+    const geo = new THREE.ConeGeometry(radius, height, 26, 6);
+    const attr = geo.attributes.position;
+    for (let i = 0; i < attr.count; i++) {
+      const x = attr.getX(i);
+      const y = attr.getY(i);
+      const z = attr.getZ(i);
+      const rr = Math.hypot(x, z);
+      if (rr > 0.01) {
+        const n = fbm2(x * 0.035 + seedOffset, (z + y * 0.7) * 0.035, 3);
+        const scale = 0.78 + n * 0.55;
+        attr.setX(i, x * scale);
+        attr.setZ(i, z * scale);
+      }
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+  function distantMountain(x, z, h, r, i) {
     const m = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), rockMat);
-    body.position.y = h / 2 - 1;
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.34, h * 0.34, 7), snowMat);
-    cap.position.y = h - h * 0.17 - 1;
+    const body = new THREE.Mesh(jaggedCone(r, h, i * 7.7), rockMat);
+    body.position.y = h / 2 - 4;
+    const cap = new THREE.Mesh(jaggedCone(r * 0.36, h * 0.34, i * 3.1), snowMat);
+    cap.position.y = h - h * 0.17 - 4;
     m.add(body, cap);
     m.position.set(x, 0, z);
+    m.rotation.y = rnd() * Math.PI;
     scene.add(m);
-    if (Math.hypot(x, z) < 280) colliders.push({ x, z, r: r * 0.92 });
   }
-  mountain(0, 10, 58, 52);
-  mountain(-65, -45, 40, 38);
-  mountain(70, 60, 34, 32);
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * TAU + 0.35;
-    mountain(Math.cos(a) * 470, Math.sin(a) * 470, 80 + rnd() * 70, 90 + rnd() * 60);
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * TAU + 0.32;
+    distantMountain(Math.cos(a) * (455 + rnd() * 90), Math.sin(a) * (455 + rnd() * 90), 85 + rnd() * 85, 95 + rnd() * 70, i);
   }
 }
 
-// Деревья и камни — инстансинг для мобильных
+// Деревья, камни и трава — инстансинг для мобильных
 {
+  function displaceGeo(geo, amount, freq) {
+    const attr = geo.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < attr.count; i++) {
+      v.fromBufferAttribute(attr, i);
+      const n = fbm2(v.x * freq + 3.7, (v.z + v.y) * freq - 1.2, 3) - 0.5;
+      const len = v.length() || 1;
+      v.addScaledVector(v.clone().divideScalar(len), n * amount);
+      attr.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  const broadleafParts = [];
+  [[2.05, 0, 4.85, 0, 1.18], [1.45, -1.05, 4.15, 0.35, 1], [1.35, 1.1, 4.3, -0.25, 1], [1.05, 0.15, 5.75, 0.55, 0.95]].forEach(([r, x, y, z, sy]) => {
+    const part = displaceGeo(new THREE.SphereGeometry(r, 12, 9), 0.24, 0.55);
+    part.scale(1.08, sy * 0.78, 1);
+    part.translate(x, y, z);
+    broadleafParts.push(part);
+  });
+  const broadleafGeo = mergeGeometries(broadleafParts);
+  const pineParts = [];
+  [[2.05, 2.6, 3.7], [1.6, 2.4, 5.25], [1.1, 2.2, 6.8]].forEach(([r, h, y]) => {
+    const part = displaceGeo(new THREE.ConeGeometry(r, h, 11, 3), 0.12, 0.7);
+    part.translate(0, y, 0);
+    pineParts.push(part);
+  });
+  const pineGeo = mergeGeometries(pineParts);
+  const trunkGeo = new THREE.CylinderGeometry(0.2, 0.46, 3.9, 8);
+  trunkGeo.translate(0, 1.95, 0);
+
   const treePos = [];
   let guard = 0;
-  while (treePos.length < 200 && guard++ < 4000) {
+  while (treePos.length < 230 && guard++ < 6000) {
     const a = rnd() * TAU;
-    const r = 24 + rnd() * 246;
+    const r = 22 + rnd() * 248;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
     const near = nearestSampleIdx({ x, z });
-    if (near.dist < 14) continue;
-    if (Math.hypot(x, z - 10) < 58) continue; // центральная гора
-    if (Math.hypot(x + 65, z + 45) < 42 || Math.hypot(x - 70, z - 60) < 36) continue;
-    treePos.push([x, z]);
+    if (near.dist < 13.5) continue;
+    const h = terrainHeight(x, z, near.dist);
+    if (h > 7.6 || h < -0.15) continue; // на голых скалах и в воде деревья не растут
+    treePos.push({ x, z, h, pine: rnd() > 0.46, s: 0.75 + rnd() * 1.05, rot: rnd() * TAU });
     if (treePos.length % 3 === 0) colliders.push({ x, z, r: 1.0 });
   }
-  const trunkGeo = new THREE.CylinderGeometry(0.32, 0.45, 2.6, 6);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 1 });
-  const leafGeo = new THREE.ConeGeometry(2.1, 5.2, 7);
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 1, flatShading: true });
-  const palmGeo = new THREE.SphereGeometry(2.0, 7, 6);
-  const palmMat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 1, flatShading: true });
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treePos.length);
-  const pines = new THREE.InstancedMesh(leafGeo, leafMat, treePos.length);
-  const palms = new THREE.InstancedMesh(palmGeo, palmMat, treePos.length);
+  const broadList = treePos.filter((t) => !t.pine);
+  const pineList = treePos.filter((t) => t.pine);
+  const barkTex = makeBarkTexture();
+  const leafTex = makeLeafTexture();
+  const trunks = new THREE.InstancedMesh(
+    trunkGeo,
+    new THREE.MeshStandardMaterial({ map: barkTex, bumpMap: barkTex, bumpScale: 0.7, roughness: 1 }),
+    treePos.length
+  );
+  const broadleaf = new THREE.InstancedMesh(
+    broadleafGeo,
+    new THREE.MeshStandardMaterial({ map: leafTex, roughness: 1, envMapIntensity: 0.3 }),
+    broadList.length
+  );
+  const pines = new THREE.InstancedMesh(
+    pineGeo,
+    new THREE.MeshStandardMaterial({ map: leafTex, color: 0x87a96f, roughness: 1, envMapIntensity: 0.3 }),
+    pineList.length
+  );
   const dummy = new THREE.Object3D();
-  treePos.forEach(([x, z], i) => {
-    const s = 0.8 + rnd() * 0.9;
-    dummy.position.set(x, 1.3 * s, z);
-    dummy.scale.setScalar(s);
-    dummy.rotation.set(0, rnd() * TAU, 0);
+  const tmpC = new THREE.Color();
+  treePos.forEach((t, i) => {
+    dummy.position.set(t.x, t.h - 0.08, t.z);
+    dummy.rotation.set(0, t.rot, 0);
+    dummy.scale.setScalar(t.s);
     dummy.updateMatrix();
     trunks.setMatrixAt(i, dummy.matrix);
-    const isPine = i % 2 === 0;
-    dummy.position.y = (2.6 + (isPine ? 2.4 : 1.4)) * s;
-    dummy.scale.set(s, s * (isPine ? 1 : 0.6), s);
-    dummy.updateMatrix();
-    (isPine ? pines : palms).setMatrixAt(i, dummy.matrix);
-    // вторую крону прячем под землю
-    dummy.position.y = -30;
-    dummy.updateMatrix();
-    (isPine ? palms : pines).setMatrixAt(i, dummy.matrix);
   });
-  trunks.castShadow = pines.castShadow = palms.castShadow = true;
-  scene.add(trunks, pines, palms);
+  broadList.forEach((t, i) => {
+    dummy.position.set(t.x, t.h - 0.08, t.z);
+    dummy.rotation.set(0, t.rot, 0);
+    dummy.scale.setScalar(t.s);
+    dummy.updateMatrix();
+    broadleaf.setMatrixAt(i, dummy.matrix);
+    broadleaf.setColorAt(i, tmpC.setHSL(0.29 + rnd() * 0.06, 0.22 + rnd() * 0.18, 0.66 + rnd() * 0.24));
+  });
+  pineList.forEach((t, i) => {
+    dummy.position.set(t.x, t.h - 0.08, t.z);
+    dummy.rotation.set(0, t.rot, 0);
+    dummy.scale.setScalar(t.s);
+    dummy.updateMatrix();
+    pines.setMatrixAt(i, dummy.matrix);
+    pines.setColorAt(i, tmpC.setHSL(0.33 + rnd() * 0.04, 0.2, 0.62 + rnd() * 0.2));
+  });
+  if (broadleaf.instanceColor) broadleaf.instanceColor.needsUpdate = true;
+  if (pines.instanceColor) pines.instanceColor.needsUpdate = true;
+  trunks.castShadow = broadleaf.castShadow = pines.castShadow = true;
+  broadleaf.receiveShadow = pines.receiveShadow = true;
+  scene.add(trunks, broadleaf, pines);
 
-  const rockGeo = new THREE.DodecahedronGeometry(1.1, 0);
-  const rockMat2 = new THREE.MeshStandardMaterial({ color: 0x8b8f99, roughness: 1, flatShading: true });
-  const rocks = new THREE.InstancedMesh(rockGeo, rockMat2, 50);
-  for (let i = 0; i < 50; i++) {
-    let x, z;
-    do {
+  // камни и скальные выходы
+  const rockTex = makeRockTexture();
+  const rockGeo = displaceGeo(new THREE.DodecahedronGeometry(1.15, 1), 0.22, 0.8);
+  const rocks = new THREE.InstancedMesh(
+    rockGeo,
+    new THREE.MeshStandardMaterial({ map: rockTex, bumpMap: rockTex, bumpScale: 0.55, roughness: 1, flatShading: true }),
+    80
+  );
+  for (let i = 0; i < 80; i++) {
+    let x = 0, z = 0, h = 0;
+    for (let tries = 0; tries < 20; tries++) {
       const a = rnd() * TAU;
-      const r = 30 + rnd() * 235;
+      const r = 28 + rnd() * 240;
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
-    } while (nearestSampleIdx({ x, z }).dist < 11);
-    dummy.position.set(x, 0.4, z);
+      const near = nearestSampleIdx({ x, z });
+      if (near.dist < 10.5) continue;
+      h = terrainHeight(x, z, near.dist);
+      break;
+    }
+    const sc = 0.5 + rnd() * 1.9;
+    dummy.position.set(x, h + sc * 0.22, z);
     dummy.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
-    dummy.scale.setScalar(0.6 + rnd() * 1.6);
+    dummy.scale.set(sc * (0.8 + rnd() * 0.5), sc * (0.55 + rnd() * 0.5), sc);
     dummy.updateMatrix();
     rocks.setMatrixAt(i, dummy.matrix);
   }
-  rocks.castShadow = true;
+  rocks.castShadow = rocks.receiveShadow = true;
   scene.add(rocks);
+
+  // пучки травы крест-накрест
+  const bladePlane = new THREE.PlaneGeometry(1.15, 0.78);
+  bladePlane.translate(0, 0.37, 0);
+  const bladePlane2 = bladePlane.clone();
+  bladePlane2.rotateY(Math.PI / 2);
+  const grassGeo = mergeGeometries([bladePlane, bladePlane2]);
+  const GRASS_COUNT = 2300;
+  grassMesh = new THREE.InstancedMesh(
+    grassGeo,
+    new THREE.MeshStandardMaterial({
+      map: makeGrassBladeTexture(), alphaTest: 0.34, side: THREE.DoubleSide, roughness: 1,
+    }),
+    GRASS_COUNT
+  );
+  let placedGrass = 0;
+  guard = 0;
+  while (placedGrass < GRASS_COUNT && guard++ < GRASS_COUNT * 5) {
+    const a = rnd() * TAU;
+    const r = 12 + Math.pow(rnd(), 0.75) * 262;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const d = roadDistanceApprox(x, z);
+    if (d < 8.6) continue;
+    const h = terrainHeight(x, z, d);
+    if (h < 0.05 || h > 8.5) continue;
+    dummy.position.set(x, h - 0.03, z);
+    dummy.rotation.set(0, rnd() * TAU, 0);
+    const gs = 0.65 + rnd() * 1.15;
+    dummy.scale.set(gs, gs * (0.8 + rnd() * 0.65), gs);
+    dummy.updateMatrix();
+    grassMesh.setMatrixAt(placedGrass, dummy.matrix);
+    grassMesh.setColorAt(placedGrass, tmpC.setHSL(0.26 + rnd() * 0.09, 0.3, 0.64 + rnd() * 0.24));
+    placedGrass++;
+  }
+  grassMesh.count = placedGrass;
+  if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+  scene.add(grassMesh);
 }
 
 // Фестивальная зона у старта: арка, шатры, дома, воздушные шары
@@ -519,25 +1175,42 @@ const balloons = [];
     colliders.push({ x: p.pos.x, z: p.pos.z, r: 3.4 });
   }
 
-  // домики деревни
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xf2e3c8, roughness: 0.95 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0xc04a32, roughness: 0.9, flatShading: true });
-  for (let i = 0; i < 12; i++) {
-    const s = (TRACK_LENGTH / 12) * i + 40;
+  // домики деревни с текстурированными фасадами
+  const facadeA = makeFacadeTexture('#eadfc7', '#31556e');
+  const facadeB = makeFacadeTexture('#e4cdb2', '#6e4631');
+  const facadeC = makeFacadeTexture('#dfe5d8', '#3f6250');
+  const facades = [facadeA, facadeB, facadeC].map((tex) => new THREE.MeshStandardMaterial({
+    map: tex, bumpMap: tex, bumpScale: 0.12, roughness: 0.92, envMapIntensity: 0.35,
+  }));
+  const plainWallMat = new THREE.MeshStandardMaterial({ color: 0xd8c9ac, roughness: 0.95 });
+  const roofMats = [0x9f4634, 0x6d4a3a, 0x51606b].map((color) => new THREE.MeshStandardMaterial({
+    color, roughness: 0.9, flatShading: true,
+  }));
+  const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6c, roughness: 1 });
+  for (let i = 0; i < 14; i++) {
+    const s = (TRACK_LENGTH / 14) * i + 42;
     const side = i % 2 ? 1 : -1;
-    const p = pointAtS(s, side * (ROAD_HALF + 16 + rnd() * 12));
-    if (Math.hypot(p.pos.x, p.pos.z) > 265) continue;
+    const p = pointAtS(s, side * (ROAD_HALF + 17 + rnd() * 13));
+    if (Math.hypot(p.pos.x, p.pos.z) > 262) continue;
+    const groundY = terrainHeight(p.pos.x, p.pos.z);
     const house = new THREE.Group();
-    const w = 5 + rnd() * 3;
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(w, 3.4, w * 0.8), wallMat);
-    walls.position.y = 1.7;
-    walls.castShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.78, 2.4, 4), roofMat);
-    roof.position.y = 4.6;
+    const w = 5.5 + rnd() * 3;
+    const facadeMat = facades[i % facades.length];
+    const walls = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 3.5, w * 0.82),
+      [facadeMat, facadeMat, plainWallMat, plainWallMat, facadeMat, facadeMat]
+    );
+    walls.position.y = 1.75;
+    walls.castShadow = walls.receiveShadow = true;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.8, 2.5, 4), roofMats[i % roofMats.length]);
+    roof.position.y = 4.75;
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
-    house.add(walls, roof);
-    house.position.copy(p.pos);
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.4, 0.55), chimneyMat);
+    chimney.position.set(w * 0.22, 5.5, 0);
+    chimney.castShadow = true;
+    house.add(walls, roof, chimney);
+    house.position.set(p.pos.x, groundY - 0.05, p.pos.z);
     house.rotation.y = rnd() * TAU;
     scene.add(house);
     colliders.push({ x: p.pos.x, z: p.pos.z, r: w * 0.62 });
@@ -564,20 +1237,22 @@ const balloons = [];
     balloons.push(b);
   }
 
-  // облака
-  const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.88 });
-  for (let i = 0; i < 10; i++) {
-    const cl = new THREE.Group();
-    for (let j = 0; j < 4; j++) {
-      const s = new THREE.Mesh(new THREE.SphereGeometry(4 + rnd() * 5, 8, 6), cloudMat);
-      s.position.set(j * 5 - 8 + rnd() * 3, rnd() * 2, rnd() * 4);
-      s.scale.y = 0.5;
-      cl.add(s);
-    }
+  // облака: мягкие спрайты в закатном свете
+  const cloudTex = makeCloudSpriteTexture();
+  for (let i = 0; i < 26; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, transparent: true, opacity: 0.42 + rnd() * 0.3,
+      depthWrite: false, fog: false,
+    }));
     const a = rnd() * TAU;
-    cl.position.set(Math.cos(a) * (120 + rnd() * 260), 90 + rnd() * 50, Math.sin(a) * (120 + rnd() * 260));
-    scene.add(cl);
+    const dist = 160 + rnd() * 420;
+    sprite.position.set(Math.cos(a) * dist, 95 + rnd() * 85, Math.sin(a) * dist);
+    const w = 85 + rnd() * 150;
+    sprite.scale.set(w, w * 0.36, 1);
+    sprite.userData.speed = 0.7 + rnd() * 1.3;
+    cloudGroup.add(sprite);
   }
+
 }
 
 // Ворота чекпоинтов
@@ -613,12 +1288,191 @@ const cpMeshes = [];
   });
 }
 
+/* ============================ Детали окружения ============================ */
+{
+  // Уличные фонари вдоль трассы
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.65, roughness: 0.45 });
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xffe2a8, emissive: 0xffbd67, emissiveIntensity: 1.5 });
+  for (let i = 0; i < 20; i++) {
+    const s = (TRACK_LENGTH / 20) * i + 24;
+    const side = i % 2 ? 1 : -1;
+    const p = pointAtS(s, side * (ROAD_HALF + 2.2));
+    const lamp = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 6.4, 8), poleMat);
+    pole.position.y = 3.2;
+    pole.castShadow = true;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.09, 0.09), poleMat);
+    arm.position.set(side > 0 ? 0.85 : -0.85, 6.25, 0);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), lampMat);
+    head.position.set(side > 0 ? 1.7 : -1.7, 6.15, 0);
+    lamp.add(pole, arm, head);
+    lamp.position.set(p.pos.x, terrainHeight(p.pos.x, p.pos.z), p.pos.z);
+    lamp.rotation.y = p.yaw;
+    scene.add(lamp);
+    colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.35 });
+  }
+
+  // Стопки шин на внешней стороне поворотов
+  const tireGeo = new THREE.TorusGeometry(0.52, 0.19, 8, 18);
+  const tirePositions = [];
+  for (let i = 0; i < 16; i++) {
+    const s = (TRACK_LENGTH / 16) * i + 34;
+    const here = pointAtS(s);
+    const ahead = pointAtS(s + 24);
+    const crossY = here.tangent.z * ahead.tangent.x - here.tangent.x * ahead.tangent.z;
+    const outside = crossY >= 0 ? -1 : 1;
+    for (let k = -1; k <= 2; k++) {
+      const p = pointAtS(s + k * 2.1, outside * (ROAD_HALF + 1.7));
+      tirePositions.push(p.pos);
+      colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.68 });
+    }
+  }
+  const tireStacks = new THREE.InstancedMesh(
+    tireGeo,
+    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    tirePositions.length * 3
+  );
+  const dummy2 = new THREE.Object3D();
+  const tmpColor2 = new THREE.Color();
+  let ti = 0;
+  tirePositions.forEach((pos, colIdx) => {
+    const gy = terrainHeight(pos.x, pos.z);
+    for (let level = 0; level < 3; level++) {
+      dummy2.position.set(pos.x, gy + 0.2 + level * 0.34, pos.z);
+      dummy2.rotation.set(Math.PI / 2, 0, colIdx * 0.7 + level);
+      dummy2.scale.setScalar(1);
+      dummy2.updateMatrix();
+      tireStacks.setMatrixAt(ti, dummy2.matrix);
+      tireStacks.setColorAt(ti, tmpColor2.setHex((colIdx + level) % 3 === 0 ? 0xc6372b : (colIdx + level) % 3 === 1 ? 0xe8e5dd : 0x1b1b1e));
+      ti++;
+    }
+  });
+  if (tireStacks.instanceColor) tireStacks.instanceColor.needsUpdate = true;
+  tireStacks.castShadow = tireStacks.receiveShadow = true;
+  scene.add(tireStacks);
+
+  // Колесо обозрения фестиваля
+  const wheelBase = new THREE.Group();
+  const wheelPos = new THREE.Vector3(-38, 0, -126);
+  wheelBase.position.set(wheelPos.x, terrainHeight(wheelPos.x, wheelPos.z), wheelPos.z);
+  wheelBase.rotation.y = 0.22;
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xd9dce2, metalness: 0.7, roughness: 0.35 });
+  [-1, 1].forEach((side) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 17.6, 8), frameMat);
+    leg.position.set(side * 3.6, 8.2, 0);
+    leg.rotation.z = side * 0.42;
+    leg.castShadow = true;
+    wheelBase.add(leg);
+  });
+  festivalWheel = new THREE.Group();
+  festivalWheel.position.y = 16;
+  [0, 0.9].forEach((zo) => {
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(12, 0.24, 8, 48), frameMat);
+    rim.position.z = zo - 0.45;
+    festivalWheel.add(rim);
+  });
+  for (let i = 0; i < 6; i++) {
+    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 23.8, 6), frameMat);
+    spoke.rotation.z = (i / 6) * Math.PI;
+    festivalWheel.add(spoke);
+  }
+  const hubWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.5, 14), frameMat);
+  hubWheel.rotation.x = Math.PI / 2;
+  festivalWheel.add(hubWheel);
+  const gondolaColors = [0xff5e3a, 0xffb03a, 0x2ee6ff, 0xb44aff, 0xff3a7a, 0x37c978];
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    const gondola = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 1.25, 1.3),
+      new THREE.MeshStandardMaterial({ color: gondolaColors[i % gondolaColors.length], roughness: 0.5, emissive: gondolaColors[i % gondolaColors.length], emissiveIntensity: 0.18 })
+    );
+    gondola.position.set(Math.cos(a) * 12, Math.sin(a) * 12, 0);
+    gondola.castShadow = true;
+    festivalWheel.add(gondola);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffe8b0, emissive: 0xffca70, emissiveIntensity: 2 })
+    );
+    bulb.position.set(Math.cos(a + 0.31) * 12, Math.sin(a + 0.31) * 12, 0.55);
+    festivalWheel.add(bulb);
+  }
+  wheelBase.add(festivalWheel);
+  scene.add(wheelBase);
+  colliders.push({ x: wheelPos.x, z: wheelPos.z, r: 6.5 });
+
+  // Ветряки на холмах
+  const turbineMat = new THREE.MeshStandardMaterial({ color: 0xe8ebef, metalness: 0.35, roughness: 0.5 });
+  [[-42, 32], [36, -28], [94, 34]].forEach(([x, z], idx) => {
+    const gy = terrainHeight(x, z);
+    const turbine = new THREE.Group();
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 21, 10), turbineMat);
+    tower.position.y = 10.5;
+    tower.castShadow = true;
+    turbine.add(tower);
+    const rotor = new THREE.Group();
+    rotor.position.set(0, 21, 0.7);
+    for (let i = 0; i < 3; i++) {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.32, 8.6, 0.08), turbineMat);
+      blade.position.y = 4.1;
+      const holder = new THREE.Group();
+      holder.rotation.z = (i / 3) * TAU;
+      holder.add(blade);
+      rotor.add(holder);
+    }
+    rotor.rotation.y = idx * 0.8 + 0.4;
+    const rotorSpin = new THREE.Group();
+    rotorSpin.add(rotor);
+    turbine.add(rotorSpin);
+    turbine.position.set(x, gy - 0.1, z);
+    scene.add(turbine);
+    windTurbines.push(rotor);
+    colliders.push({ x, z, r: 0.9 });
+  });
+
+  // Сельская церковь — ориентир на востоке острова
+  const churchPos = { x: 98, z: -12 };
+  const churchY = terrainHeight(churchPos.x, churchPos.z);
+  const church = new THREE.Group();
+  const churchWall = new THREE.MeshStandardMaterial({ map: makeFacadeTexture('#f3ead6', '#28455c'), roughness: 0.92 });
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(7, 5, 12), churchWall);
+  nave.position.y = 2.5;
+  nave.castShadow = nave.receiveShadow = true;
+  const churchRoof = new THREE.Mesh(
+    new THREE.ConeGeometry(5.4, 3, 4),
+    new THREE.MeshStandardMaterial({ color: 0x74513e, roughness: 0.9, flatShading: true })
+  );
+  churchRoof.position.y = 6.5;
+  churchRoof.rotation.y = Math.PI / 4;
+  churchRoof.scale.z = 1.55;
+  churchRoof.castShadow = true;
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(3.4, 10, 3.4), churchWall);
+  tower.position.set(0, 5, 6.8);
+  tower.castShadow = true;
+  const spire = new THREE.Mesh(
+    new THREE.ConeGeometry(2.7, 5.5, 4),
+    new THREE.MeshStandardMaterial({ color: 0x3e4e5c, roughness: 0.75, flatShading: true })
+  );
+  spire.position.set(0, 12.7, 6.8);
+  spire.rotation.y = Math.PI / 4;
+  spire.castShadow = true;
+  church.add(nave, churchRoof, tower, spire);
+  church.position.set(churchPos.x, churchY, churchPos.z);
+  church.rotation.y = -0.5;
+  scene.add(church);
+  colliders.push({ x: churchPos.x, z: churchPos.z, r: 7 });
+}
+
 /* ============================ Модель машины ============================ */
 function buildCarMesh(color, accent, isBuggy = false) {
   const car = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.55 });
+  car.rotation.order = 'YXZ';
+  const paint = new THREE.MeshPhysicalMaterial({
+    color, roughness: 0.3, metalness: 0.62, clearcoat: 1, clearcoatRoughness: 0.1, envMapIntensity: 1.35,
+  });
   const dark = new THREE.MeshStandardMaterial({ color: 0x15171f, roughness: 0.5, metalness: 0.3 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: 0.12, metalness: 0.7 });
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0x0e1a28, roughness: 0.07, metalness: 0.9, clearcoat: 1, envMapIntensity: 1.8,
+  });
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.52, 4.3), paint);
   body.position.y = isBuggy ? 0.78 : 0.56;
@@ -718,14 +1572,17 @@ function buildCarMesh(color, accent, isBuggy = false) {
     wheels.push({ pivot, spin, front: i < 2 });
   });
 
-  return { group: car, wheels, flame };
+  return { group: car, wheels, flame, wheelRadius: wy };
 }
 
 function createPlayerCar() {
   if (player.mesh) {
     scene.remove(player.mesh.group);
   }
-  const built = buildCarMesh(selectedCar.color, selectedCar.accent, selectedCar.id === 'dune');
+  const built = selectedCar.id === 'gtr35'
+    ? buildGTR35(selectedGTRPaint)
+    : buildCarMesh(selectedCar.color, selectedCar.accent, selectedCar.id === 'dune');
+  built.group.rotation.order = 'YXZ';
   player.mesh = built;
   player.wheels = built.wheels;
   scene.add(built.group);
@@ -952,8 +1809,8 @@ function updatePlayer(dt) {
 
   const fwdSpeed = player.vel.dot(_fwd);
   const near = nearestSampleIdx(pos);
-  player.offroad = near.dist > ROAD_HALF + 0.6 || Math.hypot(pos.x, pos.z) > 282;
-  const inWater = Math.hypot(pos.x, pos.z) > 298;
+  player.offroad = near.dist > ROAD_HALF + 0.6 || Math.hypot(pos.x, pos.z) > 278;
+  const inWater = Math.hypot(pos.x, pos.z) > 289 || terrainHeight(pos.x, pos.z, near.dist) < -0.85;
 
   // Прогресс вдоль трассы (без скачков через петлю)
   let dIdx = near.idx - player.prevSampleIdx;
@@ -1005,6 +1862,14 @@ function updatePlayer(dt) {
   const latKept = latSpeed * Math.exp(-grip * dt);
   player.vel.copy(_fwd).multiplyScalar(newFwdSpeed).addScaledVector(_right, latKept);
 
+  // Гравитация на склонах бездорожья: подъёмы тормозят, спуски разгоняют
+  if (player.offroad && !inWater && near.dist > ROAD_HALF + 2) {
+    const hAhead = terrainHeight(pos.x + _fwd.x * 2.2, pos.z + _fwd.z * 2.2);
+    const hBack = terrainHeight(pos.x - _fwd.x * 2.2, pos.z - _fwd.z * 2.2);
+    const slope = (hAhead - hBack) / 4.4;
+    player.vel.addScaledVector(_fwd, -slope * 8.2 * dt);
+  }
+
   // Сопротивление
   const drag = player.offroad ? 0.55 : 0.22;
   player.vel.multiplyScalar(Math.exp(-drag * dt * (player.drifting ? 1.5 : 1)));
@@ -1016,13 +1881,15 @@ function updatePlayer(dt) {
   if (spd > hardCap) player.vel.multiplyScalar(lerp(1, hardCap / spd, dt * 3));
 
   pos.addScaledVector(player.vel, dt);
-  pos.y = Math.hypot(pos.x, pos.z) > 300 ? -0.55 : 0; // в воде машина «тонет» и ползёт
+  const groundH = terrainHeight(pos.x, pos.z, near.dist);
+  player.groundH = groundH;
+  pos.y = inWater ? Math.max(groundH, -0.58) : groundH; // машина повторяет рельеф
 
   // Граница мира
   const distC = Math.hypot(pos.x, pos.z);
-  if (distC > 330) {
-    pos.x *= 330 / distC;
-    pos.z *= 330 / distC;
+  if (distC > 322) {
+    pos.x *= 322 / distC;
+    pos.z *= 322 / distC;
     player.vel.multiplyScalar(0.4);
   }
 
@@ -1084,14 +1951,34 @@ function updatePlayer(dt) {
     player.driftChain = 0;
   }
 
-  // Меш: наклон кузова и колёса
+  // Меш: кузов наклоняется по рельефу + крены от руля/газа
   const g = player.mesh.group;
   g.rotation.y = player.yaw;
-  g.rotation.z = lerp(g.rotation.z, -player.steerVis * clamp(speedAbs / 30, 0, 1) * 0.09, dt * 6);
-  g.rotation.x = lerp(g.rotation.x, (input.gas && canDrive ? -0.02 : input.brake ? 0.025 : 0), dt * 5);
+  if (!inWater && near.dist > ROAD_HALF - 1) {
+    const hF = terrainHeight(pos.x + _fwd.x * 1.7, pos.z + _fwd.z * 1.7);
+    const hB = terrainHeight(pos.x - _fwd.x * 1.7, pos.z - _fwd.z * 1.7);
+    const hR = terrainHeight(pos.x + _right.x * 1.1, pos.z + _right.z * 1.1);
+    const hL = terrainHeight(pos.x - _right.x * 1.1, pos.z - _right.z * 1.1);
+    player.groundPitch = clamp(-Math.atan2(hF - hB, 3.4), -0.5, 0.5);
+    player.groundRoll = clamp(Math.atan2(hR - hL, 2.2), -0.5, 0.5);
+  } else {
+    player.groundPitch = lerp(player.groundPitch, 0, dt * 6);
+    player.groundRoll = lerp(player.groundRoll, 0, dt * 6);
+  }
+  g.rotation.z = lerp(
+    g.rotation.z,
+    player.groundRoll - player.steerVis * clamp(speedAbs / 30, 0, 1) * 0.09,
+    dt * 7
+  );
+  g.rotation.x = lerp(
+    g.rotation.x,
+    player.groundPitch + (input.gas && canDrive ? -0.02 : input.brake ? 0.025 : 0),
+    dt * 6
+  );
+  const wheelR = player.mesh.wheelRadius || 0.4;
   player.wheels.forEach((w) => {
     if (w.front) w.pivot.rotation.y = player.steerVis;
-    w.spin.rotation.x += (fwdSpeed / 0.4) * dt;
+    w.spin.rotation.x += (fwdSpeed / wheelR) * dt;
   });
   player.mesh.flame.visible = player.boosting;
   if (player.boosting) player.mesh.flame.scale.set(1, 1, 0.8 + Math.random() * 0.55);
@@ -1164,7 +2051,7 @@ function updateRivals(dt) {
     g.position.copy(p.pos);
     g.rotation.y = angleLerp(g.rotation.y, p.yaw, dt * 5);
     r.mesh.wheels.forEach((w) => {
-      w.spin.rotation.x += (r.speed / 0.4) * dt;
+      w.spin.rotation.x += (r.speed / (r.mesh.wheelRadius || 0.4)) * dt;
     });
   }
 }
@@ -1176,10 +2063,10 @@ function updateCamera(dt) {
     // Шоурум: камера медленно кружит вокруг выбранной машины у стартовой арки
     menuOrbit += dt * 0.22;
     const center = player.mesh ? player.mesh.group.position : new THREE.Vector3(0, 0, -170);
-    const cx = center.x + Math.cos(menuOrbit) * 10.5;
-    const cz = center.z + Math.sin(menuOrbit) * 10.5;
-    camera.position.lerp(new THREE.Vector3(cx, 3.2, cz), Math.min(dt * 1.6, 1));
-    camera.lookAt(center.x, 1.1, center.z);
+    const cx = center.x + Math.cos(menuOrbit) * 8.6;
+    const cz = center.z + Math.sin(menuOrbit) * 8.6;
+    camera.position.lerp(new THREE.Vector3(cx, center.y + 2.3, cz), Math.min(dt * 1.6, 1));
+    camera.lookAt(center.x, center.y + 0.85, center.z);
     camera.fov = lerp(camera.fov, 55, dt * 2);
     camera.updateProjectionMatrix();
     return;
@@ -1192,19 +2079,21 @@ function updateCamera(dt) {
   if (cameraMode === 2) {
     // капот
     camTargetPos.copy(pos).addScaledVector(_fwd, 1.4);
-    camTargetPos.y = 1.25;
+    camTargetPos.y = pos.y + 1.25;
     camera.position.lerp(camTargetPos, Math.min(dt * 22, 1));
     const look = pos.clone().addScaledVector(_fwd, 18);
-    look.y = 1.0;
+    look.y = pos.y + 1.0;
     camera.lookAt(look);
   } else {
     const dist = cameraMode === 0 ? 10.5 + speedRatio * 2.5 : 17;
     const height = cameraMode === 0 ? 4.0 : 7.5;
     camTargetPos.copy(pos).addScaledVector(_fwd, -dist);
-    camTargetPos.y = height;
+    camTargetPos.y = pos.y + height;
+    // камера не должна уходить под склон позади машины
+    camTargetPos.y = Math.max(camTargetPos.y, terrainHeight(camTargetPos.x, camTargetPos.z) + 1.2);
     camera.position.lerp(camTargetPos, Math.min(dt * (cameraMode === 0 ? 4.2 : 3), 1));
     const look = pos.clone().addScaledVector(_fwd, 9);
-    look.y = 1.4;
+    look.y = pos.y + 1.4;
     camera.lookAt(look);
   }
   const targetFov = 68 + (player.boosting ? 10 : speedRatio * 5);
@@ -1349,6 +2238,20 @@ function animate() {
     if (b.position.x > 340) b.position.x = -340;
   });
 
+  // живая вода, пена, колесо обозрения, ветряки и дрейф облаков
+  if (waterMaterial && waterMaterial.normalMap) {
+    waterMaterial.normalMap.offset.set((t * 0.014) % 1, (t * 0.009) % 1);
+  }
+  if (foamRing) foamRing.material.opacity = 0.11 + Math.sin(t * 0.8) * 0.045;
+  if (festivalWheel) festivalWheel.rotation.z += dt * 0.11;
+  windTurbines.forEach((rotor, i) => {
+    rotor.rotation.z += dt * (0.65 + i * 0.13);
+  });
+  cloudGroup.children.forEach((sprite) => {
+    sprite.position.x += dt * (sprite.userData.speed || 1);
+    if (sprite.position.x > 620) sprite.position.x = -620;
+  });
+
   // пульс следующего чекпоинта
   if (selectedMode === 'race' && player.mesh) {
     const cp = cpMeshes[player.nextCP];
@@ -1372,7 +2275,7 @@ function animate() {
   // тень следует за игроком — дешевле для мобильных
   if (player.mesh && gameState !== 'menu') {
     const p = player.mesh.group.position;
-    sun.position.set(p.x - 90, 110, p.z - 60);
+    sun.position.set(p.x - 90, p.y + 125, p.z - 60);
     sun.target.position.copy(p);
   } else {
     sun.position.set(-90, 110, -140);
@@ -1469,6 +2372,37 @@ function buildCarPicker() {
     });
     wrap.appendChild(btn);
   });
+  buildPaintPicker();
+}
+
+function buildPaintPicker() {
+  const wrap = $('paintPicker');
+  if (!wrap) return;
+  const isGTR = selectedCar.id === 'gtr35';
+  wrap.classList.toggle('hidden', !isGTR);
+  if (!isGTR) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const current = GTR_PAINTS.find((paint) => paint.hex === selectedGTRPaint);
+  wrap.innerHTML = `<div class="paint-title">🎨 Краска GT-R35: <b>${current ? current.name : ''}</b></div>`;
+  const row = document.createElement('div');
+  row.className = 'paint-row';
+  GTR_PAINTS.forEach((paint) => {
+    const sw = document.createElement('button');
+    sw.className = 'paint-swatch' + (paint.hex === selectedGTRPaint ? ' selected' : '');
+    sw.title = paint.name;
+    sw.style.background = `#${paint.hex.toString(16).padStart(6, '0')}`;
+    sw.addEventListener('click', () => {
+      selectedGTRPaint = paint.hex;
+      selectedCar.color = paint.hex;
+      safeSetItem('nh_gtr_paint', paint.hex);
+      buildCarPicker();
+      previewCarInMenu();
+    });
+    row.appendChild(sw);
+  });
+  wrap.appendChild(row);
 }
 
 function previewCarInMenu() {
@@ -1523,6 +2457,35 @@ function toMenu() {
   cpMeshes.forEach((cp) => (cp.grp.visible = false));
 }
 
+function applyGraphicsQuality(quality, announce = false) {
+  graphicsQuality = quality === 'fast' ? 'fast' : 'realistic';
+  safeSetItem('nh_gfx', graphicsQuality);
+  document.querySelectorAll('.gfx-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.gfx === graphicsQuality);
+  });
+  renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  const shadowSize = graphicsQuality === 'realistic' ? 2048 : 1024;
+  if (sun.shadow.mapSize.x !== shadowSize) {
+    sun.shadow.mapSize.set(shadowSize, shadowSize);
+    if (sun.shadow.map) {
+      sun.shadow.map.dispose();
+      sun.shadow.map = null;
+    }
+  }
+  if (grassMesh) grassMesh.visible = graphicsQuality === 'realistic';
+  cloudGroup.visible = graphicsQuality === 'realistic';
+  if (announce) {
+    showCenterMsg(
+      graphicsQuality === 'realistic' ? 'Графика: реалистичная ✨' : 'Графика: быстрая ⚡',
+      1100
+    );
+  }
+}
+document.querySelectorAll('.gfx-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyGraphicsQuality(btn.dataset.gfx, true));
+});
+
 $('btnStart').addEventListener('click', startGame);
 $('btnPause').addEventListener('click', pauseGame);
 $('btnResume').addEventListener('click', resumeGame);
@@ -1555,6 +2518,7 @@ window.addEventListener('resize', () => {
 
 /* ============================ Старт ============================ */
 buildCarPicker();
+applyGraphicsQuality(graphicsQuality);
 previewCarInMenu();
 drawMinimap();
 animate();
