@@ -1,0 +1,827 @@
+{
+ "objects": [
+  {
+   "key": "palnts3",
+   "name": "palnts3",
+   "tris": 280468,
+   "verts_referenced": 454808,
+   "size_m": [
+    2.366,
+    3.304,
+    2.02
+   ],
+   "min_m": [
+    -2.825,
+    0.484,
+    -0.327
+   ],
+   "h_over_w": 1.4,
+   "components_sample": 20000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 500.0,
+   "tag": "tree?"
+  },
+  {
+   "key": "plant2",
+   "name": "plant2",
+   "tris": 252524,
+   "verts_referenced": 296381,
+   "size_m": [
+    2.322,
+    2.938,
+    1.954
+   ],
+   "min_m": [
+    1.062,
+    0.083,
+    -0.286
+   ],
+   "h_over_w": 1.27,
+   "components_sample": 20000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 500.0,
+   "tag": "tree?"
+  },
+  {
+   "key": "plant4",
+   "name": "plant4",
+   "tris": 258104,
+   "verts_referenced": 274556,
+   "size_m": [
+    1.983,
+    2.814,
+    1.805
+   ],
+   "min_m": [
+    -0.369,
+    0.069,
+    -0.147
+   ],
+   "h_over_w": 1.42,
+   "components_sample": 31808,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 795.2,
+   "tag": "tree?"
+  },
+  {
+   "key": "plant1",
+   "name": "plant1",
+   "tris": 312235,
+   "verts_referenced": 366318,
+   "size_m": [
+    2.111,
+    2.598,
+    2.054
+   ],
+   "min_m": [
+    -1.617,
+    0.288,
+    -1.809
+   ],
+   "h_over_w": 1.23,
+   "components_sample": 20000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 500.0,
+   "tag": "tree?"
+  },
+  {
+   "key": "Object020",
+   "name": "Object020",
+   "tris": 72202,
+   "verts_referenced": 85143,
+   "size_m": [
+    2.38,
+    1.852,
+    1.288
+   ],
+   "min_m": [
+    -0.567,
+    0.211,
+    -1.271
+   ],
+   "h_over_w": 0.78,
+   "components_sample": 15522,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 388.05,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant4#2",
+   "name": "plant4",
+   "tris": 51429,
+   "verts_referenced": 61714,
+   "size_m": [
+    2.936,
+    1.795,
+    1.312
+   ],
+   "min_m": [
+    -0.32,
+    0.042,
+    0.378
+   ],
+   "h_over_w": 0.61,
+   "components_sample": 11641,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 291.02,
+   "tag": "bush?"
+  },
+  {
+   "key": "Object021",
+   "name": "Object021",
+   "tris": 31499,
+   "verts_referenced": 39143,
+   "size_m": [
+    1.4,
+    1.646,
+    1.418
+   ],
+   "min_m": [
+    -2.525,
+    0.315,
+    -1.88
+   ],
+   "h_over_w": 1.16,
+   "components_sample": 7765,
+   "components_sample_tris": 31499,
+   "components_per_1k_tris": 246.52,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_013",
+   "name": "plant_013",
+   "tris": 4318,
+   "verts_referenced": 4606,
+   "size_m": [
+    1.137,
+    1.363,
+    1.251
+   ],
+   "min_m": [
+    -2.235,
+    0.402,
+    -0.324
+   ],
+   "h_over_w": 1.09,
+   "components_sample": 144,
+   "components_sample_tris": 4318,
+   "components_per_1k_tris": 33.35,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_016",
+   "name": "plant_016",
+   "tris": 4272,
+   "verts_referenced": 4560,
+   "size_m": [
+    1.108,
+    1.335,
+    1.099
+   ],
+   "min_m": [
+    1.598,
+    -0.073,
+    -0.73
+   ],
+   "h_over_w": 1.21,
+   "components_sample": 144,
+   "components_sample_tris": 4272,
+   "components_per_1k_tris": 33.71,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_012",
+   "name": "plant_012",
+   "tris": 5954,
+   "verts_referenced": 6354,
+   "size_m": [
+    1.687,
+    1.181,
+    1.671
+   ],
+   "min_m": [
+    -1.207,
+    0.246,
+    -2.215
+   ],
+   "h_over_w": 0.7,
+   "components_sample": 200,
+   "components_sample_tris": 5954,
+   "components_per_1k_tris": 33.59,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_011",
+   "name": "plant_011",
+   "tris": 5954,
+   "verts_referenced": 6354,
+   "size_m": [
+    1.642,
+    1.167,
+    1.612
+   ],
+   "min_m": [
+    -2.701,
+    0.266,
+    -1.632
+   ],
+   "h_over_w": 0.71,
+   "components_sample": 200,
+   "components_sample_tris": 5954,
+   "components_per_1k_tris": 33.59,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_020",
+   "name": "plant_020",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    1.329,
+    0.895,
+    1.279
+   ],
+   "min_m": [
+    -2.222,
+    0.351,
+    -1.253
+   ],
+   "h_over_w": 0.67,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_017",
+   "name": "plant_017",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    1.269,
+    0.864,
+    1.189
+   ],
+   "min_m": [
+    0.256,
+    0.143,
+    0.478
+   ],
+   "h_over_w": 0.68,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_010",
+   "name": "plant_010",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    1.248,
+    0.864,
+    1.282
+   ],
+   "min_m": [
+    -2.909,
+    0.583,
+    -0.277
+   ],
+   "h_over_w": 0.67,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant009",
+   "name": "plant009",
+   "tris": 170464,
+   "verts_referenced": 255696,
+   "size_m": [
+    0.823,
+    0.774,
+    0.8
+   ],
+   "min_m": [
+    2.265,
+    0.125,
+    0.215
+   ],
+   "h_over_w": 0.94,
+   "components_sample": 10000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 250.0,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_009",
+   "name": "plant_009",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    1.077,
+    0.762,
+    1.004
+   ],
+   "min_m": [
+    -1.36,
+    0.525,
+    -0.048
+   ],
+   "h_over_w": 0.71,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "Object019",
+   "name": "Object019",
+   "tris": 602,
+   "verts_referenced": 320,
+   "size_m": [
+    2.602,
+    0.704,
+    1.02
+   ],
+   "min_m": [
+    -2.693,
+    0.005,
+    -0.215
+   ],
+   "h_over_w": 0.27,
+   "components_sample": 1,
+   "components_sample_tris": 602,
+   "components_per_1k_tris": 1.66,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "plant_018",
+   "name": "plant_018",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    0.904,
+    0.671,
+    0.994
+   ],
+   "min_m": [
+    0.986,
+    0.15,
+    0.826
+   ],
+   "h_over_w": 0.68,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_019",
+   "name": "plant_019",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    0.858,
+    0.671,
+    0.943
+   ],
+   "min_m": [
+    0.392,
+    0.366,
+    -1.78
+   ],
+   "h_over_w": 0.71,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant5",
+   "name": "plant5",
+   "tris": 170464,
+   "verts_referenced": 255696,
+   "size_m": [
+    0.679,
+    0.651,
+    0.675
+   ],
+   "min_m": [
+    1.801,
+    0.13,
+    0.926
+   ],
+   "h_over_w": 0.96,
+   "components_sample": 10000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 250.0,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant008",
+   "name": "plant008",
+   "tris": 170464,
+   "verts_referenced": 255696,
+   "size_m": [
+    0.679,
+    0.651,
+    0.675
+   ],
+   "min_m": [
+    -1.425,
+    0.318,
+    -1.194
+   ],
+   "h_over_w": 0.96,
+   "components_sample": 10000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 250.0,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant007",
+   "name": "plant007",
+   "tris": 173052,
+   "verts_referenced": 346028,
+   "size_m": [
+    0.682,
+    0.646,
+    0.684
+   ],
+   "min_m": [
+    1.354,
+    0.128,
+    0.055
+   ],
+   "h_over_w": 0.95,
+   "components_sample": 20000,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 500.0,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant3",
+   "name": "plant3",
+   "tris": 108000,
+   "verts_referenced": 135600,
+   "size_m": [
+    0.85,
+    0.602,
+    0.781
+   ],
+   "min_m": [
+    2.254,
+    0.191,
+    -0.246
+   ],
+   "h_over_w": 0.71,
+   "components_sample": 7503,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 187.57,
+   "tag": "bush?"
+  },
+  {
+   "key": "plant_021",
+   "name": "plant_021",
+   "tris": 53982,
+   "verts_referenced": 56268,
+   "size_m": [
+    0.861,
+    0.601,
+    0.894
+   ],
+   "min_m": [
+    -1.142,
+    0.348,
+    -1.81
+   ],
+   "h_over_w": 0.67,
+   "components_sample": 7140,
+   "components_sample_tris": 40000,
+   "components_per_1k_tris": 178.5,
+   "tag": "bush?"
+  },
+  {
+   "key": "Box004",
+   "name": "Box004",
+   "tris": 602,
+   "verts_referenced": 324,
+   "size_m": [
+    3.944,
+    0.457,
+    1.409
+   ],
+   "min_m": [
+    -2.345,
+    0.005,
+    -1.64
+   ],
+   "h_over_w": 0.12,
+   "components_sample": 2,
+   "components_sample_tris": 602,
+   "components_per_1k_tris": 3.32,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Box003",
+   "name": "Box003",
+   "tris": 602,
+   "verts_referenced": 320,
+   "size_m": [
+    3.108,
+    0.27,
+    1.92
+   ],
+   "min_m": [
+    -0.077,
+    0.005,
+    -0.219
+   ],
+   "h_over_w": 0.09,
+   "components_sample": 1,
+   "components_sample_tris": 602,
+   "components_per_1k_tris": 1.66,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object022",
+   "name": "Object022",
+   "tris": 19549,
+   "verts_referenced": 15653,
+   "size_m": [
+    0.8,
+    0.23,
+    0.425
+   ],
+   "min_m": [
+    -1.913,
+    0.625,
+    0.346
+   ],
+   "h_over_w": 0.29,
+   "components_sample": 1257,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.3,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object027",
+   "name": "Object027",
+   "tris": 19549,
+   "verts_referenced": 15655,
+   "size_m": [
+    0.779,
+    0.23,
+    0.388
+   ],
+   "min_m": [
+    -1.792,
+    0.625,
+    -0.127
+   ],
+   "h_over_w": 0.3,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object016",
+   "name": "Object016",
+   "tris": 19549,
+   "verts_referenced": 15656,
+   "size_m": [
+    0.585,
+    0.23,
+    0.684
+   ],
+   "min_m": [
+    -0.695,
+    0.625,
+    -0.133
+   ],
+   "h_over_w": 0.34,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object025",
+   "name": "Object025",
+   "tris": 19549,
+   "verts_referenced": 15652,
+   "size_m": [
+    0.453,
+    0.23,
+    0.75
+   ],
+   "min_m": [
+    2.468,
+    0.178,
+    0.941
+   ],
+   "h_over_w": 0.31,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object012",
+   "name": "Object012",
+   "tris": 19549,
+   "verts_referenced": 15655,
+   "size_m": [
+    0.556,
+    0.23,
+    0.769
+   ],
+   "min_m": [
+    0.217,
+    0.178,
+    -0.057
+   ],
+   "h_over_w": 0.3,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object023",
+   "name": "Object023",
+   "tris": 19549,
+   "verts_referenced": 15655,
+   "size_m": [
+    0.71,
+    0.23,
+    0.6
+   ],
+   "min_m": [
+    -0.011,
+    0.178,
+    1.049
+   ],
+   "h_over_w": 0.32,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object026",
+   "name": "Object026",
+   "tris": 19549,
+   "verts_referenced": 15655,
+   "size_m": [
+    0.49,
+    0.23,
+    0.799
+   ],
+   "min_m": [
+    0.943,
+    0.178,
+    -0.138
+   ],
+   "h_over_w": 0.29,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object015",
+   "name": "Object015",
+   "tris": 19549,
+   "verts_referenced": 15655,
+   "size_m": [
+    0.718,
+    0.23,
+    0.596
+   ],
+   "min_m": [
+    -0.119,
+    0.393,
+    -1.47
+   ],
+   "h_over_w": 0.32,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object018",
+   "name": "Object018",
+   "tris": 19549,
+   "verts_referenced": 15653,
+   "size_m": [
+    0.746,
+    0.23,
+    0.462
+   ],
+   "min_m": [
+    -1.592,
+    0.389,
+    -1.562
+   ],
+   "h_over_w": 0.31,
+   "components_sample": 1257,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.3,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object017",
+   "name": "Object017",
+   "tris": 19549,
+   "verts_referenced": 15652,
+   "size_m": [
+    0.566,
+    0.23,
+    0.698
+   ],
+   "min_m": [
+    -2.272,
+    0.393,
+    -1.536
+   ],
+   "h_over_w": 0.33,
+   "components_sample": 1257,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.3,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object028",
+   "name": "Object028",
+   "tris": 19549,
+   "verts_referenced": 15653,
+   "size_m": [
+    0.801,
+    0.23,
+    0.455
+   ],
+   "min_m": [
+    -0.279,
+    0.393,
+    -0.793
+   ],
+   "h_over_w": 0.29,
+   "components_sample": 1258,
+   "components_sample_tris": 19549,
+   "components_per_1k_tris": 64.35,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object024",
+   "name": "Object024",
+   "tris": 10558,
+   "verts_referenced": 8561,
+   "size_m": [
+    0.511,
+    0.228,
+    0.283
+   ],
+   "min_m": [
+    2.487,
+    0.163,
+    -0.176
+   ],
+   "h_over_w": 0.45,
+   "components_sample": 701,
+   "components_sample_tris": 10558,
+   "components_per_1k_tris": 66.4,
+   "tag": "wide-patch?"
+  },
+  {
+   "key": "Object014",
+   "name": "Object014",
+   "tris": 10558,
+   "verts_referenced": 8561,
+   "size_m": [
+    0.511,
+    0.228,
+    0.283
+   ],
+   "min_m": [
+    0.958,
+    0.359,
+    -1.522
+   ],
+   "h_over_w": 0.45,
+   "components_sample": 701,
+   "components_sample_tris": 10558,
+   "components_per_1k_tris": 66.4,
+   "tag": "wide-patch?"
+  }
+ ],
+ "sheets": [
+  "sheet-1.png",
+  "sheet-2.png"
+ ]
+}
