@@ -48,6 +48,13 @@ import foliageAutumnUrl from '../assets/textures/realworld/foliage_autumn.jpg';
 import asphaltRuralUrl from '../assets/textures/realworld/asphalt_rural.jpg';
 import roofSlateUrl from '../assets/textures/realworld/roof_slate.jpg';
 import stoneWallUrl from '../assets/textures/realworld/stone_wall.jpg';
+import glassTowerUrl from '../assets/textures/realworld/glass_tower.jpg';
+import facadeGoldUrl from '../assets/textures/realworld/facade_gold.jpg';
+import facadeMarbleUrl from '../assets/textures/realworld/facade_marble.jpg';
+import facadeHotelUrl from '../assets/textures/realworld/facade_hotel.jpg';
+import facadeSandstoneUrl from '../assets/textures/realworld/facade_sandstone.jpg';
+import promenadeUrl from '../assets/textures/realworld/promenade.jpg';
+import roofPoolUrl from '../assets/textures/realworld/roof_pool.jpg';
 // User-provided oak tree (Tree.fbx via Google Drive, 2026-10-25): the model
 // replaces every procedural tree; leaf/bark maps were extracted from its
 // embedded Archicad media and downscaled for mobile VRAM.
@@ -60,7 +67,7 @@ import oakBarkUrl from '../assets/textures/realworld/oak_bark.jpg';
 // decimated to 18k triangles total, real metres. See docs/obj-inbox/.
 import plantsUrl from '../assets/models/plants.glb?url';
 
-const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry)/;
+const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry|rt-)/;
 
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
@@ -291,6 +298,13 @@ export function createRealWorldScene(foundation) {
   const ruralTex = makeTexture(loader, asphaltRuralUrl);
   const slateTex = makeTexture(loader, roofSlateUrl, { rx: 2, ry: 2, mirror: true });
   const stoneTex = makeTexture(loader, stoneWallUrl);
+  const glassTowerTex = makeTexture(loader, glassTowerUrl);
+  const goldTowerTex = makeTexture(loader, facadeGoldUrl);
+  const marbleTowerTex = makeTexture(loader, facadeMarbleUrl);
+  const hotelTowerTex = makeTexture(loader, facadeHotelUrl);
+  const sandTowerTex = makeTexture(loader, facadeSandstoneUrl);
+  const promenadeTex = makeTexture(loader, promenadeUrl, { mirror: true });
+  const roofPoolTex = makeTexture(loader, roofPoolUrl);
   const oakLeafTex = makeTexture(loader, oakLeafUrl);
   const oakLeaf2Tex = makeTexture(loader, oakLeaf2Url);
   const oakBarkTex = makeTexture(loader, oakBarkUrl, { ry: 2 });
@@ -306,9 +320,12 @@ export function createRealWorldScene(foundation) {
   };
 
   // --- Terrain with shader splat blending -----------------------------------
-  const SEGMENTS = 168;
-  const terrainGeometry = new THREE.PlaneGeometry(1000, 1000, SEGMENTS, SEGMENTS);
+  const TB = foundation.bounds || { minX: -500, maxX: 500, minZ: -500, maxZ: 500 };
+  const TW = TB.maxX - TB.minX;
+  const TD = TB.maxZ - TB.minZ;
+  const terrainGeometry = new THREE.PlaneGeometry(TW, TD, Math.round(TW / 6.2), Math.round(TD / 6.2));
   terrainGeometry.rotateX(-Math.PI / 2);
+  terrainGeometry.translate((TB.minX + TB.maxX) / 2, 0, (TB.minZ + TB.maxZ) / 2);
   {
     const position = terrainGeometry.getAttribute('position');
     const uv = terrainGeometry.getAttribute('uv');
@@ -322,12 +339,16 @@ export function createRealWorldScene(foundation) {
       const slope = foundation.slopeAt(x, z).magnitude;
       const distRiver = Math.abs(x - foundation.river.centerXAt(z));
       const cityDist = rectDistance2D(x, z, foundation.zones.city);
+      const rtDist = rectDistance2D(x, z, foundation.zones.richtown);
       let rock = clamp01(smoothstep(0.32, 0.75, slope));
       let sand = distRiver < 42 ? (1 - smoothstep(0.9, 2.4, h)) * (1 - smoothstep(30, 42, distRiver)) : 0;
       sand = Math.max(sand, smoothstep(0.16, 0.34, slope) * (1 - rock) * 0.3); // dirt on worn slopes
+      const marinaDist = rectDistance2D(x, z, foundation.zones.marina);
+      if (marinaDist < 26 && h < 1.6) sand = Math.max(sand, (1 - smoothstep(0.4, 1.6, h)) * 0.7);
       // City blocks read as paved ground between the buildings; the plaza
       // and parking planes drawn on top carry their own finer textures.
       let concrete = (1 - smoothstep(0, 55, cityDist)) * 0.55;
+      concrete = Math.max(concrete, (1 - smoothstep(0, 55, rtDist)) * 0.6);
       concrete *= 1 - rock;
       splat[i * 3] = rock;
       splat[i * 3 + 1] = clamp01(sand);
@@ -384,6 +405,19 @@ export function createRealWorldScene(foundation) {
   );
   water.name = 'real-river';
   group.add(water);
+  {
+    const m = foundation.zones.marina;
+    const marinaWater = new THREE.Mesh(
+      new THREE.PlaneGeometry(m.maxX - m.minX - 3, m.maxZ - m.minZ - 3).rotateX(-Math.PI / 2),
+      new THREE.MeshStandardMaterial({
+        color: 0x1a7d96, roughness: 0.14, metalness: 0.08, transparent: true, opacity: 0.9,
+      }),
+    );
+    marinaWater.position.set((m.minX + m.maxX) / 2, foundation.river.waterLevelM, (m.minZ + m.maxZ) / 2);
+    marinaWater.name = 'real-marina';
+    group.add(marinaWater);
+    countTris(marinaWater.geometry);
+  }
 
   // --- Paved areas: festival plaza + parking lots --------------------------------
   const plan0 = foundation.dressingPlan;
@@ -393,11 +427,13 @@ export function createRealWorldScene(foundation) {
     const cx = (area.minX + area.maxX) / 2;
     const cz = (area.minZ + area.maxZ) / 2;
     const isParking = area.kind === 'parking';
-    const texture = isParking
-      ? (area.style === 'angled'
-        ? cloneTexture(parkingAngledTex, w / 18, d / 15)
-        : cloneTexture(parkingTex, w / 20, d / 16))
-      : cloneTexture(plazaTex, w / 14, d / 14);
+    const texture = area.kind === 'promenade'
+      ? cloneTexture(promenadeTex, w / 15, d / 15)
+      : isParking
+        ? (area.style === 'angled'
+          ? cloneTexture(parkingAngledTex, w / 18, d / 15)
+          : cloneTexture(parkingTex, w / 20, d / 16))
+        : cloneTexture(plazaTex, w / 14, d / 14);
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({ map: texture, roughness: 0.95 }),
@@ -583,15 +619,55 @@ export function createRealWorldScene(foundation) {
     pastelApt: new THREE.MeshStandardMaterial({ map: cloneTexture(pastelTex, 1.1, 1.25), roughness: 0.92 }),
     pastelTown: new THREE.MeshStandardMaterial({ map: cloneTexture(pastelTex, 0.8, 0.75), roughness: 0.92 }),
     industrial: new THREE.MeshStandardMaterial({ map: cloneTexture(industrialTex, 1.6, 0.9), roughness: 0.7, metalness: 0.25 }),
+    glassTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 2, 2), roughness: 0.28, metalness: 0.4 }),
+    glassTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 2, 4), roughness: 0.28, metalness: 0.4 }),
+    glassTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 2, 6.5), roughness: 0.28, metalness: 0.4 }),
+    goldTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(goldTowerTex, 2, 2), roughness: 0.42, metalness: 0.55 }),
+    goldTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(goldTowerTex, 2, 4), roughness: 0.42, metalness: 0.55 }),
+    goldTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(goldTowerTex, 2, 6.5), roughness: 0.42, metalness: 0.55 }),
+    marbleTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 2, 2), roughness: 0.55, metalness: 0.08 }),
+    marbleTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 2, 4), roughness: 0.55, metalness: 0.08 }),
+    marbleTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 2, 6.5), roughness: 0.55, metalness: 0.08 }),
+    hotelTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(hotelTowerTex, 2, 2), roughness: 0.7, metalness: 0.05 }),
+    hotelTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(hotelTowerTex, 2, 4), roughness: 0.7, metalness: 0.05 }),
+    hotelTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(hotelTowerTex, 2, 6.5), roughness: 0.7, metalness: 0.05 }),
+    sandTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 2), roughness: 0.85, metalness: 0 }),
+    sandTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 4), roughness: 0.85, metalness: 0 }),
+    sandTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 6.5), roughness: 0.85, metalness: 0 }),
   };
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
     glassApt: [], panelTown: [], panelApt: [], shopFront: [],
     loftApt: [], pastelApt: [], pastelTown: [], industrial: [],
   };
+  const RT_FACADES = ['glassTower', 'goldTower', 'marbleTower', 'hotelTower', 'sandTower'];
+  for (const f of RT_FACADES) for (const tier of ['Low', 'Mid', 'High']) bodyItems[`${f}${tier}`] = [];
+  const rtFacadeKey = (b) => `${b.facade}${b.h < 26 ? 'Low' : b.h < 52 ? 'Mid' : 'High'}`;
   const pitchedRoofs = [];
   const flatRoofs = [];
+  const poolRoofs = [];
   for (const b of plan.buildings) {
+    if (RT_FACADES.includes(b.facade)) {
+      const key = rtFacadeKey(b);
+      if (b.kind === 'rt-tower') {
+        // Stepped silhouette: three stacked, shrinking tiers.
+        const h1 = b.h * 0.55;
+        const h2 = b.h * 0.3;
+        bodyItems[key].push({ ...b, h: h1 });
+        bodyItems[key].push({ ...b, y: b.y + h1, w: b.w * 0.78, d: b.d * 0.78, h: h2, tint: b.tint * 1.02 });
+        bodyItems[key].push({ ...b, y: b.y + h1 + h2, w: b.w * 0.55, d: b.d * 0.55, h: b.h - h1 - h2, tint: b.tint * 1.05 });
+        poolRoofs.push({ ...b, y: b.y + b.h, w: b.w * 0.58, d: b.d * 0.58 });
+      } else if (b.kind === 'rt-hotel' && b.h > 30) {
+        const h1 = b.h * 0.7;
+        bodyItems[key].push({ ...b, h: h1 });
+        bodyItems[key].push({ ...b, y: b.y + h1, w: b.w * 0.72, d: b.d * 0.72, h: b.h - h1, tint: b.tint * 1.03 });
+        poolRoofs.push({ ...b, y: b.y + b.h, w: b.w * 0.75, d: b.d * 0.75 });
+      } else {
+        bodyItems[key].push(b);
+        poolRoofs.push({ ...b, y: b.y + b.h });
+      }
+      continue;
+    }
     const key = b.facade === 'shop'
       ? 'shopFront'
       : b.facade === 'industrial'
@@ -670,6 +746,63 @@ export function createRealWorldScene(foundation) {
     group.add(mesh);
     countTris(unitBox, flatRoofs.length);
   }
+  if (poolRoofs.length) {
+    const mesh = new THREE.InstancedMesh(
+      unitBox,
+      new THREE.MeshStandardMaterial({ map: cloneTexture(roofPoolTex, 1, 1), roughness: 0.85 }),
+      poolRoofs.length,
+    );
+    mesh.name = 'real-roofs-pool';
+    setInstances(mesh, poolRoofs, (dummy, b) => {
+      dummy.position.set(b.x, b.y, b.z);
+      dummy.rotation.set(0, b.rotY, 0);
+      dummy.scale.set((b.w || 10) + 0.4, 0.5, (b.d || 10) + 0.4);
+    });
+    group.add(mesh);
+    countTris(unitBox, poolRoofs.length);
+  }
+
+  // --- RichTown landmarks: needle tower, golden frame arch, fountain ---------
+  {
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd8b25c, roughness: 0.32, metalness: 0.85 });
+    const towerGlassMat = new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 6, 10), roughness: 0.22, metalness: 0.45 });
+    const marbleMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 3, 1), roughness: 0.5, metalness: 0.08 });
+    for (const lm of plan.landmarks || []) {
+      const g = new THREE.Group();
+      g.position.set(lm.x, lm.y, lm.z);
+      g.name = `real-landmark-${lm.kind}`;
+      const addPart = (geo, mat, x, y, z) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        g.add(m);
+        countTris(geo);
+        return m;
+      };
+      if (lm.kind === 'rt-tower') {
+        addPart(new THREE.BoxGeometry(46, 26, 46), towerGlassMat, 0, 13, 0);
+        addPart(new THREE.CylinderGeometry(11, 16.5, 58, 8), towerGlassMat, 0, 55, 0);
+        addPart(new THREE.CylinderGeometry(4.6, 10, 42, 8), towerGlassMat, 0, 105, 0);
+        addPart(new THREE.TorusGeometry(11.6, 0.7, 8, 24).rotateX(Math.PI / 2), goldMat, 0, 84, 0);
+        addPart(new THREE.CylinderGeometry(0.12, 1.5, 24, 6), goldMat, 0, 138, 0);
+        addPart(new THREE.SphereGeometry(0.9, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffc95e, emissiveIntensity: 1.6, roughness: 0.4 }), 0, 150.5, 0);
+      } else if (lm.kind === 'rt-arch') {
+        addPart(new THREE.BoxGeometry(4.4, 38, 6.4), goldMat, -15, 19, 0);
+        addPart(new THREE.BoxGeometry(4.4, 38, 6.4), goldMat, 15, 19, 0);
+        addPart(new THREE.BoxGeometry(34.4, 5, 6.4), goldMat, 0, 40.5, 0);
+        addPart(new THREE.BoxGeometry(25.6, 0.5, 4.4), towerGlassMat, 0, 37.8, 0);
+      } else if (lm.kind === 'rt-fountain') {
+        addPart(new THREE.CylinderGeometry(16, 17, 1.1, 40), marbleMat, 0, 0.55, 0);
+        const fw = addPart(new THREE.CircleGeometry(14.8, 36).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x25b6cf, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.92 }), 0, 1.0, 0);
+        fw.castShadow = false;
+        addPart(new THREE.CylinderGeometry(2.4, 3.1, 2.6, 14), marbleMat, 0, 1.3, 0);
+        addPart(new THREE.CylinderGeometry(1.1, 1.7, 3.4, 12), marbleMat, 0, 4.2, 0);
+        addPart(new THREE.SphereGeometry(1.5, 14, 10), goldMat, 0, 6.8, 0);
+      }
+      group.add(g);
+    }
+  }
 
   // --- Vegetation, rocks, lamps -------------------------------------------------
   const foliageMaterial = new THREE.MeshStandardMaterial({ map: foliageTex, roughness: 1 });
@@ -719,12 +852,14 @@ export function createRealWorldScene(foundation) {
   // groves. `place` positions each dummy; `colorFor` fills the shared Color
   // and returns true when an instance tint should be written.
   const buildCellInstanced = ({ parts, items, namePrefix, place, colorFor = null, depthMats = {} }) => {
-    const CELLS = 8;
-    const CELL = 1000 / CELLS;
+    const CELL = 125;
+    const bnd = foundation.bounds || { minX: -500, minZ: -500, maxX: 500, maxZ: 500 };
+    const COLS = Math.max(1, Math.ceil((bnd.maxX - bnd.minX) / CELL));
+    const ROWS = Math.max(1, Math.ceil((bnd.maxZ - bnd.minZ) / CELL));
     const cells = new Map();
     for (const it of items) {
-      const cx = Math.min(CELLS - 1, Math.max(0, Math.floor((it.t.x + 500) / CELL)));
-      const cz = Math.min(CELLS - 1, Math.max(0, Math.floor((it.t.z + 500) / CELL)));
+      const cx = Math.min(COLS - 1, Math.max(0, Math.floor((it.t.x - bnd.minX) / CELL)));
+      const cz = Math.min(ROWS - 1, Math.max(0, Math.floor((it.t.z - bnd.minZ) / CELL)));
       const k = `${cx},${cz}`;
       if (!cells.has(k)) cells.set(k, []);
       cells.get(k).push(it);
@@ -929,6 +1064,61 @@ export function createRealWorldScene(foundation) {
     return meshes ? { meshes, counts } : null;
   };
 
+  // RichTown palms: segmented leaning trunk (bark texture) crowned with the
+  // plant pack's fan foliage, instanced per 125 m cell like other vegetation.
+  const PALM_H = 5.6;
+  const buildPalmTrunkGeometry = () => {
+    const parts = [];
+    const N = 6;
+    let prev = new THREE.Vector3(0, 0, 0);
+    for (let i = 1; i <= N; i++) {
+      const t = i / N;
+      const cur = new THREE.Vector3(0.95 * t * t, PALM_H * t, 0);
+      const dir = cur.clone().sub(prev);
+      const len = dir.length();
+      const r1 = 0.17 - 0.07 * ((i - 1) / N);
+      const r2 = 0.17 - 0.07 * t;
+      const cyl = new THREE.CylinderGeometry(r2, r1, len * 1.08, 7, 1);
+      cyl.translate(0, len / 2, 0);
+      cyl.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), dir.clone().normalize(),
+      ));
+      cyl.translate(prev.x, prev.y, prev.z);
+      parts.push(cyl);
+      prev = cur;
+    }
+    return mergeGeometries(parts);
+  };
+  const buildPalms = (species) => {
+    const fanPart = species?.fan?.parts?.[0];
+    if (!fanPart || !plan.palms?.length) return 0;
+    const crownGeo = fanPart.geometry.clone();
+    crownGeo.scale(4.8, 3.2, 4.8);
+    crownGeo.translate(0.95, PALM_H - 0.3, 0);
+    const trunkMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(oakBarkTex, 1, 3), color: 0xa8875f, roughness: 1,
+    });
+    const items = plan.palms.map((t, idx) => ({ t, idx }));
+    return buildCellInstanced({
+      parts: [
+        { key: 'trunk', geometry: buildPalmTrunkGeometry(), material: trunkMat },
+        { key: 'crown', geometry: crownGeo, material: fanPart.material },
+      ],
+      items, namePrefix: 'real-palms',
+      place: (dummy, t, h1, h2) => {
+        const s = (t.s || 1) * (0.92 + 0.18 * h1);
+        dummy.position.set(t.x, t.y, t.z);
+        dummy.rotation.set(0, t.rotY || 0, 0);
+        dummy.scale.set(s, s * (0.95 + 0.22 * h2), s);
+      },
+      colorFor: (partKey, t, idx, h1, h2, color) => {
+        if (partKey !== 'crown') return false;
+        color.setRGB(0.72 + 0.3 * h1, 0.92 + 0.22 * h2, 0.5);
+        return true;
+      },
+    });
+  };
+
   // Load both user models in parallel, then build vegetation once with the
   // best available combination: oak FBX for oaks + plant GLB for pines and
   // bushes; tree2 alone if the oak fails; procedural geometry only if both
@@ -955,12 +1145,14 @@ export function createRealWorldScene(foundation) {
     if (!treeMeshes) buildProceduralTrees();
     const bushInfo = species ? buildPlantBushes(species) : null;
     if (!bushInfo) buildProceduralBushes();
+    const palmMeshes = species ? buildPalms(species) : 0;
     if (liveStats) {
       liveStats.triangles = triangles;
       liveStats.treeModel = oaksBuilt ? 'user-oak-fbx' : species?.tree2 ? 'plants-glb-tree2' : 'fallback-procedural';
       liveStats.treeMeshes = treeMeshes;
       liveStats.plantPack = species ? Object.keys(species) : null;
       if (bushInfo) liveStats.plantBushes = bushInfo.counts;
+      liveStats.palms = palmMeshes ? plan.palms.length : 0;
     }
     group.userData.plants = species
       ? { status: 'ready', species: Object.keys(species), bushes: bushInfo ? bushInfo.counts : null }
@@ -1343,7 +1535,7 @@ export function createRealWorldScene(foundation) {
     benches: plan.benches.length,
     signs: plan.signs.length,
     powerPoles: plan.powerPoles.length,
-    textures: 36,
+    textures: 43,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;
