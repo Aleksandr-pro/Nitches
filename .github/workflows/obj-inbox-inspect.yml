@@ -1,0 +1,118 @@
+name: OBJ Inbox Inspect
+
+# Downloads one large OBJ from the owner's Google Drive (the file must be
+# temporarily shared as "anyone with the link"), inspects it with
+# scripts/inspect-obj.py, commits the report (docs/obj-inbox/<label>/) back
+# to the same branch, and keeps a gzipped copy of the model as a workflow
+# artifact for a later conversion step. Trigger by committing a request:
+#   .github/obj-inbox/request.json
+#   {"fileId":"<drive id>","expectedBytes":123,"md5":"<hex>","label":"name"}
+
+on:
+  push:
+    paths:
+      - '.github/obj-inbox/request.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: obj-inbox-inspect-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Read request
+        id: req
+        run: |
+          set -euo pipefail
+          echo "file_id=$(jq -r .fileId .github/obj-inbox/request.json)" >> "$GITHUB_OUTPUT"
+          echo "expected=$(jq -r .expectedBytes .github/obj-inbox/request.json)" >> "$GITHUB_OUTPUT"
+          echo "md5=$(jq -r .md5 .github/obj-inbox/request.json)" >> "$GITHUB_OUTPUT"
+          echo "label=$(jq -r .label .github/obj-inbox/request.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Download model from Drive (public link window)
+        env:
+          FILE_ID: ${{ steps.req.outputs.file_id }}
+          EXPECTED: ${{ steps.req.outputs.expected }}
+          MD5: ${{ steps.req.outputs.md5 }}
+        run: |
+          set -euo pipefail
+          verify() {
+            [ -f model.obj ] || return 1
+            local sz
+            sz=$(stat -c%s model.obj)
+            echo "downloaded bytes: $sz (expected $EXPECTED)"
+            [ "$sz" = "$EXPECTED" ] || return 1
+            echo "$MD5  model.obj" | md5sum -c -
+          }
+          URL="https://drive.usercontent.google.com/download?id=${FILE_ID}&export=download&confirm=t"
+          echo "trying direct usercontent download"
+          curl -L --fail --retry 3 --retry-delay 5 -o model.obj "$URL" || true
+          if ! verify; then
+            echo "direct download failed verification, falling back to gdown"
+            rm -f model.obj
+            python3 -m pip install --user -q gdown
+            ~/.local/bin/gdown "https://drive.google.com/uc?id=${FILE_ID}" -O model.obj
+            verify
+          fi
+          echo "DOWNLOAD_OK — the public link can be closed now"
+
+      - name: Inspect OBJ
+        env:
+          LABEL: ${{ steps.req.outputs.label }}
+        run: |
+          set -euo pipefail
+          mkdir -p "docs/obj-inbox/${LABEL}"
+          python3 scripts/inspect-obj.py model.obj "docs/obj-inbox/${LABEL}"
+          ls -la "docs/obj-inbox/${LABEL}"
+
+      - name: Archive raw model for later conversion
+        env:
+          LABEL: ${{ steps.req.outputs.label }}
+        run: |
+          set -euo pipefail
+          gzip -9 -k model.obj
+          mv model.obj.gz "obj-${LABEL}.obj.gz"
+          ls -la "obj-${LABEL}.obj.gz"
+
+      - name: Upload raw model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obj-inbox-${{ steps.req.outputs.label }}
+          path: obj-${{ steps.req.outputs.label }}.obj.gz
+          retention-days: 30
+
+      - name: Commit inspection report
+        env:
+          LABEL: ${{ steps.req.outputs.label }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "docs/obj-inbox/${LABEL}"
+          if git diff --cached --quiet; then
+            echo "no report changes to commit"
+            exit 0
+          fi
+          git commit -m "OBJ inbox inspection report: ${LABEL}"
+          for i in 1 2 3 4 5; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}" || git rebase --abort
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "pushed on attempt $i"
+              exit 0
+            fi
+            sleep $((i * 3))
+          done
+          echo "failed to push report after retries"
+          exit 1
