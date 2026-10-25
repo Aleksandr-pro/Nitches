@@ -50,8 +50,18 @@ function retintMaterial(mesh, materialName, hex) {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   const next = materials.map((material) => {
     if (!material || material.name !== materialName) return material;
-    const copy = material.clone();
-    copy.color = new THREE.Color(hex);
+    // Автомобильная краска: физический материал — металлическая база под
+    // прозрачным лаком (clearcoat), даёт глубокие отражения неба на кузове.
+    const copy = new THREE.MeshPhysicalMaterial({
+      name: material.name,
+      color: new THREE.Color(hex),
+      metalness: 0.55,
+      roughness: 0.34,
+      clearcoat: 1,
+      clearcoatRoughness: 0.08,
+      envMapIntensity: 1.55,
+    });
+    if (material.map) copy.map = material.map;
     return copy;
   });
   mesh.material = Array.isArray(mesh.material) ? next : next[0];
@@ -73,6 +83,18 @@ export function buildMustang(paintHex = MUSTANG_PAINTS[0].hex, accentHex = 0xff7
     const paint = retintMaterial(object, 'Paint', paintHex);
     if (paint) paintMaterial = paint;
     retintMaterial(object, 'PaintSecondary', accentHex);
+    // Стекло и хром: усиливаем отражения окружения, как на настоящей машине.
+    const mats = Array.isArray(object.material) ? object.material : [object.material];
+    mats.forEach((m) => {
+      if (!m) return;
+      const n = (m.name || '').toLowerCase();
+      if (n.includes('glass') || n.includes('window')) {
+        m.roughness = Math.min(m.roughness ?? 0.1, 0.07);
+        m.envMapIntensity = 1.9;
+      } else if (n.includes('chrome')) {
+        m.envMapIntensity = 1.6;
+      }
+    });
   });
 
   const wheels = [];

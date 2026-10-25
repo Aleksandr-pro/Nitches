@@ -41,6 +41,7 @@ export const ICON_NAMES = Object.freeze([
   'gamepad',
   'steering-wheel',
   'sparkles',
+  'sun',
   'smartphone',
   'home',
   'check',

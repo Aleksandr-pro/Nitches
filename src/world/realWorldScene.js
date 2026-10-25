@@ -34,7 +34,6 @@ import sidewalkUrl from '../assets/textures/realworld/sidewalk.jpg';
 import asphaltDragUrl from '../assets/textures/realworld/asphalt_drag.jpg';
 import crosswalkUrl from '../assets/textures/realworld/crosswalk.jpg';
 import curbUrl from '../assets/textures/realworld/curb.jpg';
-import busstopGlassUrl from '../assets/textures/realworld/busstop_glass.jpg';
 import busstopAdUrl from '../assets/textures/realworld/busstop_ad.jpg';
 import parkingAngledUrl from '../assets/textures/realworld/parking_angled.jpg';
 import asphaltCityUrl from '../assets/textures/realworld/asphalt_city.jpg';
@@ -82,6 +81,14 @@ import userWoodDeckUrl from '../assets/textures/realworld/user_wood_deck.jpg';
 import userMulchUrl from '../assets/textures/realworld/user_mulch_soil.jpg';
 import userDirtCrackedUrl from '../assets/textures/realworld/user_dirt_cracked.jpg';
 import userCurbUrl from '../assets/textures/realworld/user_curb_redwhite.jpg';
+import userBrushedMetalUrl from '../assets/textures/realworld/user_brushed_metal.jpg';
+import userBlackRoughUrl from '../assets/textures/realworld/user_black_rough.jpg';
+import userBlackGraniteUrl from '../assets/textures/realworld/user_black_granite.jpg';
+import userParkingDeckUrl from '../assets/textures/realworld/user_parking_deck.jpg';
+import userFrostedGlassUrl from '../assets/textures/realworld/user_frosted_glass.jpg';
+import userStoneRubbleUrl from '../assets/textures/realworld/user_stone_rubble.jpg';
+import userLedScreenUrl from '../assets/textures/realworld/user_led_screen.jpg';
+import userPalmLeafUrl from '../assets/textures/realworld/user_palm_leaf.png';
 // User-provided oak tree (Tree.fbx via Google Drive, 2026-10-25): the model
 // replaces every procedural tree; leaf/bark maps were extracted from its
 // embedded Archicad media and downscaled for mobile VRAM.
@@ -311,7 +318,7 @@ export function createRealWorldScene(foundation) {
   const dragTex = makeTexture(loader, asphaltDragUrl);
   const crosswalkTex = makeTexture(loader, userCrosswalkUrl);
   const curbTex = makeTexture(loader, curbUrl);
-  const busGlassTex = makeTexture(loader, busstopGlassUrl);
+  const busGlassTex = makeTexture(loader, userFrostedGlassUrl);
   const busAdTex = makeTexture(loader, busstopAdUrl);
   const parkingAngledTex = makeTexture(loader, parkingAngledUrl);
   const cityAsphaltTex = makeTexture(loader, userAsphaltPlainUrl);
@@ -346,6 +353,13 @@ export function createRealWorldScene(foundation) {
   const crackedDirtTex = makeTexture(loader, userDirtCrackedUrl, { mirror: true });
   const doubleYellowTex = makeTexture(loader, userAsphaltDoubleYellowUrl);
   const redCurbTex = makeTexture(loader, userCurbUrl);
+  const brushedMetalTex = makeTexture(loader, userBrushedMetalUrl);
+  const blackRoughTex = makeTexture(loader, userBlackRoughUrl, { mirror: true });
+  const blackGraniteTex = makeTexture(loader, userBlackGraniteUrl);
+  const parkingDeckTex = makeTexture(loader, userParkingDeckUrl);
+  const stoneRubbleTex = makeTexture(loader, userStoneRubbleUrl, { mirror: true });
+  const ledScreenTex = makeTexture(loader, userLedScreenUrl);
+  const palmLeafTex = makeTexture(loader, userPalmLeafUrl);
   const oakLeafTex = makeTexture(loader, oakLeafUrl);
   const oakLeaf2Tex = makeTexture(loader, oakLeaf2Url);
   const oakBarkTex = makeTexture(loader, oakBarkUrl, { ry: 2 });
@@ -441,6 +455,8 @@ export function createRealWorldScene(foundation) {
   farGround.name = 'real-far-ground';
   group.add(farGround);
 
+  const animatedWaters = [];
+
   // --- River -------------------------------------------------------------------
   const water = new THREE.Mesh(
     buildRiverGeometry(foundation.river),
@@ -460,6 +476,7 @@ export function createRealWorldScene(foundation) {
     );
     marinaWater.position.set((m.minX + m.maxX) / 2, foundation.river.waterLevelM, (m.minZ + m.maxZ) / 2);
     marinaWater.name = 'real-marina';
+    animatedWaters.push({ tex: marinaWater.material.map, sx: 0.011, sy: -0.007 });
     group.add(marinaWater);
     countTris(marinaWater.geometry);
 
@@ -473,6 +490,7 @@ export function createRealWorldScene(foundation) {
     );
     seaMesh.position.set((sea.minX + sea.maxX) / 2, foundation.river.waterLevelM, (sea.minZ + sea.maxZ) / 2);
     seaMesh.name = 'real-sea';
+    animatedWaters.push({ tex: seaMesh.material.map, sx: 0.006, sy: 0.004 });
     group.add(seaMesh);
     countTris(seaMesh.geometry);
 
@@ -631,7 +649,7 @@ export function createRealWorldScene(foundation) {
     }
   }
   const walkGeometry = ribbonToGeometry(walkRibbons);
-  const walks = new THREE.Mesh(walkGeometry, new THREE.MeshStandardMaterial({ map: sidewalkTex, roughness: 0.96 }));
+  const walks = new THREE.Mesh(walkGeometry, new THREE.MeshStandardMaterial({ map: sidewalkTex, roughness: 0.88, envMapIntensity: 0.8 }));
   walks.name = 'real-sidewalks';
   walks.receiveShadow = true;
   walks.renderOrder = 1;
@@ -639,7 +657,7 @@ export function createRealWorldScene(foundation) {
   countTris(walkGeometry);
 
   const curbGeometry = ribbonToGeometry(curbRibbons);
-  const curbs = new THREE.Mesh(curbGeometry, new THREE.MeshStandardMaterial({ map: curbTex, roughness: 0.95 }));
+  const curbs = new THREE.Mesh(curbGeometry, new THREE.MeshStandardMaterial({ map: curbTex, roughness: 0.9, envMapIntensity: 0.7 }));
   curbs.name = 'real-curbs';
   curbs.receiveShadow = true;
   curbs.renderOrder = 1;
@@ -647,7 +665,7 @@ export function createRealWorldScene(foundation) {
   countTris(curbGeometry);
 
   const roadGeometry = ribbonToGeometry(roadRibbons);
-  const roads = new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.94 }));
+  const roads = new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({ map: roadTex, bumpMap: roadTex, bumpScale: 0.4, roughness: 0.55, envMapIntensity: 1.25 }));
   roads.name = 'real-roads';
   roads.receiveShadow = true;
   roads.renderOrder = 2;
@@ -656,7 +674,7 @@ export function createRealWorldScene(foundation) {
 
   if (cityRibbons.length) {
     const cityGeometry = ribbonToGeometry(cityRibbons);
-    const cityRoads = new THREE.Mesh(cityGeometry, new THREE.MeshStandardMaterial({ map: cityAsphaltTex, roughness: 0.96 }));
+    const cityRoads = new THREE.Mesh(cityGeometry, new THREE.MeshStandardMaterial({ map: cityAsphaltTex, bumpMap: cityAsphaltTex, bumpScale: 0.35, roughness: 0.62, envMapIntensity: 1.15 }));
     cityRoads.name = 'real-city-streets';
     cityRoads.receiveShadow = true;
     cityRoads.renderOrder = 2;
@@ -666,7 +684,7 @@ export function createRealWorldScene(foundation) {
 
   if (ruralRibbons.length) {
     const ruralGeometry = ribbonToGeometry(ruralRibbons);
-    const ruralRoads = new THREE.Mesh(ruralGeometry, new THREE.MeshStandardMaterial({ map: ruralTex, roughness: 0.98 }));
+    const ruralRoads = new THREE.Mesh(ruralGeometry, new THREE.MeshStandardMaterial({ map: ruralTex, roughness: 0.82, envMapIntensity: 0.7 }));
     ruralRoads.name = 'real-rural-roads';
     ruralRoads.receiveShadow = true;
     ruralRoads.renderOrder = 2;
@@ -676,7 +694,7 @@ export function createRealWorldScene(foundation) {
 
   if (dragRibbons.length) {
     const dragGeometry = ribbonToGeometry(dragRibbons);
-    const drag = new THREE.Mesh(dragGeometry, new THREE.MeshStandardMaterial({ map: dragTex, roughness: 0.9 }));
+    const drag = new THREE.Mesh(dragGeometry, new THREE.MeshStandardMaterial({ map: dragTex, roughness: 0.68, envMapIntensity: 0.9 }));
     drag.name = 'real-drag-strip';
     drag.receiveShadow = true;
     drag.renderOrder = 2;
@@ -691,12 +709,66 @@ export function createRealWorldScene(foundation) {
     const dyTex = cloneTexture(doubleYellowTex, 1, 1);
     dyTex.center.set(0.5, 0.5);
     dyTex.rotation = Math.PI / 2;
-    const rtRoads = new THREE.Mesh(rtGeometry, new THREE.MeshStandardMaterial({ map: dyTex, roughness: 0.94 }));
+    const rtRoads = new THREE.Mesh(rtGeometry, new THREE.MeshStandardMaterial({ map: dyTex, bumpMap: dyTex, bumpScale: 0.3, roughness: 0.48, envMapIntensity: 1.3 }));
     rtRoads.name = 'real-richtown-roads';
     rtRoads.receiveShadow = true;
     rtRoads.renderOrder = 2;
     group.add(rtRoads);
     countTris(rtGeometry);
+  }
+
+  // --- Wet patches: sky-mirror puddles scattered along the asphalt -----------
+  {
+    const spots = [];
+    for (const e of foundation.roadGraph.edges) {
+      if (/^(river-|north-link|drift)/.test(e.id) || isDragEdge(e)) continue;
+      const smp = e.samples || [];
+      let acc = 20 + hashFromKey(e.id) * 40;
+      for (let i = 1; i < smp.length; i++) {
+        const a = smp[i - 1];
+        const b = smp[i];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const seg = Math.hypot(dx, dz);
+        acc += seg;
+        if (acc < 62) continue;
+        acc = 0;
+        const h = hashFromKey(`${e.id}:${i}`);
+        const lat = (h * 2 - 1) * Math.max(0.5, (e.halfWidthM || 4) - 1.6);
+        const inv = 1 / Math.max(seg, 0.001);
+        spots.push({
+          x: b.x + (-dz * inv) * lat,
+          z: b.z + (dx * inv) * lat,
+          yaw: Math.atan2(dx, dz),
+          w: 1.6 + h * 2.2,
+          l: 3 + h * 4.5,
+        });
+        if (spots.length >= 240) break;
+      }
+      if (spots.length >= 240) break;
+    }
+    if (spots.length) {
+      const puddleGeo = new THREE.CircleGeometry(1, 22).rotateX(-Math.PI / 2);
+      const puddleMat = new THREE.MeshStandardMaterial({
+        color: 0x93b7cc, roughness: 0.06, metalness: 0.85, envMapIntensity: 1.7,
+        transparent: true, opacity: 0.82, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      });
+      const puddles = new THREE.InstancedMesh(puddleGeo, puddleMat, spots.length);
+      const dummy = new THREE.Object3D();
+      spots.forEach((pt, i) => {
+        dummy.position.set(pt.x, foundation.heightAt(pt.x, pt.z) + 0.175, pt.z);
+        dummy.rotation.set(0, pt.yaw, 0);
+        dummy.scale.set(pt.w, 1, pt.l);
+        dummy.updateMatrix();
+        puddles.setMatrixAt(i, dummy.matrix);
+      });
+      puddles.name = 'real-puddles';
+      puddles.renderOrder = 3;
+      puddles.receiveShadow = true;
+      group.add(puddles);
+      countTris(puddleGeo, spots.length);
+    }
   }
 
   // --- Zebra crossings at city junctions -----------------------------------------
@@ -958,10 +1030,13 @@ export function createRealWorldScene(foundation) {
     const goldMat = new THREE.MeshStandardMaterial({ color: 0xd8b25c, roughness: 0.32, metalness: 0.85 });
     const towerGlassMat = new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 6, 10), roughness: 0.22, metalness: 0.45 });
     const marbleMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTilesTex, 3, 1), roughness: 0.5, metalness: 0.08 });
-    const silverMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 6, 6), roughness: 0.35, metalness: 0.55 });
+    const silverMat = new THREE.MeshStandardMaterial({ map: cloneTexture(brushedMetalTex, 5, 5), roughness: 0.38, metalness: 0.72, envMapIntensity: 1.35 });
     const plasterMat = new THREE.MeshStandardMaterial({ map: cloneTexture(plasterTex, 3, 3), roughness: 0.85 });
     const stoneMatL = new THREE.MeshStandardMaterial({ map: cloneTexture(travertineTex, 3, 1), roughness: 0.8 });
     const darkConcMat = new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 3, 2), roughness: 0.9 });
+    const graniteMat = new THREE.MeshStandardMaterial({ map: cloneTexture(blackGraniteTex, 3, 1), roughness: 0.2, metalness: 0.12, envMapIntensity: 1.5 });
+    const deckMat = new THREE.MeshStandardMaterial({ map: cloneTexture(parkingDeckTex, 3, 4), roughness: 0.85 });
+    const blackRoughMat = new THREE.MeshStandardMaterial({ map: cloneTexture(blackRoughTex, 1, 3), roughness: 0.95 });
     const woodDeckMatL = new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 3, 2), roughness: 0.9 });
     const poolMat = new THREE.MeshStandardMaterial({ map: cloneTexture(poolMosaicTex, 4, 4), roughness: 0.15, metalness: 0.05 });
     const curbMatL = new THREE.MeshStandardMaterial({ map: redCurbTex, roughness: 0.9 });
@@ -980,6 +1055,7 @@ export function createRealWorldScene(foundation) {
         return m;
       };
       if (lm.kind === 'rt-tower') {
+        addPart(new THREE.BoxGeometry(54, 1.4, 54), graniteMat, 0, 0.7, 0);
         addPart(new THREE.BoxGeometry(46, 26, 46), towerGlassMat, 0, 13, 0);
         addPart(new THREE.CylinderGeometry(11, 16.5, 58, 8), towerGlassMat, 0, 55, 0);
         addPart(new THREE.CylinderGeometry(4.6, 10, 42, 8), towerGlassMat, 0, 105, 0);
@@ -994,7 +1070,7 @@ export function createRealWorldScene(foundation) {
         addPart(new THREE.BoxGeometry(34.4, 5, 6.4), goldMat, 0, 40.5, 0);
         addPart(new THREE.BoxGeometry(25.6, 0.5, 4.4), towerGlassMat, 0, 37.8, 0);
       } else if (lm.kind === 'rt-fountain') {
-        addPart(new THREE.CylinderGeometry(16, 17, 1.1, 40), marbleMat, 0, 0.55, 0);
+        addPart(new THREE.CylinderGeometry(16, 17, 1.1, 40), graniteMat, 0, 0.55, 0);
         const fw = addPart(new THREE.CircleGeometry(14.8, 36).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x25b6cf, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.92 }), 0, 1.0, 0);
         fw.castShadow = false;
         addPart(new THREE.CylinderGeometry(2.4, 3.1, 2.6, 14), marbleMat, 0, 1.3, 0);
@@ -1044,9 +1120,9 @@ export function createRealWorldScene(foundation) {
         addPart(new THREE.BoxGeometry(30, 18, 20), towerGlassMat, 0, 69, 0);
         addPart(new THREE.BoxGeometry(30, 2, 20), goldMat, 0, 59.5, 0);
       } else if (lm.kind === 'rt-parking') {
-        for (let i = 0; i < 4; i++) addPart(new THREE.BoxGeometry(40, 1.1, 52), darkConcMat, 0, 2.2 + i * 4.2, 0);
+        for (let i = 0; i < 4; i++) addPart(new THREE.BoxGeometry(40, 1.1, 52), deckMat, 0, 2.2 + i * 4.2, 0);
         for (const [cx, cz] of [[-18, -24], [18, -24], [-18, 24], [18, 24], [0, 0]]) {
-          addPart(new THREE.CylinderGeometry(0.7, 0.7, 16, 8), darkConcMat, cx, 8, cz);
+          addPart(new THREE.CylinderGeometry(0.7, 0.7, 16, 8), blackRoughMat, cx, 8, cz);
         }
         addPart(new THREE.BoxGeometry(6, 1.2, 1.2), curbMatL, -8, 0.8, 27.5);
         addPart(new THREE.BoxGeometry(6, 1.2, 1.2), curbMatL, 8, 0.8, 27.5);
@@ -1080,6 +1156,47 @@ export function createRealWorldScene(foundation) {
         addPart(new THREE.BoxGeometry(3.8, 0.25, 3.4), roofMatL, 0, 5.9, 0);
       }
       group.add(g);
+    }
+  }
+
+  // --- LED billboards along the RichTown arterials ------------------------------
+  {
+    const ledMat = new THREE.MeshStandardMaterial({
+      map: ledScreenTex, emissive: 0xffffff, emissiveMap: ledScreenTex,
+      emissiveIntensity: 1.15, roughness: 0.4, metalness: 0.1,
+    });
+    const frameMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(brushedMetalTex, 2, 2), roughness: 0.45, metalness: 0.7, envMapIntensity: 1.1,
+    });
+    const boards = [
+      { x: 744, z: -120, rotY: Math.PI / 2 },
+      { x: 776, z: 240, rotY: -Math.PI / 2 },
+      { x: 913, z: -40, rotY: Math.PI / 2 },
+    ];
+    for (const b of boards) {
+      const g = new THREE.Group();
+      g.position.set(b.x, foundation.heightAt(b.x, b.z), b.z);
+      g.rotation.y = b.rotY;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 9, 10), frameMat);
+      pole.position.y = 4.5;
+      pole.castShadow = true;
+      g.add(pole);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(15, 7.6, 0.5), frameMat);
+      back.position.y = 12.4;
+      back.castShadow = true;
+      g.add(back);
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(14.2, 6.8), ledMat);
+      screen.position.set(0, 12.4, 0.28);
+      g.add(screen);
+      const screen2 = screen.clone();
+      screen2.position.z = -0.28;
+      screen2.rotation.y = Math.PI;
+      g.add(screen2);
+      g.name = 'real-led-billboard';
+      group.add(g);
+      countTris(back.geometry);
+      countTris(pole.geometry);
+      countTris(screen.geometry, 2);
     }
   }
 
@@ -1380,11 +1497,25 @@ export function createRealWorldScene(foundation) {
     const mulchMat = new THREE.MeshStandardMaterial({ map: mulchTex, roughness: 1 });
     const mulchGeo = new THREE.CircleGeometry(1.15, 10).rotateX(-Math.PI / 2);
     mulchGeo.translate(0, 0.04, 0);
+    const frondParts = [];
+    for (let k = 0; k < 3; k++) {
+      const p = new THREE.PlaneGeometry(3.6, 3.6);
+      p.translate(0, 1.1, 0);
+      p.rotateX(-1.15);
+      p.rotateY((k * Math.PI * 2) / 3 + 0.5);
+      p.translate(0.95, PALM_H - 0.15, 0);
+      frondParts.push(p);
+    }
+    const frondGeo = mergeGeometries(frondParts);
+    const frondMat = new THREE.MeshStandardMaterial({
+      map: palmLeafTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9,
+    });
     const items = plan.palms.map((t, idx) => ({ t, idx }));
     return buildCellInstanced({
       parts: [
         { key: 'trunk', geometry: buildPalmTrunkGeometry(), material: trunkMat },
         { key: 'crown', geometry: crownGeo, material: fanPart.material },
+        { key: 'fronds', geometry: frondGeo, material: frondMat },
         { key: 'mulch', geometry: mulchGeo, material: mulchMat },
       ],
       items, namePrefix: 'real-palms',
@@ -1444,7 +1575,7 @@ export function createRealWorldScene(foundation) {
   });
 
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
-  addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(rockTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
+  addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(stoneRubbleTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
 
   // Modelled street lamp: tapered pole, swept arm and a housing whose arm
   // reaches over the road (plan rotY already faces the asphalt).
@@ -1818,9 +1949,14 @@ export function createRealWorldScene(foundation) {
     benches: plan.benches.length,
     signs: plan.signs.length,
     powerPoles: plan.powerPoles.length,
-    textures: 70,
+    textures: 77,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;
-  return { group, stats };
+  const tick = (t) => {
+    for (const w of animatedWaters) {
+      w.tex.offset.set((t * w.sx) % 1, (t * w.sy) % 1);
+    }
+  };
+  return { group, stats, tick };
 }

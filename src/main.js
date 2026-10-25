@@ -18,7 +18,9 @@ import {
 import { iconMarkup, setIcon } from './ui/icons.js';
 import { createRealWorldFoundation } from './world/realWorld.js';
 import { createRealWorldScene } from './world/realWorldScene.js';
-import skyPanoUrl from './assets/textures/realworld/sky_pano.jpg';
+import skyDayUrl from './assets/textures/realworld/user_sky_day.jpg';
+import skySunsetUrl from './assets/textures/realworld/user_sky_sunset.jpg';
+import skyNightUrl from './assets/textures/realworld/user_sky_night.jpg';
 import sunGlowUrl from './assets/textures/realworld/sun_glow.jpg';
 import cloudPuffUrl from './assets/textures/realworld/cloud_puff.jpg';
 import { distanceToCollider } from './world/spatialIndex.js';
@@ -232,6 +234,9 @@ if (!MUSTANG_PAINTS.some((paint) => paint.hex === selectedMustangPaint)) selecte
 const mustangCatalogCar = CARS.find((car) => car.id === 'mustang');
 if (mustangCatalogCar) mustangCatalogCar.color = selectedMustangPaint;
 let graphicsQuality = safeGetItem('nh_gfx') === 'fast' ? 'fast' : 'realistic';
+let skyMood = ['day', 'sunset', 'night'].includes(safeGetItem('nh_sky')) ? safeGetItem('nh_sky') : 'day';
+let applySkyMood = () => {};
+const SKY_EXPOSURE = { day: 1.34, sunset: 1.26, night: 1.05 };
 let controlScheme = safeGetItem('nh_controls') === 'buttons' ? 'buttons' : 'wheel';
 let assistMode = ['arcade', 'sport', 'drift'].includes(safeGetItem('nh_assist'))
   ? safeGetItem('nh_assist') : 'sport';
@@ -577,7 +582,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.16.0',
+    version: '0.17.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -663,16 +668,17 @@ function updateWorldFoundation(dt) {
 }
 
 // Свет заката фестиваля — более насыщенный и объёмный
-scene.add(new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.66));
+const hemiLight = new THREE.HemisphereLight(0xa8cfff, 0x7a4a2a, 0.66);
+scene.add(hemiLight);
 const sun = new THREE.DirectionalLight(0xffb070, 3.05);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.radius = 3.2;
 sun.shadow.normalBias = 0.018;
-sun.shadow.camera.left = -52;
-sun.shadow.camera.right = 52;
-sun.shadow.camera.top = 52;
-sun.shadow.camera.bottom = -52;
+sun.shadow.camera.left = -64;
+sun.shadow.camera.right = 64;
+sun.shadow.camera.top = 64;
+sun.shadow.camera.bottom = -64;
 sun.shadow.camera.far = 300;
 sun.shadow.bias = -0.0012;
 sun.shadow.camera.updateProjectionMatrix();
@@ -1482,18 +1488,63 @@ const LEGACY_SCENE_MARK = scene.children.length;
 // текстуры остаются мгновенным фолбэком до загрузки.
 {
   const skyLoader = new THREE.TextureLoader();
-  skyLoader.load(skyPanoUrl, (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.mapping = THREE.EquirectangularReflectionMapping;
+  // Три панорамы неба пользователя: день / закат / ночь. Каждая даёт и фон
+  // неба, и настоящие PMREM-отражения окружения; время суток переключается
+  // кнопками «Небо» в меню и сохраняется между запусками.
+  const SKY_URLS = { day: skyDayUrl, sunset: skySunsetUrl, night: skyNightUrl };
+  const SKY_TUNING = {
+    day: { sun: 0xfff1d6, sunI: 3.2, hemi: 0.62, fog: 0xd9e6ea, env: 1.05 },
+    sunset: { sun: 0xffa25e, sunI: 2.6, hemi: 0.5, fog: 0xe2ac7e, env: 1.0 },
+    night: { sun: 0x8fb4ff, sunI: 0.55, hemi: 0.16, fog: 0x0d1626, env: 0.55 },
+  };
+  const skyTextures = {};
+  const skyEnvs = {};
+  const skyPmrem = new THREE.PMREMGenerator(renderer);
+  const applySkyTexture = (mood) => {
+    const tex = skyTextures[mood];
+    if (!tex) return;
     if (skyMesh) {
       skyMesh.material.map = tex;
       skyMesh.material.needsUpdate = true;
     }
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromEquirectangular(tex).texture;
-    if ('environmentIntensity' in scene) scene.environmentIntensity = 1.05;
-    pmrem.dispose();
-  });
+    if (!skyEnvs[mood]) skyEnvs[mood] = skyPmrem.fromEquirectangular(tex).texture;
+    scene.environment = skyEnvs[mood];
+  };
+  applySkyMood = (mood, announce = false) => {
+    skyMood = SKY_URLS[mood] ? mood : 'day';
+    safeSetItem('nh_sky', skyMood);
+    const tune = SKY_TUNING[skyMood];
+    sun.color.set(tune.sun);
+    sun.intensity = tune.sunI;
+    hemiLight.intensity = tune.hemi;
+    if (scene.fog) scene.fog.color.set(tune.fog);
+    if ('environmentIntensity' in scene) scene.environmentIntensity = tune.env;
+    renderer.toneMappingExposure = (SKY_EXPOSURE[skyMood] || 1.3)
+      * (graphicsQuality === 'realistic' ? 1 : 0.85);
+    if (sunBallMesh) sunBallMesh.visible = skyMood !== 'night';
+    if (sunHaloMesh) sunHaloMesh.visible = skyMood !== 'night';
+    document.querySelectorAll('[data-sky]').forEach((btn) => {
+      const active = btn.dataset.sky === skyMood;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    if (skyTextures[skyMood]) {
+      applySkyTexture(skyMood);
+    } else {
+      const wanted = skyMood;
+      skyLoader.load(SKY_URLS[wanted], (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        skyTextures[wanted] = tex;
+        if (skyMood === wanted) applySkyTexture(wanted);
+      });
+    }
+    if (announce) {
+      const label = skyMood === 'day' ? 'Небо: день' : skyMood === 'sunset' ? 'Небо: закат' : 'Небо: ночь';
+      showCenterMsg(label, 1100, '#fff', 'sparkles');
+    }
+  };
+  applySkyMood(skyMood);
   skyLoader.load(sunGlowUrl, (tex) => {
     tex.colorSpace = THREE.SRGBColorSpace;
     if (sunHaloMesh) {
@@ -4275,7 +4326,7 @@ function updateCamera(dt) {
   }
   const targetFov = inspectMode
     ? 50
-    : 60 + clamp(player.vel.length() / 60, 0, 1) * 7 + (player.boosting ? 5 : 0);
+    : 62 + clamp(player.vel.length() / 60, 0, 1) * 11 + (player.boosting ? 6 : 0);
   camera.fov = lerp(camera.fov, targetFov, dt * 4);
   camera.updateProjectionMatrix();
 }
@@ -4654,6 +4705,7 @@ function animate() {
   if (waterMaterial && waterMaterial.normalMap) {
     waterMaterial.normalMap.offset.set((t * 0.014) % 1, (t * 0.009) % 1);
   }
+  if (realWorldSceneHandle && realWorldSceneHandle.tick) realWorldSceneHandle.tick(t);
   if (foamRing) foamRing.material.opacity = 0.11 + Math.sin(t * 0.8) * 0.045;
   if (festivalWheel) festivalWheel.rotation.z += dt * 0.11;
   if (britainWheelRim) britainWheelRim.rotation.z += dt * 0.14;
@@ -5233,12 +5285,12 @@ function applyGraphicsQuality(quality, announce = false) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   const shadowSize = graphicsQuality === 'realistic' ? 2048 : 1024;
   sun.shadow.radius = graphicsQuality === 'realistic' ? 3.2 : 2;
-  sun.shadow.camera.left = graphicsQuality === 'realistic' ? -52 : -40;
+  sun.shadow.camera.left = graphicsQuality === 'realistic' ? -64 : -40;
   sun.shadow.camera.right = -sun.shadow.camera.left;
   sun.shadow.camera.top = -sun.shadow.camera.left;
   sun.shadow.camera.bottom = sun.shadow.camera.left;
   sun.shadow.camera.updateProjectionMatrix();
-  renderer.toneMappingExposure = graphicsQuality === 'realistic' ? 1.34 : 1.14;
+  renderer.toneMappingExposure = (SKY_EXPOSURE[skyMood] || 1.3) * (graphicsQuality === 'realistic' ? 1 : 0.85);
 
   if (sun.shadow.mapSize.x !== shadowSize) {
     sun.shadow.mapSize.set(shadowSize, shadowSize);
@@ -5262,6 +5314,9 @@ function applyGraphicsQuality(quality, announce = false) {
 }
 document.querySelectorAll('[data-gfx]').forEach((btn) => {
   btn.addEventListener('click', () => applyGraphicsQuality(btn.dataset.gfx, true));
+});
+document.querySelectorAll('[data-sky]').forEach((btn) => {
+  btn.addEventListener('click', () => applySkyMood(btn.dataset.sky, true));
 });
 
 $('btnStart').addEventListener('click', startGame);
