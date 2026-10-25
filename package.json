@@ -1,7 +1,7 @@
 {
   "name": "nitches-horizon",
   "private": true,
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "description": "Мобильная фестивальная гоночная аркада с открытым миром в духе Forza Horizon",
   "scripts": {
