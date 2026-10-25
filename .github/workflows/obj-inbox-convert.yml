@@ -1,0 +1,97 @@
+name: OBJ Inbox Convert
+
+# Stage-driven pipeline for the owner's large plant OBJ (raw bytes preserved
+# as the artifact of run 40182810927, so no Drive access is needed here).
+# Trigger by committing .github/obj-inbox/convert-request.json:
+#   {"stage":"census"}   -> docs/obj-inbox/census/ (per-object census + sheets)
+#   {"stage":"convert"}  -> src/assets/models/plants.glb
+#                           (+ docs/obj-inbox/convert-report.json)
+# Conversion species/budgets live in .github/obj-inbox/plants-config.json.
+
+on:
+  push:
+    paths:
+      - '.github/obj-inbox/convert-request.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: obj-inbox-convert-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Python environment (numpy, Pillow)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q numpy pillow
+          .venv/bin/python -c "import numpy, PIL; print('numpy', numpy.__version__)"
+
+      - name: Fetch raw OBJ from inspection artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 40182810927 -n obj-inbox-obj-2026-10-25 --dir /tmp/obj
+          gzip -dc /tmp/obj/obj-obj-2026-10-25.obj.gz > /tmp/model.obj
+          sz=$(stat -c%s /tmp/model.obj)
+          echo "model.obj bytes: $sz"
+          [ "$sz" = "331683992" ]
+          echo "1aaf25181123e2662c22623b1056a94f  /tmp/model.obj" | md5sum -c -
+
+      - name: Run stage
+        id: stage
+        run: |
+          set -euo pipefail
+          STAGE=$(jq -r .stage .github/obj-inbox/convert-request.json)
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+          if [ "$STAGE" = "census" ]; then
+            .venv/bin/python scripts/obj-plants.py census /tmp/model.obj docs/obj-inbox/census
+          elif [ "$STAGE" = "convert" ]; then
+            .venv/bin/python scripts/obj-plants.py convert /tmp/model.obj \
+              .github/obj-inbox/plants-config.json src/assets/models/plants.glb \
+              > docs/obj-inbox/convert-report.json
+            cat docs/obj-inbox/convert-report.json
+            ls -la src/assets/models/plants.glb
+          else
+            echo "unknown stage: $STAGE"; exit 1
+          fi
+
+      - name: Commit stage outputs
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$STAGE" = "census" ]; then
+            git add docs/obj-inbox/census
+            MSG="OBJ plants census (per-object silhouettes and stats)"
+          else
+            git add src/assets/models/plants.glb docs/obj-inbox/convert-report.json
+            MSG="OBJ plants converted to plants.glb (CI)"
+          fi
+          if git diff --cached --quiet; then
+            echo "nothing to commit"; exit 0
+          fi
+          git commit -m "$MSG"
+          for i in 1 2 3 4 5; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}" || git rebase --abort
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "pushed on attempt $i"; exit 0
+            fi
+            sleep $((i * 3))
+          done
+          echo "failed to push outputs"; exit 1
