@@ -1,5 +1,5 @@
 /**
- * Real Valley — compact 1 x 1 km playable world.
+ * Real Valley — playable world: 1 x 1 km valley plus the RichTown district.
  *
  * v0.10 layout follows the "Nitches Horizon" reference map: a dense city
  * street grid around a wide central avenue with a drag strip at its north
@@ -7,6 +7,11 @@
  * river with a riverside road along the west edge, a closed drift circuit
  * in the south-west, a festival plaza and parking lots in the east, and a
  * car shop + cafe on the southern street.
+ *
+ * v0.15 expands the world 650 m east with RichTown — a modern Dubai-style
+ * district: a wide palm-lined boulevard, glass/gold/marble skyscrapers, a
+ * 148 m needle tower, a golden frame arch over the boulevard, a fountain
+ * plaza and a rectangular marina basin.
  *
  * Pure-data foundation (no Three imports): analytic terrain, road network
  * reusing the shared road-graph/spatial-index code, surfaces, districts and
@@ -18,14 +23,15 @@ import { buildRoadGraph, buildRoadSegments, findRoute as graphFindRoute, roadPoi
 import { ColliderIndex, RoadSpatialIndex } from './spatialIndex.js';
 
 export const REAL_WORLD_ID = 'real-valley';
-export const REAL_WORLD_VERSION = '0.12.0';
-export const REAL_WORLD_SIZE_M = 1000;
-export const REAL_WORLD_HALF_M = REAL_WORLD_SIZE_M / 2;
+export const REAL_WORLD_VERSION = '0.15.0';
+/** World width (x extent) in metres; the world grew east in v0.15. */
+export const REAL_WORLD_SIZE_M = 1650;
+export const REAL_WORLD_HALF_M = 500;
 export const REAL_WORLD_BOUNDS = Object.freeze({
-  minX: -REAL_WORLD_HALF_M,
-  minZ: -REAL_WORLD_HALF_M,
-  maxX: REAL_WORLD_HALF_M,
-  maxZ: REAL_WORLD_HALF_M,
+  minX: -500,
+  minZ: -500,
+  maxX: 1150,
+  maxZ: 500,
 });
 
 /** The river hugs the west edge; centreline x as a function of z. */
@@ -56,6 +62,9 @@ export const REAL_WORLD_ZONES = Object.freeze({
     Object.freeze({ minX: -375, maxX: -300, minZ: -135, maxZ: -65, style: 'angled' }),
   ]),
   city: Object.freeze({ minX: -185, maxX: 285, minZ: -415, maxZ: 205 }),
+  richtown: Object.freeze({ minX: 520, maxX: 1140, minZ: -470, maxZ: 470 }),
+  marina: Object.freeze({ minX: 840, maxX: 1040, minZ: 140, maxZ: 400 }),
+  rtPlaza: Object.freeze({ minX: 600, maxX: 730, minZ: -90, maxZ: 40 }),
   roundabout: Object.freeze({ x: 0, z: 225, r: 34, islandR: 27 }),
   drift: Object.freeze({ x: -292, z: 338 }),
 });
@@ -67,6 +76,8 @@ export const REAL_WORLD_DISTRICTS = Object.freeze([
   { id: 'drift-zone', name: 'Дрифт-зона', x: -292, z: 338, radiusM: 175, biome: 'park' },
   { id: 'riverside', name: 'Риверсайд', x: -355, z: -60, radiusM: 210, biome: 'forest' },
   { id: 'south-quarter', name: 'Южный квартал', x: 0, z: 345, radiusM: 195, biome: 'urban' },
+  { id: 'richtown', name: 'RichTown', x: 700, z: -60, radiusM: 360, biome: 'urban' },
+  { id: 'richtown-marina', name: 'RichTown Marina', x: 950, z: 270, radiusM: 200, biome: 'urban' },
 ]);
 
 export const REAL_WORLD_SURFACES = Object.freeze({
@@ -180,6 +191,10 @@ function rawHeightSampler(seed) {
     h = lerp(h, 4.2, radialBlend(px, pz, REAL_WORLD_ZONES.drift.x, REAL_WORLD_ZONES.drift.z, 105, 200) * 0.92);
     h = lerp(h, 3.9, rectBlend(px, pz, { minX: -250, maxX: 250, minZ: 270, maxZ: 430 }, 70) * 0.8);
 
+    // RichTown plateau east of the old rim, then the marina basin cut.
+    h = lerp(h, 4.0, rectBlend(px, pz, REAL_WORLD_ZONES.richtown, 80) * 0.95);
+    h = lerp(h, -1.2, rectBlend(px, pz, REAL_WORLD_ZONES.marina, 10) * 0.99);
+
     // River channel along the west edge, with a land bridge where the
     // highway and the riverside road cross (z ~ 192..238).
     const dRiver = Math.abs(px - riverCenterX(pz));
@@ -188,11 +203,14 @@ function rawHeightSampler(seed) {
     const riverCut = (1 - smoothstep(10, 34, dRiver)) * (1 - gap) * endFade;
     h = lerp(h, -1.4, riverCut * 0.98);
 
-    // Rim hills close the playable square.
-    const edge = Math.max(
-      smoothstep(455, 500, Math.abs(px)),
-      smoothstep(455, 500, Math.abs(pz)),
+    // Rim hills close the playable area along the (now rectangular) bounds.
+    const dEdge = Math.min(
+      px - REAL_WORLD_BOUNDS.minX,
+      REAL_WORLD_BOUNDS.maxX - px,
+      pz - REAL_WORLD_BOUNDS.minZ,
+      REAL_WORLD_BOUNDS.maxZ - pz,
     );
+    const edge = 1 - smoothstep(0, 45, dEdge);
     h = lerp(h, h + 18, edge * 0.8);
     return Number.isFinite(h) ? h : 0;
   };
@@ -401,6 +419,30 @@ function buildRoadDefinition() {
   const parking2Gate = addNode('parking2-gate', 340, -290);
   addEdge('parking2-entry', grid[3][1], parking2Gate, straight(250, -290, 340, -290), { widthM: 10, speedLimitKmh: 30 });
 
+  // --- RichTown (v0.15): boulevard grid east of the old rim -------------------
+  // Columns: west frontage x=560, RichTown Boulevard x=760, east (marina)
+  // frontage x=1060. The highway terminates at the boulevard; the marina
+  // basin (x 840..1040, z 140..400) is reached via the z=60 / z=430 streets.
+  const RT_Z = [-430, -300, -110, 60, HIGHWAY_Z, 430];
+  const rtW = RT_Z.map((z, i) => addNode(`rt-w${i}`, 560, z));
+  const rtB = RT_Z.map((z, i) => addNode(`rt-b${i}`, 760, z));
+  const rtE = RT_Z.map((z, i) => addNode(`rt-e${i}`, 1060, z));
+  const rtStreet = { widthM: 13, speedLimitKmh: 50 };
+  for (let i = 0; i < RT_Z.length - 1; i++) {
+    addEdge(`rt-blvd-${i}`, rtB[i], rtB[i + 1], straight(760, RT_Z[i], 760, RT_Z[i + 1]), { widthM: 22, lanes: 4, speedLimitKmh: 70, name: 'RichTown Boulevard' });
+    addEdge(`rt-west-${i}`, rtW[i], rtW[i + 1], straight(560, RT_Z[i], 560, RT_Z[i + 1]), { widthM: 11, speedLimitKmh: 50 });
+    addEdge(`rt-east-${i}`, rtE[i], rtE[i + 1], straight(1060, RT_Z[i], 1060, RT_Z[i + 1]), { widthM: 11, speedLimitKmh: 50 });
+  }
+  RT_Z.forEach((z, i) => {
+    if (z === HIGHWAY_Z) return;
+    addEdge(`rt-st-${i}w`, rtW[i], rtB[i], straight(560, z, 760, z), rtStreet);
+    addEdge(`rt-st-${i}e`, rtB[i], rtE[i], straight(760, z, 1060, z), rtStreet);
+  });
+  addEdge('rt-highway-1', eastGate, rtW[4], straight(472, HIGHWAY_Z, 560, HIGHWAY_Z), { widthM: 15, speedLimitKmh: 90 });
+  addEdge('rt-highway-2', rtW[4], rtB[4], straight(560, HIGHWAY_Z, 760, HIGHWAY_Z), { widthM: 16, speedLimitKmh: 70 });
+  addEdge('rt-link-plaza', plazaGate, rtW[2], straight(345, -110, 560, -110), { widthM: 11, speedLimitKmh: 40 });
+  addEdge('rt-link-south', southE, rtW[5], [[220, 330], [380, 395], [560, 430]], { widthM: 10, speedLimitKmh: 60 });
+
   return { id: 'real-valley-roads', version: REAL_WORLD_VERSION, nodes, edges };
 }
 
@@ -532,9 +574,11 @@ function planDressing(core, seed) {
     buildings: [], trees: [], bushes: [], rocks: [], lamps: [], colliders: [],
     busStops: [], benches: [], hedges: [],
     signs: [], bins: [], bollards: [], fences: [], powerPoles: [],
+    palms: [], landmarks: [],
     pavedAreas: [
       { ...REAL_WORLD_ZONES.plaza, kind: 'plaza' },
       ...REAL_WORLD_ZONES.parkings.map((r) => ({ ...r, kind: 'parking' })),
+      { ...REAL_WORLD_ZONES.rtPlaza, kind: 'promenade' },
     ],
     roundabout: { ...REAL_WORLD_ZONES.roundabout },
     festival: { stage: null, tents: [], banners: [] },
@@ -614,10 +658,116 @@ function planDressing(core, seed) {
     });
   }
 
+  // --- RichTown: skyscraper blocks, landmarks, palms, fountain plaza ---------
+  {
+    const RT_COLS_X = [560, 760, 1060];
+    const RT_ROWS_Z = [-430, -300, -110, 60, 225, 430];
+    const towerFacades = ['glassTower', 'goldTower', 'marbleTower'];
+    const hotelFacades = ['hotelTower', 'glassTower', 'marbleTower', 'sandTower'];
+    const midFacades = ['sandTower', 'marbleTower', 'hotelTower', 'glassTower'];
+    for (let ix = 0; ix < RT_COLS_X.length - 1; ix++) {
+      for (let iz = 0; iz < RT_ROWS_Z.length - 1; iz++) {
+        const x0 = RT_COLS_X[ix] + 22;
+        const x1 = RT_COLS_X[ix + 1] - 22;
+        const z0 = RT_ROWS_Z[iz] + 20;
+        const z1 = RT_ROWS_Z[iz + 1] - 20;
+        const cols = Math.max(1, Math.floor((x1 - x0) / 52));
+        const rows = Math.max(1, Math.floor((z1 - z0) / 52));
+        const cellW = (x1 - x0) / cols;
+        const cellD = (z1 - z0) / rows;
+        for (let cx = 0; cx < cols; cx++) {
+          for (let cz = 0; cz < rows; cz++) {
+            const px = x0 + cellW * (cx + 0.5) + (rng() - 0.5) * 4;
+            const pz = z0 + cellD * (cz + 0.5) + (rng() - 0.5) * 4;
+            if (inRect(px, pz, REAL_WORLD_ZONES.marina, 26)) continue;
+            if (inRect(px, pz, REAL_WORLD_ZONES.rtPlaza, 14)) continue;
+            if (Math.hypot(px - 665, pz + 170) < 46) continue; // landmark tower plot
+            if (rng() < 0.14) continue; // open plot / plaza gap
+            const distCore = Math.hypot(px - 760, pz - 60);
+            const kind = distCore < 270 ? 'rt-tower' : distCore < 430 ? 'rt-hotel' : 'rt-mid';
+            const h = kind === 'rt-tower' ? 42 + rng() * 63
+              : kind === 'rt-hotel' ? 22 + rng() * 33 : 10 + rng() * 16;
+            const pool = kind === 'rt-tower' ? towerFacades : kind === 'rt-hotel' ? hotelFacades : midFacades;
+            const w = clamp(cellW * (0.5 + rng() * 0.22), 18, 40);
+            const d = clamp(cellD * (0.5 + rng() * 0.22), 18, 40);
+            const py = core.heightAt(px, pz);
+            if (py < 0.8 || slopeApprox(core.heightAt, px, pz) > 0.25) continue;
+            const near = core.nearestRoad(px, pz, { maxDistanceM: 40 });
+            if (near && near.edgeDistanceM < 5) continue;
+            if (overlapsBuilding(px, pz, Math.max(w, d) * 0.4)) continue;
+            pushBuilding({
+              x: px, z: pz, y: py - 0.3, rotY: rng() < 0.12 ? Math.PI / 4 : 0,
+              w, d, h, roofH: 0, kind,
+              facade: pool[Math.floor(rng() * pool.length)],
+              tint: 0.88 + rng() * 0.28,
+            });
+          }
+        }
+      }
+    }
+
+    // Landmarks are rendered bespoke by the scene; here only data + colliders.
+    plan.landmarks.push({ kind: 'rt-tower', x: 665, z: -170, y: core.heightAt(665, -170) - 0.3, h: 148 });
+    addCollider({ kind: 'obb', x: 665, z: -170, halfWidthM: 24, halfDepthM: 24, rotationY: 0 });
+    plan.landmarks.push({ kind: 'rt-arch', x: 760, z: 60, y: core.heightAt(760, 60), h: 43 });
+    for (const px of [745, 775]) {
+      addCollider({ kind: 'obb', x: px, z: 60, halfWidthM: 2.4, halfDepthM: 3.2, rotationY: 0 });
+    }
+    plan.landmarks.push({ kind: 'rt-fountain', x: 665, z: -25, y: core.heightAt(665, -25), r: 16 });
+    addCollider({ kind: 'circle', x: 665, z: -25, r: 16.8 });
+
+    // Palms: boulevard sidewalks, marina promenade, fountain ring.
+    const pushPalm = (x, z) => {
+      plan.palms.push({ x, z, y: core.heightAt(x, z) - 0.05, rotY: rng() * Math.PI * 2, s: 0.9 + rng() * 0.35 });
+      addCollider({ kind: 'circle', x, z, r: 0.35 });
+    };
+    for (let z = -415; z <= 415; z += 21) {
+      if (RT_ROWS_Z.some((rz) => Math.abs(z - rz) < 13)) continue;
+      pushPalm(745.5, z);
+      pushPalm(774.5, z + 10);
+    }
+    for (let z = 160; z <= 385; z += 23) pushPalm(826, z);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.39;
+      pushPalm(665 + Math.cos(a) * 26, -25 + Math.sin(a) * 26);
+    }
+
+    // Fountain-plaza furniture: benches, bins, bollards, hedge.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.2;
+      const bx = 665 + Math.cos(a) * 21;
+      const bz = -25 + Math.sin(a) * 21;
+      plan.benches.push({ x: bx, z: bz, y: core.heightAt(bx, bz), rotY: Math.atan2(-Math.cos(a), -Math.sin(a)) });
+      addCollider({ kind: 'circle', x: bx, z: bz, r: 0.85 });
+      if (i % 2 === 0) {
+        const nx = bx + 2.2;
+        const nz = bz + 0.6;
+        plan.bins.push({ x: nx, z: nz, y: core.heightAt(nx, nz), rotY: rng() * Math.PI });
+        addCollider({ kind: 'circle', x: nx, z: nz, r: 0.34 });
+      }
+    }
+    for (let z = -80; z <= 30; z += 11) {
+      plan.bollards.push({ x: 736, z, y: core.heightAt(736, z) });
+      addCollider({ kind: 'circle', x: 736, z, r: 0.2 });
+    }
+    for (let x = 606; x <= 724; x += 11) {
+      plan.hedges.push({ x, z: 46, y: core.heightAt(x, 46), rotY: 0, w: 10.4 });
+      addCollider({ kind: 'obb', x, z: 46, halfWidthM: 5.2, halfDepthM: 0.65, rotationY: 0 });
+    }
+    // District gateway signs.
+    const rtSign = (x, z, rotY, text) => {
+      plan.signs.push({ x, z, y: core.heightAt(x, z), rotY, type: 'text', text });
+      addCollider({ kind: 'circle', x, z, r: 0.22 });
+    };
+    rtSign(505, 242, -Math.PI / 2, 'RICHTOWN');
+    rtSign(748, 412, Math.PI, 'RICHTOWN');
+    rtSign(832, 72, -Math.PI / 2, 'MARINA');
+  }
+
   // --- Sparse houses along the riverside road and southern links ------------
   const rural = /^(river-road|north-link|south-st|sw-link|se-link)/;
   for (const e of core.roadGraph.edges) {
-    if (plan.buildings.length >= 260) break;
+    if (plan.buildings.length >= 400) break;
     if (!rural.test(e.id)) continue;
     for (let i = 3; i < e.samples.length - 3; i++) {
       const sample = e.samples[i];
@@ -677,7 +827,7 @@ function planDressing(core, seed) {
   addCollider({ kind: 'circle', x: plan.roundabout.x, z: plan.roundabout.z, r: 24 });
 
   // --- Lamps along lit streets --------------------------------------------------
-  const lit = /^(street-|avenue|hw-|drag-|south-|rb-arc|plaza-entry|parking-entry)/;
+  const lit = /^(street-|avenue|hw-|drag-|south-|rb-arc|plaza-entry|parking-entry|rt-)/;
   for (const e of core.roadGraph.edges) {
     if (!lit.test(e.id)) continue;
     for (let i = 3; i < e.samples.length - 3; i++) {
@@ -699,9 +849,9 @@ function planDressing(core, seed) {
   }
 
   // --- Bus stops along the avenue, highway and southern street ------------------
-  const busEdges = /^(avenue-\d|avenue-rb|avenue-south|hw-|south-st)/;
+  const busEdges = /^(avenue-\d|avenue-rb|avenue-south|hw-|south-st|rt-blvd|rt-highway)/;
   for (const e of core.roadGraph.edges) {
-    if (plan.busStops.length >= 18) break;
+    if (plan.busStops.length >= 26) break;
     if (!busEdges.test(e.id)) continue;
     for (let i = 4; i < e.samples.length - 4; i++) {
       const sample = e.samples[i];
@@ -773,7 +923,7 @@ function planDressing(core, seed) {
   pushSign(-146, 241, Math.PI, 'parking');
   pushSign(-296, -62, Math.PI / 2, 'parking');
   for (const e of core.roadGraph.edges) {
-    if (!/^(hw-|avenue-\d)/.test(e.id)) continue;
+    if (!/^(hw-|avenue-\d|rt-highway|rt-blvd)/.test(e.id)) continue;
     let nextAt = 60;
     for (let i = 2; i < e.samples.length - 2; i++) {
       const sample = e.samples[i];
@@ -875,9 +1025,10 @@ function planDressing(core, seed) {
   let attempts = 0;
   while (plan.trees.length < 620 && attempts < 6500) {
     attempts++;
-    const x = -485 + rng() * 970;
+    const x = -485 + rng() * 1620;
     const z = -485 + rng() * 970;
     if (Math.abs(x - riverCenterX(z)) < 20) continue;
+    if (inRect(x, z, REAL_WORLD_ZONES.richtown, 10)) continue; // palms dress the district instead
     if (plan.pavedAreas.some((r) => inRect(x, z, r, 4))) continue;
     const y = core.heightAt(x, z);
     if (y < 0.9) continue;
@@ -906,8 +1057,9 @@ function planDressing(core, seed) {
   attempts = 0;
   while (plan.rocks.length < 90 && attempts < 2600) {
     attempts++;
-    const x = -488 + rng() * 976;
+    const x = -488 + rng() * 1626;
     const z = -488 + rng() * 976;
+    if (inRect(x, z, REAL_WORLD_ZONES.richtown, 6)) continue;
     const y = core.heightAt(x, z);
     if (y < 0.3) continue;
     const slope = slopeApprox(core.heightAt, x, z);
@@ -922,11 +1074,14 @@ function planDressing(core, seed) {
   }
 
   // --- Invisible boundary walls just inside the rim -------------------------------
-  const B = 492;
-  addCollider({ kind: 'segment', x1: -B, z1: -B, x2: B, z2: -B, r: 2 });
-  addCollider({ kind: 'segment', x1: B, z1: -B, x2: B, z2: B, r: 2 });
-  addCollider({ kind: 'segment', x1: B, z1: B, x2: -B, z2: B, r: 2 });
-  addCollider({ kind: 'segment', x1: -B, z1: B, x2: -B, z2: -B, r: 2 });
+  const bx0 = REAL_WORLD_BOUNDS.minX + 8;
+  const bx1 = REAL_WORLD_BOUNDS.maxX - 8;
+  const bz0 = REAL_WORLD_BOUNDS.minZ + 8;
+  const bz1 = REAL_WORLD_BOUNDS.maxZ - 8;
+  addCollider({ kind: 'segment', x1: bx0, z1: bz0, x2: bx1, z2: bz0, r: 2 });
+  addCollider({ kind: 'segment', x1: bx1, z1: bz0, x2: bx1, z2: bz1, r: 2 });
+  addCollider({ kind: 'segment', x1: bx1, z1: bz1, x2: bx0, z2: bz1, r: 2 });
+  addCollider({ kind: 'segment', x1: bx0, z1: bz1, x2: bx0, z2: bz0, r: 2 });
   return plan;
 }
 
@@ -968,10 +1123,13 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
     if (h <= REAL_WORLD_RIVER.waterLevelM + 0.05 && Math.abs(x - riverCenterX(z)) < 40) {
       return { ...REAL_WORLD_SURFACES.water, heightM: h, road: nearest, district };
     }
+    if (h <= REAL_WORLD_RIVER.waterLevelM + 0.05 && inRect(x, z, REAL_WORLD_ZONES.marina, 4)) {
+      return { ...REAL_WORLD_SURFACES.water, heightM: h, road: nearest, district };
+    }
     if (inRect(x, z, REAL_WORLD_ZONES.plaza) || REAL_WORLD_ZONES.parkings.some((r) => inRect(x, z, r))) {
       return { ...REAL_WORLD_SURFACES.concrete, heightM: h, road: nearest, district };
     }
-    if (inRect(x, z, REAL_WORLD_ZONES.city) && h < 9) {
+    if ((inRect(x, z, REAL_WORLD_ZONES.city) || inRect(x, z, REAL_WORLD_ZONES.richtown)) && h < 9) {
       return { ...REAL_WORLD_SURFACES.concrete, heightM: h, road: nearest, district };
     }
     const slope = slopeAt(x, z).magnitude;
@@ -985,7 +1143,7 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
   function terrainColorAt(x, z, h, slope) {
     if (h <= 0.4) return [0.45, 0.42, 0.3];
     if (slope > 0.5) return [0.42, 0.4, 0.37];
-    if (inRect(x, z, REAL_WORLD_ZONES.city)) return [0.45, 0.46, 0.46];
+    if (inRect(x, z, REAL_WORLD_ZONES.city) || inRect(x, z, REAL_WORLD_ZONES.richtown)) return [0.45, 0.46, 0.46];
     return [0.3, 0.48, 0.21];
   }
   function spawnPoint(lane = 0) {
@@ -1034,6 +1192,8 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
         bollards: dressingPlan.bollards.length,
         fences: dressingPlan.fences.length,
         powerPoles: dressingPlan.powerPoles.length,
+        palms: dressingPlan.palms.length,
+        landmarks: dressingPlan.landmarks.length,
       },
     };
   }

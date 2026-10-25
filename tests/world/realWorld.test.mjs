@@ -5,11 +5,11 @@ import { createRealWorldFoundation, riverCenterX } from '../../src/world/realWor
 
 const foundation = createRealWorldFoundation();
 
-test('Real Valley is a 1x1 km world with a dense street network', () => {
+test('Real Valley world with a dense street network (grown east in v0.15)', () => {
   const stats = foundation.stats();
-  assert.equal(stats.worldSizeM, 1000);
+  assert.equal(stats.worldSizeM, 1650);
   assert.equal(foundation.bounds.minX, -500);
-  assert.equal(foundation.bounds.maxX, 500);
+  assert.equal(foundation.bounds.maxX, 1150);
   assert.ok(stats.roadLengthM > 7500, `road length ${stats.roadLengthM}`);
   assert.ok(stats.roadEdges >= 85, `road edges ${stats.roadEdges}`);
   assert.ok(stats.districts >= 6);
@@ -92,4 +92,41 @@ test('dressing plan is dense and buildings keep off the asphalt', () => {
     assert.ok(!near || near.edgeDistanceM > 1, `building at ${b.x},${b.z} intrudes on a road`);
     assert.ok(b.h >= 4 && b.w >= 7, 'real-metre building sizes');
   }
+});
+
+test('RichTown: boulevard district with skyscrapers, landmarks, palms and marina', () => {
+  const plan = foundation.dressingPlan;
+  assert.equal(foundation.getDistrict(760, 60)?.id, 'richtown');
+  assert.equal(foundation.getDistrict(760, 60)?.name, 'RichTown');
+  assert.equal(foundation.getDistrict(950, 270)?.id, 'richtown-marina');
+  const blvd = foundation.roadGraph.edges.filter((e) => e.id.startsWith('rt-blvd'));
+  assert.ok(blvd.length >= 5, 'RichTown Boulevard edges exist');
+  assert.ok(blvd.every((e) => e.widthM >= 20), 'boulevard is wide');
+  assert.ok(foundation.findRoute('west-gate', 'rt-b3'), 'route valley -> boulevard exists');
+  assert.ok(foundation.findRoute('south-gate', 'rt-e0'), 'route south -> marina frontage exists');
+  // Marina basin is carved below water level and reads as water.
+  assert.ok(foundation.heightAt(940, 270) < 0, 'marina bed below water level');
+  assert.equal(foundation.surfaceAt(940, 270).id, 'water');
+  assert.equal(foundation.surfaceAt(760, 100).id, 'asphalt', 'boulevard driving surface');
+  // Skyscrapers with the new facade family.
+  const rt = plan.buildings.filter((b) => String(b.kind).startsWith('rt-'));
+  assert.ok(rt.length >= 35, `RichTown buildings ${rt.length}`);
+  assert.ok(Math.max(...rt.map((b) => b.h)) >= 70, 'real skyscrapers planned');
+  const rtFacades = new Set(rt.map((b) => b.facade));
+  const expected = ['glassTower', 'goldTower', 'marbleTower', 'hotelTower', 'sandTower'];
+  assert.ok(expected.filter((f) => rtFacades.has(f)).length >= 4, `RichTown facades: ${[...rtFacades].join(',')}`);
+  assert.ok(rt.every((b) => !(b.x > 830 && b.x < 1050 && b.z > 130 && b.z < 410)), 'no towers in the marina');
+  // Landmarks and palms.
+  const lm = new Map(plan.landmarks.map((l) => [l.kind, l]));
+  assert.ok(lm.get('rt-tower')?.h >= 140, 'needle tower landmark');
+  assert.ok(lm.get('rt-arch'), 'golden arch landmark');
+  assert.ok(lm.get('rt-fountain'), 'fountain landmark');
+  assert.ok(plan.palms.length >= 60, `palms ${plan.palms.length}`);
+  // The district stays clear of wild scatter.
+  const zone = foundation.zones.richtown;
+  assert.ok(plan.trees.every((t) => !(t.x > zone.minX && t.x < zone.maxX && t.z > zone.minZ && t.z < zone.maxZ)), 'no wild trees inside RichTown');
+  assert.ok(plan.signs.some((s) => s.text === 'RICHTOWN'), 'RICHTOWN gateway sign planned');
+  const stats = foundation.stats();
+  assert.equal(stats.dressing.palms, plan.palms.length);
+  assert.equal(stats.dressing.landmarks, 3);
 });

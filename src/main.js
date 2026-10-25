@@ -26,8 +26,9 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.14.0: реалистичный мир Real Valley 1×1 км на сгенерированных
-   фототекстурах (асфальт с разметкой, фасады, трава, скалы, кровля),
+   v0.15.0: мир Real Valley вырос на восток новым районом RichTown в
+   стиле Дубая (бульвар с пальмами, стеклянные и золотые небоскрёбы,
+   башня-игла, золотая арка, фонтан и марина) на фототекстурах,
    дуб из FBX-модели пользователя и растительный пак из его Obj.obj
    (второе дерево, кусты, кустарник и веерное растение), Mustang
    Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт и нитро.
@@ -576,7 +577,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.14.0',
+    version: '0.15.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -3737,12 +3738,13 @@ function updatePlayer(dt) {
 
   // Граница мира
   if (britain) {
-    const bound = (worldFoundation.worldSizeM || 1000) / 2 - 6;
+    const halfW = (worldFoundation.worldSizeM || 1000) / 2;
+    const wb = worldFoundation.bounds || { minX: -halfW, maxX: halfW, minZ: -halfW, maxZ: halfW };
     let hitBound = false;
-    if (pos.x > bound) { pos.x = bound; hitBound = true; }
-    if (pos.x < -bound) { pos.x = -bound; hitBound = true; }
-    if (pos.z > bound) { pos.z = bound; hitBound = true; }
-    if (pos.z < -bound) { pos.z = -bound; hitBound = true; }
+    if (pos.x > wb.maxX - 6) { pos.x = wb.maxX - 6; hitBound = true; }
+    if (pos.x < wb.minX + 6) { pos.x = wb.minX + 6; hitBound = true; }
+    if (pos.z > wb.maxZ - 6) { pos.z = wb.maxZ - 6; hitBound = true; }
+    if (pos.z < wb.minZ + 6) { pos.z = wb.minZ + 6; hitBound = true; }
     if (hitBound) {
       player.vel.multiplyScalar(0.4);
       player.yawRate *= 0.5;
@@ -4290,22 +4292,31 @@ function buildBritainMinimapBase(S) {
   c.width = S;
   c.height = S;
   const g = c.getContext('2d');
-  const worldSize = worldFoundation.worldSizeM || 1000;
-  const scale = S / (worldSize * 1.08);
-  const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
+  const halfW = (worldFoundation.worldSizeM || 1000) / 2;
+  const wb = worldFoundation.bounds || { minX: -halfW, maxX: halfW, minZ: -halfW, maxZ: halfW };
+  const scale = S / (Math.max(wb.maxX - wb.minX, wb.maxZ - wb.minZ) * 1.08);
+  const mcx = (wb.minX + wb.maxX) / 2;
+  const mcz = (wb.minZ + wb.maxZ) / 2;
+  const toMap = (x, z) => [S / 2 + (x - mcx) * scale, S / 2 + (z - mcz) * scale];
   g.beginPath();
   g.arc(S / 2, S / 2, S / 2 - 1, 0, TAU);
   g.clip();
   g.fillStyle = '#0a2a3d';
   g.fillRect(0, 0, S, S);
-  const half = worldSize / 2;
-  const [lx, ly] = toMap(-half, -half);
-  const [rx, ry] = toMap(half, half);
+  const [lx, ly] = toMap(wb.minX, wb.minZ);
+  const [rx, ry] = toMap(wb.maxX, wb.maxZ);
   g.fillStyle = 'rgba(49, 92, 55, 0.94)';
   g.fillRect(lx, ly, rx - lx, ry - ly);
   g.strokeStyle = 'rgba(236, 211, 156, 0.78)';
   g.lineWidth = 2;
   g.strokeRect(lx, ly, rx - lx, ry - ly);
+  if (worldFoundation.zones?.marina) {
+    const m = worldFoundation.zones.marina;
+    const [mx0, mz0] = toMap(m.minX, m.minZ);
+    const [mx1, mz1] = toMap(m.maxX, m.maxZ);
+    g.fillStyle = '#155e7d';
+    g.fillRect(mx0, mz0, mx1 - mx0, mz1 - mz0);
+  }
   if (worldFoundation.river) {
     g.beginPath();
     worldFoundation.river.path.forEach((pt, i) => {
@@ -4352,8 +4363,10 @@ function buildBritainMinimapBase(S) {
 function drawBritainMinimap() {
   const S = 132;
   if (!britainMinimapBase) britainMinimapBase = buildBritainMinimapBase(S);
-  const scale = S / ((worldFoundation.worldSizeM || 1000) * 1.08);
-  const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
+  const halfW = (worldFoundation.worldSizeM || 1000) / 2;
+  const wb = worldFoundation.bounds || { minX: -halfW, maxX: halfW, minZ: -halfW, maxZ: halfW };
+  const scale = S / (Math.max(wb.maxX - wb.minX, wb.maxZ - wb.minZ) * 1.08);
+  const toMap = (x, z) => [S / 2 + (x - (wb.minX + wb.maxX) / 2) * scale, S / 2 + (z - (wb.minZ + wb.maxZ) / 2) * scale];
   minimap.clearRect(0, 0, S, S);
   minimap.save();
   minimap.beginPath();
