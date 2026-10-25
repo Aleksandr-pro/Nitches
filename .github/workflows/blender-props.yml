@@ -15,21 +15,31 @@ permissions:
 
 concurrency:
   group: blender-props-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-props:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install Blender
+      - name: Install Blender (official tarball, pinned)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y blender python3-numpy
+          set -e
+          for v in "4.2/blender-4.2.3-linux-x64" "4.1/blender-4.1.1-linux-x64" "4.0/blender-4.0.2-linux-x64"; do
+            url="https://download.blender.org/release/Blender${v}.tar.xz"
+            echo "Trying $url"
+            if curl -fL --retry 2 --connect-timeout 30 -o blender.tar.xz "$url"; then
+              echo "Downloaded $v"
+              break
+            fi
+          done
+          tar -xf blender.tar.xz
+          sudo ln -s "$PWD"/blender-*/blender /usr/local/bin/blender
           blender --version
 
       - name: Build prop GLBs
