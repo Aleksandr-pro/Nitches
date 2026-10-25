@@ -5,6 +5,8 @@ name: Blender Props Build
 # .gitattributes exceptions). Runs whenever the Blender sources change.
 on:
   push:
+    branches:
+      - '**'
     paths:
       - 'blender/**'
       - '.github/workflows/blender-props.yml'
@@ -94,7 +96,7 @@ jobs:
           }
           console.log('SMOKE OK');
           EOF
-          node props-smoke.mjs props_out/bus_shelter.glb props_out/street_lamp.glb props_out/hero_building.glb | tee props-report.txt
+          node props-smoke.mjs props_out/*.glb | tee props-report.txt
 
       - name: Commit GLBs to branch
         run: |
