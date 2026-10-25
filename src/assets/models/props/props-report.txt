@@ -1,4 +1,7 @@
 props_out/bus_shelter.glb: meshes=26 tris=816 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,PropsGlass,PropsWood
-props_out/street_lamp.glb: meshes=10 tris=560 size=0.48x6.63x4.90m minY=0.00 mats=PropsMetal,LampGlow
+props_out/glass_tower.glb: meshes=96 tris=2776 size=33.60x70.71x33.60m minY=0.00 mats=RoofDark,FacadeAccent,PropsGlass,PropsMetal,FacadeGlass,LampGlow
 props_out/hero_building.glb: meshes=299 tris=4668 size=24.50x18.40x18.20m minY=0.00 mats=FacadeAccent,FacadeMain,RoofDark,PropsMetal,PropsGlass
+props_out/street_lamp.glb: meshes=10 tris=560 size=0.48x6.63x4.90m minY=0.00 mats=PropsMetal,LampGlow
+props_out/townhouse.glb: meshes=92 tris=1904 size=13.15x9.99x13.40m minY=0.00 mats=FacadeAccent,FacadeMain,RoofTile,RoofDark,PropsMetal,PropsGlass,PropsWood
+props_out/villa.glb: meshes=76 tris=1856 size=19.15x7.90x15.14m minY=0.00 mats=RoofDark,FacadeMain,FacadeAccent,PropsGlass,PropsWood,PropsMetal
 SMOKE OK
