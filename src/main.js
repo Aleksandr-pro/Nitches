@@ -23,7 +23,7 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.10.0: реалистичный мир Real Valley 1×1 км на сгенерированных
+   v0.11.0: реалистичный мир Real Valley 1×1 км на сгенерированных
    фототекстурах (асфальт с разметкой, фасады, трава, скалы, кровля),
    Mustang Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт
    и нитро. Старый остров: ?world=legacy.
@@ -571,7 +571,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.10.0',
+    version: '0.11.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,

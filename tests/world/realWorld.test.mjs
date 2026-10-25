@@ -24,6 +24,11 @@ test('reference-map infrastructure: roundabout, drift loop, drag strip', () => {
   assert.equal(loop.length, 7, 'drift circuit is a closed loop');
   const drag = foundation.roadGraph.edgesById.get('drag-strip');
   assert.ok(drag && drag.lengthM > 85, 'drag strip edge exists');
+  assert.ok(foundation.roadGraph.edgesById.get('alley-v-0'), 'N-S mid-block alley exists');
+  assert.ok(foundation.roadGraph.edgesById.get('alley-h-0'), 'E-W mid-block alley exists');
+  assert.ok(foundation.findRoute('ax3', 'south-gate'), 'alley junctions are graph-connected');
+  const parkingAreas = foundation.dressingPlan.pavedAreas.filter((a) => a.kind === 'parking');
+  assert.ok(parkingAreas.length >= 6, `parking lots ${parkingAreas.length}`);
   assert.equal(foundation.getDistrict(-292, 338)?.id, 'drift-zone');
   assert.equal(foundation.getDistrict(0, -390)?.id, 'drag-strip');
   assert.equal(foundation.getDistrict(390, -160)?.id, 'festival');
@@ -67,6 +72,10 @@ test('dressing plan is dense and buildings keep off the asphalt', () => {
   assert.ok(plan.lamps.length >= 80, `lamps ${plan.lamps.length}`);
   assert.ok(plan.festival.tents.length >= 8, 'festival tents planned');
   assert.ok(plan.festival.stage, 'festival stage planned');
+  assert.ok(plan.busStops.length >= 12, `bus stops ${plan.busStops.length}`);
+  assert.ok(plan.benches.length >= 14, `benches ${plan.benches.length}`);
+  assert.ok(plan.hedges.length >= 24, `hedges ${plan.hedges.length}`);
+  assert.ok(plan.lamps.every((l) => l.side === 1 || l.side === -1), 'lamps know their road side');
   const kinds = new Set(plan.buildings.map((b) => b.kind));
   assert.ok(kinds.has('shop') && kinds.has('cafe'), 'shop and cafe landmarks exist');
   const facades = new Set(plan.buildings.map((b) => b.facade));
