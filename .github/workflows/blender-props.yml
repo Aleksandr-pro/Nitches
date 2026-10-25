@@ -58,7 +58,7 @@ jobs:
 
       - name: Smoke-parse GLBs with three GLTFLoader
         run: |
-          cat > /tmp/props-smoke.mjs <<'EOF'
+          cat > props-smoke.mjs <<'EOF'
           globalThis.window = globalThis;
           globalThis.document = {
             createElementNS: () => ({ getContext: () => null }),
@@ -94,15 +94,16 @@ jobs:
           }
           console.log('SMOKE OK');
           EOF
-          node /tmp/props-smoke.mjs props_out/bus_shelter.glb props_out/street_lamp.glb props_out/hero_building.glb
+          node props-smoke.mjs props_out/bus_shelter.glb props_out/street_lamp.glb props_out/hero_building.glb | tee props-report.txt
 
       - name: Commit GLBs to branch
         run: |
           mkdir -p src/assets/models/props
           cp props_out/*.glb src/assets/models/props/
+          cp props-report.txt src/assets/models/props/props-report.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/assets/models/props/*.glb
+          git add src/assets/models/props/*.glb src/assets/models/props/props-report.txt
           if git diff --cached --quiet; then
             echo "No GLB changes to commit."
             exit 0
