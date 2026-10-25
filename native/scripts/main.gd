@@ -21,9 +21,13 @@ var _camera: Camera3D
 var _camera_mode := CAMERA_CHASE
 var _snap_camera := true
 var _time_index := 0
+var _smoke_mode := false
+var _smoke_frames := 0
+var _smoke_completed := false
 
 
 func _ready() -> void:
+	_smoke_mode = OS.get_cmdline_user_args().has("--native-smoke") or OS.get_cmdline_args().has("--native-smoke")
 	Engine.max_fps = 60
 	if OS.has_feature("android"):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -33,6 +37,8 @@ func _ready() -> void:
 	add_child(_world)
 	var stats := _world.build_world()
 	print("[native] RichTown build stats: ", stats)
+	if not _world.build_error.is_empty():
+		push_error("Native world failed to build: %s" % _world.build_error)
 
 	_vehicle = VehicleScript.new() as NativeVehicle
 	add_child(_vehicle)
@@ -56,11 +62,12 @@ func _ready() -> void:
 func _create_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "GameCamera"
-	_camera.current = true
 	_camera.near = 0.12
 	_camera.far = 2800.0
 	_camera.fov = 65.0
 	add_child(_camera)
+	_camera.make_current()
+	_camera.current = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -104,8 +111,15 @@ func _reset_vehicle_to_road() -> void:
 
 
 func _process(delta: float) -> void:
+	if _camera != null and not _camera.is_current():
+		_camera.make_current()
 	_update_camera(delta, _snap_camera)
 	_snap_camera = false
+	if _smoke_mode and not _smoke_completed:
+		_smoke_frames += 1
+		if _smoke_frames >= 90:
+			_smoke_completed = true
+			_run_smoke_checks()
 
 
 func _update_camera(delta: float, snap: bool) -> void:
@@ -140,3 +154,99 @@ func _update_camera(delta: float, snap: bool) -> void:
 			var target := _vehicle.global_position + Vector3.UP * 1.35 + forward * (8.0 + speed_ratio * 7.0)
 			if _camera.global_position.distance_squared_to(target) > 0.001:
 				_camera.look_at(target, Vector3.UP)
+
+
+func _count_geometry_instances(node: Node) -> int:
+	var count := 0
+	if node is MeshInstance3D or node is MultiMeshInstance3D:
+		count += 1
+	for child in node.get_children():
+		count += _count_geometry_instances(child)
+	return count
+
+
+func _rect_is_on_screen(rect: Rect2, viewport_size: Vector2) -> bool:
+	return rect.size.x > 1.0 and rect.size.y > 1.0 and rect.position.x >= -1.0 and rect.position.y >= -1.0 and rect.end.x <= viewport_size.x + 1.0 and rect.end.y <= viewport_size.y + 1.0
+
+
+func _run_smoke_checks() -> void:
+	var failures: Array[String] = []
+	if _world == null:
+		failures.append("world node is missing")
+	if _vehicle == null:
+		failures.append("vehicle node is missing")
+	if _camera == null:
+		failures.append("camera node is missing")
+	if _hud == null:
+		failures.append("HUD node is missing")
+	if not failures.is_empty():
+		_finish_smoke(failures)
+		return
+
+	var stats := _world.get_stats()
+	var world_data := _world.get_world_data()
+	if not _world.has_world_data() or world_data.is_empty():
+		failures.append("exported world data is empty: %s" % _world.build_error)
+	if int(stats.get("terrainVertices", 0)) < 9000:
+		failures.append("terrain stats are missing or too small")
+	if int(stats.get("roadEdges", 0)) < 35:
+		failures.append("road stats are missing or too small")
+	if int(stats.get("buildings", 0)) < 45:
+		failures.append("building stats are missing or too small")
+	if int(stats.get("landmarks", 0)) != 15:
+		failures.append("landmark stats are incomplete")
+
+	var world_geometry_count := _count_geometry_instances(_world)
+	if world_geometry_count < 20:
+		failures.append("world geometry count is too low: %d" % world_geometry_count)
+	var vehicle_geometry_count := _count_geometry_instances(_vehicle)
+	if vehicle_geometry_count == 0:
+		failures.append("vehicle has no renderable geometry")
+	if _vehicle.grounded_wheel_count < 2:
+		failures.append("vehicle is not grounded after spawn: wheels=%d position=%s" % [_vehicle.grounded_wheel_count, str(_vehicle.global_position)])
+
+	var terrain_height := _world.height_at(_vehicle.global_position.x, _vehicle.global_position.z)
+	if _vehicle.global_position.y < terrain_height - 1.0 or _vehicle.global_position.y > terrain_height + 8.0:
+		failures.append("vehicle is outside the expected spawn height band: y=%.2f terrain=%.2f" % [_vehicle.global_position.y, terrain_height])
+
+	if not _camera.is_current() or get_viewport().get_camera_3d() != _camera:
+		failures.append("game camera is not the viewport's current camera")
+	var vehicle_view_point := _vehicle.global_position + Vector3.UP * 0.75
+	if _camera.is_position_behind(vehicle_view_point):
+		failures.append("vehicle is behind the game camera")
+	if not _camera.is_position_in_frustum(vehicle_view_point):
+		failures.append("vehicle is outside the game camera frustum")
+
+	var hud_state := _hud.get_smoke_state()
+	var minimap_counts: Dictionary = hud_state.get("minimap_counts", {})
+	if int(minimap_counts.get("roads", 0)) < 35 or int(minimap_counts.get("buildings", 0)) < 45:
+		failures.append("minimap did not receive complete world data: %s" % str(minimap_counts))
+	var performance_text := String(hud_state.get("performance_text", ""))
+	if performance_text.is_empty() or performance_text == "FPS —" or performance_text.contains("WORLD DATA ERROR"):
+		failures.append("HUD performance label did not update cleanly: %s" % performance_text)
+	var viewport_size: Vector2 = hud_state.get("viewport_size", Vector2.ZERO)
+	var speed_rect: Rect2 = hud_state.get("speed_rect", Rect2())
+	var pedal_rect: Rect2 = hud_state.get("pedal_rect", Rect2())
+	if not _rect_is_on_screen(speed_rect, viewport_size):
+		failures.append("speed panel is not fully on screen: rect=%s viewport=%s" % [str(speed_rect), str(viewport_size)])
+	if not _rect_is_on_screen(pedal_rect, viewport_size):
+		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
+
+	if failures.is_empty():
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s" % [
+			world_geometry_count,
+			vehicle_geometry_count,
+			str(_vehicle.global_position),
+			str(_camera.global_position),
+			str(minimap_counts),
+		])
+	_finish_smoke(failures)
+
+
+func _finish_smoke(failures: Array[String]) -> void:
+	if failures.is_empty():
+		get_tree().quit(0)
+		return
+	for failure in failures:
+		push_error("[native-smoke] FAIL: %s" % failure)
+	get_tree().quit(2)

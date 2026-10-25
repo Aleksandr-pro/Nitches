@@ -31,6 +31,9 @@ assert(mainScene.includes('res://scripts/main.gd'), 'main scene is not wired to 
 assert(preset.includes('platform="Android"'), 'Android export preset is missing');
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
+assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
+assert(preset.includes('version/code=2'), 'Native hotfix must bump Android versionCode to 2');
+assert(preset.includes('version/name="0.1.1-native-alpha"'), 'Native hotfix version name must be 0.1.1-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);

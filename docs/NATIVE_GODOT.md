@@ -21,7 +21,7 @@ HTML/JavaScript внутри APK.
 - существующие GLB, JPG/PNG и normal maps импортируются без повторной
   покупки или загрузки ассетов.
 
-## Что уже есть в Native Alpha 0.1
+## Что уже есть в Native Alpha 0.1.1
 
 - `native/project.godot` — настоящий Godot-проект, Mobile renderer, Jolt;
 - `native/scenes/main.tscn` — главная сцена;
@@ -46,6 +46,12 @@ HTML/JavaScript внутри APK.
 `scripts/export-native-world.mjs` экспортирует детерминированный план
 RichTown из существующего генератора мира в `native/data/richtown_native.json`.
 Это одноразовый мост данных: Godot не исполняет Three.js код.
+
+JSON не является обычным Godot-ресурсом, поэтому Android preset обязан
+содержать `include_filter="*.json"`. Без этого фильтра редакторный запуск
+может работать, а экспортированный APK останется без данных мира. Начиная с
+0.1.1 CI отдельно запускает экспортированный PCK вне исходного дерева и
+проверяет в APK путь `assets/data/richtown_native.json`.
 
 `scripts/sync-native-assets.mjs` копирует нужные файлы в игнорируемую папку
 `native/assets/` перед импортом Godot:
@@ -73,6 +79,12 @@ Godot 4.7.2 и export templates из GitHub Releases, настраивает And
 подписывает APK ключом из секретов (или одноразовым ключом раннера, если
 секретов нет), проверяет подпись и наличие `lib/arm64-v8a/libgodot_android.so`
 и загружает артефакт `NitchesHorizonNative-apk`.
+
+Перед APK workflow запускает строгий `--native-smoke`: данные мира не пустые,
+Mustang стоит на колёсах у спавна и находится в frustum текущей камеры,
+миникарта получила дороги/здания, а скорость и педали полностью лежат в
+viewport. Та же проверка повторяется на экспортированном PCK, чтобы успешный
+редакторный импорт больше не маскировал пустую телефонную сборку.
 
 Пароли keystore не хранятся в `export_presets.cfg`: CI передаёт их только
 через `GODOT_ANDROID_KEYSTORE_RELEASE_*` environment variables.

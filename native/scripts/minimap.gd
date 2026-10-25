@@ -28,6 +28,18 @@ func refresh() -> void:
 	queue_redraw()
 
 
+func has_data() -> bool:
+	return not _data.is_empty()
+
+
+func get_feature_counts() -> Dictionary:
+	return {
+		"roads": (_data.get("roads", []) as Array).size(),
+		"buildings": (_data.get("buildings", []) as Array).size(),
+		"landmarks": (_data.get("landmarks", []) as Array).size(),
+	}
+
+
 func _bounds() -> Dictionary:
 	return _data.get("bounds", {"minX": 520.0, "maxX": 1500.0, "minZ": -500.0, "maxZ": 500.0})
 
@@ -58,6 +70,9 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.045, 0.075, 0.88), true)
 	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.62, 0.12, 0.70), false, 1.5)
 	if _data.is_empty():
+		var inset := Vector2(10.0, 10.0)
+		draw_line(inset, size - inset, Color(1.0, 0.18, 0.08, 0.90), 3.0, true)
+		draw_line(Vector2(size.x - inset.x, inset.y), Vector2(inset.x, size.y - inset.y), Color(1.0, 0.18, 0.08, 0.90), 3.0, true)
 		return
 
 	_draw_zone("sea", Color(0.05, 0.42, 0.66, 0.82))

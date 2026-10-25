@@ -171,10 +171,21 @@ func _load_mustang_model() -> bool:
 	if model == null:
 		return false
 	model.name = "MustangModel"
+	if _count_mesh_instances(model) == 0:
+		push_warning("Mustang GLB contained no renderable meshes; using native fallback visual")
+		model.free()
+		return false
 	_visual_root.add_child(model)
 	_apply_model_materials(model)
 	_collect_wheel_visuals(model)
 	return true
+
+
+func _count_mesh_instances(node: Node) -> int:
+	var count := 1 if node is MeshInstance3D else 0
+	for child in node.get_children():
+		count += _count_mesh_instances(child)
+	return count
 
 
 func _paint_material(color: Color) -> StandardMaterial3D:
