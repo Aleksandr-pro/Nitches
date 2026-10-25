@@ -203,7 +203,6 @@ func _apply_model_materials(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		mesh_instance.receive_shadow = true
 		if mesh_instance.mesh != null:
 			for surface_index in mesh_instance.mesh.get_surface_count():
 				var material := mesh_instance.get_surface_override_material(surface_index)
@@ -309,7 +308,6 @@ func _add_visual_box(size: Vector3, center: Vector3, material: Material, node_na
 	instance.material_override = material
 	instance.position = center
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	instance.receive_shadow = true
 	_visual_root.add_child(instance)
 
 
