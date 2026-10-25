@@ -55,6 +55,33 @@ import facadeHotelUrl from '../assets/textures/realworld/facade_hotel.jpg';
 import facadeSandstoneUrl from '../assets/textures/realworld/facade_sandstone.jpg';
 import promenadeUrl from '../assets/textures/realworld/promenade.jpg';
 import roofPoolUrl from '../assets/textures/realworld/roof_pool.jpg';
+import userGrassUrl from '../assets/textures/realworld/user_grass.jpg';
+import userSandRippledUrl from '../assets/textures/realworld/user_sand_rippled.jpg';
+import userSandBeachUrl from '../assets/textures/realworld/user_sand_beach_white.jpg';
+import userSandWetUrl from '../assets/textures/realworld/user_sand_wet.jpg';
+import userAsphaltDashedUrl from '../assets/textures/realworld/user_asphalt_dashed.jpg';
+import userAsphaltPlainUrl from '../assets/textures/realworld/user_asphalt_plain.jpg';
+import userAsphaltPotholeUrl from '../assets/textures/realworld/user_asphalt_pothole.jpg';
+import userAsphaltDoubleYellowUrl from '../assets/textures/realworld/user_asphalt_double_yellow.jpg';
+import userCrosswalkUrl from '../assets/textures/realworld/user_crosswalk.jpg';
+import userConcreteSlabsUrl from '../assets/textures/realworld/user_concrete_slabs.jpg';
+import userStoneTilesUrl from '../assets/textures/realworld/user_stone_tiles_beige.jpg';
+import userRoofTerracottaUrl from '../assets/textures/realworld/user_roof_terracotta.jpg';
+import userRoofWeatheredUrl from '../assets/textures/realworld/user_roof_weathered.jpg';
+import userFacadeBlueGlassUrl from '../assets/textures/realworld/user_facade_blue_glass.jpg';
+import userFacadeSilverUrl from '../assets/textures/realworld/user_facade_silver.jpg';
+import userFacadeGoldGridUrl from '../assets/textures/realworld/user_facade_gold_grid.jpg';
+import userMarbleTilesUrl from '../assets/textures/realworld/user_marble_tiles.jpg';
+import userTravertineUrl from '../assets/textures/realworld/user_travertine.jpg';
+import userPlasterUrl from '../assets/textures/realworld/user_plaster_white.jpg';
+import userWoodSlatsUrl from '../assets/textures/realworld/user_wood_slats_dark.jpg';
+import userConcreteDarkUrl from '../assets/textures/realworld/user_concrete_dark.jpg';
+import userWaterUrl from '../assets/textures/realworld/user_water_turquoise.jpg';
+import userPoolMosaicUrl from '../assets/textures/realworld/user_pool_mosaic.jpg';
+import userWoodDeckUrl from '../assets/textures/realworld/user_wood_deck.jpg';
+import userMulchUrl from '../assets/textures/realworld/user_mulch_soil.jpg';
+import userDirtCrackedUrl from '../assets/textures/realworld/user_dirt_cracked.jpg';
+import userCurbUrl from '../assets/textures/realworld/user_curb_redwhite.jpg';
 // User-provided oak tree (Tree.fbx via Google Drive, 2026-10-25): the model
 // replaces every procedural tree; leaf/bark maps were extracted from its
 // embedded Archicad media and downscaled for mobile VRAM.
@@ -265,29 +292,29 @@ function buildRiverGeometry(river) {
 
 export function createRealWorldScene(foundation) {
   const loader = new THREE.TextureLoader();
-  const grassTex = makeTexture(loader, grassUrl, { mirror: true });
+  const grassTex = makeTexture(loader, userGrassUrl, { mirror: true });
   const rockTex = makeTexture(loader, rockUrl, { mirror: true });
-  const sandTex = makeTexture(loader, sandUrl, { mirror: true });
-  const concreteTex = makeTexture(loader, concreteUrl, { mirror: true });
-  const roadTex = makeTexture(loader, asphaltRoadUrl);
+  const sandTex = makeTexture(loader, userSandRippledUrl, { mirror: true });
+  const concreteTex = makeTexture(loader, userConcreteSlabsUrl, { mirror: true });
+  const roadTex = makeTexture(loader, userAsphaltDashedUrl);
   const brickTex = makeTexture(loader, facadeBrickUrl);
   const modernTex = makeTexture(loader, facadeModernUrl);
-  const roofTex = makeTexture(loader, roofTilesUrl, { rx: 2, ry: 2, mirror: true });
+  const roofTex = makeTexture(loader, userRoofTerracottaUrl, { rx: 2, ry: 2, mirror: true });
   const foliageTex = makeTexture(loader, foliageUrl, { rx: 2, ry: 2, mirror: true });
   const parkingTex = makeTexture(loader, parkingUrl);
   const plazaTex = makeTexture(loader, plazaUrl, { mirror: true });
   const glassTex = makeTexture(loader, facadeGlassUrl);
   const shopTex = makeTexture(loader, facadeShopUrl);
   const panelTex = makeTexture(loader, facadePanelUrl);
-  const roofFlatTex = makeTexture(loader, roofFlatUrl, { mirror: true });
-  const sidewalkTex = makeTexture(loader, sidewalkUrl, { mirror: true });
+  const roofFlatTex = makeTexture(loader, userRoofWeatheredUrl, { mirror: true });
+  const sidewalkTex = makeTexture(loader, userConcreteSlabsUrl, { mirror: true });
   const dragTex = makeTexture(loader, asphaltDragUrl);
-  const crosswalkTex = makeTexture(loader, crosswalkUrl);
+  const crosswalkTex = makeTexture(loader, userCrosswalkUrl);
   const curbTex = makeTexture(loader, curbUrl);
   const busGlassTex = makeTexture(loader, busstopGlassUrl);
   const busAdTex = makeTexture(loader, busstopAdUrl);
   const parkingAngledTex = makeTexture(loader, parkingAngledUrl);
-  const cityAsphaltTex = makeTexture(loader, asphaltCityUrl);
+  const cityAsphaltTex = makeTexture(loader, userAsphaltPlainUrl);
   const benchWoodTex = makeTexture(loader, benchWoodUrl);
   const hedgeTex = makeTexture(loader, hedgeUrl, { mirror: true });
   const metalPoleTex = makeTexture(loader, metalPoleUrl);
@@ -295,16 +322,30 @@ export function createRealWorldScene(foundation) {
   const pastelTex = makeTexture(loader, facadePastelUrl);
   const industrialTex = makeTexture(loader, facadeIndustrialUrl);
   const autumnTex = makeTexture(loader, foliageAutumnUrl, { rx: 2, ry: 2, mirror: true });
-  const ruralTex = makeTexture(loader, asphaltRuralUrl);
+  const ruralTex = makeTexture(loader, userAsphaltPotholeUrl);
   const slateTex = makeTexture(loader, roofSlateUrl, { rx: 2, ry: 2, mirror: true });
   const stoneTex = makeTexture(loader, stoneWallUrl);
-  const glassTowerTex = makeTexture(loader, glassTowerUrl);
-  const goldTowerTex = makeTexture(loader, facadeGoldUrl);
-  const marbleTowerTex = makeTexture(loader, facadeMarbleUrl);
+  const glassTowerTex = makeTexture(loader, userFacadeBlueGlassUrl);
+  const goldTowerTex = makeTexture(loader, userFacadeGoldGridUrl);
+  const marbleTowerTex = makeTexture(loader, userFacadeSilverUrl);
   const hotelTowerTex = makeTexture(loader, facadeHotelUrl);
   const sandTowerTex = makeTexture(loader, facadeSandstoneUrl);
-  const promenadeTex = makeTexture(loader, promenadeUrl, { mirror: true });
+  const promenadeTex = makeTexture(loader, userStoneTilesUrl, { mirror: true });
   const roofPoolTex = makeTexture(loader, roofPoolUrl);
+  const marbleTilesTex = makeTexture(loader, userMarbleTilesUrl);
+  const travertineTex = makeTexture(loader, userTravertineUrl);
+  const plasterTex = makeTexture(loader, userPlasterUrl);
+  const woodSlatsTex = makeTexture(loader, userWoodSlatsUrl);
+  const darkConcreteTex = makeTexture(loader, userConcreteDarkUrl);
+  const seaTex = makeTexture(loader, userWaterUrl, { mirror: true });
+  const poolMosaicTex = makeTexture(loader, userPoolMosaicUrl);
+  const woodDeckTex = makeTexture(loader, userWoodDeckUrl);
+  const whiteSandTex = makeTexture(loader, userSandBeachUrl, { mirror: true });
+  const wetSandTex = makeTexture(loader, userSandWetUrl, { mirror: true });
+  const mulchTex = makeTexture(loader, userMulchUrl, { mirror: true });
+  const crackedDirtTex = makeTexture(loader, userDirtCrackedUrl, { mirror: true });
+  const doubleYellowTex = makeTexture(loader, userAsphaltDoubleYellowUrl);
+  const redCurbTex = makeTexture(loader, userCurbUrl);
   const oakLeafTex = makeTexture(loader, oakLeafUrl);
   const oakLeaf2Tex = makeTexture(loader, oakLeaf2Url);
   const oakBarkTex = makeTexture(loader, oakBarkUrl, { ry: 2 });
@@ -330,6 +371,7 @@ export function createRealWorldScene(foundation) {
     const position = terrainGeometry.getAttribute('position');
     const uv = terrainGeometry.getAttribute('uv');
     const splat = new Float32Array(position.count * 3);
+    const RT_INLAND = { minX: 520, maxX: 1045, minZ: -470, maxZ: 470 };
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i);
       const z = position.getZ(i);
@@ -339,12 +381,15 @@ export function createRealWorldScene(foundation) {
       const slope = foundation.slopeAt(x, z).magnitude;
       const distRiver = Math.abs(x - foundation.river.centerXAt(z));
       const cityDist = rectDistance2D(x, z, foundation.zones.city);
-      const rtDist = rectDistance2D(x, z, foundation.zones.richtown);
+      const rtDist = rectDistance2D(x, z, RT_INLAND);
       let rock = clamp01(smoothstep(0.32, 0.75, slope));
       let sand = distRiver < 42 ? (1 - smoothstep(0.9, 2.4, h)) * (1 - smoothstep(30, 42, distRiver)) : 0;
       sand = Math.max(sand, smoothstep(0.16, 0.34, slope) * (1 - rock) * 0.3); // dirt on worn slopes
       const marinaDist = rectDistance2D(x, z, foundation.zones.marina);
       if (marinaDist < 26 && h < 1.6) sand = Math.max(sand, (1 - smoothstep(0.4, 1.6, h)) * 0.7);
+      const beachDist = rectDistance2D(x, z, foundation.zones.beach);
+      if (beachDist < 40 && h < 3) sand = Math.max(sand, (1 - smoothstep(20, 40, beachDist)) * (1 - smoothstep(2.2, 3, h)));
+      if (h < 3.2 && (rectDistance2D(x, z, foundation.zones.palmIsland) < 30 || rectDistance2D(x, z, foundation.zones.sailIsland) < 30)) sand = Math.max(sand, 0.85);
       // City blocks read as paved ground between the buildings; the plaza
       // and parking planes drawn on top carry their own finer textures.
       let concrete = (1 - smoothstep(0, 55, cityDist)) * 0.55;
@@ -390,7 +435,7 @@ export function createRealWorldScene(foundation) {
   // Distant ground so the horizon beyond the rim is never empty sky-blue void.
   const farGround = new THREE.Mesh(
     new THREE.CircleGeometry(2800, 40).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ map: cloneTexture(grassTex, 220, 220), color: 0x8aa06b, roughness: 1 }),
+    new THREE.MeshStandardMaterial({ map: cloneTexture(crackedDirtTex, 220, 220), color: 0xd8c49a, roughness: 1 }),
   );
   farGround.position.y = -3.5;
   farGround.name = 'real-far-ground';
@@ -410,13 +455,101 @@ export function createRealWorldScene(foundation) {
     const marinaWater = new THREE.Mesh(
       new THREE.PlaneGeometry(m.maxX - m.minX - 3, m.maxZ - m.minZ - 3).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({
-        color: 0x1a7d96, roughness: 0.14, metalness: 0.08, transparent: true, opacity: 0.9,
+        map: cloneTexture(seaTex, 10, 10), color: 0xbfeef5, roughness: 0.14, metalness: 0.08, transparent: true, opacity: 0.92,
       }),
     );
     marinaWater.position.set((m.minX + m.maxX) / 2, foundation.river.waterLevelM, (m.minZ + m.maxZ) / 2);
     marinaWater.name = 'real-marina';
     group.add(marinaWater);
     countTris(marinaWater.geometry);
+
+    // Open sea east of the beach, textured with the user's turquoise water.
+    const sea = foundation.zones.sea;
+    const seaMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(sea.maxX - sea.minX, sea.maxZ - sea.minZ).rotateX(-Math.PI / 2),
+      new THREE.MeshStandardMaterial({
+        map: cloneTexture(seaTex, 26, 26), color: 0xd8f6fa, roughness: 0.12, metalness: 0.08, transparent: true, opacity: 0.94,
+      }),
+    );
+    seaMesh.position.set((sea.minX + sea.maxX) / 2, foundation.river.waterLevelM, (sea.minZ + sea.maxZ) / 2);
+    seaMesh.name = 'real-sea';
+    group.add(seaMesh);
+    countTris(seaMesh.geometry);
+
+    // Terrain-conforming beach overlays: dry white sand + wet shoreline band.
+    const buildShoreStrip = (x0, x1, tex, lift, name) => {
+      const cols = 5;
+      const zA = -470;
+      const zB = 470;
+      const rows = Math.floor((zB - zA) / 20);
+      const pos = [];
+      const uvA = [];
+      const idx = [];
+      for (let r = 0; r <= rows; r++) {
+        const z = zA + r * 20;
+        for (let c = 0; c <= cols; c++) {
+          const x = x0 + ((x1 - x0) * c) / cols;
+          pos.push(x, foundation.heightAt(x, z) + lift, z);
+          uvA.push(x / 9, z / 9);
+        }
+      }
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const a0 = r * (cols + 1) + c;
+          const b0 = a0 + cols + 1;
+          idx.push(a0, b0, a0 + 1, a0 + 1, b0, b0 + 1);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvA, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+      mesh.name = name;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      countTris(geo);
+    };
+    buildShoreStrip(952, 1024, whiteSandTex, 0.06, 'real-beach-sand');
+    buildShoreStrip(1018, 1048, wetSandTex, 0.1, 'real-beach-wet-sand');
+
+    // Wooden pier into the sea + beach umbrellas along the public beach.
+    const pierMat = new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 6, 1), roughness: 0.9 });
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(74, 0.5, 6), pierMat);
+    pier.position.set(1036, 1.05, -40);
+    pier.name = 'real-pier';
+    pier.castShadow = true;
+    pier.receiveShadow = true;
+    group.add(pier);
+    countTris(pier.geometry);
+    const postGeo = new THREE.CylinderGeometry(0.25, 0.25, 3.4, 7);
+    for (let i = 0; i < 7; i++) {
+      const post = new THREE.Mesh(postGeo, pierMat);
+      post.position.set(1004 + i * 11, -0.5, -40 + (i % 2 ? 2.2 : -2.2));
+      group.add(post);
+    }
+    const umbColors = [0x2f7fe0, 0xf5c518, 0xe0409a, 0x35c4b5, 0xf2f2f2];
+    const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
+    const poleMat = new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 1, 2), roughness: 0.9 });
+    for (let i = 0; i < 12; i++) {
+      const ux = 970 + (i % 3) * 13;
+      const uz = -205 + i * 29;
+      const uy = foundation.heightAt(ux, uz);
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(ux, uy + 1.3, uz);
+      pole.name = 'real-beach-umbrella-pole';
+      group.add(pole);
+      const canopy = new THREE.Mesh(
+        new THREE.ConeGeometry(2.3, 1.05, 9),
+        new THREE.MeshStandardMaterial({ color: umbColors[i % umbColors.length], roughness: 0.85 }),
+      );
+      canopy.position.set(ux, uy + 2.75, uz);
+      canopy.name = 'real-beach-umbrella';
+      canopy.castShadow = true;
+      group.add(canopy);
+      countTris(canopy.geometry);
+    }
   }
 
   // --- Paved areas: festival plaza + parking lots --------------------------------
@@ -464,6 +597,7 @@ export function createRealWorldScene(foundation) {
   const cityRibbons = [];
   const ruralRibbons = [];
   const dragRibbons = [];
+  const rtRibbons = [];
   const walkRibbons = [];
   const curbRibbons = [];
   const isDragEdge = (e) => {
@@ -477,9 +611,11 @@ export function createRealWorldScene(foundation) {
       ? dragRibbons
       : e.id.startsWith('street-h')
         ? cityRibbons
-        : /^(river-|north-link|drift-entry|drift-west-entry)/.test(e.id)
-          ? ruralRibbons
-          : roadRibbons;
+        : /^(rt-blvd|rt-east|rt-palm|rt-sail)/.test(e.id)
+          ? rtRibbons
+          : /^(river-|north-link|drift-entry|drift-west-entry)/.test(e.id)
+            ? ruralRibbons
+            : roadRibbons;
     target.push(buildRoadRibbonGeometry(e, { liftM: 0.13, uvScaleM: 11 }));
     if (SIDEWALK_EDGE_PATTERN.test(e.id)) {
       walkRibbons.push(buildRoadRibbonGeometry(
@@ -546,6 +682,21 @@ export function createRealWorldScene(foundation) {
     drag.renderOrder = 2;
     group.add(drag);
     countTris(dragGeometry);
+  }
+
+  if (rtRibbons.length) {
+    // Boulevard + Corniche: the user's double-yellow asphalt, rotated so the
+    // lines run along the road.
+    const rtGeometry = ribbonToGeometry(rtRibbons);
+    const dyTex = cloneTexture(doubleYellowTex, 1, 1);
+    dyTex.center.set(0.5, 0.5);
+    dyTex.rotation = Math.PI / 2;
+    const rtRoads = new THREE.Mesh(rtGeometry, new THREE.MeshStandardMaterial({ map: dyTex, roughness: 0.94 }));
+    rtRoads.name = 'real-richtown-roads';
+    rtRoads.receiveShadow = true;
+    rtRoads.renderOrder = 2;
+    group.add(rtRoads);
+    countTris(rtGeometry);
   }
 
   // --- Zebra crossings at city junctions -----------------------------------------
@@ -634,6 +785,11 @@ export function createRealWorldScene(foundation) {
     sandTowerLow: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 2), roughness: 0.85, metalness: 0 }),
     sandTowerMid: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 4), roughness: 0.85, metalness: 0 }),
     sandTowerHigh: new THREE.MeshStandardMaterial({ map: cloneTexture(sandTowerTex, 2, 6.5), roughness: 0.85, metalness: 0 }),
+    userMarble: new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTilesTex, 3, 1), roughness: 0.5, metalness: 0.05 }),
+    userStone: new THREE.MeshStandardMaterial({ map: cloneTexture(travertineTex, 2, 1), roughness: 0.8, metalness: 0 }),
+    userPlaster: new THREE.MeshStandardMaterial({ map: cloneTexture(plasterTex, 2, 1), roughness: 0.9, metalness: 0 }),
+    userWood: new THREE.MeshStandardMaterial({ map: cloneTexture(woodSlatsTex, 2, 1), roughness: 0.8, metalness: 0 }),
+    userConcrete: new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 2, 1), roughness: 0.9, metalness: 0 }),
   };
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
@@ -642,11 +798,18 @@ export function createRealWorldScene(foundation) {
   };
   const RT_FACADES = ['glassTower', 'goldTower', 'marbleTower', 'hotelTower', 'sandTower'];
   for (const f of RT_FACADES) for (const tier of ['Low', 'Mid', 'High']) bodyItems[`${f}${tier}`] = [];
+  for (const f of ['userMarble', 'userStone', 'userPlaster', 'userWood', 'userConcrete']) bodyItems[f] = [];
   const rtFacadeKey = (b) => `${b.facade}${b.h < 26 ? 'Low' : b.h < 52 ? 'Mid' : 'High'}`;
   const pitchedRoofs = [];
   const flatRoofs = [];
   const poolRoofs = [];
   for (const b of plan.buildings) {
+    if (b.facade && b.facade.startsWith('user')) {
+      bodyItems[b.facade].push(b);
+      if (b.roofH > 0) pitchedRoofs.push(b);
+      else flatRoofs.push({ ...b, y: b.y + b.h });
+      continue;
+    }
     if (RT_FACADES.includes(b.facade)) {
       const key = rtFacadeKey(b);
       if (b.kind === 'rt-tower') {
@@ -761,12 +924,48 @@ export function createRealWorldScene(foundation) {
     group.add(mesh);
     countTris(unitBox, poolRoofs.length);
   }
+  if (plan.pools?.length) {
+    const deckMesh = new THREE.InstancedMesh(
+      unitBox,
+      new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 2, 1), roughness: 0.9 }),
+      plan.pools.length,
+    );
+    deckMesh.name = 'real-villa-pool-decks';
+    setInstances(deckMesh, plan.pools, (dummy, b) => {
+      dummy.position.set(b.x, b.y - 0.04, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w + 2.6, 0.28, b.d + 2.6);
+    });
+    group.add(deckMesh);
+    countTris(unitBox, plan.pools.length);
+    const poolMesh = new THREE.InstancedMesh(
+      unitBox,
+      new THREE.MeshStandardMaterial({ map: cloneTexture(poolMosaicTex, 3, 2), roughness: 0.15, metalness: 0.05 }),
+      plan.pools.length,
+    );
+    poolMesh.name = 'real-villa-pools';
+    setInstances(poolMesh, plan.pools, (dummy, b) => {
+      dummy.position.set(b.x, b.y + 0.02, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w, 0.34, b.d);
+    });
+    group.add(poolMesh);
+    countTris(unitBox, plan.pools.length);
+  }
 
   // --- RichTown landmarks: needle tower, golden frame arch, fountain ---------
   {
     const goldMat = new THREE.MeshStandardMaterial({ color: 0xd8b25c, roughness: 0.32, metalness: 0.85 });
     const towerGlassMat = new THREE.MeshStandardMaterial({ map: cloneTexture(glassTowerTex, 6, 10), roughness: 0.22, metalness: 0.45 });
-    const marbleMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 3, 1), roughness: 0.5, metalness: 0.08 });
+    const marbleMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTilesTex, 3, 1), roughness: 0.5, metalness: 0.08 });
+    const silverMat = new THREE.MeshStandardMaterial({ map: cloneTexture(marbleTowerTex, 6, 6), roughness: 0.35, metalness: 0.55 });
+    const plasterMat = new THREE.MeshStandardMaterial({ map: cloneTexture(plasterTex, 3, 3), roughness: 0.85 });
+    const stoneMatL = new THREE.MeshStandardMaterial({ map: cloneTexture(travertineTex, 3, 1), roughness: 0.8 });
+    const darkConcMat = new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 3, 2), roughness: 0.9 });
+    const woodDeckMatL = new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 3, 2), roughness: 0.9 });
+    const poolMat = new THREE.MeshStandardMaterial({ map: cloneTexture(poolMosaicTex, 4, 4), roughness: 0.15, metalness: 0.05 });
+    const curbMatL = new THREE.MeshStandardMaterial({ map: redCurbTex, roughness: 0.9 });
+    const roofMatL = new THREE.MeshStandardMaterial({ map: cloneTexture(roofTex, 2, 2), roughness: 0.95 });
     for (const lm of plan.landmarks || []) {
       const g = new THREE.Group();
       g.position.set(lm.x, lm.y, lm.z);
@@ -785,6 +984,8 @@ export function createRealWorldScene(foundation) {
         addPart(new THREE.CylinderGeometry(11, 16.5, 58, 8), towerGlassMat, 0, 55, 0);
         addPart(new THREE.CylinderGeometry(4.6, 10, 42, 8), towerGlassMat, 0, 105, 0);
         addPart(new THREE.TorusGeometry(11.6, 0.7, 8, 24).rotateX(Math.PI / 2), goldMat, 0, 84, 0);
+        addPart(new THREE.CylinderGeometry(6.4, 6.4, 4.5, 16), towerGlassMat, 0, 124, 0);
+        addPart(new THREE.TorusGeometry(6.5, 0.35, 8, 24).rotateX(Math.PI / 2), goldMat, 0, 126.2, 0);
         addPart(new THREE.CylinderGeometry(0.12, 1.5, 24, 6), goldMat, 0, 138, 0);
         addPart(new THREE.SphereGeometry(0.9, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffc95e, emissiveIntensity: 1.6, roughness: 0.4 }), 0, 150.5, 0);
       } else if (lm.kind === 'rt-arch') {
@@ -799,6 +1000,84 @@ export function createRealWorldScene(foundation) {
         addPart(new THREE.CylinderGeometry(2.4, 3.1, 2.6, 14), marbleMat, 0, 1.3, 0);
         addPart(new THREE.CylinderGeometry(1.1, 1.7, 3.4, 12), marbleMat, 0, 4.2, 0);
         addPart(new THREE.SphereGeometry(1.5, 14, 10), goldMat, 0, 6.8, 0);
+      } else if (lm.kind === 'rt-sail') {
+        addPart(new THREE.BoxGeometry(38, 4, 26), marbleMat, 0, 2, 0);
+        const sailShape = new THREE.Shape();
+        sailShape.moveTo(-2, 0);
+        sailShape.quadraticCurveTo(20, 42, 3, 92);
+        sailShape.quadraticCurveTo(-7, 40, -2, 0);
+        const sailGeo = new THREE.ExtrudeGeometry(sailShape, { depth: 9, bevelEnabled: false });
+        sailGeo.translate(0, 0, -4.5);
+        addPart(sailGeo, plasterMat, 0, 4, 0);
+        addPart(new THREE.BoxGeometry(3.2, 88, 3.2), towerGlassMat, -4.5, 48, 0);
+        addPart(new THREE.CylinderGeometry(0.18, 0.7, 10, 6), goldMat, 2.4, 100, 0);
+      } else if (lm.kind === 'rt-museum') {
+        addPart(new THREE.CylinderGeometry(20, 22, 2, 24), stoneMatL, 0, 1, 0);
+        const ring = addPart(new THREE.TorusGeometry(14.5, 4.4, 12, 36), silverMat, 0, 15, 0);
+        ring.rotation.z = 0.1;
+      } else if (lm.kind === 'rt-opera') {
+        addPart(new THREE.BoxGeometry(46, 3, 32), marbleMat, 0, 1.5, 0);
+        [[-12, 12, 1.1], [0, 15, 1.35], [12, 10.5, 0.95]].forEach(([ox, oy, sc]) => {
+          const shell = addPart(new THREE.SphereGeometry(9, 18, 12, 0, Math.PI), plasterMat, ox, oy, 0);
+          shell.scale.set(sc, 1.5, 1.8);
+          shell.rotation.y = Math.PI / 2;
+        });
+      } else if (lm.kind === 'rt-mosque') {
+        addPart(new THREE.BoxGeometry(34, 12, 34), marbleMat, 0, 6, 0);
+        addPart(new THREE.SphereGeometry(11, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), goldMat, 0, 12, 0);
+        for (const mx of [-20, 20]) {
+          addPart(new THREE.CylinderGeometry(1.4, 1.8, 30, 10), plasterMat, mx, 15, 0);
+          addPart(new THREE.ConeGeometry(2.2, 6, 10), goldMat, mx, 33, 0);
+        }
+      } else if (lm.kind === 'rt-twist') {
+        for (let i = 0; i < 7; i++) {
+          const tier = addPart(new THREE.BoxGeometry(24, 15.2, 24), towerGlassMat, 0, 7.6 + i * 15, 0);
+          tier.rotation.y = i * 0.24;
+        }
+      } else if (lm.kind === 'rt-lean') {
+        addPart(new THREE.BoxGeometry(30, 3, 30), darkConcMat, 0, 1.5, 0);
+        const lean = addPart(new THREE.BoxGeometry(22, 88, 22), silverMat, 5, 42, 0);
+        lean.rotation.z = 0.13;
+      } else if (lm.kind === 'rt-hole') {
+        addPart(new THREE.BoxGeometry(8, 60, 20), towerGlassMat, -11, 30, 0);
+        addPart(new THREE.BoxGeometry(8, 60, 20), towerGlassMat, 11, 30, 0);
+        addPart(new THREE.BoxGeometry(30, 18, 20), towerGlassMat, 0, 69, 0);
+        addPart(new THREE.BoxGeometry(30, 2, 20), goldMat, 0, 59.5, 0);
+      } else if (lm.kind === 'rt-parking') {
+        for (let i = 0; i < 4; i++) addPart(new THREE.BoxGeometry(40, 1.1, 52), darkConcMat, 0, 2.2 + i * 4.2, 0);
+        for (const [cx, cz] of [[-18, -24], [18, -24], [-18, 24], [18, 24], [0, 0]]) {
+          addPart(new THREE.CylinderGeometry(0.7, 0.7, 16, 8), darkConcMat, cx, 8, cz);
+        }
+        addPart(new THREE.BoxGeometry(6, 1.2, 1.2), curbMatL, -8, 0.8, 27.5);
+        addPart(new THREE.BoxGeometry(6, 1.2, 1.2), curbMatL, 8, 0.8, 27.5);
+      } else if (lm.kind === 'rt-aquapark') {
+        addPart(new THREE.CylinderGeometry(26, 26, 0.5, 28), stoneMatL, 0, 0.25, 0);
+        const ap = addPart(new THREE.CircleGeometry(12, 24).rotateX(-Math.PI / 2), poolMat, -6, 0.55, 5);
+        ap.castShadow = false;
+        addPart(new THREE.BoxGeometry(7, 13, 7), woodDeckMatL, 11, 6.5, -7);
+        [[0xe04040, 13, 0], [0xf5c518, 11, 2.1], [0x2f7fe0, 9, 4.2]].forEach(([col, hh, ph]) => {
+          const pts = [];
+          for (let k = 0; k <= 10; k++) {
+            const t = k / 10;
+            pts.push(new THREE.Vector3(
+              11 + Math.cos(t * 5 + ph) * 6.5 * (1 - t * 0.35) - t * 12,
+              hh * (1 - t) + 0.8,
+              -7 + Math.sin(t * 5 + ph) * 6.5 * (1 - t * 0.35) + t * 12,
+            ));
+          }
+          addPart(
+            new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 36, 0.55, 8),
+            new THREE.MeshStandardMaterial({ color: col, roughness: 0.45 }),
+            0, 0, 0,
+          );
+        });
+      } else if (lm.kind === 'rt-lifeguard') {
+        for (const [lx, lz] of [[-1.4, -1.2], [1.4, -1.2], [-1.4, 1.2], [1.4, 1.2]]) {
+          addPart(new THREE.BoxGeometry(0.28, 3.4, 0.28), woodDeckMatL, lx, 1.7, lz);
+        }
+        addPart(new THREE.BoxGeometry(3.6, 0.3, 3.2), woodDeckMatL, 0, 3.5, 0);
+        addPart(new THREE.BoxGeometry(2.8, 2.1, 2.6), plasterMat, 0, 4.7, 0);
+        addPart(new THREE.BoxGeometry(3.8, 0.25, 3.4), roofMatL, 0, 5.9, 0);
       }
       group.add(g);
     }
@@ -1098,11 +1377,15 @@ export function createRealWorldScene(foundation) {
     const trunkMat = new THREE.MeshStandardMaterial({
       map: cloneTexture(oakBarkTex, 1, 3), color: 0xa8875f, roughness: 1,
     });
+    const mulchMat = new THREE.MeshStandardMaterial({ map: mulchTex, roughness: 1 });
+    const mulchGeo = new THREE.CircleGeometry(1.15, 10).rotateX(-Math.PI / 2);
+    mulchGeo.translate(0, 0.04, 0);
     const items = plan.palms.map((t, idx) => ({ t, idx }));
     return buildCellInstanced({
       parts: [
         { key: 'trunk', geometry: buildPalmTrunkGeometry(), material: trunkMat },
         { key: 'crown', geometry: crownGeo, material: fanPart.material },
+        { key: 'mulch', geometry: mulchGeo, material: mulchMat },
       ],
       items, namePrefix: 'real-palms',
       place: (dummy, t, h1, h2) => {
@@ -1535,7 +1818,7 @@ export function createRealWorldScene(foundation) {
     benches: plan.benches.length,
     signs: plan.signs.length,
     powerPoles: plan.powerPoles.length,
-    textures: 43,
+    textures: 70,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;
