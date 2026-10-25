@@ -582,7 +582,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.17.0',
+    version: '0.18.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,

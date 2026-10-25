@@ -1,0 +1,123 @@
+name: Blender Props Build
+
+# Builds the original city-prop GLBs from blender/build_props.py and commits
+# them to src/assets/models/props/ on the same branch (plain git, see the
+# .gitattributes exceptions). Runs whenever the Blender sources change.
+on:
+  push:
+    paths:
+      - 'blender/**'
+      - '.github/workflows/blender-props.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blender-props-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-props:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Blender (official tarball, pinned)
+        run: |
+          set -e
+          for v in "4.2/blender-4.2.3-linux-x64" "4.1/blender-4.1.1-linux-x64" "4.0/blender-4.0.2-linux-x64"; do
+            url="https://download.blender.org/release/Blender${v}.tar.xz"
+            echo "Trying $url"
+            if curl -fL --retry 2 --connect-timeout 30 -o blender.tar.xz "$url"; then
+              echo "Downloaded $v"
+              break
+            fi
+          done
+          tar -xf blender.tar.xz
+          sudo ln -s "$PWD"/blender-*/blender /usr/local/bin/blender
+          blender --version
+
+      - name: Build prop GLBs
+        run: |
+          mkdir -p props_out
+          blender -b -noaudio --python blender/build_props.py -- "$PWD/props_out"
+          ls -la props_out
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies (clean)
+        run: npm ci --ignore-scripts
+
+      - name: Smoke-parse GLBs with three GLTFLoader
+        run: |
+          cat > props-smoke.mjs <<'EOF'
+          globalThis.window = globalThis;
+          globalThis.document = {
+            createElementNS: () => ({ getContext: () => null }),
+          };
+          const { readFile } = await import('node:fs/promises');
+          const THREE = await import('three');
+          const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+          const files = process.argv.slice(2);
+          if (!files.length) throw new Error('no GLB files given');
+          for (const file of files) {
+            const buf = await readFile(file);
+            const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+            const gltf = await new GLTFLoader().parseAsync(ab, '');
+            const bbox = new THREE.Box3().setFromObject(gltf.scene);
+            const size = bbox.getSize(new THREE.Vector3());
+            const mats = new Set();
+            let tris = 0;
+            let meshes = 0;
+            gltf.scene.traverse((o) => {
+              if (!o.isMesh) return;
+              meshes += 1;
+              const g = o.geometry;
+              tris += (g.getIndex() ? g.getIndex().count : g.getAttribute('position').count) / 3;
+              (Array.isArray(o.material) ? o.material : [o.material])
+                .forEach((m) => m && mats.add(m.name));
+            });
+            console.log(
+              `${file}: meshes=${meshes} tris=${Math.round(tris)} ` +
+              `size=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)}m ` +
+              `minY=${bbox.min.y.toFixed(2)} mats=${[...mats].join(',')}`,
+            );
+            if (bbox.min.y < -0.05) throw new Error(`${file}: below ground ${bbox.min.y}`);
+          }
+          console.log('SMOKE OK');
+          EOF
+          node props-smoke.mjs props_out/bus_shelter.glb props_out/street_lamp.glb props_out/hero_building.glb | tee props-report.txt
+
+      - name: Commit GLBs to branch
+        run: |
+          mkdir -p src/assets/models/props
+          cp props_out/*.glb src/assets/models/props/
+          cp props-report.txt src/assets/models/props/props-report.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/assets/models/props/*.glb src/assets/models/props/props-report.txt
+          if git diff --cached --quiet; then
+            echo "No GLB changes to commit."
+            exit 0
+          fi
+          git commit -m "Blender props: rebuild original city prop GLBs (CI)"
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${{ github.ref_name }}"; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            echo "Push rejected, rebasing (attempt $i)..."
+            git fetch origin "${{ github.ref_name }}"
+            git rebase "origin/${{ github.ref_name }}" || git rebase --abort
+            sleep 3
+          done
+          echo "Failed to push GLBs after retries" >&2
+          exit 1

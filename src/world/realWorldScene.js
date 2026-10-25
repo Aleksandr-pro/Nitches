@@ -100,6 +100,11 @@ import oakBarkUrl from '../assets/textures/realworld/oak_bark.jpg';
 // collection via Google Drive): tree2 + round bush + upright shrub + fan,
 // decimated to 18k triangles total, real metres. See docs/obj-inbox/.
 import plantsUrl from '../assets/models/plants.glb?url';
+// Original city props authored in Blender for this project
+// (blender/build_props.py, built by the blender-props CI workflow).
+import busShelterUrl from '../assets/models/props/bus_shelter.glb?url';
+import streetLampUrl from '../assets/models/props/street_lamp.glb?url';
+import heroBuildingUrl from '../assets/models/props/hero_building.glb?url';
 
 const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry|rt-)/;
 
@@ -863,6 +868,13 @@ export function createRealWorldScene(foundation) {
     userWood: new THREE.MeshStandardMaterial({ map: cloneTexture(woodSlatsTex, 2, 1), roughness: 0.8, metalness: 0 }),
     userConcrete: new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 2, 1), roughness: 0.9, metalness: 0 }),
   };
+  // Window/joint relief from each facade's own photo texture: at grazing sun
+  // angles the bump shading reads as mullions, frames and panel joints.
+  for (const m of Object.values(materials)) {
+    if (!m.map) continue;
+    m.bumpMap = m.map;
+    m.bumpScale = m.metalness >= 0.4 ? 0.25 : 0.6;
+  }
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
     glassApt: [], panelTown: [], panelApt: [], shopFront: [],
@@ -875,7 +887,16 @@ export function createRealWorldScene(foundation) {
   const pitchedRoofs = [];
   const flatRoofs = [];
   const poolRoofs = [];
+  // A dozen apartment blocks nearest the old-town drive loop are rendered
+  // with the detailed Blender hero building instead of textured boxes
+  // (loaded further below; textured-box fallback if the GLB fails).
+  const heroBuildings = plan.buildings
+    .filter((b) => b.kind === 'apartment' && b.h >= 11 && b.h <= 20 && b.w >= 15 && b.w <= 32 && b.d >= 9 && b.d <= 22)
+    .sort((a, c) => ((a.x * a.x + (a.z - 100) * (a.z - 100)) - (c.x * c.x + (c.z - 100) * (c.z - 100))))
+    .slice(0, 12);
+  const heroBuildingSet = new Set(heroBuildings);
   for (const b of plan.buildings) {
+    if (heroBuildingSet.has(b)) continue;
     if (b.facade && b.facade.startsWith('user')) {
       bodyItems[b.facade].push(b);
       if (b.roofH > 0) pitchedRoofs.push(b);
@@ -996,6 +1017,125 @@ export function createRealWorldScene(foundation) {
     group.add(mesh);
     countTris(unitBox, poolRoofs.length);
   }
+  // --- Building detail: plinths, cornices, roof furniture, balconies --------
+  {
+    const rotOff = (b, lx, lz) => {
+      const c = Math.cos(b.rotY || 0);
+      const sn = Math.sin(b.rotY || 0);
+      return { x: b.x + lx * c + lz * sn, z: b.z - lx * sn + lz * c };
+    };
+    const plinths = [];
+    const cornices = [];
+    const roofBoxes = [];
+    const roofTanks = [];
+    const canopies = [];
+    const balconies = [];
+    for (const b of plan.buildings) {
+      if (heroBuildingSet.has(b)) continue;
+      plinths.push(b);
+      const isTowerFacade = b.facade && RT_FACADES.includes(b.facade);
+      if (b.roofH > 0 || (!isTowerFacade && b.h < 16)) {
+        cornices.push({ ...b, cy: b.y + b.h - 0.36 });
+      }
+      if (!b.roofH && b.w >= 10 && b.d >= 9) {
+        const n = 1 + Math.floor(hashFromKey(`ac${b.x},${b.z}`) * 3);
+        for (let i = 0; i < n; i++) {
+          const h1 = hashFromKey(`acx${b.x},${b.z},${i}`);
+          const h2 = hashFromKey(`acz${b.x},${b.z},${i}`);
+          const pt = rotOff(b, (h1 - 0.5) * (b.w - 4.5), (h2 - 0.5) * (b.d - 4.5));
+          const item = {
+            x: pt.x, y: b.y + b.h + 0.4, z: pt.z,
+            rotY: (b.rotY || 0) + (h1 - 0.5) * 0.8, s: 0.8 + h2 * 0.9,
+          };
+          (i === 0 && h2 > 0.55 ? roofTanks : roofBoxes).push(item);
+        }
+      }
+      if (b.x > 500 && b.h >= 9) {
+        const pt = rotOff(b, 0, b.d / 2 + 0.9);
+        canopies.push({ x: pt.x, y: b.y, z: pt.z, rotY: b.rotY || 0 });
+        if (b.h >= 18) {
+          const floors = Math.min(13, Math.floor((b.h - 6) / 3.1));
+          const cols = Math.max(2, Math.floor(b.w / 5.2));
+          for (let f = 0; f < floors; f++) {
+            for (let cI = 0; cI < cols; cI++) {
+              const lx = -b.w / 2 + (b.w * (cI + 0.5)) / cols;
+              for (const sgn of [1, -1]) {
+                const bp = rotOff(b, lx, sgn * (b.d / 2));
+                balconies.push({
+                  x: bp.x, y: b.y + 5 + f * 3.1, z: bp.z,
+                  rotY: (b.rotY || 0) + (sgn < 0 ? Math.PI : 0),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    const addDetail = (name, geometry, material, items, compose) => {
+      if (!items.length) return;
+      const mesh = new THREE.InstancedMesh(geometry, material, items.length);
+      mesh.name = name;
+      setInstances(mesh, items, compose);
+      group.add(mesh);
+      countTris(geometry, items.length);
+    };
+    const graniteDetailMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(blackGraniteTex, 2, 1), roughness: 0.45, metalness: 0.1, envMapIntensity: 1.1,
+    });
+    const corniceMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(travertineTex, 2, 1), roughness: 0.85,
+    });
+    const roofMetalMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(brushedMetalTex, 1, 1), roughness: 0.55, metalness: 0.6,
+    });
+    addDetail('real-plinths', unitBox, graniteDetailMat, plinths, (dummy, b) => {
+      dummy.position.set(b.x, b.y - 0.05, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w + 0.3, 1.05, b.d + 0.3);
+    });
+    addDetail('real-cornices', unitBox, corniceMat, cornices, (dummy, b) => {
+      dummy.position.set(b.x, b.cy, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w + 0.45, 0.36, b.d + 0.45);
+    });
+    addDetail('real-roof-boxes', unitBox, roofMetalMat, roofBoxes, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1.7 * it.s, 0.9 * it.s, 1.1 * it.s);
+    });
+    const tankGeo = new THREE.CylinderGeometry(0.85, 0.85, 1.25, 12);
+    tankGeo.translate(0, 0.625, 0);
+    addDetail('real-roof-tanks', tankGeo, roofMetalMat, roofTanks, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(it.s, it.s, it.s);
+    });
+    const canopySlab = new THREE.BoxGeometry(5, 0.16, 2.1);
+    canopySlab.translate(0, 3.1, 0);
+    const canopyColL = new THREE.CylinderGeometry(0.06, 0.06, 3.1, 8);
+    canopyColL.translate(-2.2, 1.55, 0.85);
+    const canopyColR = canopyColL.clone();
+    canopyColR.translate(4.4, 0, 0);
+    const canopyGeo = mergeGeometries([canopySlab, canopyColL, canopyColR]);
+    addDetail('real-canopies', canopyGeo, roofMetalMat, canopies, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+    });
+    const balcSlab = new THREE.BoxGeometry(2.0, 0.12, 0.85);
+    balcSlab.translate(0, 0, 0.42);
+    const balcFront = new THREE.BoxGeometry(2.0, 0.55, 0.05);
+    balcFront.translate(0, 0.33, 0.82);
+    const balcRail = new THREE.BoxGeometry(2.0, 0.06, 0.08);
+    balcRail.translate(0, 0.63, 0.82);
+    const balcGeo = mergeGeometries([balcSlab, balcFront, balcRail]);
+    addDetail('real-balconies', balcGeo, corniceMat, balconies.slice(0, 4200), (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+    });
+  }
+
   if (plan.pools?.length) {
     const deckMesh = new THREE.InstancedMesh(
       unitBox,
@@ -1577,6 +1717,77 @@ export function createRealWorldScene(foundation) {
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
   addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(stoneRubbleTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
 
+  // --- Street hedge rows: green edges along the arterials --------------------
+  {
+    const junctionPts = [];
+    for (const e of foundation.roadGraph.edges) {
+      const sm = e.samples || [];
+      if (sm.length) junctionPts.push(sm[0], sm[sm.length - 1]);
+    }
+    const nearJunction = (x, z) => junctionPts.some(
+      (n) => (n.x - x) * (n.x - x) + (n.z - z) * (n.z - z) < 169,
+    );
+    const insideBuilding = (x, z) => plan.buildings.some((bd) => {
+      const r = Math.max(bd.w, bd.d) / 2 + 1.4;
+      return Math.abs(x - bd.x) < r && Math.abs(z - bd.z) < r;
+    });
+    const rows = [];
+    for (const e of foundation.roadGraph.edges) {
+      const isRT = /^rt-/.test(e.id);
+      const isTown = /^(street-h|avenue|street-v)/.test(e.id);
+      if (!isRT && !isTown) continue;
+      const smp = e.samples || [];
+      const stepTarget = isRT ? 8.5 : 14;
+      let acc = stepTarget * 0.5;
+      for (let i = 1; i < smp.length; i++) {
+        const a = smp[i - 1];
+        const b = smp[i];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const seg = Math.hypot(dx, dz) || 0.001;
+        acc += seg;
+        if (acc < stepTarget) continue;
+        acc = 0;
+        const yaw = Math.atan2(dx, dz);
+        const off = (e.halfWidthM || 4) + 2.7;
+        const sides = isRT ? [1, -1] : [hashFromKey(`${e.id}:${i}`) > 0.5 ? 1 : -1];
+        for (const sgn of sides) {
+          const x = b.x + (-dz / seg) * off * sgn;
+          const z = b.z + (dx / seg) * off * sgn;
+          if (x > 1035 || nearJunction(x, z) || insideBuilding(x, z)) continue;
+          const y = foundation.heightAt(x, z);
+          if (y < 0.8) continue;
+          rows.push({ x, y: y - 0.05, z, rotY: yaw, len: isRT ? 7 : 8.5 });
+        }
+        if (rows.length > 2600) break;
+      }
+      if (rows.length > 2600) break;
+    }
+    if (rows.length) {
+      const hedgeGeo = jitterGeometry(new THREE.BoxGeometry(1, 1, 1, 4, 2, 2), 0.16, 1);
+      hedgeGeo.translate(0, 0.5, 0);
+      const hedgeMesh = new THREE.InstancedMesh(
+        hedgeGeo,
+        new THREE.MeshStandardMaterial({ map: cloneTexture(hedgeTex, 4, 1), roughness: 1 }),
+        rows.length,
+      );
+      hedgeMesh.name = 'real-street-hedges';
+      const dummy = new THREE.Object3D();
+      rows.forEach((r, i) => {
+        dummy.position.set(r.x, r.y, r.z);
+        dummy.rotation.set(0, r.rotY, 0);
+        dummy.scale.set(1.05, 0.95, r.len);
+        dummy.updateMatrix();
+        hedgeMesh.setMatrixAt(i, dummy.matrix);
+      });
+      hedgeMesh.instanceMatrix.needsUpdate = true;
+      hedgeMesh.castShadow = true;
+      hedgeMesh.receiveShadow = true;
+      group.add(hedgeMesh);
+      countTris(hedgeGeo, rows.length);
+    }
+  }
+
   // Modelled street lamp: tapered pole, swept arm and a housing whose arm
   // reaches over the road (plan rotY already faces the asphalt).
   const lampPole = new THREE.CylinderGeometry(0.07, 0.13, 6, 8);
@@ -1598,6 +1809,8 @@ export function createRealWorldScene(foundation) {
   };
   addInstanced('real-lamp-posts', lampFrameGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(metalPoleTex, 1, 3), roughness: 0.5, metalness: 0.6 }), plan.lamps, placeLamp);
   addInstanced('real-lamp-glows', lampGlowGeometry, new THREE.MeshStandardMaterial({ color: 0xfff2cf, emissive: 0x665522, roughness: 0.4 }), plan.lamps, placeLamp);
+  let buildProceduralStops = () => {};
+  let rtBusStops = [];
 
   // --- Bus stops, benches, hedges ----------------------------------------------------
   {
@@ -1606,7 +1819,10 @@ export function createRealWorldScene(foundation) {
       dummy.rotation.set(0, item.rotY || 0, 0);
       dummy.scale.set(1, 1, 1);
     };
-    if (plan.busStops.length) {
+    const oldStops = plan.busStops.filter((it) => it.x <= 480);
+    rtBusStops = plan.busStops.filter((it) => it.x > 480);
+    buildProceduralStops = (items) => {
+      if (!items.length) return;
       const postGeos = [];
       for (const sx of [-2.3, 2.3]) {
         for (const sz of [-0.8, 0.8]) {
@@ -1636,13 +1852,14 @@ export function createRealWorldScene(foundation) {
       benchLegR.translate(2.8, 0, 0);
       const shelterBench = mergeGeometries([benchSeat, benchBack, benchLegL, benchLegR]);
       const metalMat = new THREE.MeshStandardMaterial({ map: cloneTexture(metalPoleTex, 1, 1), roughness: 0.45, metalness: 0.6 });
-      addInstanced('real-busstop-frames', shelterFrame, metalMat, plan.busStops, placeUnit);
+      addInstanced('real-busstop-frames', shelterFrame, metalMat, items, placeUnit);
       addInstanced('real-busstop-glass', shelterGlass, new THREE.MeshStandardMaterial({
         map: busGlassTex, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
-      }), plan.busStops, placeUnit);
-      addInstanced('real-busstop-ads', adPanel, new THREE.MeshStandardMaterial({ map: busAdTex, roughness: 0.55 }), plan.busStops, placeUnit);
-      addInstanced('real-busstop-benches', shelterBench, new THREE.MeshStandardMaterial({ map: benchWoodTex, roughness: 0.85 }), plan.busStops, placeUnit);
-    }
+      }), items, placeUnit);
+      addInstanced('real-busstop-ads', adPanel, new THREE.MeshStandardMaterial({ map: busAdTex, roughness: 0.55 }), items, placeUnit);
+      addInstanced('real-busstop-benches', shelterBench, new THREE.MeshStandardMaterial({ map: benchWoodTex, roughness: 0.85 }), items, placeUnit);
+    };
+    buildProceduralStops(oldStops);
     if (plan.benches.length) {
       const seat = new THREE.BoxGeometry(2.0, 0.09, 0.52);
       seat.translate(0, 0.5, 0);
@@ -1937,6 +2154,143 @@ export function createRealWorldScene(foundation) {
     }
   }
 
+  // --- Blender-authored props: lamps, enclosed shelters, hero buildings ------
+  {
+    const propMats = {
+      PropsMetal: new THREE.MeshStandardMaterial({ map: cloneTexture(brushedMetalTex, 1, 1), roughness: 0.42, metalness: 0.72, envMapIntensity: 1.25 }),
+      PropsGlass: new THREE.MeshPhysicalMaterial({
+        color: 0x9fc6d8, roughness: 0.07, metalness: 0.85, transparent: true, opacity: 0.62,
+        envMapIntensity: 1.8, side: THREE.DoubleSide,
+      }),
+      PropsWood: new THREE.MeshStandardMaterial({ map: cloneTexture(woodDeckTex, 1, 1), roughness: 0.85 }),
+      FacadeMain: new THREE.MeshStandardMaterial({ map: cloneTexture(plasterTex, 3, 2), roughness: 0.88 }),
+      FacadeAccent: new THREE.MeshStandardMaterial({ map: cloneTexture(travertineTex, 2, 1), roughness: 0.85 }),
+      RoofDark: new THREE.MeshStandardMaterial({ map: cloneTexture(blackRoughTex, 2, 2), roughness: 0.95 }),
+      LampGlow: new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xffdf9e, emissiveIntensity: 1.6, roughness: 0.4 }),
+    };
+    propMats.FacadeMain.bumpMap = propMats.FacadeMain.map;
+    propMats.FacadeMain.bumpScale = 0.4;
+
+    const extractPropParts = (gltf) => {
+      const root = gltf.scene;
+      root.updateMatrixWorld(true);
+      const groups = new Map();
+      root.traverse((obj) => {
+        if (!obj.isMesh) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        const matName = (mats[0] && mats[0].name) || 'PropsMetal';
+        let geometry = obj.geometry.clone().applyMatrix4(obj.matrixWorld);
+        for (const attr of Object.keys(geometry.attributes)) {
+          if (!['position', 'normal', 'uv'].includes(attr)) geometry.deleteAttribute(attr);
+        }
+        if (geometry.index) geometry = geometry.toNonIndexed();
+        if (!groups.has(matName)) groups.set(matName, []);
+        groups.get(matName).push(geometry);
+      });
+      root.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          for (const m of (Array.isArray(obj.material) ? obj.material : [obj.material])) m.dispose();
+        }
+      });
+      const parts = [];
+      for (const [matName, geos] of groups) {
+        const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+        if (merged) {
+          parts.push({ key: matName, geometry: merged, material: propMats[matName] || propMats.PropsMetal });
+        }
+      }
+      return parts;
+    };
+
+    const addPropInstances = (namePrefix, gltf, items, place) => {
+      if (!items.length) return 0;
+      const parts = extractPropParts(gltf);
+      for (const part of parts) {
+        addInstanced(`${namePrefix}-${part.key.toLowerCase()}`, part.geometry, part.material, items, place);
+      }
+      return parts.length;
+    };
+
+    const propLoader = new GLTFLoader();
+    const propsReady = {};
+    const noteProps = () => { group.userData.props = { ...propsReady }; };
+
+    // Street lamps: swap the procedural posts for the Blender model.
+    propLoader.loadAsync(streetLampUrl).then((gltf) => {
+      const built = addPropInstances('real-blender-lamps', gltf, plan.lamps, (dummy, item) => {
+        dummy.position.set(item.x, item.y, item.z);
+        dummy.rotation.set(0, item.rotY || 0, 0);
+        dummy.scale.set(1, 1, 1);
+      });
+      if (built) {
+        for (const nm of ['real-lamp-posts', 'real-lamp-glows']) {
+          const old = group.getObjectByName(nm);
+          if (old) {
+            old.removeFromParent();
+            old.geometry.dispose();
+          }
+        }
+      }
+      propsReady.lamps = built ? 'blender-glb' : 'procedural';
+      noteProps();
+    }).catch((error) => {
+      console.warn('[world] street lamp GLB failed, keeping procedural lamps:', error);
+      propsReady.lamps = 'procedural';
+      noteProps();
+    });
+
+    // RichTown bus stops: enclosed air-conditioned shelters from Blender.
+    if (rtBusStops.length) {
+      propLoader.loadAsync(busShelterUrl).then((gltf) => {
+        const built = addPropInstances('real-blender-shelters', gltf, rtBusStops, (dummy, item) => {
+          dummy.position.set(item.x, item.y, item.z);
+          dummy.rotation.set(0, (item.rotY || 0) + Math.PI, 0);
+          dummy.scale.set(0.94, 0.94, 0.94);
+        });
+        if (!built) buildProceduralStops(rtBusStops);
+        propsReady.shelters = built ? 'blender-glb' : 'procedural';
+        noteProps();
+      }).catch((error) => {
+        console.warn('[world] bus shelter GLB failed, using procedural shelters:', error);
+        buildProceduralStops(rtBusStops);
+        propsReady.shelters = 'procedural';
+        noteProps();
+      });
+    }
+
+    // Hero residential buildings near the old-town loop.
+    if (heroBuildings.length) {
+      const heroItems = heroBuildings.map((b) => ({
+        x: b.x, y: b.y, z: b.z, rotY: b.rotY || 0, w: b.w, d: b.d, h: b.h,
+      }));
+      const buildHeroFallback = () => {
+        addInstanced('real-hero-fallback', unitBox, materials.brickApt, heroItems, (dummy, b) => {
+          dummy.position.set(b.x, b.y, b.z);
+          dummy.rotation.set(0, b.rotY, 0);
+          dummy.scale.set(b.w, b.h, b.d);
+        });
+      };
+      propLoader.loadAsync(heroBuildingUrl).then((gltf) => {
+        const built = addPropInstances('real-hero-buildings', gltf, heroItems, (dummy, b) => {
+          dummy.position.set(b.x, b.y, b.z);
+          dummy.rotation.set(0, b.rotY, 0);
+          // Authored body is 24 x 16.6 x 14 m; canopies/balconies overhang.
+          dummy.scale.set(b.w / 24, b.h / 16.6, b.d / 14);
+        });
+        if (!built) buildHeroFallback();
+        propsReady.heroBuildings = built ? heroItems.length : 'fallback';
+        noteProps();
+        if (liveStats) liveStats.triangles = triangles;
+      }).catch((error) => {
+        console.warn('[world] hero building GLB failed, using box fallback:', error);
+        buildHeroFallback();
+        propsReady.heroBuildings = 'fallback';
+        noteProps();
+      });
+    }
+  }
+
   const stats = {
     triangles,
     buildings: plan.buildings.length,
@@ -1950,6 +2304,7 @@ export function createRealWorldScene(foundation) {
     signs: plan.signs.length,
     powerPoles: plan.powerPoles.length,
     textures: 77,
+    heroBuildings: heroBuildings.length,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;

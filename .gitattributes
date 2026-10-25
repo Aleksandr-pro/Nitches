@@ -72,3 +72,4 @@ src/assets/models/oak-tree.fbx -filter -diff -merge -text
 # Same plain-Git exception for the plant pack converted from the owner's
 # Obj.obj by the obj-inbox CI (small decimated GLB, built for src/assets).
 src/assets/models/plants.glb -filter -diff -merge -text
+src/assets/models/props/*.glb -filter -diff -merge -text
