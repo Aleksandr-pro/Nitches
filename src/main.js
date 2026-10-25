@@ -16,26 +16,17 @@ import {
   updateAxleWheel,
 } from './vehicle/wheelDynamics.js';
 import { iconMarkup, setIcon } from './ui/icons.js';
-import { createFestivalBritainFoundation } from './world/festivalBritain.js';
-import { createWorldFoundationStreamer } from './world/worldStreamer.js';
-import { buildHeightTile } from './world/heightfield.js';
-import { buildTerrainTileGeometry } from './world/meshBuilders.js';
-import { roadPointAt } from './world/roadGraph.js';
+import { createRealWorldFoundation } from './world/realWorld.js';
+import { createRealWorldScene } from './world/realWorldScene.js';
 import { distanceToCollider } from './world/spatialIndex.js';
-import {
-  MANHATTAN_CITY_MODEL_URL,
-  loadManhattanCityGroup,
-  registerManhattanCityColliders,
-  updateManhattanCityVisibility,
-} from './world/manhattanCityModel.js';
 import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.8.0: карта Festival Britain 4×4 км (свободная поездка) и настоящий
-   импортный город Манхэттен вместо процедурного Kingsford, Mustang
-   Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт и нитро.
-   Старый остров: ?world=legacy.
+   v0.9.0: новый реалистичный мир Real Valley 1×1 км на сгенерированных
+   фототекстурах (асфальт с разметкой, фасады, трава, скалы, кровля),
+   Mustang Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт
+   и нитро. Старый остров: ?world=legacy.
    ===================================================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -487,9 +478,9 @@ camera.position.set(0, 26, -140);
 let worldFoundation = null;
 let worldStreamer = null;
 let worldBackdrop = null;
-let manhattanCityHandle = null;
+let realWorldSceneHandle = null;
 let worldStreamAccumS = 0;
-let britainDistrictId = 'festival-vale';
+let britainDistrictId = 'town-centre';
 let skyMesh = null;      // заполняются в блоке «Небо» ниже
 let sunBallMesh = null;
 let sunHaloMesh = null;
@@ -510,16 +501,14 @@ function isBritainWorld() {
   return WORLD_MODE === 'britain' && worldFoundation !== null;
 }
 
-/** Точка спавна у фестиваля новой карты, носом на север к центру карты. */
+/** Точка спавна Real Valley: главная улица у западного въезда в город. */
 function britainSpawnPoint(lane = 0) {
-  const fallbackY = worldFoundation ? worldFoundation.heightAt(0, 1226) : 6;
-  const fallback = { pos: new THREE.Vector3(0, fallbackY, 1226), yaw: Math.PI };
-  if (!worldFoundation) return fallback;
-  const edge = worldFoundation.roadGraph.edgesById.get('festival-north-festival');
-  if (!edge) return fallback;
-  const p = roadPointAt(edge, Math.max(0, edge.lengthM - 24), lane);
-  if (!p) return fallback;
-  return { pos: new THREE.Vector3(p.x, p.y, p.z), yaw: Math.atan2(-p.tangent.x, -p.tangent.z) };
+  if (worldFoundation?.spawnPoint) {
+    const p = worldFoundation.spawnPoint(lane);
+    return { pos: new THREE.Vector3(p.x, p.y, p.z), yaw: p.yaw };
+  }
+  const fallbackY = worldFoundation ? worldFoundation.heightAt(-208, 4) : 8;
+  return { pos: new THREE.Vector3(-208, fallbackY, 4), yaw: Math.PI / 2 };
 }
 
 let britainWheelRim = null;
@@ -581,89 +570,39 @@ function buildBritainFerrisWheel() {
 
 function initWorldMode() {
   const diagnostics = {
-    world: 'festival-britain',
-    version: '0.8.0',
+    world: 'real-valley',
+    version: '0.9.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
     city: null,
     error: null,
-    stats: () => (worldStreamer ? worldStreamer.stats() : (worldFoundation ? worldFoundation.stats() : null)),
-    setPreview: (visible) => (worldStreamer ? worldStreamer.setVisible(Boolean(visible)) : false),
+    stats: () => (worldFoundation ? worldFoundation.stats() : null),
+    setPreview: (visible) => {
+      if (realWorldSceneHandle) realWorldSceneHandle.group.visible = Boolean(visible);
+      return Boolean(realWorldSceneHandle);
+    },
   };
   window.__NH_WORLD__ = diagnostics;
   if (WORLD_MODE !== 'britain') return diagnostics;
   try {
-    worldFoundation = createFestivalBritainFoundation();
-    worldStreamer = createWorldFoundationStreamer({
-      THREE,
-      scene,
-      foundation: worldFoundation,
-      visible: true,
-      heightOffsetM: 0,
-      loadRadiusChunks: 3,
-      unloadRadiusChunks: 4,
-      loadsPerUpdate: 4,
-    });
+    // Real Valley 1x1 км: весь мир строится одной статичной сценой на
+    // сгенерированных фототекстурах — стриминг для километра не нужен.
+    worldFoundation = createRealWorldFoundation();
+    realWorldSceneHandle = createRealWorldScene(worldFoundation);
+    scene.add(realWorldSceneHandle.group);
+    diagnostics.city = { status: 'ready', ...realWorldSceneHandle.stats };
 
-    // Грубый фон всей карты одним мешем на метр ниже стримящихся чанков:
-    // силуэт мира виден до горизонта, пока детали догружаются вокруг.
-    const backdropTile = buildHeightTile({
-      chunkX: 0,
-      chunkZ: 0,
-      chunkSizeM: 4000,
-      cells: 72,
-      worldOriginM: -2000,
-      sampleHeight: (x, z) => worldFoundation.heightAt(x, z),
-    });
-    const backdropData = buildTerrainTileGeometry(backdropTile, {
-      colorAt: worldFoundation.terrainColorAt,
-    });
-    const backdropGeometry = new THREE.BufferGeometry();
-    backdropGeometry.setAttribute('position', new THREE.BufferAttribute(backdropData.positions, 3));
-    backdropGeometry.setAttribute('normal', new THREE.BufferAttribute(backdropData.normals, 3));
-    backdropGeometry.setAttribute('uv', new THREE.BufferAttribute(backdropData.uvs, 2));
-    if (backdropData.colors) backdropGeometry.setAttribute('color', new THREE.BufferAttribute(backdropData.colors, 3));
-    backdropGeometry.setIndex(new THREE.BufferAttribute(backdropData.indices, 1));
-    worldBackdrop = new THREE.Mesh(backdropGeometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
-    worldBackdrop.position.y = -1.0;
-    worldBackdrop.receiveShadow = true;
-    worldBackdrop.name = 'nh-britain-backdrop';
-    scene.add(worldBackdrop);
-
-    // Дальность обзора под 4 километра вместо острова.
-    scene.fog.near = 260;
-    scene.fog.far = 3200;
-    camera.far = 7000;
+    // Дальность обзора под километр мира и дальнюю землю за ободом.
+    scene.fog.near = 140;
+    scene.fog.far = 2100;
+    camera.far = 5000;
     camera.updateProjectionMatrix();
-
-    scene.add(buildBritainFerrisWheel());
-
-    const spawn = britainSpawnPoint();
-    worldStreamer.update(spawn.pos.x, spawn.pos.z, { budget: 10 });
-
-    // Импортный Манхэттен вместо процедурного Kingsford: GLB грузится
-    // асинхронно, чтобы старт мира не ждал 46 МБ; плато, подавление
-    // процедурной застройки и маскировка дорог уже действуют без него.
-    diagnostics.city = { status: 'loading', url: MANHATTAN_CITY_MODEL_URL };
-    loadManhattanCityGroup()
-      .then((handle) => {
-        manhattanCityHandle = handle;
-        scene.add(handle.group);
-        const colliders = registerManhattanCityColliders(worldFoundation);
-        updateManhattanCityVisibility(handle, spawn.pos.x, spawn.pos.z);
-        diagnostics.city = { status: 'ready', colliders, ...handle.stats };
-        console.info('[world] Manhattan city loaded:', diagnostics.city);
-      })
-      .catch((error) => {
-        diagnostics.city = { status: 'error', error: String((error && error.message) || error) };
-        console.warn('[world] Manhattan city failed to load; flat Kingsford plateau remains:', error);
-      });
 
     selectedMode = 'free'; // гонки на новой карте — следующим этапом
     diagnostics.foundation = worldFoundation;
-    diagnostics.streamer = worldStreamer;
-    console.info('[world] Festival Britain playable:', worldFoundation.stats());
+    diagnostics.streamer = null;
+    console.info('[world] Real Valley 1x1 km playable:', worldFoundation.stats(), realWorldSceneHandle.stats);
   } catch (error) {
     WORLD_MODE = 'legacy';
     diagnostics.mode = 'legacy';
@@ -689,15 +628,14 @@ function applyBritainModeUI() {
 }
 
 function updateWorldFoundation(dt) {
-  if (!worldStreamer || !isBritainWorld()) return;
+  if (!isBritainWorld()) return;
   worldStreamAccumS += dt;
   if (worldStreamAccumS < 0.25) return;
   worldStreamAccumS = 0;
   const pos = player.mesh && player.mesh.group ? player.mesh.group.position : null;
   const fx = pos ? pos.x : 0;
-  const fz = pos ? pos.z : 1250;
-  worldStreamer.update(fx, fz, { budget: 2 });
-  if (manhattanCityHandle) updateManhattanCityVisibility(manhattanCityHandle, fx, fz);
+  const fz = pos ? pos.z : 0;
+  if (worldStreamer) worldStreamer.update(fx, fz, { budget: 2 });
 
   // Сфера неба (R=950) и облака не покрывают 4 км из начала координат —
   // едут за игроком, как и тень солнца.
@@ -3184,7 +3122,7 @@ function startGame() {
   } else {
     gameState = 'racing';
     showCenterMsg(
-      isBritainWorld() ? 'СВОБОДНАЯ ПОЕЗДКА — Festival Britain, 4×4 км!' : 'СВОБОДНАЯ ПОЕЗДКА — твой остров!',
+      isBritainWorld() ? 'СВОБОДНАЯ ПОЕЗДКА — Real Valley, 1×1 км!' : 'СВОБОДНАЯ ПОЕЗДКА — твой остров!',
       2600, '#2ee6ff', 'map',
     );
     $('hudPosition').textContent = 'FREE';
@@ -3719,7 +3657,7 @@ function updatePlayer(dt) {
 
   // Граница мира
   if (britain) {
-    const bound = 1960;
+    const bound = (worldFoundation.worldSizeM || 1000) / 2 - 6;
     let hitBound = false;
     if (pos.x > bound) { pos.x = bound; hitBound = true; }
     if (pos.x < -bound) { pos.x = -bound; hitBound = true; }
@@ -4272,25 +4210,29 @@ function buildBritainMinimapBase(S) {
   c.width = S;
   c.height = S;
   const g = c.getContext('2d');
-  const scale = S / 4200;
+  const worldSize = worldFoundation.worldSizeM || 1000;
+  const scale = S / (worldSize * 1.08);
   const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
   g.beginPath();
   g.arc(S / 2, S / 2, S / 2 - 1, 0, TAU);
   g.clip();
   g.fillStyle = '#0a2a3d';
   g.fillRect(0, 0, S, S);
-  const [lx, ly] = toMap(-2000, -2000);
-  const [rx, ry] = toMap(2000, 2000);
+  const half = worldSize / 2;
+  const [lx, ly] = toMap(-half, -half);
+  const [rx, ry] = toMap(half, half);
   g.fillStyle = 'rgba(49, 92, 55, 0.94)';
   g.fillRect(lx, ly, rx - lx, ry - ly);
   g.strokeStyle = 'rgba(236, 211, 156, 0.78)';
   g.lineWidth = 2;
   g.strokeRect(lx, ly, rx - lx, ry - ly);
-  const [ox, oy] = toMap(-1200, -1050);
-  g.beginPath();
-  g.ellipse(ox, oy, 310 * scale, 245 * scale, 0, 0, TAU);
-  g.fillStyle = '#155e7d';
-  g.fill();
+  if (worldFoundation.lake) {
+    const [ox, oy] = toMap(worldFoundation.lake.x, worldFoundation.lake.z);
+    g.beginPath();
+    g.ellipse(ox, oy, worldFoundation.lake.radiusM * scale, worldFoundation.lake.radiusM * scale, 0, 0, TAU);
+    g.fillStyle = '#155e7d';
+    g.fill();
+  }
   g.lineCap = 'round';
   g.lineJoin = 'round';
   const strokeEdge = (edge, style, width) => {
@@ -4314,8 +4256,8 @@ function buildBritainMinimapBase(S) {
   worldFoundation.districts.forEach((d) => {
     const [x, y] = toMap(d.x, d.z);
     g.beginPath();
-    g.arc(x, y, d.id === 'festival-vale' ? 3.2 : 2.2, 0, TAU);
-    g.fillStyle = d.id === 'festival-vale' ? '#f0abfc' : '#facc15';
+    g.arc(x, y, d.id === 'town-centre' ? 3.2 : 2.2, 0, TAU);
+    g.fillStyle = d.id === 'town-centre' ? '#f0abfc' : '#facc15';
     g.fill();
     g.strokeStyle = 'rgba(0,0,0,0.45)';
     g.lineWidth = 1;
@@ -4327,7 +4269,7 @@ function buildBritainMinimapBase(S) {
 function drawBritainMinimap() {
   const S = 132;
   if (!britainMinimapBase) britainMinimapBase = buildBritainMinimapBase(S);
-  const scale = S / 4200;
+  const scale = S / ((worldFoundation.worldSizeM || 1000) * 1.08);
   const toMap = (x, z) => [S / 2 + x * scale, S / 2 + z * scale];
   minimap.clearRect(0, 0, S, S);
   minimap.save();
