@@ -16,9 +16,21 @@ const WHEEL_RADIUS := 0.3378
 const SUSPENSION_REST_LENGTH := 0.72
 const SUSPENSION_TRAVEL := 0.30
 const SPRING_STIFFNESS := 28000.0
-const SPRING_DAMPING := 2850.0
-const ANTI_ROLL_STIFFNESS := 7200.0
-const TYRE_MU := 1.18
+const SPRING_DAMPING_COMPRESSION := 3600.0
+const SPRING_DAMPING_REBOUND := 2150.0
+const ANTI_ROLL_FRONT := 8000.0
+const ANTI_ROLL_REAR := 6400.0
+const WHEELBASE := 2.86
+const TRACK_WIDTH := 1.64
+const ENGINE_IDLE_RPM := 850.0
+const ENGINE_REDLINE_RPM := 7200.0
+const GEAR_RATIOS: Array[float] = [3.66, 2.43, 1.69, 1.32, 1.00, 0.65]
+const REVERSE_RATIO := 3.35
+const FINAL_DRIVE := 3.73
+const DRIVETRAIN_EFFICIENCY := 0.86
+const AIR_DENSITY := 1.225
+const DRAG_AREA := 0.72
+const DOWNFORCE_AREA := 0.52
 
 var steering_angle := 0.0
 var throttle_input := 0.0
@@ -38,7 +50,14 @@ var _touch_inputs: Dictionary = {
 var _wheels: Array[Dictionary] = []
 var _wheel_visuals: Array[Dictionary] = []
 var _visual_root: Node3D
+var _world: NativeWorldBuilder
 var _headlights: Array[SpotLight3D] = []
+var _headlight_materials: Array[StandardMaterial3D] = []
+var _tail_light_materials: Array[StandardMaterial3D] = []
+var _smoke_emitters: Array[GPUParticles3D] = []
+var _nitro_emitters: Array[GPUParticles3D] = []
+var _contact_shadow_material: StandardMaterial3D
+var _soft_disc_texture: Texture2D
 var _engine_player: AudioStreamPlayer
 var _nitro := 0.72
 var _forward_speed := 0.0
@@ -47,6 +66,19 @@ var _flip_timer := 0.0
 var _last_safe_transform := Transform3D.IDENTITY
 var _safe_transform_timer := 0.0
 var _steering_visual_angle := 0.0
+var _current_gear := 0
+var _engine_rpm := ENGINE_IDLE_RPM
+var _gear_shift_timer := 0.0
+var _reverse_engaged := false
+var _drive_force_per_wheel := 0.0
+var _engine_brake_force_per_wheel := 0.0
+var _wheelspin_excess_speed := 0.0
+var _rear_slip_ratio := 0.0
+var _surface_kind := "asphalt"
+var _surface_label := "АСФАЛЬТ"
+var _surface_mu := 1.16
+var _headlights_enabled := false
+var _brake_light_active := false
 
 
 func _ready() -> void:
@@ -54,8 +86,8 @@ func _ready() -> void:
 	mass = 1450.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, 0.38, 0.02)
-	linear_damp = 0.035
-	angular_damp = 1.25
+	linear_damp = 0.012
+	angular_damp = 0.38
 	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 10
@@ -64,8 +96,8 @@ func _ready() -> void:
 	collision_mask = 1
 
 	var physics_material := PhysicsMaterial.new()
-	physics_material.friction = 0.18
-	physics_material.bounce = 0.03
+	physics_material.friction = 0.28
+	physics_material.bounce = 0.025
 	physics_material_override = physics_material
 
 	_ensure_input_actions()
@@ -73,7 +105,12 @@ func _ready() -> void:
 	_create_suspension_raycasts()
 	_create_visual()
 	_create_headlights()
+	_create_vehicle_effects()
 	_create_engine_audio()
+
+
+func set_world(world: NativeWorldBuilder) -> void:
+	_world = world
 
 
 func _ensure_input_actions() -> void:
@@ -143,6 +180,9 @@ func _create_suspension_raycasts() -> void:
 		wheel["ray"] = ray
 		wheel["grounded"] = false
 		wheel["displacement"] = 0.0
+		wheel["spring_force"] = 0.0
+		wheel["slip_angle"] = 0.0
+		wheel["surface"] = {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 		_wheels.append(wheel)
 
 
@@ -191,11 +231,12 @@ func _count_mesh_instances(node: Node) -> int:
 func _paint_material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.metallic = 0.62
-	material.roughness = 0.30
+	material.metallic = 0.18
+	material.roughness = 0.34
+	material.metallic_specular = 0.78
 	material.clearcoat_enabled = true
 	material.clearcoat = 1.0
-	material.clearcoat_roughness = 0.08
+	material.clearcoat_roughness = 0.055
 	return material
 
 
@@ -218,11 +259,54 @@ func _apply_model_materials(node: Node) -> void:
 					mesh_instance.set_surface_override_material(surface_index, _paint_material(Color(0.94, 0.36, 0.05)))
 				elif lower_name.contains("glass") or lower_name.contains("window"):
 					var glass := StandardMaterial3D.new()
-					glass.albedo_color = Color(0.035, 0.075, 0.11, 0.82)
+					glass.albedo_color = Color(0.035, 0.075, 0.11, 0.78)
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					glass.metallic = 0.72
-					glass.roughness = 0.07
+					glass.metallic = 0.05
+					glass.roughness = 0.05
+					glass.metallic_specular = 1.0
 					mesh_instance.set_surface_override_material(surface_index, glass)
+				elif lower_name.contains("tyre") or lower_name.contains("tire") or lower_name.contains("rubber"):
+					var tyre := StandardMaterial3D.new()
+					tyre.albedo_color = Color(0.018, 0.018, 0.02)
+					tyre.metallic = 0.0
+					tyre.roughness = 0.94
+					mesh_instance.set_surface_override_material(surface_index, tyre)
+				elif lower_name.contains("chrome"):
+					var chrome := StandardMaterial3D.new()
+					chrome.albedo_color = Color(0.72, 0.75, 0.78)
+					chrome.metallic = 1.0
+					chrome.roughness = 0.16
+					mesh_instance.set_surface_override_material(surface_index, chrome)
+				elif lower_name.contains("carbon"):
+					var carbon := StandardMaterial3D.new()
+					carbon.albedo_color = Color(0.025, 0.028, 0.032)
+					carbon.metallic = 0.32
+					carbon.roughness = 0.38
+					carbon.clearcoat_enabled = true
+					carbon.clearcoat = 0.65
+					carbon.clearcoat_roughness = 0.18
+					mesh_instance.set_surface_override_material(surface_index, carbon)
+				elif lower_name.contains("tail") or lower_name.contains("rearlight") or lower_name.contains("brakelight"):
+					var tail := StandardMaterial3D.new()
+					tail.albedo_color = Color(0.38, 0.015, 0.025)
+					tail.metallic = 0.05
+					tail.roughness = 0.2
+					tail.emission_enabled = true
+					tail.emission = Color(1.0, 0.03, 0.04)
+					tail.emission_energy_multiplier = 0.75
+					_tail_light_materials.append(tail)
+					mesh_instance.set_surface_override_material(surface_index, tail)
+				elif lower_name.contains("headlight") or lower_name.contains("headlamp"):
+					var lens := StandardMaterial3D.new()
+					lens.albedo_color = Color(0.72, 0.84, 0.92)
+					lens.metallic = 0.08
+					lens.roughness = 0.08
+					lens.metallic_specular = 1.0
+					lens.emission_enabled = true
+					lens.emission = Color(1.0, 0.94, 0.78)
+					lens.emission_energy_multiplier = 0.0
+					_headlight_materials.append(lens)
+					mesh_instance.set_surface_override_material(surface_index, lens)
 	for child in node.get_children():
 		_apply_model_materials(child)
 
@@ -240,10 +324,10 @@ func _find_node_by_name(node: Node, target_name: String) -> Node:
 func _collect_wheel_visuals(model: Node) -> void:
 	_wheel_visuals.clear()
 	for definition in [
-		{"pivot": "Wheel_FL", "spin": "Wheel_FL_Spin", "front": true},
-		{"pivot": "Wheel_FR", "spin": "Wheel_FR_Spin", "front": true},
-		{"pivot": "Wheel_RL", "spin": "Wheel_RL_Spin", "front": false},
-		{"pivot": "Wheel_RR", "spin": "Wheel_RR_Spin", "front": false},
+		{"pivot": "Wheel_FL", "spin": "Wheel_FL_Spin", "front": true, "side": -1},
+		{"pivot": "Wheel_FR", "spin": "Wheel_FR_Spin", "front": true, "side": 1},
+		{"pivot": "Wheel_RL", "spin": "Wheel_RL_Spin", "front": false, "side": -1},
+		{"pivot": "Wheel_RR", "spin": "Wheel_RR_Spin", "front": false, "side": 1},
 	]:
 		var pivot := _find_node_by_name(model, String(definition.get("pivot", ""))) as Node3D
 		var spin := _find_node_by_name(model, String(definition.get("spin", ""))) as Node3D
@@ -252,7 +336,9 @@ func _collect_wheel_visuals(model: Node) -> void:
 				"pivot": pivot,
 				"spin": spin,
 				"front": bool(definition.get("front", false)),
+				"side": int(definition.get("side", 1)),
 				"pivot_y": pivot.rotation.y,
+				"base_position": pivot.position,
 			})
 	if _wheel_visuals.size() != 4:
 		push_warning("Mustang wheel pivots found: %d/4" % _wheel_visuals.size())
@@ -271,10 +357,10 @@ func _create_fallback_visual() -> void:
 
 	_wheel_visuals.clear()
 	for definition in [
-		{"position": Vector3(-0.82, WHEEL_RADIUS, 1.43), "front": true},
-		{"position": Vector3(0.82, WHEEL_RADIUS, 1.43), "front": true},
-		{"position": Vector3(-0.82, WHEEL_RADIUS, -1.43), "front": false},
-		{"position": Vector3(0.82, WHEEL_RADIUS, -1.43), "front": false},
+		{"position": Vector3(-0.82, WHEEL_RADIUS, 1.43), "front": true, "side": -1},
+		{"position": Vector3(0.82, WHEEL_RADIUS, 1.43), "front": true, "side": 1},
+		{"position": Vector3(-0.82, WHEEL_RADIUS, -1.43), "front": false, "side": -1},
+		{"position": Vector3(0.82, WHEEL_RADIUS, -1.43), "front": false, "side": 1},
 	]:
 		var pivot := Node3D.new()
 		pivot.position = definition.get("position", Vector3.ZERO)
@@ -295,7 +381,9 @@ func _create_fallback_visual() -> void:
 			"pivot": pivot,
 			"spin": spin,
 			"front": bool(definition.get("front", false)),
+			"side": int(definition.get("side", 1)),
 			"pivot_y": 0.0,
+			"base_position": pivot.position,
 		})
 
 
@@ -327,8 +415,153 @@ func _create_headlights() -> void:
 
 
 func set_headlights_enabled(enabled: bool) -> void:
+	_headlights_enabled = enabled
 	for light in _headlights:
-		light.light_energy = 3.6 if enabled else 0.0
+		light.light_energy = 4.2 if enabled else 0.0
+	for material in _headlight_materials:
+		material.emission_energy_multiplier = 3.2 if enabled else 0.0
+
+
+func _get_soft_disc_texture() -> Texture2D:
+	if _soft_disc_texture != null:
+		return _soft_disc_texture
+	var size := 64
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in size:
+		for x in size:
+			var nx := (float(x) / float(size - 1) - 0.5) * 2.0
+			var ny := (float(y) / float(size - 1) - 0.5) * 2.0
+			var radius := sqrt(nx * nx + ny * ny)
+			var alpha := clampf(1.0 - smoothstep(0.42, 1.0, radius), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+	_soft_disc_texture = ImageTexture.create_from_image(image)
+	return _soft_disc_texture
+
+
+func _particle_material(color: Color, emissive: bool = false) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.albedo_texture = _get_soft_disc_texture()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	material.vertex_color_use_as_albedo = true
+	material.metallic_specular = 0.0
+	if emissive:
+		material.emission_enabled = true
+		material.emission = Color(color.r, color.g, color.b)
+		material.emission_energy_multiplier = 2.4
+	return material
+
+
+func _make_particle_emitter(
+	node_name: String,
+	position_value: Vector3,
+	amount: int,
+	lifetime: float,
+	direction: Vector3,
+	spread: float,
+	min_velocity: float,
+	max_velocity: float,
+	min_scale: float,
+	max_scale: float,
+	quad_size: float,
+	material: Material,
+	gravity: Vector3 = Vector3.ZERO
+) -> GPUParticles3D:
+	var process := ParticleProcessMaterial.new()
+	if material is StandardMaterial3D:
+		process.color = (material as StandardMaterial3D).albedo_color
+	process.direction = direction
+	process.spread = spread
+	process.initial_velocity_min = min_velocity
+	process.initial_velocity_max = max_velocity
+	process.gravity = gravity
+	process.damping_min = 1.6
+	process.damping_max = 3.8
+	process.scale_min = min_scale
+	process.scale_max = max_scale
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	process.emission_sphere_radius = 0.20
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 1.0, 1.0, 0.0))
+	gradient.add_point(0.16, Color(1.0, 1.0, 1.0, 0.82))
+	gradient.add_point(0.72, Color(1.0, 1.0, 1.0, 0.42))
+	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var gradient_texture := GradientTexture1D.new()
+	gradient_texture.gradient = gradient
+	gradient_texture.width = 64
+	process.color_ramp = gradient_texture
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(quad_size, quad_size)
+	quad.material = material
+
+	var emitter := GPUParticles3D.new()
+	emitter.name = node_name
+	emitter.position = position_value
+	emitter.amount = amount
+	emitter.lifetime = lifetime
+	emitter.randomness = 0.62
+	emitter.local_coords = false
+	emitter.process_material = process
+	emitter.draw_pass_1 = quad
+	emitter.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	emitter.visibility_aabb = AABB(Vector3(-16.0, -4.0, -20.0), Vector3(32.0, 10.0, 40.0))
+	emitter.emitting = false
+	add_child(emitter)
+	return emitter
+
+
+func _create_vehicle_effects() -> void:
+	_contact_shadow_material = StandardMaterial3D.new()
+	_contact_shadow_material.albedo_color = Color(0.0, 0.0, 0.0, 0.30)
+	_contact_shadow_material.albedo_texture = _get_soft_disc_texture()
+	_contact_shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_contact_shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_contact_shadow_material.metallic_specular = 0.0
+	var shadow_mesh := PlaneMesh.new()
+	shadow_mesh.size = Vector2(2.28, 5.08)
+	shadow_mesh.material = _contact_shadow_material
+	var contact_shadow := MeshInstance3D.new()
+	contact_shadow.name = "ContactShadow"
+	contact_shadow.mesh = shadow_mesh
+	contact_shadow.position = Vector3(0.0, 0.035, 0.0)
+	contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	contact_shadow.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	add_child(contact_shadow)
+
+	for x in [-0.82, 0.82]:
+		_smoke_emitters.append(_make_particle_emitter(
+			"RearTyreSmoke",
+			Vector3(x, 0.20, 1.50),
+			52,
+			0.92,
+			Vector3(0.0, 0.24, 1.0),
+			28.0,
+			0.7,
+			2.8,
+			0.55,
+			1.25,
+			0.62,
+			_particle_material(Color(0.72, 0.72, 0.74, 0.34)),
+			Vector3(0.0, 0.45, 0.0)
+		))
+	for x in [-0.56, 0.56]:
+		_nitro_emitters.append(_make_particle_emitter(
+			"NitroFlame",
+			Vector3(x, 0.36, 2.34),
+			38,
+			0.30,
+			Vector3(0.0, 0.0, 1.0),
+			7.0,
+			7.0,
+			12.0,
+			0.55,
+			1.0,
+			0.28,
+			_particle_material(Color(0.25, 0.82, 1.0, 0.72), true)
+		))
 
 
 func _create_engine_audio() -> void:
@@ -405,10 +638,110 @@ func _physics_process(delta: float) -> void:
 	else:
 		_nitro = minf(_nitro + delta * (0.16 if is_drifting() else 0.055), 1.0)
 
+	_brake_light_active = handbrake_active or (throttle_input < -0.03 and _forward_speed > 0.45)
+	_update_drivetrain(delta)
 	_apply_suspension_and_tyres(delta)
 	_apply_aerodynamics()
 	_update_flip_recovery(delta)
 	_update_safe_transform(delta)
+
+
+func _engine_torque_curve(rpm: float) -> float:
+	var points: Array[Vector2] = [
+		Vector2(850.0, 0.58),
+		Vector2(1800.0, 0.78),
+		Vector2(3200.0, 0.96),
+		Vector2(4700.0, 1.0),
+		Vector2(5900.0, 0.91),
+		Vector2(6800.0, 0.78),
+		Vector2(7200.0, 0.62),
+	]
+	if rpm <= points[0].x:
+		return 525.0 * points[0].y
+	for i in range(1, points.size()):
+		if rpm <= points[i].x:
+			var t := (rpm - points[i - 1].x) / maxf(points[i].x - points[i - 1].x, 1.0)
+			return 525.0 * lerpf(points[i - 1].y, points[i].y, t)
+	return 525.0 * points[points.size() - 1].y
+
+
+func _pacejka(slip: float, stiffness: float, shape: float, curvature: float) -> float:
+	var bx := stiffness * slip
+	return sin(shape * atan(bx - curvature * (bx - atan(bx))))
+
+
+func _ackermann_angle(side: int) -> float:
+	if absf(steering_angle) < 0.0005:
+		return 0.0
+	var turn_radius := WHEELBASE / tan(absf(steering_angle))
+	var is_inner := (steering_angle > 0.0 and side < 0) or (steering_angle < 0.0 and side > 0)
+	var denominator := maxf(turn_radius + (-TRACK_WIDTH * 0.5 if is_inner else TRACK_WIDTH * 0.5), 0.25)
+	return signf(steering_angle) * atan(WHEELBASE / denominator)
+
+
+func _update_drivetrain(delta: float) -> void:
+	if throttle_input > 0.03:
+		_reverse_engaged = false
+	elif throttle_input < -0.03 and _forward_speed <= 0.45:
+		_reverse_engaged = true
+	elif _forward_speed > 0.6:
+		_reverse_engaged = false
+
+	_gear_shift_timer = maxf(_gear_shift_timer - delta, 0.0)
+	var ratio := REVERSE_RATIO if _reverse_engaged else GEAR_RATIOS[_current_gear]
+	var wheel_rpm := absf(_forward_speed) / WHEEL_RADIUS * 60.0 / TAU
+	var coupled_rpm := wheel_rpm * ratio * FINAL_DRIVE
+	var target_rpm := maxf(coupled_rpm, ENGINE_IDLE_RPM)
+	if absf(throttle_input) > 0.03 and absf(_forward_speed) < 7.0:
+		target_rpm = maxf(target_rpm, ENGINE_IDLE_RPM + absf(throttle_input) * 1750.0)
+	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 5600.0 * delta), ENGINE_IDLE_RPM, ENGINE_REDLINE_RPM)
+
+	if not _reverse_engaged and _gear_shift_timer <= 0.0:
+		if throttle_input > 0.04 and _engine_rpm > 6250.0 and _current_gear < GEAR_RATIOS.size() - 1:
+			var old_ratio := GEAR_RATIOS[_current_gear]
+			_current_gear += 1
+			ratio = GEAR_RATIOS[_current_gear]
+			_engine_rpm *= ratio / old_ratio
+			_gear_shift_timer = 0.18
+		elif _current_gear > 0 and _engine_rpm < 2050.0 and absf(_forward_speed) > 3.0:
+			var old_ratio_down := GEAR_RATIOS[_current_gear]
+			_current_gear -= 1
+			ratio = GEAR_RATIOS[_current_gear]
+			_engine_rpm *= ratio / old_ratio_down
+			_gear_shift_timer = 0.12
+
+	var throttle_magnitude := 0.0
+	if _reverse_engaged:
+		throttle_magnitude = absf(minf(throttle_input, 0.0))
+	elif throttle_input > 0.03:
+		throttle_magnitude = throttle_input
+	var torque := _engine_torque_curve(_engine_rpm) * throttle_magnitude
+	if boost_active and not _reverse_engaged:
+		torque *= 1.34
+	if _gear_shift_timer > 0.0:
+		torque *= 0.16
+	var total_drive_force := torque * ratio * FINAL_DRIVE * DRIVETRAIN_EFFICIENCY / WHEEL_RADIUS
+	_drive_force_per_wheel = total_drive_force * 0.5 * (-1.0 if _reverse_engaged else 1.0)
+
+	var engine_brake_torque := clampf((_engine_rpm - ENGINE_IDLE_RPM) * 0.018, 0.0, 110.0)
+	_engine_brake_force_per_wheel = 0.0
+	if absf(throttle_input) <= 0.03 and not _reverse_engaged and absf(_forward_speed) > 0.4:
+		_engine_brake_force_per_wheel = engine_brake_torque * ratio * FINAL_DRIVE * DRIVETRAIN_EFFICIENCY / WHEEL_RADIUS * 0.5
+
+	# A single limited-slip rear axle state is enough for believable
+	# launches: requested force beyond the available rear-axle friction
+	# becomes wheelspin, then the longitudinal Pacejka curve and traction
+	# control decide how much of it reaches the road.
+	var approximate_rear_peak := mass * 9.81 * 0.47 * maxf(_surface_mu, 0.05)
+	var load_ratio := absf(total_drive_force) / maxf(approximate_rear_peak, 1.0)
+	var target_excess := clampf((load_ratio - 0.72) * 7.0, 0.0, 11.0)
+	if _reverse_engaged:
+		target_excess = -target_excess
+	if handbrake_active:
+		target_excess = -_forward_speed
+	var excess_rate := 18.0 if absf(target_excess) > absf(_wheelspin_excess_speed) else 9.0
+	_wheelspin_excess_speed = move_toward(_wheelspin_excess_speed, target_excess, excess_rate * delta)
+	_rear_slip_ratio = _wheelspin_excess_speed / maxf(absf(_forward_speed), 4.0)
 
 
 func _apply_suspension_and_tyres(_delta: float) -> void:
@@ -421,6 +754,7 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		wheel["grounded"] = false
 		wheel["displacement"] = 0.0
 		wheel["spring_force"] = 0.0
+		wheel["slip_angle"] = 0.0
 		if ray == null:
 			continue
 		ray.force_raycast_update()
@@ -437,6 +771,8 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		wheel["ground_normal"] = ground_normal
 		wheel["distance"] = distance
 		wheel["displacement"] = displacement
+		if _world != null:
+			wheel["surface"] = _world.get_surface_at(hit_point)
 		grounded_wheel_count += 1
 
 	# Anti-roll coupling per axle.
@@ -451,7 +787,7 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 				left_displacement = float(wheel.get("displacement", 0.0))
 			else:
 				right_displacement = float(wheel.get("displacement", 0.0))
-		axle_adjustments[axle] = (left_displacement - right_displacement) * ANTI_ROLL_STIFFNESS
+		axle_adjustments[axle] = (left_displacement - right_displacement) * (ANTI_ROLL_FRONT if axle == 0 else ANTI_ROLL_REAR)
 
 	# Second pass: spring/damper plus tyre forces at actual contacts.
 	for wheel in _wheels:
@@ -463,16 +799,19 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		var point_velocity := linear_velocity + angular_velocity.cross(relative_position)
 		var suspension_velocity := point_velocity.dot(ground_normal)
 		var displacement := float(wheel.get("displacement", 0.0))
-		var spring_force := displacement * SPRING_STIFFNESS - suspension_velocity * SPRING_DAMPING
+		var compression_ratio := clampf(displacement / SUSPENSION_TRAVEL, 0.0, 1.0)
+		var progressive_force := displacement * SPRING_STIFFNESS + compression_ratio * compression_ratio * 7200.0
+		var damping := SPRING_DAMPING_COMPRESSION if suspension_velocity < 0.0 else SPRING_DAMPING_REBOUND
+		var spring_force := progressive_force - suspension_velocity * damping
 		var adjustment := float(axle_adjustments.get(int(wheel.get("axle", 0)), 0.0))
 		spring_force += adjustment if int(wheel.get("side", 0)) < 0 else -adjustment
-		spring_force = clampf(spring_force, 0.0, 22000.0)
+		spring_force = clampf(spring_force, 0.0, 26500.0)
 		wheel["spring_force"] = spring_force
 		apply_force(ground_normal * spring_force, relative_position)
 
 		var forward := -global_transform.basis.z
 		if bool(wheel.get("front", false)):
-			forward = Basis(ground_normal, steering_angle) * forward
+			forward = Basis(ground_normal, _ackermann_angle(int(wheel.get("side", 1)))) * forward
 		forward = forward - ground_normal * forward.dot(ground_normal)
 		if forward.length_squared() < 0.0001:
 			forward = -global_transform.basis.z
@@ -485,41 +824,94 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		var forward_velocity := point_velocity.dot(forward)
 		var lateral_velocity := point_velocity.dot(right)
 		var is_rear := not bool(wheel.get("front", false))
+		var surface: Dictionary = wheel.get("surface", {"mu": 1.16, "rolling_resistance": 0.014})
+		var surface_mu := float(surface.get("mu", 1.16))
+		var load_sensitivity := clampf(1.08 - spring_force / 45000.0, 0.88, 1.08)
+		var peak_force := spring_force * surface_mu * load_sensitivity
 		var grip_factor := 1.0
 		if handbrake_active and is_rear:
-			grip_factor = 0.24
+			grip_factor = 0.22
 		elif handbrake_active:
-			grip_factor = 0.82
+			grip_factor = 0.84
 
-		var max_lateral_force := spring_force * TYRE_MU * grip_factor
-		var lateral_force_magnitude := clampf(-lateral_velocity * (mass * 0.25) * 15.0, -max_lateral_force, max_lateral_force)
-		var tyre_force := right * lateral_force_magnitude
+		var slip_angle := atan2(lateral_velocity, maxf(absf(forward_velocity), 2.0))
+		wheel["slip_angle"] = slip_angle
+		var pacejka_lateral := -_pacejka(slip_angle, 8.6, 1.34, 0.86) * peak_force * grip_factor
+		var low_speed_lateral := clampf(-lateral_velocity * (mass * 0.25) * 13.0, -peak_force, peak_force)
+		var lateral_blend := 0.25 + 0.75 * clampf(absf(forward_velocity) / 6.0, 0.0, 1.0)
+		var lateral_force := lerpf(low_speed_lateral, pacejka_lateral, lateral_blend)
 
 		var longitudinal_force := 0.0
-		if throttle_input > 0.03:
-			if bool(wheel.get("driven", false)):
-				var taper := clampf(1.0 - absf(_forward_speed) / 68.0, 0.20, 1.0)
-				var boost_multiplier := 1.55 if boost_active else 1.0
-				longitudinal_force += 15800.0 * throttle_input * taper * boost_multiplier * 0.5
-		elif throttle_input < -0.03:
-			if _forward_speed > 0.45:
-				longitudinal_force += -signf(forward_velocity) * 5600.0 * absf(throttle_input)
-			elif bool(wheel.get("driven", false)):
-				longitudinal_force += -7600.0 * absf(throttle_input) * 0.5
-		else:
-			longitudinal_force += -forward_velocity * 22.0
+		if bool(wheel.get("driven", false)):
+			var requested_drive := _drive_force_per_wheel
+			if absf(requested_drive) > 1.0:
+				var slip_ratio := _rear_slip_ratio
+				if (requested_drive < 0.0 and slip_ratio > 0.0) or (requested_drive > 0.0 and slip_ratio < 0.0):
+					slip_ratio = -slip_ratio
+				var traction_limit := 0.30 if boost_active else 0.19
+				if handbrake_active:
+					traction_limit = 10.0
+				var curve_force := absf(_pacejka(maxf(absf(slip_ratio), 0.035), 13.0, 1.30, 0.90)) * peak_force
+				var available_drive := minf(absf(requested_drive), maxf(curve_force, absf(requested_drive) * 0.25))
+				if absf(slip_ratio) > traction_limit:
+					# Traction control targets the force at the optimal
+					# slip ratio instead of multiplying a huge first-gear
+					# request by a tiny factor and killing the launch.
+					var optimal_force := absf(_pacejka(traction_limit, 13.0, 1.30, 0.90)) * peak_force
+					var recovery := clampf(traction_limit / absf(slip_ratio), 0.84, 1.0)
+					available_drive = minf(available_drive, optimal_force * recovery)
+				longitudinal_force += signf(requested_drive) * available_drive
+			if absf(throttle_input) <= 0.03 and not _reverse_engaged:
+				longitudinal_force += -signf(forward_velocity) * _engine_brake_force_per_wheel
+
+		if throttle_input < -0.03 and _forward_speed > 0.45:
+			# 64/36 front/rear brake bias.  The friction-circle clamp below
+			# preserves lateral force first, which is the ABS-like part of
+			# this model: steering grip is not consumed by locked brakes.
+			var brake_share := 0.32 if bool(wheel.get("front", false)) else 0.18
+			longitudinal_force += -signf(forward_velocity) * 21500.0 * brake_share * absf(throttle_input)
 
 		if handbrake_active and is_rear:
-			longitudinal_force += -signf(forward_velocity) * minf(absf(forward_velocity) * 850.0, 7200.0)
+			longitudinal_force += clampf(-forward_velocity * 1800.0, -peak_force, peak_force)
 
-		# Rolling resistance, kept small enough for a 240 km/h arcade top end.
-		longitudinal_force += -forward_velocity * 9.0
-		tyre_force += forward * longitudinal_force
+		var rolling_coefficient := float(surface.get("rolling_resistance", 0.014))
+		if absf(forward_velocity) > 0.15:
+			longitudinal_force += -signf(forward_velocity) * spring_force * rolling_coefficient
+		else:
+			longitudinal_force += -forward_velocity * 48.0
 
-		var max_combined_force := spring_force * 1.58
-		if tyre_force.length() > max_combined_force and tyre_force.length() > 0.001:
-			tyre_force = tyre_force.normalized() * max_combined_force
-		apply_force(tyre_force, relative_position)
+		# Friction circle with lateral priority.
+		lateral_force = clampf(lateral_force, -peak_force * grip_factor, peak_force * grip_factor)
+		var available_longitudinal := sqrt(maxf(peak_force * peak_force - lateral_force * lateral_force, 0.0))
+		longitudinal_force = clampf(longitudinal_force, -available_longitudinal, available_longitudinal)
+		apply_force(right * lateral_force + forward * longitudinal_force, relative_position)
+
+	if grounded_wheel_count > 0:
+		var mu_total := 0.0
+		var surface_votes: Dictionary = {}
+		for wheel in _wheels:
+			if not bool(wheel.get("grounded", false)):
+				continue
+			var wheel_surface: Dictionary = wheel.get("surface", {})
+			mu_total += float(wheel_surface.get("mu", 1.16))
+			var kind := String(wheel_surface.get("kind", "asphalt"))
+			surface_votes[kind] = int(surface_votes.get(kind, 0)) + 1
+			if int(surface_votes.get(kind, 0)) >= int(surface_votes.get(_surface_kind, 0)):
+				_surface_kind = kind
+				_surface_label = String(wheel_surface.get("label", "АСФАЛЬТ"))
+		_surface_mu = mu_total / float(maxi(grounded_wheel_count, 1))
+
+		# Bicycle-model yaw damping.  It replaces the old heavy global
+		# angular damping with a targeted stability torque and is mostly
+		# released while handbraking or already in a controlled drift.
+		if grounded_wheel_count >= 2 and absf(_forward_speed) > 3.0:
+			var understeer_gradient := 0.0028
+			var desired_yaw_rate := _forward_speed / WHEELBASE * tan(steering_angle) / (1.0 + understeer_gradient * _forward_speed * _forward_speed)
+			var grip_limited_yaw_rate := clampf(_surface_mu * 9.81 * 0.92 / maxf(absf(_forward_speed), 1.0), 0.22, 1.15)
+			desired_yaw_rate = clampf(desired_yaw_rate, -grip_limited_yaw_rate, grip_limited_yaw_rate)
+			var yaw_error := desired_yaw_rate - angular_velocity.y
+			var stability_strength := 900.0 if handbrake_active else (1900.0 if is_drifting() else 5200.0)
+			apply_torque(Vector3.UP * clampf(yaw_error * stability_strength, -9000.0, 9000.0))
 
 	if grounded_wheel_count > 0 and absf(throttle_input) < 0.03 and not handbrake_active:
 		var horizontal_velocity := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
@@ -531,10 +923,12 @@ func _apply_aerodynamics() -> void:
 	var velocity := linear_velocity
 	var speed := velocity.length()
 	if speed > 0.01:
-		apply_central_force(-velocity.normalized() * speed * speed * 0.34)
-	var downforce := clampf(_forward_speed * _forward_speed * 2.1, 0.0, 6800.0)
+		var drag_force := 0.5 * AIR_DENSITY * DRAG_AREA * speed * speed
+		apply_central_force(-velocity.normalized() * drag_force)
+	var downforce := clampf(0.5 * AIR_DENSITY * DOWNFORCE_AREA * _forward_speed * _forward_speed, 0.0, 6500.0)
 	if grounded_wheel_count > 0:
-		apply_central_force(-global_transform.basis.y * downforce)
+		var rear_bias := global_transform.basis * Vector3(0.0, 0.0, 0.32)
+		apply_force(-global_transform.basis.y * downforce, rear_bias)
 
 
 func _update_safe_transform(delta: float) -> void:
@@ -562,14 +956,49 @@ func _update_flip_recovery(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	for wheel_visual in _wheel_visuals:
+	for i in _wheel_visuals.size():
+		var wheel_visual: Dictionary = _wheel_visuals[i]
 		var pivot := wheel_visual.get("pivot") as Node3D
 		var spin := wheel_visual.get("spin") as Node3D
 		if pivot == null or spin == null:
 			continue
+		if i < _wheels.size():
+			var base_position: Vector3 = wheel_visual.get("base_position", pivot.position)
+			var displacement := float(_wheels[i].get("displacement", 0.0))
+			pivot.position = base_position + Vector3.UP * displacement * 0.86
 		if bool(wheel_visual.get("front", false)):
-			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _steering_visual_angle
-		spin.rotation.x -= _forward_speed * delta / WHEEL_RADIUS
+			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _ackermann_angle(int(wheel_visual.get("side", 1)))
+		var visual_speed := _forward_speed
+		if not bool(wheel_visual.get("front", false)):
+			visual_speed += _wheelspin_excess_speed
+		spin.rotation.x -= visual_speed * delta / WHEEL_RADIUS
+
+	var smoke_intensity := 0.0
+	if grounded_wheel_count >= 2:
+		if is_drifting():
+			smoke_intensity = maxf(smoke_intensity, clampf(get_drift_angle_degrees() / 38.0, 0.35, 1.0))
+		if absf(_rear_slip_ratio) > 0.24 and absf(throttle_input) > 0.05:
+			smoke_intensity = maxf(smoke_intensity, clampf(absf(_rear_slip_ratio) / 0.75, 0.30, 1.0))
+		if (_surface_kind == "sand" or _surface_kind == "grass" or _surface_kind == "rock") and absf(_forward_speed) > 9.0:
+			smoke_intensity = maxf(smoke_intensity, 0.42)
+	var smoke_color := Color(0.72, 0.72, 0.74, 0.34)
+	if _surface_kind == "sand":
+		smoke_color = Color(0.78, 0.66, 0.45, 0.38)
+	elif _surface_kind == "grass" or _surface_kind == "rock":
+		smoke_color = Color(0.48, 0.44, 0.34, 0.36)
+	for emitter in _smoke_emitters:
+		emitter.emitting = smoke_intensity > 0.03
+		emitter.amount_ratio = smoke_intensity
+		var process := emitter.process_material as ParticleProcessMaterial
+		if process != null:
+			process.color = smoke_color
+	for emitter in _nitro_emitters:
+		emitter.emitting = boost_active
+		emitter.amount_ratio = 1.0 if boost_active else 0.0
+	if _contact_shadow_material != null:
+		_contact_shadow_material.albedo_color.a = 0.30 if grounded_wheel_count >= 2 else 0.12
+	for material in _tail_light_materials:
+		material.emission_energy_multiplier = 4.6 if _brake_light_active else (1.1 if _headlights_enabled else 0.65)
 
 	if _engine_player != null:
 		var rpm := get_rpm_ratio()
@@ -589,11 +1018,72 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
+	_current_gear = 0
+	_engine_rpm = ENGINE_IDLE_RPM
+	_gear_shift_timer = 0.0
+	_reverse_engaged = false
+	_drive_force_per_wheel = 0.0
+	_wheelspin_excess_speed = 0.0
+	_rear_slip_ratio = 0.0
 	_last_safe_transform = target
 
 
 func get_forward_speed_ms() -> float:
 	return _forward_speed
+
+
+func get_lateral_speed_ms() -> float:
+	return _lateral_speed
+
+
+func get_steering_angle() -> float:
+	return steering_angle
+
+
+func get_engine_rpm() -> float:
+	return _engine_rpm
+
+
+func get_current_gear_index() -> int:
+	return _current_gear
+
+
+func get_rear_slip_ratio() -> float:
+	return _rear_slip_ratio
+
+
+func get_surface_kind() -> String:
+	return _surface_kind
+
+
+func get_surface_label() -> String:
+	return _surface_label
+
+
+func _accumulate_visual_aabb(node: Node, current: AABB, has_aabb: bool) -> Dictionary:
+	var result := {"aabb": current, "has": has_aabb}
+	if String(node.name) == "ContactShadow":
+		return result
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			var transformed := mesh_instance.global_transform * mesh_instance.get_aabb()
+			current = transformed if not has_aabb else current.merge(transformed)
+			has_aabb = true
+			result = {"aabb": current, "has": has_aabb}
+	for child in node.get_children():
+		result = _accumulate_visual_aabb(child, result.get("aabb", current), bool(result.get("has", has_aabb)))
+	return result
+
+
+func get_visual_aabb_size() -> Vector3:
+	if _visual_root == null:
+		return Vector3.ZERO
+	var result := _accumulate_visual_aabb(_visual_root, AABB(), false)
+	if not bool(result.get("has", false)):
+		return Vector3.ZERO
+	var aabb: AABB = result.get("aabb", AABB())
+	return aabb.size
 
 
 func get_speed_kmh() -> float:
@@ -623,43 +1113,12 @@ func is_drifting() -> bool:
 
 
 func get_gear_label() -> String:
-	if _forward_speed < -0.45 or (throttle_input < -0.05 and _forward_speed <= 0.45):
+	if _reverse_engaged or _forward_speed < -0.45:
 		return "R"
 	if absf(_forward_speed) < 0.25 and absf(throttle_input) < 0.03:
 		return "N"
-	var speed := absf(_forward_speed)
-	if speed < 13.0:
-		return "1"
-	if speed < 24.0:
-		return "2"
-	if speed < 36.0:
-		return "3"
-	if speed < 49.0:
-		return "4"
-	if speed < 62.0:
-		return "5"
-	return "6"
+	return str(_current_gear + 1)
 
 
 func get_rpm_ratio() -> float:
-	var speed := absf(_forward_speed)
-	var lower := 0.0
-	var upper := 13.0
-	if speed >= 62.0:
-		lower = 62.0
-		upper = 76.0
-	elif speed >= 49.0:
-		lower = 49.0
-		upper = 62.0
-	elif speed >= 36.0:
-		lower = 36.0
-		upper = 49.0
-	elif speed >= 24.0:
-		lower = 24.0
-		upper = 36.0
-	elif speed >= 13.0:
-		lower = 13.0
-		upper = 24.0
-	var in_gear := clampf((speed - lower) / maxf(upper - lower, 0.001), 0.0, 1.0)
-	var throttle_blip := absf(throttle_input) * 0.12
-	return clampf(0.18 + in_gear * 0.72 + throttle_blip, 0.0, 1.0)
+	return clampf((_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)

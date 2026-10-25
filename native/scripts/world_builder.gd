@@ -28,7 +28,15 @@ var _night_materials: Array[Dictionary] = []
 var _collision_root: StaticBody3D
 var _sun: DirectionalLight3D
 var _environment: Environment
-var _sky_material: ProceduralSkyMaterial
+var _sky: Sky
+var _procedural_sky_material: ProceduralSkyMaterial
+var _panorama_sky_material: PanoramaSkyMaterial
+var _road_segment_starts: Array[Vector3] = []
+var _road_segment_ends: Array[Vector3] = []
+var _road_segment_half_widths: Array[float] = []
+var _reflection_probes: Array[ReflectionProbe] = []
+var _enhancement_stats: Dictionary = {}
+var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
 var _palm_crown_mesh: ArrayMesh
 var _sail_mesh: ArrayMesh
@@ -39,7 +47,7 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	for i in _water_materials.size():
 		var material := _water_materials[i]
-		var speed := 0.010 if i == 0 else 0.020
+		var speed := 0.018 if i == 0 else 0.026
 		material.uv1_offset = Vector3(
 			fmod(_elapsed * speed, 1.0),
 			fmod(_elapsed * speed * 0.63, 1.0),
@@ -65,6 +73,7 @@ func build_world() -> Dictionary:
 
 	_terrain = data.get("terrain", {})
 	_compute_spawn_transform()
+	_build_road_surface_index()
 	_create_collision_root()
 	_build_environment()
 	_build_terrain()
@@ -74,7 +83,9 @@ func build_world() -> Dictionary:
 	_build_landmarks()
 	_build_vegetation()
 	_build_street_lamps()
+	_build_bus_shelters()
 	_build_benches()
+	_build_reflection_probes()
 	_build_world_bounds()
 	set_time_of_day("day")
 	is_built = true
@@ -92,6 +103,99 @@ func get_world_data() -> Dictionary:
 
 func has_world_data() -> bool:
 	return build_error.is_empty() and not data.is_empty()
+
+
+func get_enhancement_stats() -> Dictionary:
+	return _enhancement_stats.duplicate(true)
+
+
+func _build_road_surface_index() -> void:
+	_road_segment_starts.clear()
+	_road_segment_ends.clear()
+	_road_segment_half_widths.clear()
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		var half_width := _f(road, "widthM", 10.0) * 0.5
+		for i in range(samples.size() - 1):
+			var a := _sample_point(samples[i])
+			var b := _sample_point(samples[i + 1])
+			if Vector2(b.x - a.x, b.z - a.z).length_squared() < 0.0001:
+				continue
+			_road_segment_starts.append(a)
+			_road_segment_ends.append(b)
+			_road_segment_half_widths.append(half_width)
+
+
+func _distance_to_segment_xz(point: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := Vector2(b.x - a.x, b.z - a.z)
+	var ap := Vector2(point.x - a.x, point.z - a.z)
+	var length_squared := ab.length_squared()
+	if length_squared <= 0.0001:
+		return ap.length()
+	var t := clampf(ap.dot(ab) / length_squared, 0.0, 1.0)
+	return ap.distance_to(ab * t)
+
+
+func _road_clearance_xz(point: Vector3) -> float:
+	var best_clearance := INF
+	for i in _road_segment_starts.size():
+		var clearance := _distance_to_segment_xz(point, _road_segment_starts[i], _road_segment_ends[i]) - _road_segment_half_widths[i]
+		best_clearance = minf(best_clearance, clearance)
+	return best_clearance
+
+
+func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float) -> bool:
+	if _road_clearance_xz(point) < minimum_road_clearance:
+		return false
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		var center := _item_position(building)
+		var local := Basis(Vector3.UP, -_f(building, "rotY")) * (point - center)
+		if absf(local.x) <= _f(building, "w", 20.0) * 0.5 + building_padding and absf(local.z) <= _f(building, "d", 16.0) * 0.5 + building_padding:
+			return false
+	for landmark_variant in data.get("landmarks", []):
+		var landmark: Dictionary = landmark_variant
+		var center := _item_position(landmark)
+		var radius := maxf(_f(landmark, "r", 18.0), 14.0) + building_padding
+		if Vector2(point.x - center.x, point.z - center.z).length_squared() < radius * radius:
+			return false
+	return true
+
+
+## Returns the driving surface used by the tyre model.  Roads always win
+## over the underlying terrain class, which makes bridges and causeways
+## behave as asphalt instead of water/grass.
+func get_surface_at(world_position: Vector3) -> Dictionary:
+	var clearance := _road_clearance_xz(world_position)
+	if clearance <= 0.0:
+		return {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
+	if clearance <= 2.05:
+		return {"kind": "sidewalk", "label": "БЕТОН", "mu": 0.93, "rolling_resistance": 0.021}
+
+	var h := height_at(world_position.x, world_position.z)
+	if ((_in_zone(world_position.x, world_position.z, "sea") or _in_zone(world_position.x, world_position.z, "marina")) and h < 0.45) or world_position.y < 0.18:
+		return {"kind": "water", "label": "ВОДА", "mu": 0.27, "rolling_resistance": 0.19}
+
+	var sample_step := 5.0
+	var slope := maxf(
+		absf(height_at(world_position.x + sample_step, world_position.z) - h),
+		absf(height_at(world_position.x, world_position.z + sample_step) - h)
+	) / sample_step
+	var min_x := _f(_terrain, "minX", 520.0)
+	var min_z := _f(_terrain, "minZ", -500.0)
+	var step := maxf(_f(_terrain, "stepM", 10.0), 1.0)
+	var ix := clampi(int(floor((world_position.x - min_x) / step)), 0, int(_terrain.get("cols", 2)) - 1)
+	var iz := clampi(int(floor((world_position.z - min_z) / step)), 0, int(_terrain.get("rows", 2)) - 1)
+	match _terrain_class(world_position.x, world_position.z, h, slope, ix, iz):
+		"sand":
+			return {"kind": "sand", "label": "ПЕСОК", "mu": 0.57, "rolling_resistance": 0.115}
+		"rock":
+			return {"kind": "rock", "label": "КАМЕНЬ", "mu": 0.74, "rolling_resistance": 0.052}
+		"concrete":
+			return {"kind": "concrete", "label": "БЕТОН", "mu": 0.89, "rolling_resistance": 0.024}
+		_:
+			return {"kind": "grass", "label": "ГРУНТ", "mu": 0.62, "rolling_resistance": 0.078}
 
 
 func get_district_name(world_position: Vector3) -> String:
@@ -163,10 +267,49 @@ func make_transform(position_value: Vector3, yaw: float = 0.0, scale_value: Vect
 	return Transform3D(Basis(Vector3.UP, yaw).scaled(scale_value), position_value)
 
 
+func _apply_sky_mode(mode: String) -> void:
+	if _sky == null or _procedural_sky_material == null or _panorama_sky_material == null:
+		return
+	var texture_file := "user_sky_day.jpg"
+	var panorama_energy := 1.08
+	match mode:
+		"sunset":
+			texture_file = "user_sky_sunset.jpg"
+			panorama_energy = 1.02
+			_procedural_sky_material.sky_top_color = Color(0.16, 0.30, 0.59)
+			_procedural_sky_material.sky_horizon_color = Color(1.0, 0.58, 0.32)
+			_procedural_sky_material.ground_bottom_color = Color(0.16, 0.11, 0.10)
+			_procedural_sky_material.ground_horizon_color = Color(0.77, 0.43, 0.30)
+			_procedural_sky_material.sky_energy_multiplier = 1.15
+		"night":
+			texture_file = "user_sky_night.jpg"
+			panorama_energy = 0.62
+			_procedural_sky_material.sky_top_color = Color(0.008, 0.016, 0.055)
+			_procedural_sky_material.sky_horizon_color = Color(0.055, 0.10, 0.22)
+			_procedural_sky_material.ground_bottom_color = Color(0.005, 0.008, 0.02)
+			_procedural_sky_material.ground_horizon_color = Color(0.03, 0.05, 0.11)
+			_procedural_sky_material.sky_energy_multiplier = 0.55
+		_:
+			_procedural_sky_material.sky_top_color = Color(0.12, 0.42, 0.83)
+			_procedural_sky_material.sky_horizon_color = Color(0.62, 0.82, 0.98)
+			_procedural_sky_material.ground_bottom_color = Color(0.13, 0.17, 0.16)
+			_procedural_sky_material.ground_horizon_color = Color(0.55, 0.66, 0.70)
+			_procedural_sky_material.sky_energy_multiplier = 1.25
+
+	var panorama := _texture(texture_file)
+	if panorama != null:
+		_panorama_sky_material.panorama = panorama
+		_panorama_sky_material.energy_multiplier = panorama_energy
+		_sky.sky_material = _panorama_sky_material
+	else:
+		_sky.sky_material = _procedural_sky_material
+
+
 func set_time_of_day(mode: String) -> void:
 	time_of_day = mode
-	if _sun == null or _environment == null or _sky_material == null:
+	if _sun == null or _environment == null or _sky == null:
 		return
+	_apply_sky_mode(mode)
 
 	match mode:
 		"sunset":
@@ -175,48 +318,52 @@ func set_time_of_day(mode: String) -> void:
 			_sun.light_energy = 1.85
 			_sun.shadow_opacity = 0.62
 			_environment.background_energy_multiplier = 0.95
+			_environment.ambient_light_energy = 0.62
 			_environment.tonemap_exposure = 1.08
 			_environment.fog_light_color = Color(0.98, 0.67, 0.48)
+			_environment.fog_light_energy = 1.05
 			_environment.fog_density = 0.00065
-			_sky_material.sky_top_color = Color(0.16, 0.30, 0.59)
-			_sky_material.sky_horizon_color = Color(1.0, 0.58, 0.32)
-			_sky_material.ground_bottom_color = Color(0.16, 0.11, 0.10)
-			_sky_material.ground_horizon_color = Color(0.77, 0.43, 0.30)
-			_sky_material.sky_energy_multiplier = 1.15
+			_environment.fog_sun_scatter = 0.48
+			_environment.fog_aerial_perspective = 0.42
 		"night":
 			_sun.rotation_degrees = Vector3(-63.0, 38.0, 0.0)
 			_sun.light_color = Color(0.63, 0.74, 1.0)
 			_sun.light_energy = 0.42
 			_sun.shadow_opacity = 0.48
 			_environment.background_energy_multiplier = 0.24
+			_environment.ambient_light_energy = 0.34
 			_environment.tonemap_exposure = 0.92
 			_environment.fog_light_color = Color(0.05, 0.08, 0.16)
+			_environment.fog_light_energy = 0.55
 			_environment.fog_density = 0.00085
-			_sky_material.sky_top_color = Color(0.008, 0.016, 0.055)
-			_sky_material.sky_horizon_color = Color(0.055, 0.10, 0.22)
-			_sky_material.ground_bottom_color = Color(0.005, 0.008, 0.02)
-			_sky_material.ground_horizon_color = Color(0.03, 0.05, 0.11)
-			_sky_material.sky_energy_multiplier = 0.55
+			_environment.fog_sun_scatter = 0.08
+			_environment.fog_aerial_perspective = 0.24
 		_:
 			_sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
 			_sun.light_color = Color(1.0, 0.94, 0.84)
 			_sun.light_energy = 2.55
 			_sun.shadow_opacity = 0.74
 			_environment.background_energy_multiplier = 1.2
+			_environment.ambient_light_energy = 0.82
 			_environment.tonemap_exposure = 1.04
 			_environment.fog_light_color = Color(0.68, 0.82, 0.96)
+			_environment.fog_light_energy = 0.92
 			_environment.fog_density = 0.00045
-			_sky_material.sky_top_color = Color(0.12, 0.42, 0.83)
-			_sky_material.sky_horizon_color = Color(0.62, 0.82, 0.98)
-			_sky_material.ground_bottom_color = Color(0.13, 0.17, 0.16)
-			_sky_material.ground_horizon_color = Color(0.55, 0.66, 0.70)
-			_sky_material.sky_energy_multiplier = 1.25
+			_environment.fog_sun_scatter = 0.28
+			_environment.fog_aerial_perspective = 0.38
 
 	for entry in _night_materials:
 		var material := entry.get("material") as StandardMaterial3D
 		if material == null:
 			continue
 		material.emission_energy_multiplier = float(entry.get(mode, entry.get("day", 0.0)))
+
+	# UPDATE_ONCE probes recapture when nudged, keeping car paint and glass
+	# reflections in sync with day/sunset/night without an UPDATE_ALWAYS cost.
+	if not _reflection_probes.is_empty():
+		_reflection_probe_refresh_sign = -_reflection_probe_refresh_sign
+		for probe in _reflection_probes:
+			probe.position.y += 0.01 * _reflection_probe_refresh_sign
 
 
 func _load_data() -> void:
@@ -324,32 +471,43 @@ func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> vo
 
 
 func _build_environment() -> void:
-	_sky_material = ProceduralSkyMaterial.new()
-	_sky_material.sky_curve = 0.12
-	_sky_material.ground_curve = 0.08
-	_sky_material.sun_angle_max = 28.0
-	_sky_material.sun_curve = 0.08
+	_procedural_sky_material = ProceduralSkyMaterial.new()
+	_procedural_sky_material.sky_curve = 0.12
+	_procedural_sky_material.ground_curve = 0.08
+	_procedural_sky_material.sun_angle_max = 28.0
+	_procedural_sky_material.sun_curve = 0.08
 
-	var sky := Sky.new()
-	sky.sky_material = _sky_material
-	sky.process_mode = Sky.PROCESS_MODE_AUTOMATIC
-	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	_panorama_sky_material = PanoramaSkyMaterial.new()
+	_panorama_sky_material.filter = true
+
+	_sky = Sky.new()
+	_sky.sky_material = _procedural_sky_material
+	_sky.process_mode = Sky.PROCESS_MODE_AUTOMATIC
+	_sky.radiance_size = Sky.RADIANCE_SIZE_512
 
 	_environment = Environment.new()
 	_environment.background_mode = Environment.BG_SKY
-	_environment.sky = sky
+	_environment.sky = _sky
+	_environment.sky_custom_fov = 0.0
+	_environment.sky_rotation = Vector3.ZERO
 	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	_environment.ambient_light_sky_contribution = 0.88
 	_environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	_environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	_environment.glow_enabled = true
-	_environment.glow_intensity = 0.28
-	_environment.glow_strength = 0.72
+	_environment.glow_intensity = 1.18
+	_environment.glow_strength = 0.86
+	_environment.glow_bloom = 0.055
+	_environment.glow_hdr_threshold = 0.9
+	_environment.set_glow_level(1, 0.35)
+	_environment.set_glow_level(2, 0.65)
+	_environment.set_glow_level(3, 0.45)
 	_environment.fog_enabled = true
 	_environment.fog_sky_affect = 0.28
 	_environment.adjustment_enabled = true
 	_environment.adjustment_brightness = 1.02
-	_environment.adjustment_contrast = 1.04
-	_environment.adjustment_saturation = 1.05
+	_environment.adjustment_contrast = 1.045
+	_environment.adjustment_saturation = 1.055
 
 	var world_environment := WorldEnvironment.new()
 	world_environment.name = "WorldEnvironment"
@@ -359,10 +517,18 @@ func _build_environment() -> void:
 	_sun = DirectionalLight3D.new()
 	_sun.name = "Sun"
 	_sun.shadow_enabled = true
+	_sun.light_angular_distance = 0.45
+	_sun.shadow_bias = 0.045
+	_sun.shadow_normal_bias = 1.65
+	_sun.shadow_blur = 1.15
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	_sun.directional_shadow_max_distance = 850.0
+	_sun.directional_shadow_max_distance = 520.0
+	_sun.directional_shadow_split_1 = 0.055
+	_sun.directional_shadow_split_2 = 0.16
+	_sun.directional_shadow_split_3 = 0.42
+	_sun.directional_shadow_fade_start = 0.82
 	_sun.directional_shadow_blend_splits = true
-	_sun.directional_shadow_pancake_size = 24.0
+	_sun.directional_shadow_pancake_size = 18.0
 	add_child(_sun)
 
 
@@ -455,14 +621,14 @@ func _facade_material(facade: String, height: float) -> StandardMaterial3D:
 		"glassTower":
 			albedo = "user_facade_blue_glass.jpg"
 			normal = "user_facade_blue_glass_normal.jpg"
-			roughness = 0.26
-			metallic = 0.42
+			roughness = 0.16
+			metallic = 0.08
 			glassy = true
 		"goldTower":
 			albedo = "user_facade_gold_grid.jpg"
 			normal = "user_facade_gold_grid_normal.jpg"
-			roughness = 0.38
-			metallic = 0.52
+			roughness = 0.29
+			metallic = 0.34
 			glassy = true
 		"hotelTower":
 			albedo = "facade_hotel.jpg"
@@ -499,6 +665,7 @@ func _facade_material(facade: String, height: float) -> StandardMaterial3D:
 		Vector3(0.052, 0.047 + float(tier) * 0.006, 0.052),
 		true
 	)
+	material.metallic_specular = 0.92 if glassy else 0.58
 	if glassy or facade == "hotelTower":
 		material.emission_enabled = true
 		material.emission = Color(1.0, 0.74, 0.45)
@@ -541,7 +708,8 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 		"FacadeAccent":
 			return _material("prop_facade_accent", "user_travertine.jpg", "user_travertine_normal.jpg", Color.WHITE, 0.84)
 		"FacadeGlass":
-			var glass := _material("prop_facade_glass", "user_facade_blue_glass.jpg", "user_facade_blue_glass_normal.jpg", Color(0.78, 0.92, 1.05), 0.2, 0.5, Vector3(2.5, 5.0, 1.0))
+			var glass := _material("prop_facade_glass", "user_facade_blue_glass.jpg", "user_facade_blue_glass_normal.jpg", Color(0.78, 0.92, 1.05), 0.11, 0.08, Vector3(2.5, 5.0, 1.0))
+			glass.metallic_specular = 1.0
 			glass.emission_enabled = true
 			glass.emission = Color(1.0, 0.76, 0.48)
 			glass.emission_texture = glass.albedo_texture
@@ -727,11 +895,13 @@ func _water_material() -> StandardMaterial3D:
 		"water_sea",
 		"user_water_turquoise.jpg",
 		"user_water_turquoise_normal.jpg",
-		Color(0.20, 0.72, 0.86, 0.78),
-		0.08,
-		0.28,
+		Color(0.20, 0.72, 0.86, 0.80),
+		0.055,
+		0.0,
 		Vector3(90.0, 120.0, 1.0)
 	)
+	material.normal_scale = 1.22
+	material.metallic_specular = 1.0
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	if not _water_materials.has(material):
 		_water_materials.append(material)
@@ -744,10 +914,12 @@ func _pool_material() -> StandardMaterial3D:
 		"user_pool_mosaic.jpg",
 		"user_pool_mosaic_normal.jpg",
 		Color(0.46, 0.90, 1.0, 0.92),
-		0.16,
-		0.05,
+		0.11,
+		0.0,
 		Vector3(2.0, 2.0, 1.0)
 	)
+	material.normal_scale = 0.92
+	material.metallic_specular = 0.92
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.emission_enabled = true
 	material.emission = Color(0.25, 0.72, 0.88)
@@ -854,16 +1026,122 @@ func _build_roads() -> void:
 	add_child(roads_root)
 
 	var sidewalk_material := _material("sidewalk", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.78, 0.79, 0.78), 0.96)
+	sidewalk_material.normal_scale = 0.9
 	var sidewalk_mesh := _build_road_mesh(1.9, 0.035, 7.0)
 	if sidewalk_mesh != null:
 		var sidewalks := _mesh_instance(roads_root, sidewalk_mesh, sidewalk_material, Transform3D.IDENTITY, "Sidewalks", false)
 		sidewalks.custom_aabb = WORLD_AABB
 
-	var asphalt_material := _material("asphalt", "user_asphalt_dashed.jpg", "user_asphalt_dashed_normal.jpg", Color(0.74, 0.76, 0.78), 0.72, 0.02)
+	var asphalt_material := _material("asphalt", "user_asphalt_dashed.jpg", "user_asphalt_dashed_normal.jpg", Color(0.74, 0.76, 0.78), 0.68, 0.0)
+	asphalt_material.normal_scale = 1.14
+	asphalt_material.metallic_specular = 0.42
 	var road_mesh := _build_road_mesh(0.0, 0.075, 18.0)
 	if road_mesh != null:
 		var roads := _mesh_instance(roads_root, road_mesh, asphalt_material, Transform3D.IDENTITY, "Asphalt", false)
 		roads.custom_aabb = WORLD_AABB
+
+	_build_road_markings(roads_root)
+	_build_bridge_guardrails(roads_root)
+
+
+func _build_road_markings(parent: Node) -> void:
+	var stripe_transforms: Array[Transform3D] = []
+	var vertical_roads := [
+		{"x": 560.0, "width": 11.0},
+		{"x": 760.0, "width": 22.0},
+		{"x": 930.0, "width": 24.0},
+	]
+	var cross_z := [-300.0, -250.0, -110.0, 60.0, 225.0]
+	var cross_width := 13.0
+
+	for vertical_variant in vertical_roads:
+		var vertical: Dictionary = vertical_variant
+		var center_x := float(vertical.get("x", 760.0))
+		var width := float(vertical.get("width", 12.0))
+		for z_variant in cross_z:
+			var center_z := float(z_variant)
+			# Zebra crossings on both approaches to the vertical road.
+			for side in [-1.0, 1.0]:
+				var crossing_z: float = center_z + float(side) * (cross_width * 0.5 + 2.35)
+				var stripe_count := maxi(int(floor((width - 1.4) / 1.08)), 3)
+				var start_x := center_x - float(stripe_count - 1) * 0.54
+				for i in stripe_count:
+					var x := start_x + float(i) * 1.08
+					var y := height_at(x, crossing_z) + 0.165
+					stripe_transforms.append(make_transform(Vector3(x, y, crossing_z), 0.0, Vector3(0.58, 0.028, 3.15)))
+				var stop_z: float = crossing_z + float(side) * 2.15
+				stripe_transforms.append(make_transform(
+					Vector3(center_x + width * 0.25, height_at(center_x, stop_z) + 0.165, stop_z),
+					0.0,
+					Vector3(width * 0.48, 0.028, 0.42)
+				))
+
+			# Matching zebras across the horizontal street.
+			for side in [-1.0, 1.0]:
+				var crossing_x: float = center_x + float(side) * (width * 0.5 + 2.35)
+				var stripe_count_h := maxi(int(floor((cross_width - 1.4) / 1.08)), 3)
+				var start_z := center_z - float(stripe_count_h - 1) * 0.54
+				for i in stripe_count_h:
+					var z := start_z + float(i) * 1.08
+					var y := height_at(crossing_x, z) + 0.165
+					stripe_transforms.append(make_transform(Vector3(crossing_x, y, z), 0.0, Vector3(3.15, 0.028, 0.58)))
+				var stop_x: float = crossing_x + float(side) * 2.15
+				stripe_transforms.append(make_transform(
+					Vector3(stop_x, height_at(stop_x, center_z) + 0.165, center_z - cross_width * 0.25),
+					0.0,
+					Vector3(0.42, 0.028, cross_width * 0.48)
+				))
+
+	var paint := _material("road_paint", "", "", Color(0.88, 0.90, 0.88), 0.74)
+	var stripe_mesh := BoxMesh.new()
+	stripe_mesh.size = Vector3.ONE
+	stripe_mesh.material = paint
+	_add_multimesh(parent, stripe_mesh, paint, stripe_transforms, "CrosswalksAndStopLines", false)
+	_enhancement_stats["road_markings"] = stripe_transforms.size()
+
+
+func _build_bridge_guardrails(parent: Node) -> void:
+	var post_transforms: Array[Transform3D] = []
+	var rail_transforms: Array[Transform3D] = []
+	var bridge_ids := ["rt-palm-1", "rt-sail-road"]
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		if not bridge_ids.has(String(road.get("id", ""))):
+			continue
+		var samples: Array = road.get("samples", [])
+		var half_width := _f(road, "widthM", 12.0) * 0.5 - 0.38
+		for i in range(samples.size() - 1):
+			var a := _sample_point(samples[i])
+			var b := _sample_point(samples[i + 1])
+			var direction := b - a
+			direction.y = 0.0
+			if direction.length_squared() < 0.001:
+				continue
+			direction = direction.normalized()
+			var side_vector := Vector3(-direction.z, 0.0, direction.x)
+			var yaw := atan2(-direction.x, -direction.z)
+			var segment_length := a.distance_to(b)
+			for side in [-1.0, 1.0]:
+				var edge_a: Vector3 = a + side_vector * half_width * float(side) + Vector3.UP * 0.10
+				var edge_b: Vector3 = b + side_vector * half_width * float(side) + Vector3.UP * 0.10
+				if i % 2 == 0:
+					post_transforms.append(make_transform(edge_a + Vector3.UP * 0.43, yaw, Vector3(0.16, 0.86, 0.16)))
+				var centre: Vector3 = (edge_a + edge_b) * 0.5
+				_add_box_collider(centre + Vector3.UP * 0.45, Vector3(0.24, 0.92, segment_length + 0.05), yaw)
+				for rail_height in [0.52, 0.82]:
+					rail_transforms.append(make_transform(centre + Vector3.UP * rail_height, yaw, Vector3(0.09, 0.13, segment_length + 0.08)))
+
+	var metal := _prop_material("PropsMetal")
+	var post_mesh := BoxMesh.new()
+	post_mesh.size = Vector3.ONE
+	post_mesh.material = metal
+	var rail_mesh := BoxMesh.new()
+	rail_mesh.size = Vector3.ONE
+	rail_mesh.material = metal
+	_add_multimesh(parent, post_mesh, metal, post_transforms, "BridgeGuardrailPosts", true)
+	_add_multimesh(parent, rail_mesh, metal, rail_transforms, "BridgeGuardrails", true)
+	_enhancement_stats["guardrail_posts"] = post_transforms.size()
+	_enhancement_stats["guardrail_rails"] = rail_transforms.size()
 
 
 func _get_gable_mesh() -> ArrayMesh:
@@ -1042,6 +1320,10 @@ func _add_batched_model(parent: Node, path: String, transforms: Array, node_name
 	return built_any
 
 
+func _centered_model_transform(position_value: Vector3, yaw: float, scale_value: Vector3, source_center: Vector3) -> Transform3D:
+	return make_transform(position_value, yaw, scale_value) * Transform3D(Basis.IDENTITY, -source_center)
+
+
 func _build_buildings() -> void:
 	var buildings_root := Node3D.new()
 	buildings_root.name = "Buildings"
@@ -1051,6 +1333,10 @@ func _build_buildings() -> void:
 	var villa_transforms: Array[Transform3D] = []
 	var tower_items: Array[Dictionary] = []
 	var tower_transforms: Array[Transform3D] = []
+	var townhouse_items: Array[Dictionary] = []
+	var townhouse_transforms: Array[Transform3D] = []
+	var hero_items: Array[Dictionary] = []
+	var hero_transforms: Array[Transform3D] = []
 
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
@@ -1061,12 +1347,18 @@ func _build_buildings() -> void:
 		var d := _f(building, "d", 16.0)
 		var h := _f(building, "h", 10.0)
 		var roof_h := _f(building, "roofH")
+		var kind := String(building.get("kind", "building"))
+		var total_height := maxf(h + roof_h, 5.0)
+		# Exact world-space AABBs of the user's Blender GLBs, measured with
+		# node transforms included.  These denominators preserve the JSON
+		# footprint/height instead of the earlier approximate 7-12% oversize.
 		if model == "villa":
 			villa_items.append(building)
-			villa_transforms.append(make_transform(
+			villa_transforms.append(_centered_model_transform(
 				position_value,
 				yaw,
-				Vector3(w / 18.5, maxf(h + roof_h, 5.0) / 7.27, d / 14.5)
+				Vector3(w / 19.15, total_height / 7.90, d / 15.14),
+				Vector3(-0.325, 0.0, -0.23)
 			))
 			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
 		elif model == "glass_tower":
@@ -1074,7 +1366,24 @@ func _build_buildings() -> void:
 			tower_transforms.append(make_transform(
 				position_value,
 				yaw,
-				Vector3(w / 30.0, h / 66.0, d / 30.0)
+				Vector3(w / 33.60, h / 70.71, d / 33.60)
+			))
+			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d), yaw)
+		elif kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
+			townhouse_items.append(building)
+			townhouse_transforms.append(_centered_model_transform(
+				position_value,
+				yaw,
+				Vector3(w / 13.15, total_height / 9.99, d / 13.40),
+				Vector3(0.075, 0.0, 1.075)
+			))
+			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
+		elif kind == "rt-hotel" and h >= 15.0 and h <= 38.0 and w <= 55.0 and d <= 38.0:
+			hero_items.append(building)
+			hero_transforms.append(make_transform(
+				position_value,
+				yaw,
+				Vector3(w / 24.50, h / 18.40, d / 18.20)
 			))
 			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d), yaw)
 		else:
@@ -1086,6 +1395,14 @@ func _build_buildings() -> void:
 	if not _add_batched_model(buildings_root, "res://assets/buildings/glass_tower.glb", tower_transforms, "BlenderGlassTowers"):
 		for item in tower_items:
 			_add_generic_building(buildings_root, item)
+	if not _add_batched_model(buildings_root, "res://assets/buildings/townhouse.glb", townhouse_transforms, "BlenderTownhouses"):
+		for item in townhouse_items:
+			_add_generic_building(buildings_root, item)
+	if not _add_batched_model(buildings_root, "res://assets/buildings/hero_building.glb", hero_transforms, "BlenderHeroBuildings"):
+		for item in hero_items:
+			_add_generic_building(buildings_root, item)
+	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
+	_enhancement_stats["hero_building_models"] = hero_transforms.size()
 
 
 func _get_sail_mesh() -> ArrayMesh:
@@ -1153,6 +1470,7 @@ func _build_landmarks() -> void:
 				_add_cylinder(root, r, 1.0, pos + Vector3(0.0, 0.5, 0.0), concrete, 0.0, 36)
 				_add_cylinder(root, r - 1.5, 0.22, pos + Vector3(0.0, 0.96, 0.0), _pool_material(), 0.0, 36)
 				_add_cylinder(root, 1.25, 4.2, pos + Vector3(0.0, 2.1, 0.0), marble, 0.0, 20)
+				_add_fountain_particles(root, pos + Vector3(0.0, 4.05, 0.0))
 				_add_cylinder_collider(pos + Vector3(0.0, 1.0, 0.0), r, 2.0)
 			"rt-sail":
 				_add_box(root, Vector3(56.0, 3.0, 30.0), pos + Vector3(0.0, 0.8, 0.0), marble)
@@ -1223,6 +1541,49 @@ func _build_landmarks() -> void:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
 				_add_box_collider(pos + Vector3(0.0, fallback_height * 0.5, 0.0), Vector3(24.0, fallback_height, 24.0))
+
+
+func _add_fountain_particles(parent: Node, origin: Vector3) -> void:
+	var process := ParticleProcessMaterial.new()
+	process.direction = Vector3.UP
+	process.spread = 11.0
+	process.initial_velocity_min = 6.1
+	process.initial_velocity_max = 7.3
+	process.gravity = Vector3(0.0, -9.8, 0.0)
+	process.damping_min = 0.0
+	process.damping_max = 0.08
+	process.scale_min = 0.7
+	process.scale_max = 1.25
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	process.emission_sphere_radius = 0.32
+
+	var droplet := SphereMesh.new()
+	droplet.radius = 0.045
+	droplet.height = 0.09
+	droplet.radial_segments = 6
+	droplet.rings = 3
+	var droplet_material := StandardMaterial3D.new()
+	droplet_material.albedo_color = Color(0.55, 0.84, 1.0, 0.50)
+	droplet_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	droplet_material.roughness = 0.05
+	droplet_material.metallic = 0.0
+	droplet_material.metallic_specular = 1.0
+	droplet.material = droplet_material
+
+	var particles := GPUParticles3D.new()
+	particles.name = "FountainWater"
+	particles.position = origin
+	particles.amount = 320
+	particles.lifetime = 1.35
+	particles.preprocess = 1.35
+	particles.randomness = 0.55
+	particles.local_coords = false
+	particles.process_material = process
+	particles.draw_pass_1 = droplet
+	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	particles.visibility_aabb = AABB(Vector3(-14.0, -5.0, -14.0), Vector3(28.0, 18.0, 28.0))
+	parent.add_child(particles)
+	_enhancement_stats["fountain_particles"] = particles.amount
 
 
 func _find_node_by_name(node: Node, target_name: String) -> Node:
@@ -1309,8 +1670,75 @@ func _build_vegetation() -> void:
 	add_child(root)
 
 	if _load_plant_parts():
+		var trees: Array = data.get("trees", []).duplicate()
+		var extra_tree_count := 0
+
+		# Plaza ring: mature oaks frame the fountain instead of leaving the
+		# exported six distant hill trees as the city's only broadleaf trees.
+		for i in 10:
+			var angle := TAU * float(i) / 10.0 + 0.18
+			var candidate: Vector3 = Vector3(665.0 + cos(angle) * 30.0, 0.0, -25.0 + sin(angle) * 30.0)
+			candidate.y = height_at(candidate.x, candidate.z)
+			if _is_position_clear(candidate, 2.0, 2.5):
+				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": angle * 1.7, "s": 0.92, "type": "oak"})
+				extra_tree_count += 1
+
+		# Street trees along the western residential avenue.
+		var west_index := 0
+		for z in range(-390, 391, 65):
+			var x := 546.0 if west_index % 2 == 0 else 574.0
+			var candidate: Vector3 = Vector3(x, height_at(x, float(z)), float(z))
+			if _is_position_clear(candidate, 2.0, 4.0):
+				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(west_index) * 0.83, "s": 0.86 + float(west_index % 3) * 0.08, "type": "oak"})
+				extra_tree_count += 1
+			west_index += 1
+
+		# Shade trees on the Corniche and outer Boulevard verges.  The
+		# building/road clearance test removes candidates in hotel plots,
+		# intersections and driveways while keeping a continuous canopy.
+		var promenade_index := 0
+		for z in range(-390, 391, 65):
+			var candidate: Vector3 = Vector3(912.0, height_at(912.0, float(z)), float(z))
+			if _is_position_clear(candidate, 2.0, 4.0):
+				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(promenade_index) * 0.71, "s": 0.84 + float(promenade_index % 3) * 0.07, "type": "oak"})
+				extra_tree_count += 1
+			promenade_index += 1
+		var boulevard_index := 0
+		for z in range(-380, 386, 85):
+			for x in [738.0, 782.0]:
+				var candidate := Vector3(x, height_at(x, float(z)), float(z))
+				if _is_position_clear(candidate, 2.0, 4.0):
+					trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(boulevard_index) * 0.93, "s": 0.82 + float(boulevard_index % 4) * 0.06, "type": "oak"})
+					extra_tree_count += 1
+				boulevard_index += 1
+
+		# Deterministic hillside woodland.  Candidates are rejected on
+		# roads, landmarks, steep/underwater terrain and building plots.
+		var hill_ix := 0
+		for base_x in range(970, 1241, 34):
+			var hill_iz := 0
+			for base_z in range(-470, 471, 38):
+				var jitter_x := (_hash01(hill_ix * 13 + 7, hill_iz * 17 + 3) - 0.5) * 18.0
+				var jitter_z := (_hash01(hill_ix * 19 + 11, hill_iz * 23 + 5) - 0.5) * 20.0
+				var candidate := Vector3(float(base_x) + jitter_x, 0.0, float(base_z) + jitter_z)
+				candidate.y = height_at(candidate.x, candidate.z)
+				var slope := absf(height_at(candidate.x + 4.0, candidate.z) - candidate.y) / 4.0
+				if candidate.y > 5.4 and slope < 0.55 and _is_position_clear(candidate, 4.0, 9.0):
+					trees.append({
+						"x": candidate.x,
+						"y": candidate.y,
+						"z": candidate.z,
+						"rotY": _hash01(hill_ix + 41, hill_iz + 97) * TAU,
+						"s": 0.82 + _hash01(hill_ix + 3, hill_iz + 29) * 0.38,
+						"type": "oak",
+					})
+					extra_tree_count += 1
+				hill_iz += 1
+			hill_ix += 1
+		_enhancement_stats["extra_trees"] = extra_tree_count
+
 		var tree_transforms: Array[Transform3D] = []
-		for tree_variant in data.get("trees", []):
+		for tree_variant in trees:
 			var tree: Dictionary = tree_variant
 			var scale_value := 2.85 * _f(tree, "s", 1.0)
 			tree_transforms.append(make_transform(_item_position(tree, -0.04), _f(tree, "rotY"), Vector3.ONE * scale_value))
@@ -1337,6 +1765,36 @@ func _build_vegetation() -> void:
 					"rotY": fmod(abs(base.x * 0.37 + base.z * 0.71 + offset.x), TAU),
 					"s": 0.95,
 				})
+		var extra_bush_count := 0
+		for building_variant in data.get("buildings", []):
+			var building: Dictionary = building_variant
+			var centre := _item_position(building)
+			var building_yaw := _f(building, "rotY")
+			var building_basis := Basis(Vector3.UP, building_yaw)
+			var w := _f(building, "w", 20.0)
+			var d := _f(building, "d", 16.0)
+			for local_offset in [Vector3(-w * 0.34, 0.0, d * 0.5 + 2.1), Vector3(w * 0.34, 0.0, d * 0.5 + 2.1), Vector3(-w * 0.34, 0.0, -d * 0.5 - 2.1), Vector3(w * 0.34, 0.0, -d * 0.5 - 2.1)]:
+				var candidate: Vector3 = centre + building_basis * local_offset
+				candidate.y = height_at(candidate.x, candidate.z)
+				var surface_kind := String(get_surface_at(candidate).get("kind", ""))
+				if surface_kind != "asphalt" and surface_kind != "water" and candidate.y > 1.2:
+					bushes.append({
+						"x": candidate.x,
+						"y": candidate.y,
+						"z": candidate.z,
+						"rotY": fmod(abs(candidate.x * 0.43 + candidate.z * 0.67), TAU),
+						"s": 0.88,
+					})
+					extra_bush_count += 1
+		for i in 12:
+			var angle := TAU * float(i) / 12.0 + 0.12
+			var candidate := Vector3(665.0 + cos(angle) * 22.0, 0.0, -25.0 + sin(angle) * 22.0)
+			candidate.y = height_at(candidate.x, candidate.z)
+			if _is_position_clear(candidate, 1.0, 2.0):
+				bushes.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": angle, "s": 0.95})
+				extra_bush_count += 1
+		_enhancement_stats["extra_bushes"] = extra_bush_count
+
 		var bush_names: Array[String] = ["bush_round_foliage", "shrub_cone_foliage", "fan_foliage"]
 		for i in bushes.size():
 			var bush: Dictionary = bushes[i]
@@ -1379,6 +1837,71 @@ func _build_street_lamps() -> void:
 		transforms.append(make_transform(position_value, _f(lamp, "rotY"), Vector3.ONE))
 		_add_cylinder_collider(position_value + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
 	_add_batched_model(root, "res://assets/props/street_lamp.glb", transforms, "BlenderStreetLamps")
+
+
+func _build_bus_shelters() -> void:
+	var root := Node3D.new()
+	root.name = "BusShelters"
+	add_child(root)
+	var transforms: Array[Transform3D] = []
+	var placements: Array[Dictionary] = [
+		{"x": 744.2, "z": -383.0, "yaw": PI * 0.5},
+		{"x": 744.2, "z": -174.0, "yaw": PI * 0.5},
+		{"x": 744.2, "z": 16.0, "yaw": PI * 0.5},
+		{"x": 744.2, "z": 215.0, "yaw": PI * 0.5},
+		{"x": 775.8, "z": -290.0, "yaw": -PI * 0.5},
+		{"x": 775.8, "z": -90.0, "yaw": -PI * 0.5},
+		{"x": 775.8, "z": 78.0, "yaw": -PI * 0.5},
+		{"x": 775.8, "z": 235.0, "yaw": -PI * 0.5},
+		{"x": 914.0, "z": -300.0, "yaw": PI * 0.5},
+		{"x": 914.0, "z": -110.0, "yaw": PI * 0.5},
+		{"x": 914.0, "z": 70.0, "yaw": PI * 0.5},
+		{"x": 914.0, "z": 250.0, "yaw": PI * 0.5},
+		{"x": 551.0, "z": -260.0, "yaw": PI * 0.5},
+		{"x": 569.0, "z": 30.0, "yaw": -PI * 0.5},
+		{"x": 551.0, "z": 300.0, "yaw": PI * 0.5},
+		{"x": 640.0, "z": 50.7, "yaw": 0.0},
+		{"x": 840.0, "z": 69.3, "yaw": PI},
+	]
+	for placement in placements:
+		var position_value := Vector3(_f(placement, "x"), 0.0, _f(placement, "z"))
+		position_value.y = height_at(position_value.x, position_value.z) + 0.02
+		var yaw := _f(placement, "yaw")
+		transforms.append(make_transform(position_value, yaw, Vector3.ONE))
+		_add_box_collider(position_value + Vector3(0.0, 1.53, 0.0), Vector3(5.75, 3.06, 2.35), yaw)
+	var built := _add_batched_model(root, "res://assets/props/bus_shelter.glb", transforms, "BlenderBusShelters")
+	_enhancement_stats["bus_shelters"] = transforms.size() if built else 0
+
+
+func _build_reflection_probes() -> void:
+	_reflection_probes.clear()
+	var root := Node3D.new()
+	root.name = "ReflectionProbes"
+	add_child(root)
+	for centre in [
+		Vector3(720.0, 0.0, 0.0),
+		Vector3(680.0, 0.0, -300.0),
+		Vector3(720.0, 0.0, 330.0),
+		Vector3(940.0, 0.0, 0.0),
+		Vector3(1180.0, 0.0, 80.0),
+		Vector3(1340.0, 0.0, -250.0),
+	]:
+		var probe := ReflectionProbe.new()
+		probe.name = "DistrictReflection"
+		probe.position = Vector3(centre.x, height_at(centre.x, centre.z) + 12.0, centre.z)
+		probe.size = Vector3(300.0, 110.0, 300.0)
+		probe.blend_distance = 45.0
+		probe.origin_offset = Vector3(0.0, -4.0, 0.0)
+		probe.box_projection = true
+		probe.enable_shadows = false
+		probe.intensity = 1.12
+		probe.max_distance = 450.0
+		probe.mesh_lod_threshold = 0.35
+		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+		probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		root.add_child(probe)
+		_reflection_probes.append(probe)
+	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
 
 
 func _build_benches() -> void:

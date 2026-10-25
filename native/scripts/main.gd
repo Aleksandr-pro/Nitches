@@ -7,6 +7,7 @@ extends Node3D
 
 const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
+const TrafficScript := preload("res://scripts/traffic_manager.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -16,6 +17,7 @@ const CAMERA_TOP := 2
 
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
+var _traffic: NativeTrafficManager
 var _hud: NativeHud
 var _camera: Camera3D
 var _camera_mode := CAMERA_CHASE
@@ -42,9 +44,15 @@ func _ready() -> void:
 
 	_vehicle = VehicleScript.new() as NativeVehicle
 	add_child(_vehicle)
+	_vehicle.set_world(_world)
 	_vehicle.reset_requested.connect(_on_vehicle_reset_requested)
 	_vehicle.reset_to_transform(_world.spawn_transform)
 	_vehicle.global_transform = _world.spawn_transform
+
+	_traffic = TrafficScript.new() as NativeTrafficManager
+	add_child(_traffic)
+	_traffic.initialize(_world, _vehicle)
+	print("[native] Traffic stats: ", _traffic.get_stats())
 
 	_create_camera()
 	_hud = HudScript.new() as NativeHud
@@ -64,7 +72,7 @@ func _create_camera() -> void:
 	_camera.name = "GameCamera"
 	_camera.near = 0.12
 	_camera.far = 2800.0
-	_camera.fov = 65.0
+	_camera.fov = 58.0
 	add_child(_camera)
 	_camera.make_current()
 	_camera.current = true
@@ -95,7 +103,9 @@ func _apply_time_mode() -> void:
 	var mode := TIME_MODES[_time_index]
 	_world.set_time_of_day(mode)
 	if _vehicle != null:
-		_vehicle.set_headlights_enabled(mode == "night")
+		_vehicle.set_headlights_enabled(mode != "day")
+	if _traffic != null:
+		_traffic.set_headlights_enabled(mode != "day")
 
 
 func _on_vehicle_reset_requested() -> void:
@@ -128,7 +138,9 @@ func _update_camera(delta: float, snap: bool) -> void:
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
 	var speed_ratio := clampf(speed_kmh / 240.0, 0.0, 1.0)
-	var desired_fov := 64.0 + speed_ratio * 10.0 + (5.0 if _vehicle.is_boosting() else 0.0)
+	# The car stays at its real 1.0 scale; it reads larger because the
+	# chase camera now sits closer/lower with a narrower lens.
+	var desired_fov := 58.0 + speed_ratio * 14.0 + (5.0 if _vehicle.is_boosting() else 0.0)
 	_camera.fov = lerpf(_camera.fov, desired_fov, 1.0 if snap else clampf(delta * 4.5, 0.0, 1.0))
 
 	match _camera_mode:
@@ -138,22 +150,52 @@ func _update_camera(delta: float, snap: bool) -> void:
 			_camera.global_position = hood_position
 			_camera.look_at(hood_target, Vector3.UP)
 		CAMERA_TOP:
-			var top_position := _vehicle.global_position + Vector3(0.0, 39.0, 18.0)
+			var top_position := _vehicle.global_position + Vector3(0.0, 31.0, 14.0)
 			_camera.global_position = top_position
 			_camera.look_at(_vehicle.global_position + Vector3.UP * 1.0, Vector3(0.0, 0.0, -1.0))
 		_:
-			var distance := 7.5 + speed_ratio * 2.4
-			var height := 2.65 + speed_ratio * 0.45
-			var desired_position := _vehicle.global_transform * Vector3(0.0, height, distance)
+			var distance := 6.15 + speed_ratio * 2.15
+			var height := 2.05 + speed_ratio * 0.38
+			var drift_offset := clampf(-_vehicle.get_lateral_speed_ms() * 0.055, -0.65, 0.65)
+			var desired_position := _vehicle.global_transform * Vector3(drift_offset, height, distance)
+			desired_position = _get_safe_camera_position(desired_position)
 			if snap or delta <= 0.0:
 				_camera.global_position = desired_position
 			else:
 				var weight := 1.0 - exp(-7.0 * delta)
 				_camera.global_position = _camera.global_position.lerp(desired_position, weight)
 			var forward := -_vehicle.global_transform.basis.z
-			var target := _vehicle.global_position + Vector3.UP * 1.35 + forward * (8.0 + speed_ratio * 7.0)
+			var target := _vehicle.global_position + Vector3.UP * 1.12 + forward * (6.0 + speed_ratio * 6.0)
 			if _camera.global_position.distance_squared_to(target) > 0.001:
 				_camera.look_at(target, Vector3.UP)
+				var roll := clampf(-_vehicle.get_lateral_speed_ms() * 0.0035, -0.035, 0.035)
+				_camera.rotate_object_local(Vector3.FORWARD, roll)
+
+	# Almost imperceptible vibration only while nitro is active.  Using
+	# camera offsets avoids changing the smoothed global position.
+	var shake := 0.0
+	if _vehicle.is_boosting():
+		shake = 0.010 + speed_ratio * 0.012
+	var shake_time := float(Time.get_ticks_msec()) * 0.043
+	_camera.h_offset = sin(shake_time * 1.37) * shake
+	_camera.v_offset = cos(shake_time * 1.71) * shake * 0.7
+
+
+func _get_safe_camera_position(desired_position: Vector3) -> Vector3:
+	if _vehicle == null:
+		return desired_position
+	var origin := _vehicle.global_position + Vector3.UP * 1.25
+	if origin.distance_squared_to(desired_position) < 0.04:
+		return desired_position
+	var query := PhysicsRayQueryParameters3D.create(origin, desired_position, 1, [_vehicle.get_rid()])
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return desired_position
+	var hit_position: Vector3 = hit.get("position", desired_position)
+	var toward_vehicle := (origin - desired_position).normalized()
+	return hit_position + toward_vehicle * 0.28
 
 
 func _count_geometry_instances(node: Node) -> int:
@@ -175,6 +217,8 @@ func _run_smoke_checks() -> void:
 		failures.append("world node is missing")
 	if _vehicle == null:
 		failures.append("vehicle node is missing")
+	if _traffic == null:
+		failures.append("traffic node is missing")
 	if _camera == null:
 		failures.append("camera node is missing")
 	if _hud == null:
@@ -195,6 +239,34 @@ func _run_smoke_checks() -> void:
 		failures.append("building stats are missing or too small")
 	if int(stats.get("landmarks", 0)) != 15:
 		failures.append("landmark stats are incomplete")
+
+	var enhancement_stats := _world.get_enhancement_stats()
+	if int(enhancement_stats.get("reflection_probes", 0)) < 6:
+		failures.append("reflection probes are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("road_markings", 0)) < 700:
+		failures.append("road markings are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
+		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
+		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
+		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
+
+	var traffic_stats := _traffic.get_stats()
+	if int(traffic_stats.get("moving", 0)) < 12 or int(traffic_stats.get("parked", 0)) < 16:
+		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
+	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
+	if String(spawn_surface.get("kind", "")) != "asphalt":
+		failures.append("spawn surface is not asphalt: %s" % str(spawn_surface))
+	if _vehicle.get_surface_kind() != "asphalt":
+		failures.append("vehicle tyre surface is not asphalt after spawn: %s" % _vehicle.get_surface_kind())
+	if _vehicle.get_gear_label() != "N" and _vehicle.get_gear_label() != "1":
+		failures.append("vehicle gearbox state is invalid after spawn: %s rpm=%.0f" % [_vehicle.get_gear_label(), _vehicle.get_engine_rpm()])
+	var vehicle_aabb_size := _vehicle.get_visual_aabb_size()
+	var horizontal_max := maxf(vehicle_aabb_size.x, vehicle_aabb_size.z)
+	var horizontal_min := minf(vehicle_aabb_size.x, vehicle_aabb_size.z)
+	if horizontal_max < 4.2 or horizontal_max > 5.3 or horizontal_min < 1.6 or horizontal_min > 2.25 or vehicle_aabb_size.y < 1.05 or vehicle_aabb_size.y > 1.8:
+		failures.append("Mustang visual AABB is outside real-car scale bounds: %s" % str(vehicle_aabb_size))
 
 	var world_geometry_count := _count_geometry_instances(_world)
 	if world_geometry_count < 20:
@@ -233,12 +305,18 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
 			str(_camera.global_position),
 			str(minimap_counts),
+			str(traffic_stats),
+			str(enhancement_stats),
+			str(vehicle_aabb_size),
+			str(spawn_surface),
+			_vehicle.get_gear_label(),
+			_vehicle.get_engine_rpm(),
 		])
 	_finish_smoke(failures)
 

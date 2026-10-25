@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, trafficScript, hudScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -21,30 +21,47 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/main.gd'),
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
+  readText('scripts/traffic_manager.gd'),
   readText('scripts/hud.gd'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
 assert(project.includes('renderer/rendering_method="mobile"'), 'Godot Mobile renderer is not selected');
+assert(project.includes('textures/default_filters/anisotropic_filtering_level=4'), '4x anisotropic filtering is not enabled');
+assert(project.includes('lights_and_shadows/directional_shadow/size.mobile=4096'), '4096px mobile directional shadows are not enabled');
 assert(mainScene.includes('res://scripts/main.gd'), 'main scene is not wired to main.gd');
 
 assert(preset.includes('platform="Android"'), 'Android export preset is missing');
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=2'), 'Native hotfix must bump Android versionCode to 2');
-assert(preset.includes('version/name="0.1.1-native-alpha"'), 'Native hotfix version name must be 0.1.1-native-alpha');
+assert(preset.includes('version/code=3'), 'Native 0.2.0 must bump Android versionCode to 3');
+assert(preset.includes('version/name="0.2.0-native-alpha"'), 'Native version name must be 0.2.0-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${trafficScript}\n${hudScript}`;
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeTrafficManager', 'class_name NativeHud']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
+}
+for (const marker of [
+  'PanoramaSkyMaterial',
+  'user_sky_day.jpg',
+  'ReflectionProbe.UPDATE_ONCE',
+  'get_surface_at',
+  '_pacejka',
+  '_ackermann_angle',
+  'GEAR_RATIOS',
+  'AnimatableBody3D',
+  'GPUParticles3D',
+  'get_visual_aabb_size',
+]) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.0 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
@@ -65,10 +82,16 @@ if (requireAssets) {
     'assets/vehicles/mustang.glb',
     'assets/buildings/villa.glb',
     'assets/buildings/glass_tower.glb',
+    'assets/buildings/hero_building.glb',
+    'assets/buildings/townhouse.glb',
     'assets/props/street_lamp.glb',
+    'assets/props/bus_shelter.glb',
     'assets/vegetation/plants.glb',
     'assets/textures/user_asphalt_dashed.jpg',
     'assets/textures/user_water_turquoise.jpg',
+    'assets/textures/user_sky_day.jpg',
+    'assets/textures/user_sky_sunset.jpg',
+    'assets/textures/user_sky_night.jpg',
   ];
   for (const relative of required) {
     const file = path.join(root, relative);

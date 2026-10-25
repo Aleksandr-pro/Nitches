@@ -293,7 +293,7 @@ func _process(delta: float) -> void:
 	elif _vehicle.is_drifting():
 		_state_label.text = "ДРИФТ %d°" % int(round(_vehicle.get_drift_angle_degrees()))
 	else:
-		_state_label.text = ""
+		_state_label.text = _vehicle.get_surface_label()
 
 	_refresh_timer += delta
 	if _refresh_timer < 0.14:
