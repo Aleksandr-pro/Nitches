@@ -1,0 +1,55 @@
+{
+ "ok": true,
+ "glb_bytes": 715272,
+ "species": [
+  {
+   "key": "tree2",
+   "object": "plant2",
+   "parts": [
+    {
+     "name": "tree2_bark",
+     "tris": 199,
+     "height_m": 2.92
+    },
+    {
+     "name": "tree2_foliage",
+     "tris": 7801,
+     "height_m": 2.92
+    }
+   ]
+  },
+  {
+   "key": "bush_round",
+   "object": "plant009",
+   "parts": [
+    {
+     "name": "bush_round_foliage",
+     "tris": 3500,
+     "height_m": 0.768
+    }
+   ]
+  },
+  {
+   "key": "shrub_cone",
+   "object": "Object021",
+   "parts": [
+    {
+     "name": "shrub_cone_foliage",
+     "tris": 3000,
+     "height_m": 1.645
+    }
+   ]
+  },
+  {
+   "key": "fan",
+   "object": "plant3",
+   "parts": [
+    {
+     "name": "fan_foliage",
+     "tris": 3500,
+     "height_m": 0.598
+    }
+   ]
+  }
+ ]
+}
