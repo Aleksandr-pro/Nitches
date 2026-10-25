@@ -1,0 +1,8 @@
+{
+  "species": [
+    {"key": "tree2", "object": "plant2", "tris": 8000, "strategy": "cluster+thin", "bark": true},
+    {"key": "bush_round", "object": "plant009", "tris": 3500, "strategy": "cluster+thin", "bark": false},
+    {"key": "shrub_cone", "object": "Object021", "tris": 3000, "strategy": "cluster+thin", "bark": false},
+    {"key": "fan", "object": "plant3", "tris": 3500, "strategy": "thin", "bark": false}
+  ]
+}

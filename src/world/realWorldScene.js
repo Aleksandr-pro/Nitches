@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildRoadRibbonGeometry, roadPointAt } from './roadGraph.js';
 import grassUrl from '../assets/textures/realworld/grass.jpg';
 import rockUrl from '../assets/textures/realworld/rock.jpg';
@@ -54,6 +55,10 @@ import oakTreeUrl from '../assets/models/oak-tree.fbx?url';
 import oakLeafUrl from '../assets/textures/realworld/oak_leaf.png';
 import oakLeaf2Url from '../assets/textures/realworld/oak_leaf2.png';
 import oakBarkUrl from '../assets/textures/realworld/oak_bark.jpg';
+// Plant pack converted in CI from the user's Obj.obj (3ds Max vegetation
+// collection via Google Drive): tree2 + round bush + upright shrub + fan,
+// decimated to 18k triangles total, real metres. See docs/obj-inbox/.
+import plantsUrl from '../assets/models/plants.glb?url';
 
 const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry)/;
 
@@ -686,7 +691,11 @@ export function createRealWorldScene(foundation) {
     dummy.rotation.set(0, item.rotY || 0, 0);
     dummy.scale.set(item.s, item.sy || item.s, item.s);
   };
-  addInstanced('real-bushes', bushGeometry, foliageMaterial, plan.bushes, placeScaled);
+  // Procedural bushes are only a fallback now: the plant GLB (below) normally
+  // provides real bush/shrub/fan geometry for every plan bush.
+  const buildProceduralBushes = () => {
+    addInstanced('real-bushes', bushGeometry, foliageMaterial, plan.bushes, placeScaled);
+  };
 
   // Emergency fallback if the FBX oak cannot be fetched/parsed: the previous
   // procedural trees, so the valley is never left bare.
@@ -705,13 +714,57 @@ export function createRealWorldScene(foundation) {
     group.userData.oakTrees = { status: 'fallback-procedural' };
   };
 
+  // Shared cell instancer for all real vegetation: instances are split into
+  // an 8x8 grid of 125 m cells so frustum culling can drop whole off-screen
+  // groves. `place` positions each dummy; `colorFor` fills the shared Color
+  // and returns true when an instance tint should be written.
+  const buildCellInstanced = ({ parts, items, namePrefix, place, colorFor = null, depthMats = {} }) => {
+    const CELLS = 8;
+    const CELL = 1000 / CELLS;
+    const cells = new Map();
+    for (const it of items) {
+      const cx = Math.min(CELLS - 1, Math.max(0, Math.floor((it.t.x + 500) / CELL)));
+      const cz = Math.min(CELLS - 1, Math.max(0, Math.floor((it.t.z + 500) / CELL)));
+      const k = `${cx},${cz}`;
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push(it);
+    }
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    let meshCount = 0;
+    for (const [k, cellItems] of cells) {
+      for (const part of parts) {
+        const mesh = new THREE.InstancedMesh(part.geometry, part.material, cellItems.length);
+        mesh.name = `${namePrefix}-${part.key}-${k}`;
+        cellItems.forEach((it, i) => {
+          const h1 = hashFromKey(`${namePrefix}:${it.idx}:a`);
+          const h2 = hashFromKey(`${namePrefix}:${it.idx}:b`);
+          place(dummy, it.t, h1, h2);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+          if (colorFor && colorFor(part.key, it.t, it.idx, h1, h2, color)) mesh.setColorAt(i, color);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        if (depthMats[part.key]) mesh.customDepthMaterial = depthMats[part.key];
+        mesh.computeBoundingSphere();
+        group.add(mesh);
+        meshCount += 1;
+        countTris(part.geometry, cellItems.length);
+      }
+    }
+    return meshCount;
+  };
+
   // The user's oak (Tree.fbx): branched "Wood - Bark" trunk plus two leaf-card
   // canopies ("Leaf Oak" / "Leaf Oak2"), ~10.4k tris, 9.35 m tall in metres.
-  // All 620 plan trees instance this one model; an 8x8 grid of 125 m cells
-  // keeps frustum culling effective so off-screen groves cost nothing, and
-  // per-instance tints keep oaks varied green, every 4th oak autumn-orange,
-  // and west-woods "pines" darker and narrower/taller.
-  const buildOakTrees = (root) => {
+  // Instances the given plan trees (oaks only when the plant pack provides a
+  // second species for the pines, otherwise every tree); per-instance tints
+  // keep oaks varied green and every 4th oak autumn-orange. Returns the
+  // number of cell meshes built (0 when the model yielded no geometry).
+  const buildOakTrees = (root, items) => {
     root.updateMatrixWorld(true);
     const parts = [];
     root.traverse((obj) => {
@@ -733,7 +786,7 @@ export function createRealWorldScene(foundation) {
         }
       }
     });
-    if (!parts.length) { buildProceduralTrees(); return; }
+    if (!parts.length) return 0;
     const union = new THREE.Box3();
     for (const p of parts) { p.geometry.computeBoundingBox(); union.union(p.geometry.boundingBox); }
     const size = new THREE.Vector3(); union.getSize(size);
@@ -752,66 +805,167 @@ export function createRealWorldScene(foundation) {
       leaf: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeafTex, alphaTest: 0.42 }),
       leaf2: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeaf2Tex, alphaTest: 0.42 }),
     };
-    const CELLS = 8;
-    const CELL = 1000 / CELLS;
-    const cells = new Map();
-    plan.trees.forEach((t, idx) => {
-      const cx = Math.min(CELLS - 1, Math.max(0, Math.floor((t.x + 500) / CELL)));
-      const cz = Math.min(CELLS - 1, Math.max(0, Math.floor((t.z + 500) / CELL)));
-      const k = `${cx},${cz}`;
-      if (!cells.has(k)) cells.set(k, []);
-      cells.get(k).push({ t, idx });
+    for (const p of parts) p.material = materials[p.key];
+    const meshCount = buildCellInstanced({
+      parts, items, namePrefix: 'real-oak', depthMats,
+      place: (dummy, t, h1, h2) => {
+        // Match the height range of the trees they replace (~6.3*s metres).
+        const base = (6.3 * (t.s || 1)) / modelHeight;
+        let sx = base * (0.92 + 0.16 * h1);
+        let sy = base * (0.92 + 0.2 * h2);
+        if (t.type === 'pine') { sx *= 0.78; sy *= 1.22; }
+        dummy.position.set(t.x, t.y, t.z);
+        dummy.rotation.set(0, t.rotY || 0, 0);
+        dummy.scale.set(sx, sy, sx);
+      },
+      colorFor: (key, t, idx, h1, h2, color) => {
+        if (key === 'trunk') return false;
+        const tint = t.tint || 1;
+        if (t.type === 'oak' && idx % 4 === 0) color.setRGB(1.05 * tint, 0.58 * tint, 0.24 * tint);
+        else if (t.type === 'pine') color.setRGB(0.5 * tint, 0.78 * tint, 0.48 * tint);
+        else color.setRGB((0.82 + 0.3 * h1) * tint, (0.92 + 0.18 * h2) * tint, 0.7 * tint);
+        return true;
+      },
     });
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
-    let meshCount = 0;
-    for (const [k, items] of cells) {
-      for (const part of parts) {
-        const mesh = new THREE.InstancedMesh(part.geometry, materials[part.key], items.length);
-        mesh.name = `real-oak-${part.key}-${k}`;
-        items.forEach(({ t, idx }, i) => {
-          const h1 = hashFromKey(`oak:${idx}:a`);
-          const h2 = hashFromKey(`oak:${idx}:b`);
-          // Match the height range of the trees they replace (~6.3*s metres).
-          const base = (6.3 * (t.s || 1)) / modelHeight;
-          let sx = base * (0.92 + 0.16 * h1);
-          let sy = base * (0.92 + 0.2 * h2);
-          if (t.type === 'pine') { sx *= 0.78; sy *= 1.22; }
-          dummy.position.set(t.x, t.y, t.z);
-          dummy.rotation.set(0, t.rotY || 0, 0);
-          dummy.scale.set(sx, sy, sx);
-          dummy.updateMatrix();
-          mesh.setMatrixAt(i, dummy.matrix);
-          if (part.key !== 'trunk') {
-            const tint = t.tint || 1;
-            if (t.type === 'oak' && idx % 4 === 0) color.setRGB(1.05 * tint, 0.58 * tint, 0.24 * tint);
-            else if (t.type === 'pine') color.setRGB(0.5 * tint, 0.78 * tint, 0.48 * tint);
-            else color.setRGB((0.82 + 0.3 * h1) * tint, (0.92 + 0.18 * h2) * tint, 0.7 * tint);
-            mesh.setColorAt(i, color);
-          }
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        if (depthMats[part.key]) mesh.customDepthMaterial = depthMats[part.key];
-        mesh.computeBoundingSphere();
-        group.add(mesh);
-        meshCount += 1;
-        countTris(part.geometry, items.length);
+    group.userData.oakTrees = { status: 'ready', meshes: meshCount, modelHeightM: +modelHeight.toFixed(2) };
+    console.info('[world] user oak FBX instanced:', items.length, 'trees,', meshCount, 'cell meshes');
+    return meshCount;
+  };
+
+  // --- Plant pack from the user's Obj.obj (plants.glb) -----------------------
+  // Four species converted in CI from the 3ds Max vegetation collection:
+  // tree2 (second tree for the west-woods "pines"), bush_round, shrub_cone
+  // and fan — 18k triangles total, real metres, bases at the origin. The
+  // source carried no textures, so foliage uses the seamless foliage photo
+  // map and trunks the oak's bark map (box-projected UVs from conversion).
+  const plantMats = {
+    foliage: new THREE.MeshStandardMaterial({ map: cloneTexture(foliageTex, 1, 1), side: THREE.DoubleSide, roughness: 1 }),
+    bark: new THREE.MeshStandardMaterial({ map: cloneTexture(oakBarkTex, 1, 1), roughness: 1 }),
+  };
+  const extractSpecies = (gltf) => {
+    const root = gltf.scene;
+    root.updateMatrixWorld(true);
+    const byKey = {};
+    root.traverse((obj) => {
+      if (!obj.isMesh) return;
+      const m = /^(.+)_(foliage|bark)$/.exec(obj.name || '');
+      if (!m) return;
+      const geometry = obj.geometry.clone().applyMatrix4(obj.matrixWorld);
+      (byKey[m[1]] ||= []).push({ key: m[2], geometry, material: plantMats[m[2]] });
+    });
+    root.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        for (const m of (Array.isArray(obj.material) ? obj.material : [obj.material])) m.dispose();
       }
+    });
+    const out = {};
+    for (const [key, parts] of Object.entries(byKey)) {
+      const union = new THREE.Box3();
+      for (const p of parts) {
+        p.geometry.computeBoundingBox();
+        union.union(p.geometry.boundingBox);
+        p.geometry.computeBoundingSphere();
+      }
+      out[key] = { parts, height: Math.max(0.1, union.max.y - union.min.y) };
     }
+    return Object.keys(out).length ? out : null;
+  };
+
+  const buildSpeciesTrees = (sp, items) => buildCellInstanced({
+    parts: sp.parts, items, namePrefix: 'real-tree2',
+    place: (dummy, t, h1, h2) => {
+      const base = (6.6 * (t.s || 1)) / sp.height;
+      const sx = base * (0.9 + 0.18 * h1);
+      dummy.position.set(t.x, t.y, t.z);
+      dummy.rotation.set(0, t.rotY || 0, 0);
+      dummy.scale.set(sx, base * (0.95 + 0.25 * h2), sx);
+    },
+    colorFor: (key, t, idx, h1, h2, color) => {
+      if (key === 'bark') return false;
+      const tint = t.tint || 1;
+      color.setRGB((0.45 + 0.22 * h1) * tint, (0.75 + 0.2 * h2) * tint, 0.42 * tint);
+      return true;
+    },
+  });
+
+  const BUSH_TARGETS = { bush_round: 1.25, shrub_cone: 1.75, fan: 1.05 };
+  const BUSH_TINTS = {
+    bush_round: (h1, h2) => [0.75 + 0.35 * h1, 0.9 + 0.25 * h2, 0.65],
+    shrub_cone: (h1, h2) => [0.45 + 0.2 * h1, 0.72 + 0.2 * h2, 0.5],
+    fan: (h1, h2) => [0.9 + 0.25 * h1, 0.95 + 0.2 * h2, 0.55],
+  };
+  const buildPlantBushes = (species) => {
+    const buckets = { bush_round: [], shrub_cone: [], fan: [] };
+    plan.bushes.forEach((b, idx) => {
+      const h = hashFromKey(`bushpick:${idx}`);
+      const key = h < 0.5 ? 'bush_round' : h < 0.82 ? 'shrub_cone' : 'fan';
+      buckets[species[key] ? key : 'bush_round'].push({ t: b, idx });
+    });
+    let meshes = 0;
+    const counts = {};
+    for (const [key, items] of Object.entries(buckets)) {
+      const sp = species[key];
+      if (!sp || !items.length) continue;
+      counts[key] = items.length;
+      meshes += buildCellInstanced({
+        parts: sp.parts, items, namePrefix: `real-${key.replace('_', '-')}`,
+        place: (dummy, t, h1, h2) => {
+          const base = ((BUSH_TARGETS[key] || 1.2) * (t.s || 1)) / sp.height;
+          const sx = base * (0.9 + 0.25 * h1);
+          dummy.position.set(t.x, t.y - 0.03, t.z);
+          dummy.rotation.set(0, t.rotY || 0, 0);
+          dummy.scale.set(sx, base * (0.9 + 0.2 * h2), sx);
+        },
+        colorFor: (partKey, t, idx, h1, h2, color) => {
+          if (partKey === 'bark') return false;
+          const rgb = (BUSH_TINTS[key] || BUSH_TINTS.bush_round)(h1, h2);
+          const tint = t.tint || 1;
+          color.setRGB(rgb[0] * tint, rgb[1] * tint, rgb[2] * tint);
+          return true;
+        },
+      });
+    }
+    return meshes ? { meshes, counts } : null;
+  };
+
+  // Load both user models in parallel, then build vegetation once with the
+  // best available combination: oak FBX for oaks + plant GLB for pines and
+  // bushes; tree2 alone if the oak fails; procedural geometry only if both
+  // models cannot be fetched/parsed, so the valley is never left bare.
+  const oakLoad = new FBXLoader().loadAsync(oakTreeUrl).catch((error) => {
+    console.warn('[world] oak FBX failed:', error);
+    return null;
+  });
+  const plantsLoad = new GLTFLoader().loadAsync(plantsUrl).catch((error) => {
+    console.warn('[world] plants GLB failed:', error);
+    return null;
+  });
+  Promise.all([oakLoad, plantsLoad]).then(([oakRoot, plantsGltf]) => {
+    const species = plantsGltf ? extractSpecies(plantsGltf) : null;
+    const allTrees = plan.trees.map((t, idx) => ({ t, idx }));
+    const oakItems = allTrees.filter(({ t }) => t.type === 'oak');
+    const pineItems = allTrees.filter(({ t }) => t.type === 'pine');
+    let treeMeshes = 0;
+    if (oakRoot) treeMeshes += buildOakTrees(oakRoot, species?.tree2 ? oakItems : allTrees);
+    const oaksBuilt = treeMeshes > 0;
+    if (species?.tree2) {
+      treeMeshes += buildSpeciesTrees(species.tree2, oaksBuilt ? pineItems : allTrees);
+    }
+    if (!treeMeshes) buildProceduralTrees();
+    const bushInfo = species ? buildPlantBushes(species) : null;
+    if (!bushInfo) buildProceduralBushes();
     if (liveStats) {
       liveStats.triangles = triangles;
-      liveStats.treeModel = 'user-oak-fbx';
-      liveStats.treeMeshes = meshCount;
+      liveStats.treeModel = oaksBuilt ? 'user-oak-fbx' : species?.tree2 ? 'plants-glb-tree2' : 'fallback-procedural';
+      liveStats.treeMeshes = treeMeshes;
+      liveStats.plantPack = species ? Object.keys(species) : null;
+      if (bushInfo) liveStats.plantBushes = bushInfo.counts;
     }
-    group.userData.oakTrees = { status: 'ready', meshes: meshCount, modelHeightM: +modelHeight.toFixed(2) };
-    console.info('[world] user oak FBX instanced:', plan.trees.length, 'trees,', meshCount, 'cell meshes');
-  };
-  new FBXLoader().loadAsync(oakTreeUrl).then(buildOakTrees).catch((error) => {
-    console.warn('[world] oak FBX failed, using procedural trees:', error);
-    buildProceduralTrees();
+    group.userData.plants = species
+      ? { status: 'ready', species: Object.keys(species), bushes: bushInfo ? bushInfo.counts : null }
+      : { status: 'unavailable' };
+    console.info('[world] vegetation ready:', group.userData.plants);
   });
 
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
