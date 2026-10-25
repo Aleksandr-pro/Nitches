@@ -105,6 +105,48 @@ import plantsUrl from '../assets/models/plants.glb?url';
 import busShelterUrl from '../assets/models/props/bus_shelter.glb?url';
 import streetLampUrl from '../assets/models/props/street_lamp.glb?url';
 import heroBuildingUrl from '../assets/models/props/hero_building.glb?url';
+import userGrassNormalUrl from '../assets/textures/realworld/user_grass_normal.jpg';
+import rockNormalUrl from '../assets/textures/realworld/rock_normal.jpg';
+import userSandRippledNormalUrl from '../assets/textures/realworld/user_sand_rippled_normal.jpg';
+import userConcreteSlabsNormalUrl from '../assets/textures/realworld/user_concrete_slabs_normal.jpg';
+import userAsphaltDashedNormalUrl from '../assets/textures/realworld/user_asphalt_dashed_normal.jpg';
+import userAsphaltPlainNormalUrl from '../assets/textures/realworld/user_asphalt_plain_normal.jpg';
+import userAsphaltPotholeNormalUrl from '../assets/textures/realworld/user_asphalt_pothole_normal.jpg';
+import userAsphaltDoubleYellowNormalUrl from '../assets/textures/realworld/user_asphalt_double_yellow_normal.jpg';
+import asphaltDragNormalUrl from '../assets/textures/realworld/asphalt_drag_normal.jpg';
+import userWaterNormalUrl from '../assets/textures/realworld/user_water_turquoise_normal.jpg';
+import userPoolMosaicNormalUrl from '../assets/textures/realworld/user_pool_mosaic_normal.jpg';
+import userStoneRubbleNormalUrl from '../assets/textures/realworld/user_stone_rubble_normal.jpg';
+import facadeBrickNormalUrl from '../assets/textures/realworld/facade_brick_normal.jpg';
+import facadeModernNormalUrl from '../assets/textures/realworld/facade_modern_normal.jpg';
+import facadeGlassNormalUrl from '../assets/textures/realworld/facade_glass_normal.jpg';
+import facadePanelNormalUrl from '../assets/textures/realworld/facade_panel_normal.jpg';
+import facadeLoftNormalUrl from '../assets/textures/realworld/facade_loft_normal.jpg';
+import facadePastelNormalUrl from '../assets/textures/realworld/facade_pastel_normal.jpg';
+import facadeIndustrialNormalUrl from '../assets/textures/realworld/facade_industrial_normal.jpg';
+import facadeShopNormalUrl from '../assets/textures/realworld/facade_shop_normal.jpg';
+import facadeHotelNormalUrl from '../assets/textures/realworld/facade_hotel_normal.jpg';
+import facadeSandstoneNormalUrl from '../assets/textures/realworld/facade_sandstone_normal.jpg';
+import userFacadeBlueGlassNormalUrl from '../assets/textures/realworld/user_facade_blue_glass_normal.jpg';
+import userFacadeGoldGridNormalUrl from '../assets/textures/realworld/user_facade_gold_grid_normal.jpg';
+import userFacadeSilverNormalUrl from '../assets/textures/realworld/user_facade_silver_normal.jpg';
+import userMarbleTilesNormalUrl from '../assets/textures/realworld/user_marble_tiles_normal.jpg';
+import userTravertineNormalUrl from '../assets/textures/realworld/user_travertine_normal.jpg';
+import userPlasterNormalUrl from '../assets/textures/realworld/user_plaster_white_normal.jpg';
+import userWoodSlatsNormalUrl from '../assets/textures/realworld/user_wood_slats_dark_normal.jpg';
+import userConcreteDarkNormalUrl from '../assets/textures/realworld/user_concrete_dark_normal.jpg';
+import userRoofTerracottaNormalUrl from '../assets/textures/realworld/user_roof_terracotta_normal.jpg';
+import roofSlateNormalUrl from '../assets/textures/realworld/roof_slate_normal.jpg';
+import userRoofWeatheredNormalUrl from '../assets/textures/realworld/user_roof_weathered_normal.jpg';
+import userWoodDeckNormalUrl from '../assets/textures/realworld/user_wood_deck_normal.jpg';
+import benchWoodNormalUrl from '../assets/textures/realworld/bench_wood_normal.jpg';
+import oakBarkNormalUrl from '../assets/textures/realworld/oak_bark_normal.jpg';
+import foliageNormalUrl from '../assets/textures/realworld/foliage_normal.jpg';
+import metalPoleNormalUrl from '../assets/textures/realworld/metal_pole_normal.jpg';
+import userBrushedMetalNormalUrl from '../assets/textures/realworld/user_brushed_metal_normal.jpg';
+import userBlackGraniteNormalUrl from '../assets/textures/realworld/user_black_granite_normal.jpg';
+import userBlackRoughNormalUrl from '../assets/textures/realworld/user_black_rough_normal.jpg';
+import userParkingDeckNormalUrl from '../assets/textures/realworld/user_parking_deck_normal.jpg';
 
 const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry|rt-)/;
 
@@ -137,6 +179,11 @@ function cloneTexture(base, rx, ry) {
   const texture = base.clone();
   texture.repeat.set(rx, ry);
   texture.needsUpdate = true;
+  return texture;
+}
+function makeNormalTexture(loader, url, { mirror = false } = {}) {
+  const texture = makeTexture(loader, url, { mirror });
+  texture.colorSpace = THREE.NoColorSpace;
   return texture;
 }
 
@@ -369,6 +416,125 @@ export function createRealWorldScene(foundation) {
   const oakLeaf2Tex = makeTexture(loader, oakLeaf2Url);
   const oakBarkTex = makeTexture(loader, oakBarkUrl, { ry: 2 });
 
+  // Tangent-space normal maps derived from the colour photos.  Registry is
+  // keyed by Texture.source, so every clone/repeat/rotation of a colour map
+  // can receive a matching normal clone automatically.
+  const normalBySource = new Map();
+  const registerNormal = (colourTex, url, scale, mirror = false) => {
+    const tex = makeNormalTexture(loader, url, { mirror });
+    normalBySource.set(colourTex.source, { tex, scale });
+    return tex;
+  };
+  const grassNormalTex = registerNormal(grassTex, userGrassNormalUrl, 0.72, true);
+  const rockNormalTex = registerNormal(rockTex, rockNormalUrl, 0.9, true);
+  const sandNormalTex = registerNormal(sandTex, userSandRippledNormalUrl, 0.82, true);
+  const concreteNormalTex = registerNormal(concreteTex, userConcreteSlabsNormalUrl, 0.72, true);
+  normalBySource.set(sidewalkTex.source, normalBySource.get(concreteTex.source));
+  normalBySource.set(whiteSandTex.source, normalBySource.get(sandTex.source));
+  normalBySource.set(wetSandTex.source, normalBySource.get(sandTex.source));
+  registerNormal(roadTex, userAsphaltDashedNormalUrl, 0.82);
+  registerNormal(cityAsphaltTex, userAsphaltPlainNormalUrl, 0.82);
+  registerNormal(ruralTex, userAsphaltPotholeNormalUrl, 0.92);
+  registerNormal(doubleYellowTex, userAsphaltDoubleYellowNormalUrl, 0.68);
+  registerNormal(dragTex, asphaltDragNormalUrl, 0.62);
+  const seaNormalTex = registerNormal(seaTex, userWaterNormalUrl, 0.88, true);
+  registerNormal(poolMosaicTex, userPoolMosaicNormalUrl, 0.5);
+  registerNormal(stoneRubbleTex, userStoneRubbleNormalUrl, 1.0, true);
+  registerNormal(brickTex, facadeBrickNormalUrl, 0.55);
+  registerNormal(modernTex, facadeModernNormalUrl, 0.45);
+  registerNormal(glassTex, facadeGlassNormalUrl, 0.3);
+  registerNormal(panelTex, facadePanelNormalUrl, 0.52);
+  registerNormal(loftTex, facadeLoftNormalUrl, 0.52);
+  registerNormal(pastelTex, facadePastelNormalUrl, 0.47);
+  registerNormal(industrialTex, facadeIndustrialNormalUrl, 0.58);
+  registerNormal(shopTex, facadeShopNormalUrl, 0.3);
+  registerNormal(hotelTowerTex, facadeHotelNormalUrl, 0.45);
+  registerNormal(sandTowerTex, facadeSandstoneNormalUrl, 0.58);
+  registerNormal(glassTowerTex, userFacadeBlueGlassNormalUrl, 0.3);
+  registerNormal(goldTowerTex, userFacadeGoldGridNormalUrl, 0.34);
+  registerNormal(marbleTowerTex, userFacadeSilverNormalUrl, 0.34);
+  registerNormal(marbleTilesTex, userMarbleTilesNormalUrl, 0.36);
+  registerNormal(travertineTex, userTravertineNormalUrl, 0.62);
+  registerNormal(plasterTex, userPlasterNormalUrl, 0.42);
+  registerNormal(woodSlatsTex, userWoodSlatsNormalUrl, 0.72);
+  registerNormal(darkConcreteTex, userConcreteDarkNormalUrl, 0.68);
+  registerNormal(roofTex, userRoofTerracottaNormalUrl, 0.85, true);
+  registerNormal(slateTex, roofSlateNormalUrl, 0.82, true);
+  registerNormal(roofFlatTex, userRoofWeatheredNormalUrl, 0.72, true);
+  registerNormal(woodDeckTex, userWoodDeckNormalUrl, 0.62);
+  registerNormal(benchWoodTex, benchWoodNormalUrl, 0.55);
+  registerNormal(oakBarkTex, oakBarkNormalUrl, 0.88);
+  registerNormal(foliageTex, foliageNormalUrl, 0.5, true);
+  registerNormal(metalPoleTex, metalPoleNormalUrl, 0.3);
+  registerNormal(brushedMetalTex, userBrushedMetalNormalUrl, 0.2);
+  registerNormal(blackGraniteTex, userBlackGraniteNormalUrl, 0.3);
+  registerNormal(blackRoughTex, userBlackRoughNormalUrl, 0.85, true);
+  registerNormal(parkingDeckTex, userParkingDeckNormalUrl, 0.68);
+
+  const applyNormalMap = (material, multiplier = 1) => {
+    if (!material || !material.isMeshStandardMaterial || !material.map || material.normalMap) return false;
+    const entry = normalBySource.get(material.map.source);
+    if (!entry) return false;
+    const normal = cloneTexture(entry.tex, material.map.repeat.x, material.map.repeat.y);
+    normal.offset.copy(material.map.offset);
+    normal.center.copy(material.map.center);
+    normal.rotation = material.map.rotation;
+    normal.colorSpace = THREE.NoColorSpace;
+    material.normalMap = normal;
+    material.normalScale.set(entry.scale * multiplier, entry.scale * multiplier);
+    material.bumpMap = null;
+    material.needsUpdate = true;
+    return true;
+  };
+
+  // Materials whose emissive term follows the selected sky: lamps, windows,
+  // signs and LED screens wake up at sunset/night without extra lights.
+  const nightReactiveMaterials = [];
+  const registerNightMaterial = (material, {
+    day = 0, sunset = day, night = 1, property = 'emissiveIntensity',
+  } = {}) => {
+    if (!material) return material;
+    material[property] = day;
+    nightReactiveMaterials.push({ material, day, sunset, night, property });
+    return material;
+  };
+  const setSkyMood = (mood) => {
+    const key = mood === 'night' || mood === 'sunset' ? mood : 'day';
+    for (const item of nightReactiveMaterials) item.material[item.property] = item[key];
+  };
+
+  // Cheap vertex-shader wind for instanced foliage.  Phase is seeded by the
+  // instance translation, so neighbouring crowns move as travelling gusts.
+  const windShaders = [];
+  const addWindSway = (material, { strength = 0.06, maxHeight = 5 } = {}) => {
+    if (!material || material.userData.windSway) return material;
+    material.userData.windSway = true;
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uWindTime = { value: 0 };
+      shader.uniforms.uWindStrength = { value: strength };
+      shader.uniforms.uWindHeight = { value: maxHeight };
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nuniform float uWindTime;\nuniform float uWindStrength;\nuniform float uWindHeight;',
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          #ifdef USE_INSTANCING
+            float nhWindPhase = uWindTime * 1.35 + instanceMatrix[3][0] * 0.14 + instanceMatrix[3][2] * 0.11;
+            float nhWindAmount = smoothstep(0.3, uWindHeight, transformed.y);
+            float nhWindWave = sin(nhWindPhase) + 0.35 * sin(nhWindPhase * 2.17 + 1.3);
+            transformed.x += nhWindWave * uWindStrength * nhWindAmount;
+            transformed.z += cos(nhWindPhase * 0.83 + 0.7) * uWindStrength * 0.62 * nhWindAmount;
+          #endif`,
+        );
+      windShaders.push(shader);
+    };
+    material.customProgramCacheKey = () => `nh-wind-${strength.toFixed(3)}-${maxHeight.toFixed(2)}`;
+    return material;
+  };
+
   const group = new THREE.Group();
   group.name = 'nh-real-valley-1km';
   let triangles = 0;
@@ -426,11 +592,28 @@ export function createRealWorldScene(foundation) {
     shader.uniforms.rockMap = { value: rockTex };
     shader.uniforms.sandMap = { value: sandTex };
     shader.uniforms.concreteMap = { value: concreteTex };
+    shader.uniforms.grassNormalMap = { value: grassNormalTex };
+    shader.uniforms.rockNormalMap = { value: rockNormalTex };
+    shader.uniforms.sandNormalMap = { value: sandNormalTex };
+    shader.uniforms.concreteNormalMap = { value: concreteNormalTex };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 splat;\nvarying vec3 vSplat;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSplat = splat;');
+      .replace('#include <common>', '#include <common>\nattribute vec3 splat;\nvarying vec3 vSplat;\nvarying vec3 vTerrainTangentX;\nvarying vec3 vTerrainTangentZ;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vSplat = splat;
+        vTerrainTangentX = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));
+        vTerrainTangentZ = normalize(normalMatrix * vec3(0.0, 0.0, 1.0));`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSplat;\nuniform sampler2D rockMap;\nuniform sampler2D sandMap;\nuniform sampler2D concreteMap;')
+      .replace('#include <common>', `#include <common>
+        varying vec3 vSplat;
+        varying vec3 vTerrainTangentX;
+        varying vec3 vTerrainTangentZ;
+        uniform sampler2D rockMap;
+        uniform sampler2D sandMap;
+        uniform sampler2D concreteMap;
+        uniform sampler2D grassNormalMap;
+        uniform sampler2D rockNormalMap;
+        uniform sampler2D sandNormalMap;
+        uniform sampler2D concreteNormalMap;`)
       .replace('#include <map_fragment>', `
         vec4 grassColor = texture2D(map, vMapUv);
         vec4 rockColor = texture2D(rockMap, vMapUv * 0.55);
@@ -442,9 +625,23 @@ export function createRealWorldScene(foundation) {
         float gw = max(0.0, 1.0 - rw - sw - cw);
         vec4 blended = (grassColor * gw + rockColor * rw + sandColor * sw + concreteColor * cw) / max(gw + rw + sw + cw, 0.001);
         diffuseColor *= blended;
+      `)
+      .replace('#include <normal_fragment_maps>', `
+        vec3 terrainTangentNormal = normalize(
+          (texture2D(grassNormalMap, vMapUv).rgb * 2.0 - 1.0) * gw
+          + (texture2D(rockNormalMap, vMapUv * 0.55).rgb * 2.0 - 1.0) * rw
+          + (texture2D(sandNormalMap, vMapUv * 0.8).rgb * 2.0 - 1.0) * sw
+          + (texture2D(concreteNormalMap, vMapUv * 0.35).rgb * 2.0 - 1.0) * cw
+        );
+        terrainTangentNormal.xy *= 0.72;
+        normal = normalize(
+          vTerrainTangentX * terrainTangentNormal.x
+          + vTerrainTangentZ * terrainTangentNormal.y
+          + normal * terrainTangentNormal.z
+        );
       `);
   };
-  terrainMaterial.customProgramCacheKey = () => 'real-valley-terrain-v1';
+  terrainMaterial.customProgramCacheKey = () => 'real-valley-terrain-v2-normals';
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
   terrain.name = 'real-terrain';
   terrain.receiveShadow = true;
@@ -467,9 +664,11 @@ export function createRealWorldScene(foundation) {
     buildRiverGeometry(foundation.river),
     new THREE.MeshStandardMaterial({
       color: 0x1d6f92, roughness: 0.16, metalness: 0.05, transparent: true, opacity: 0.88,
+      normalMap: cloneTexture(seaNormalTex, 1, 1), normalScale: new THREE.Vector2(0.42, 0.42),
     }),
   );
   water.name = 'real-river';
+  animatedWaters.push({ normalTex: water.material.normalMap, nsx: 0.0, nsy: 0.03 });
   group.add(water);
   {
     const m = foundation.zones.marina;
@@ -477,11 +676,12 @@ export function createRealWorldScene(foundation) {
       new THREE.PlaneGeometry(m.maxX - m.minX - 3, m.maxZ - m.minZ - 3).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({
         map: cloneTexture(seaTex, 10, 10), color: 0xbfeef5, roughness: 0.14, metalness: 0.08, transparent: true, opacity: 0.92,
+        normalMap: cloneTexture(seaNormalTex, 10, 10), normalScale: new THREE.Vector2(0.55, 0.55),
       }),
     );
     marinaWater.position.set((m.minX + m.maxX) / 2, foundation.river.waterLevelM, (m.minZ + m.maxZ) / 2);
     marinaWater.name = 'real-marina';
-    animatedWaters.push({ tex: marinaWater.material.map, sx: 0.011, sy: -0.007 });
+    animatedWaters.push({ tex: marinaWater.material.map, sx: 0.011, sy: -0.007, normalTex: marinaWater.material.normalMap, nsx: -0.017, nsy: 0.012 });
     group.add(marinaWater);
     countTris(marinaWater.geometry);
 
@@ -491,11 +691,12 @@ export function createRealWorldScene(foundation) {
       new THREE.PlaneGeometry(sea.maxX - sea.minX, sea.maxZ - sea.minZ).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({
         map: cloneTexture(seaTex, 26, 26), color: 0xd8f6fa, roughness: 0.12, metalness: 0.08, transparent: true, opacity: 0.94,
+        normalMap: cloneTexture(seaNormalTex, 26, 26), normalScale: new THREE.Vector2(0.78, 0.78),
       }),
     );
     seaMesh.position.set((sea.minX + sea.maxX) / 2, foundation.river.waterLevelM, (sea.minZ + sea.maxZ) / 2);
     seaMesh.name = 'real-sea';
-    animatedWaters.push({ tex: seaMesh.material.map, sx: 0.006, sy: 0.004 });
+    animatedWaters.push({ tex: seaMesh.material.map, sx: 0.006, sy: 0.004, normalTex: seaMesh.material.normalMap, nsx: -0.009, nsy: 0.014 });
     group.add(seaMesh);
     countTris(seaMesh.geometry);
 
@@ -776,6 +977,90 @@ export function createRealWorldScene(foundation) {
     }
   }
 
+  // --- Road micro-detail: raised reflectors and manhole covers ----------------
+  {
+    const junctionPts = [];
+    for (const e of foundation.roadGraph.edges) {
+      const sm = e.samples || [];
+      if (sm.length) junctionPts.push(sm[0], sm[sm.length - 1]);
+    }
+    const nearJunction = (x, z, r = 10) => junctionPts.some(
+      (n) => (n.x - x) * (n.x - x) + (n.z - z) * (n.z - z) < r * r,
+    );
+    const reflectors = [];
+    const manholes = [];
+    for (const e of foundation.roadGraph.edges) {
+      const isRT = /^(rt-blvd|rt-east|rt-palm|rt-sail)/.test(e.id);
+      const isUrban = isRT || SIDEWALK_EDGE_PATTERN.test(e.id);
+      if (!isUrban || isDragEdge(e)) continue;
+      const smp = e.samples || [];
+      let reflectorAcc = 8;
+      let manholeAcc = 35 + hashFromKey(`mh:${e.id}`) * 50;
+      for (let i = 1; i < smp.length; i++) {
+        const a = smp[i - 1];
+        const b = smp[i];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const seg = Math.hypot(dx, dz) || 0.001;
+        reflectorAcc += seg;
+        manholeAcc += seg;
+        const yaw = Math.atan2(dx, dz);
+        if (reflectorAcc >= (isRT ? 18 : 27) && reflectors.length < 650) {
+          reflectorAcc = 0;
+          if (!nearJunction(b.x, b.z, 9)) {
+            reflectors.push({ x: b.x, y: foundation.heightAt(b.x, b.z) + 0.165, z: b.z, rotY: yaw });
+          }
+        }
+        if (manholeAcc >= 95 && manholes.length < 180) {
+          manholeAcc = 0;
+          const h = hashFromKey(`mh:${e.id}:${i}`);
+          const lat = (h * 2 - 1) * Math.max(0.4, (e.halfWidthM || 4) - 1.1);
+          const x = b.x + (-dz / seg) * lat;
+          const z = b.z + (dx / seg) * lat;
+          if (!nearJunction(x, z, 10)) {
+            manholes.push({ x, y: foundation.heightAt(x, z) + 0.162, z, rotY: yaw + h * 0.8 });
+          }
+        }
+      }
+    }
+    const makeDetailInstanced = (name, geometry, material, items) => {
+      if (!items.length) return;
+      const mesh = new THREE.InstancedMesh(geometry, material, items.length);
+      const dummy = new THREE.Object3D();
+      items.forEach((item, i) => {
+        dummy.position.set(item.x, item.y, item.z);
+        dummy.rotation.set(0, item.rotY || 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.name = name;
+      mesh.renderOrder = 3;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+      countTris(geometry, items.length);
+    };
+    const reflectorGeo = new THREE.BoxGeometry(0.18, 0.045, 0.18);
+    reflectorGeo.translate(0, 0.022, 0);
+    const reflectorMat = new THREE.MeshStandardMaterial({
+      color: 0xffb545, emissive: 0xff8a1e, emissiveIntensity: 0.3,
+      roughness: 0.32, metalness: 0.1, envMapIntensity: 1.4,
+    });
+    registerNightMaterial(reflectorMat, { day: 0.3, sunset: 1.5, night: 3.0 });
+    makeDetailInstanced('real-road-reflectors', reflectorGeo, reflectorMat, reflectors);
+    const manholeGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.035, 18);
+    manholeGeo.translate(0, 0.018, 0);
+    const manholeMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(blackRoughTex, 1, 1), color: 0x8b8f94,
+      roughness: 0.48, metalness: 0.65, envMapIntensity: 0.9,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    applyNormalMap(manholeMat, 0.8);
+    makeDetailInstanced('real-manholes', manholeGeo, manholeMat, manholes);
+  }
+
   // --- Zebra crossings at city junctions -----------------------------------------
   {
     const approaches = [];
@@ -868,12 +1153,24 @@ export function createRealWorldScene(foundation) {
     userWood: new THREE.MeshStandardMaterial({ map: cloneTexture(woodSlatsTex, 2, 1), roughness: 0.8, metalness: 0 }),
     userConcrete: new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 2, 1), roughness: 0.9, metalness: 0 }),
   };
-  // Window/joint relief from each facade's own photo texture: at grazing sun
-  // angles the bump shading reads as mullions, frames and panel joints.
-  for (const m of Object.values(materials)) {
+  // Window/joint relief from matching tangent-space normals; bump remains
+  // only as a fallback for unmapped sources.  Tower/shop facade maps double
+  // as restrained emissive maps after dark, so lit windows follow the sky.
+  for (const [key, m] of Object.entries(materials)) {
     if (!m.map) continue;
-    m.bumpMap = m.map;
-    m.bumpScale = m.metalness >= 0.4 ? 0.25 : 0.6;
+    if (!applyNormalMap(m)) {
+      m.bumpMap = m.map;
+      m.bumpScale = m.metalness >= 0.4 ? 0.25 : 0.6;
+    }
+    if (/Tower|glassApt|modernApt|shopFront|userMarble/.test(key)) {
+      m.emissive.set(0xffc27d);
+      m.emissiveMap = m.map;
+      registerNightMaterial(m, {
+        day: 0,
+        sunset: 0.1,
+        night: key === 'shopFront' ? 0.48 : 0.3,
+      });
+    }
   }
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
@@ -1305,6 +1602,7 @@ export function createRealWorldScene(foundation) {
       map: ledScreenTex, emissive: 0xffffff, emissiveMap: ledScreenTex,
       emissiveIntensity: 1.15, roughness: 0.4, metalness: 0.1,
     });
+    registerNightMaterial(ledMat, { day: 1.05, sunset: 1.45, night: 2.35 });
     const frameMat = new THREE.MeshStandardMaterial({
       map: cloneTexture(brushedMetalTex, 2, 2), roughness: 0.45, metalness: 0.7, envMapIntensity: 1.1,
     });
@@ -1342,6 +1640,8 @@ export function createRealWorldScene(foundation) {
 
   // --- Vegetation, rocks, lamps -------------------------------------------------
   const foliageMaterial = new THREE.MeshStandardMaterial({ map: foliageTex, roughness: 1 });
+  applyNormalMap(foliageMaterial, 0.75);
+  addWindSway(foliageMaterial, { strength: 0.045, maxHeight: 4 });
   const bushGeometry = jitterGeometry(new THREE.IcosahedronGeometry(0.95, 1), 0.36, 0.62);
   bushGeometry.translate(0, 0.65, 0);
   const oaks = plan.trees.filter((t) => t.type === 'oak');
@@ -1472,6 +1772,9 @@ export function createRealWorldScene(foundation) {
       leaf: new THREE.MeshStandardMaterial({ map: oakLeafTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.95 }),
       leaf2: new THREE.MeshStandardMaterial({ map: oakLeaf2Tex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.95 }),
     };
+    applyNormalMap(materials.trunk, 0.95);
+    addWindSway(materials.leaf, { strength: 0.07, maxHeight: 7 });
+    addWindSway(materials.leaf2, { strength: 0.07, maxHeight: 7 });
     const depthMats = {
       leaf: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeafTex, alphaTest: 0.42 }),
       leaf2: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeaf2Tex, alphaTest: 0.42 }),
@@ -1513,6 +1816,9 @@ export function createRealWorldScene(foundation) {
     foliage: new THREE.MeshStandardMaterial({ map: cloneTexture(foliageTex, 1, 1), side: THREE.DoubleSide, roughness: 1 }),
     bark: new THREE.MeshStandardMaterial({ map: cloneTexture(oakBarkTex, 1, 1), roughness: 1 }),
   };
+  applyNormalMap(plantMats.foliage, 0.7);
+  applyNormalMap(plantMats.bark, 0.95);
+  addWindSway(plantMats.foliage, { strength: 0.055, maxHeight: 3.2 });
   const extractSpecies = (gltf) => {
     const root = gltf.scene;
     root.updateMatrixWorld(true);
@@ -1650,6 +1956,8 @@ export function createRealWorldScene(foundation) {
     const frondMat = new THREE.MeshStandardMaterial({
       map: palmLeafTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9,
     });
+    applyNormalMap(trunkMat, 0.95);
+    addWindSway(frondMat, { strength: 0.11, maxHeight: PALM_H });
     const items = plan.palms.map((t, idx) => ({ t, idx }));
     return buildCellInstanced({
       parts: [
@@ -1716,6 +2024,82 @@ export function createRealWorldScene(foundation) {
 
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
   addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(stoneRubbleTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
+
+  // --- Soft contact AO: grounds distant objects outside the shadow camera ---
+  {
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = 128;
+    shadowCanvas.height = 128;
+    const sg = shadowCanvas.getContext('2d');
+    const gradient = sg.createRadialGradient(64, 64, 5, 64, 64, 62);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.86)');
+    gradient.addColorStop(0.55, 'rgba(0,0,0,0.42)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    sg.fillStyle = gradient;
+    sg.fillRect(0, 0, 128, 128);
+    const contactTex = new THREE.CanvasTexture(shadowCanvas);
+    contactTex.colorSpace = THREE.SRGBColorSpace;
+    const contacts = [];
+    const addContact = (x, y, z, w, d, rotY = 0, sunShift = 0) => {
+      contacts.push({
+        x: x + sunShift * 0.72,
+        y: y + 0.075,
+        z: z + sunShift * 0.48,
+        w,
+        d,
+        rotY,
+      });
+    };
+    for (const b of plan.buildings) addContact(b.x, b.y + 0.02, b.z, b.w + 4.2, b.d + 4.2, b.rotY || 0);
+    for (const t of plan.trees) {
+      const size = 5.2 * (t.s || 1);
+      addContact(t.x, t.y, t.z, size, size, t.rotY || 0, size * 0.16);
+    }
+    for (const t of plan.palms || []) {
+      const size = 4.8 * (t.s || 1);
+      addContact(t.x, t.y, t.z, size, size, t.rotY || 0, size * 0.18);
+    }
+    for (const t of plan.bushes) {
+      const size = 2.1 * (t.s || 1);
+      addContact(t.x, t.y, t.z, size, size, t.rotY || 0, size * 0.12);
+    }
+    for (const t of plan.rocks) {
+      const size = 2.9 * (t.s || 1);
+      addContact(t.x, t.y, t.z, size, size, t.rotY || 0, size * 0.1);
+    }
+    for (const t of plan.lamps) addContact(t.x, t.y, t.z, 1.5, 1.5, t.rotY || 0, 0.35);
+    for (const t of plan.busStops) addContact(t.x, t.y, t.z, 6.2, 3.0, t.rotY || 0, 0.3);
+    for (const t of plan.benches) addContact(t.x, t.y, t.z, 2.5, 1.25, t.rotY || 0, 0.18);
+    if (contacts.length) {
+      const contactGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+      const contactMat = new THREE.MeshBasicMaterial({
+        map: contactTex,
+        transparent: true,
+        opacity: 0.24,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      const contactMesh = new THREE.InstancedMesh(contactGeo, contactMat, contacts.length);
+      const dummy = new THREE.Object3D();
+      contacts.forEach((item, i) => {
+        dummy.position.set(item.x, item.y, item.z);
+        dummy.rotation.set(0, item.rotY, 0);
+        dummy.scale.set(item.w, 1, item.d);
+        dummy.updateMatrix();
+        contactMesh.setMatrixAt(i, dummy.matrix);
+      });
+      contactMesh.instanceMatrix.needsUpdate = true;
+      contactMesh.name = 'real-contact-ao';
+      contactMesh.renderOrder = 1;
+      contactMesh.castShadow = false;
+      contactMesh.receiveShadow = false;
+      contactMesh.frustumCulled = false;
+      group.add(contactMesh);
+      countTris(contactGeo, contacts.length);
+    }
+  }
 
   // --- Street hedge rows: green edges along the arterials --------------------
   {
@@ -1808,7 +2192,9 @@ export function createRealWorldScene(foundation) {
     dummy.scale.set(1, 1, 1);
   };
   addInstanced('real-lamp-posts', lampFrameGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(metalPoleTex, 1, 3), roughness: 0.5, metalness: 0.6 }), plan.lamps, placeLamp);
-  addInstanced('real-lamp-glows', lampGlowGeometry, new THREE.MeshStandardMaterial({ color: 0xfff2cf, emissive: 0x665522, roughness: 0.4 }), plan.lamps, placeLamp);
+  const lampGlowMat = new THREE.MeshStandardMaterial({ color: 0xfff2cf, emissive: 0xffdf9e, emissiveIntensity: 0.3, roughness: 0.4 });
+  registerNightMaterial(lampGlowMat, { day: 0.25, sunset: 1.35, night: 2.8 });
+  addInstanced('real-lamp-glows', lampGlowGeometry, lampGlowMat, plan.lamps, placeLamp);
   let buildProceduralStops = () => {};
   let rtBusStops = [];
 
@@ -2154,6 +2540,26 @@ export function createRealWorldScene(foundation) {
     }
   }
 
+  // Final synchronous material pass: matching normals everywhere a mapped
+  // source is known, plus readable night glow for bespoke building signs.
+  {
+    const processedMaterials = new Set();
+    group.traverse((obj) => {
+      if (!obj.isMesh || obj.name === 'real-terrain') return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const material of mats) {
+        if (!material || processedMaterials.has(material)) continue;
+        processedMaterials.add(material);
+        applyNormalMap(material);
+        if (/^real-sign-/.test(obj.name) && material.map && material.emissive) {
+          material.emissive.set(0xffffff);
+          material.emissiveMap = material.map;
+          registerNightMaterial(material, { day: 0, sunset: 0.35, night: 1.15 });
+        }
+      }
+    });
+  }
+
   // --- Blender-authored props: lamps, enclosed shelters, hero buildings ------
   {
     const propMats = {
@@ -2168,8 +2574,10 @@ export function createRealWorldScene(foundation) {
       RoofDark: new THREE.MeshStandardMaterial({ map: cloneTexture(blackRoughTex, 2, 2), roughness: 0.95 }),
       LampGlow: new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xffdf9e, emissiveIntensity: 1.6, roughness: 0.4 }),
     };
-    propMats.FacadeMain.bumpMap = propMats.FacadeMain.map;
-    propMats.FacadeMain.bumpScale = 0.4;
+    for (const material of Object.values(propMats)) applyNormalMap(material);
+    propMats.PropsGlass.emissive.set(0xffc98a);
+    registerNightMaterial(propMats.PropsGlass, { day: 0, sunset: 0.06, night: 0.2 });
+    registerNightMaterial(propMats.LampGlow, { day: 0.25, sunset: 1.3, night: 2.8 });
 
     const extractPropParts = (gltf) => {
       const root = gltf.scene;
@@ -2303,15 +2711,20 @@ export function createRealWorldScene(foundation) {
     benches: plan.benches.length,
     signs: plan.signs.length,
     powerPoles: plan.powerPoles.length,
-    textures: 77,
+    textures: 119,
+    normalMaps: normalBySource.size,
     heroBuildings: heroBuildings.length,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;
   const tick = (t) => {
     for (const w of animatedWaters) {
-      w.tex.offset.set((t * w.sx) % 1, (t * w.sy) % 1);
+      if (w.tex) w.tex.offset.set((t * w.sx) % 1, (t * w.sy) % 1);
+      if (w.normalTex) w.normalTex.offset.set((t * (w.nsx || 0)) % 1, (t * (w.nsy || 0)) % 1);
+    }
+    for (const shader of windShaders) {
+      if (shader.uniforms.uWindTime) shader.uniforms.uWindTime.value = t;
     }
   };
-  return { group, stats, tick };
+  return { group, stats, tick, setSkyMood };
 }
