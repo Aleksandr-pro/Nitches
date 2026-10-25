@@ -10,10 +10,13 @@ extends Node3D
 const WORLD_DATA_PATH := "res://data/richtown_native.json"
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
+const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 
 var data: Dictionary = {}
 var spawn_transform := Transform3D.IDENTITY
 var time_of_day := "day"
+var build_error := ""
+var is_built := false
 
 var _terrain: Dictionary = {}
 var _textures: Dictionary = {}
@@ -45,12 +48,20 @@ func _process(delta: float) -> void:
 
 
 func build_world() -> Dictionary:
-	if not data.is_empty():
-		return get_stats()
+	if is_built:
+		return get_stats() if build_error.is_empty() else {"error": build_error}
 
 	_load_data()
 	if data.is_empty():
-		return {}
+		if build_error.is_empty():
+			build_error = "Native world data could not be loaded"
+		spawn_transform = make_transform(FALLBACK_SPAWN_POSITION, 0.0, Vector3.ONE)
+		_create_collision_root()
+		_build_environment()
+		_build_emergency_spawn_pad()
+		set_time_of_day("day")
+		is_built = true
+		return {"error": build_error}
 
 	_terrain = data.get("terrain", {})
 	_compute_spawn_transform()
@@ -66,6 +77,7 @@ func build_world() -> Dictionary:
 	_build_benches()
 	_build_world_bounds()
 	set_time_of_day("day")
+	is_built = true
 	return get_stats()
 
 
@@ -76,6 +88,10 @@ func get_stats() -> Dictionary:
 
 func get_world_data() -> Dictionary:
 	return data
+
+
+func has_world_data() -> bool:
+	return build_error.is_empty() and not data.is_empty()
 
 
 func get_district_name(world_position: Vector3) -> String:
@@ -204,13 +220,20 @@ func set_time_of_day(mode: String) -> void:
 
 
 func _load_data() -> void:
+	build_error = ""
+	if not FileAccess.file_exists(WORLD_DATA_PATH):
+		build_error = "Native world data is missing from the exported game: %s" % WORLD_DATA_PATH
+		push_error(build_error)
+		return
 	var file := FileAccess.open(WORLD_DATA_PATH, FileAccess.READ)
 	if file == null:
-		push_error("Native world data is missing: %s" % WORLD_DATA_PATH)
+		build_error = "Native world data could not be opened: %s" % WORLD_DATA_PATH
+		push_error(build_error)
 		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("Native world data is not a JSON dictionary")
+		build_error = "Native world data is not a JSON dictionary"
+		push_error(build_error)
 		return
 	data = parsed
 
@@ -236,6 +259,37 @@ func _sample_point(sample_variant: Variant) -> Vector3:
 func _compute_spawn_transform() -> void:
 	var spawn: Dictionary = data.get("spawn", {})
 	spawn_transform = make_transform(_item_position(spawn), _f(spawn, "yaw"), Vector3.ONE)
+
+
+func _build_emergency_spawn_pad() -> void:
+	# This pad is deliberately only a fail-safe for a broken export: it keeps
+	# the car and camera usable while the HUD reports the missing world data.
+	var root := Node3D.new()
+	root.name = "EmergencySpawnPad"
+	add_child(root)
+	var center := Vector3(FALLBACK_SPAWN_POSITION.x, FALLBACK_SPAWN_POSITION.y - 0.11, FALLBACK_SPAWN_POSITION.z)
+	var asphalt := _material(
+		"emergency_asphalt",
+		"user_asphalt_plain.jpg",
+		"user_asphalt_plain_normal.jpg",
+		Color(0.42, 0.44, 0.46),
+		0.92,
+		0.0,
+		Vector3(24.0, 24.0, 1.0),
+		true
+	)
+	_add_box(root, Vector3(140.0, 0.22, 140.0), center, asphalt, 0.0, "EmergencyGround")
+	_add_box_collider(center, Vector3(140.0, 0.22, 140.0))
+	var edge := _material("emergency_edge", "", "", Color(1.0, 0.45, 0.05), 0.72)
+	for side in [-1.0, 1.0]:
+		_add_box(
+			root,
+			Vector3(0.45, 0.08, 118.0),
+			Vector3(center.x + side * 9.0, FALLBACK_SPAWN_POSITION.y + 0.03, center.z),
+			edge,
+			0.0,
+			"EmergencyRoadEdge"
+		)
 
 
 func _create_collision_root() -> void:
@@ -354,7 +408,7 @@ func _material(
 	material.roughness = roughness
 	material.metallic = metallic
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	material.texture_repeat = BaseMaterial3D.TEXTURE_REPEAT_ENABLED
+	material.texture_repeat = true
 	material.uv1_scale = uv_scale
 	if triplanar:
 		material.uv1_triplanar = true

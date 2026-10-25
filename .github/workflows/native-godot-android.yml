@@ -186,11 +186,82 @@ jobs:
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS"
           } >> "$GITHUB_ENV"
 
-      - name: Import Godot project and run headless smoke test
+      - name: Import Godot project and run strict source smoke test
         run: |
           set -euo pipefail
-          "$GODOT_BIN" --headless --path "$PROJECT_PATH" --import --quit
-          timeout 120 "$GODOT_BIN" --headless --path "$PROJECT_PATH" --quit-after 5
+          mkdir -p "$RUNNER_TEMP/native-logs"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" --import --quit \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/import.log"
+          timeout 120 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            -- --native-smoke 2>&1 | tee "$RUNNER_TEMP/native-logs/source-smoke.log"
+          grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/source-smoke.log"
+          if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/source-smoke.log"; then
+            echo "Native source smoke reported a fatal runtime problem" >&2
+            exit 1
+          fi
+
+      - name: Verify exported data pack without the source tree
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP/native-pack-test"
+          PACK_PATH="$PACK_DIR/NitchesHorizonNative.pck"
+          mkdir -p "$PACK_DIR"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-pack Android "$PACK_PATH" \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/export-pack.log"
+          test -s "$PACK_PATH"
+          (
+            cd "$PACK_DIR"
+            timeout 120 "$GODOT_BIN" --headless --main-pack ./NitchesHorizonNative.pck \
+              -- --native-smoke
+          ) 2>&1 | tee "$RUNNER_TEMP/native-logs/pack-smoke.log"
+          grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/pack-smoke.log"
+          if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/pack-smoke.log"; then
+            echo "Exported Godot pack is missing runtime data or reported a fatal problem" >&2
+            exit 1
+          fi
+
+      - name: Publish native smoke diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          log_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "native-logs"
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          markers = (
+              "[native] RichTown build stats:",
+              "[native-smoke]",
+              "SCRIPT ERROR",
+              "ERROR:",
+              "Native world",
+              "Mustang GLB",
+              "Native texture is missing",
+              "Native model is missing",
+          )
+
+          def annotation_escape(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("\n## Native Godot smoke diagnostics\n\n")
+              if not log_dir.exists():
+                  summary.write("No native smoke logs were produced.\n")
+              for log_path in sorted(log_dir.glob("*.log")):
+                  lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                  selected = [line for line in lines if any(marker in line for marker in markers)]
+                  if not selected:
+                      selected = lines[-40:]
+                  summary.write(f"### {log_path.name}\n\n```text\n")
+                  summary.write("\n".join(selected[-80:]))
+                  summary.write("\n```\n\n")
+                  for line in selected:
+                      if "[native-smoke] FAIL" in line or "SCRIPT ERROR" in line or "Native world" in line:
+                          print(f"::error title=Native smoke {log_path.name}::{annotation_escape(line[:900])}")
+                      elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line:
+                          print(f"::notice title=Native smoke {log_path.name}::{annotation_escape(line[:900])}")
+          PY
 
       - name: Export signed native Android APK
         run: |
@@ -208,6 +279,8 @@ jobs:
           "$BT/apksigner" verify --verbose "$APK_PATH"
           unzip -l "$APK_PATH" | tee "$RUNNER_TEMP/apk-contents.txt"
           grep -F "lib/arm64-v8a/libgodot_android.so" "$RUNNER_TEMP/apk-contents.txt"
+          grep -F "assets/data/richtown_native.json" "$RUNNER_TEMP/apk-contents.txt"
+          grep -Ei "mustang.*\.scn" "$RUNNER_TEMP/apk-contents.txt"
           if grep -Ei "(^|/)(index\.html|capacitor|www/)" "$RUNNER_TEMP/apk-contents.txt"; then
             echo "Unexpected web wrapper payload found in native APK" >&2
             exit 1

@@ -56,7 +56,7 @@ func _ready() -> void:
 	center_of_mass = Vector3(0.0, 0.38, 0.02)
 	linear_damp = 0.035
 	angular_damp = 1.25
-	continuous_cd = RigidBody3D.CCD_MODE_CAST_RAY
+	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 10
 	can_sleep = false
@@ -171,10 +171,21 @@ func _load_mustang_model() -> bool:
 	if model == null:
 		return false
 	model.name = "MustangModel"
+	if _count_mesh_instances(model) == 0:
+		push_warning("Mustang GLB contained no renderable meshes; using native fallback visual")
+		model.free()
+		return false
 	_visual_root.add_child(model)
 	_apply_model_materials(model)
 	_collect_wheel_visuals(model)
 	return true
+
+
+func _count_mesh_instances(node: Node) -> int:
+	var count := 1 if node is MeshInstance3D else 0
+	for child in node.get_children():
+		count += _count_mesh_instances(child)
+	return count
 
 
 func _paint_material(color: Color) -> StandardMaterial3D:
@@ -192,7 +203,6 @@ func _apply_model_materials(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		mesh_instance.receive_shadow = true
 		if mesh_instance.mesh != null:
 			for surface_index in mesh_instance.mesh.get_surface_count():
 				var material := mesh_instance.get_surface_override_material(surface_index)
@@ -298,7 +308,6 @@ func _add_visual_box(size: Vector3, center: Vector3, material: Material, node_na
 	instance.material_override = material
 	instance.position = center
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	instance.receive_shadow = true
 	_visual_root.add_child(instance)
 
 
