@@ -1,0 +1,223 @@
+name: Build Native Godot Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - 'native/**'
+      - 'scripts/export-native-world.mjs'
+      - 'scripts/sync-native-assets.mjs'
+      - 'scripts/validate-native-project.mjs'
+      - 'scripts/check-lfs-assets.mjs'
+      - 'src/world/realWorld.js'
+      - 'src/assets/models/**'
+      - 'src/assets/textures/realworld/**'
+      - 'public/assets/models/**'
+      - '.github/workflows/native-godot-android.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-godot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: '4.7.2'
+  GODOT_STATUS: 'stable'
+  PROJECT_PATH: native
+  APK_PATH: native/build/android/NitchesHorizonNative.apk
+
+jobs:
+  build-native-apk:
+    name: Godot 4 native Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (LFS runtime model is pulled explicitly)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch and verify the Mustang LFS model
+        run: |
+          set -euo pipefail
+          git lfs version
+          git lfs install --local
+          git lfs pull --include="public/assets/models/**" --exclude=""
+          git lfs ls-files
+          node scripts/check-lfs-assets.mjs
+
+      - name: Generate native world data and stage Godot assets
+        run: |
+          set -euo pipefail
+          node scripts/export-native-world.mjs
+          node scripts/sync-native-assets.mjs
+          node scripts/validate-native-project.mjs --require-assets
+
+      - name: Setup Java 17 (required by the Godot Android toolchain)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          SDKMANAGER="$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Cache Godot editor and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nitches-godot/${{ env.GODOT_VERSION }}
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}-linux-x86_64-v1
+
+      - name: Download official Godot editor and export templates
+        run: |
+          set -euo pipefail
+          GODOT_DIR="$HOME/.cache/nitches-godot/$GODOT_VERSION"
+          GODOT_BIN="$GODOT_DIR/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$GODOT_DIR" "$TEMPLATE_DIR"
+
+          if [ ! -x "$GODOT_BIN" ]; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-editor.zip" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -q -o "$RUNNER_TEMP/godot-editor.zip" -d "$GODOT_DIR"
+            chmod +x "$GODOT_BIN"
+          fi
+
+          if [ ! -f "$TEMPLATE_DIR/android_release.apk" ]; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-templates.tpz" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            rm -rf "$RUNNER_TEMP/godot-templates"
+            mkdir -p "$RUNNER_TEMP/godot-templates"
+            unzip -q -o "$RUNNER_TEMP/godot-templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+            cp -a "$RUNNER_TEMP/godot-templates/templates/." "$TEMPLATE_DIR/"
+          fi
+
+          "$GODOT_BIN" --headless --version
+          test -f "$TEMPLATE_DIR/android_release.apk"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Configure Godot Android SDK/JDK paths
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          # Let Godot create a valid editor-settings resource first.
+          "$GODOT_BIN" --headless --editor --path "$PROJECT_PATH" --quit >/dev/null 2>&1 || true
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          settings = Path.home() / ".config" / "godot" / "editor_settings-4.tres"
+          settings.parent.mkdir(parents=True, exist_ok=True)
+          text = settings.read_text(encoding="utf-8") if settings.exists() else ""
+          if "[resource]" not in text:
+              text = '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' + text
+          values = {
+              "export/android/android_sdk_path": os.environ.get("ANDROID_SDK_ROOT", ""),
+              "export/android/java_sdk_path": os.environ.get("JAVA_HOME", ""),
+          }
+          lines = text.splitlines()
+          seen = set()
+          output = []
+          for line in lines:
+              replaced = False
+              for key, value in values.items():
+                  if line.startswith(key + " ="):
+                      output.append(f'{key} = "{value}"')
+                      seen.add(key)
+                      replaced = True
+                      break
+              if not replaced:
+                  output.append(line)
+          insert_at = output.index("[resource]") + 1
+          for key, value in values.items():
+              if key not in seen:
+                  output.insert(insert_at, f'{key} = "{value}"')
+                  insert_at += 1
+          settings.write_text("\n".join(output) + "\n", encoding="utf-8")
+          print(f"Configured {settings}")
+          PY
+          grep -E 'export/android/(android_sdk_path|java_sdk_path)' "$HOME/.config/godot/editor_settings-4.tres"
+
+      - name: Prepare Android signing key (secret or one-time CI key)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/nitches-native-release.jks"
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+            echo "Using the persistent Android signing key from repository secrets"
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
+            KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+          else
+            echo "Signing secrets are absent; generating a one-time CI key"
+            KS_PASS="$(openssl rand -base64 24)"
+            keytool -genkeypair -keystore "$KS" -alias nitches \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Nitches Horizon, O=ProfitNiche"
+          fi
+          echo "::add-mask::$KS_PASS"
+          {
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=nitches"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: Import Godot project and run headless smoke test
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" --import --quit
+          timeout 120 "$GODOT_BIN" --headless --path "$PROJECT_PATH" --quit-after 5
+
+      - name: Export signed native Android APK
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$APK_PATH")"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-release Android build/android/NitchesHorizonNative.apk
+          test -s "$APK_PATH"
+          ls -lh "$APK_PATH"
+
+      - name: Verify APK signature and native Godot ARM64 library
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_SDK_ROOT/build-tools/35.0.0"
+          "$BT/apksigner" verify --verbose "$APK_PATH"
+          unzip -l "$APK_PATH" | tee "$RUNNER_TEMP/apk-contents.txt"
+          grep -F "lib/arm64-v8a/libgodot_android.so" "$RUNNER_TEMP/apk-contents.txt"
+          if grep -Ei "(^|/)(index\.html|capacitor|www/)" "$RUNNER_TEMP/apk-contents.txt"; then
+            echo "Unexpected web wrapper payload found in native APK" >&2
+            exit 1
+          fi
+          sha256sum "$APK_PATH"
+
+      - name: Upload native APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-apk
+          path: ${{ env.APK_PATH }}
+          retention-days: 90
+          if-no-files-found: error
