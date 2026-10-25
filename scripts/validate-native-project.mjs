@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+
+const requireAssets = process.argv.includes('--require-assets');
+const root = 'native';
+
+async function readText(relative) {
+  return readFile(path.join(root, relative), 'utf8');
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript] = await Promise.all([
+  readText('project.godot'),
+  readText('export_presets.cfg'),
+  readText('scenes/main.tscn'),
+  readText('data/richtown_native.json'),
+  readText('scripts/main.gd'),
+  readText('scripts/world_builder.gd'),
+  readText('scripts/vehicle_controller.gd'),
+  readText('scripts/hud.gd'),
+]);
+
+assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
+assert(project.includes('renderer/rendering_method="mobile"'), 'Godot Mobile renderer is not selected');
+assert(mainScene.includes('res://scripts/main.gd'), 'main scene is not wired to main.gd');
+
+assert(preset.includes('platform="Android"'), 'Android export preset is missing');
+assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
+assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
+for (const key of ['keystore/debug_password', 'keystore/release_password']) {
+  const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
+  assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
+}
+
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}`;
+for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
+  assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
+}
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud']) {
+  assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
+}
+
+const data = JSON.parse(dataText);
+assert(data.schemaVersion === 1, 'Unexpected native world schema');
+assert(data.units === 'metres', 'Native world must use real metres');
+assert(data.terrain.heights.length === data.terrain.cols * data.terrain.rows, 'Terrain height count mismatch');
+assert(data.bounds.minX === 520 && data.bounds.maxX === 1500, 'RichTown X bounds changed unexpectedly');
+assert(data.roads.length >= 35, 'Too few RichTown road edges exported');
+assert(data.buildings.length >= 45, 'Too few RichTown buildings exported');
+assert(data.buildings.filter((b) => b.model === 'villa').length === 14, 'Expected 14 Blender villas');
+assert(data.buildings.filter((b) => b.model === 'glass_tower').length === 8, 'Expected 8 Blender glass towers');
+assert(data.landmarks.length === 15, 'Expected all 15 RichTown landmarks');
+assert(data.palms.length === 112, 'Expected 112 RichTown palms');
+assert(data.spawn.x === 760 && data.spawn.z === 330, 'Unexpected native spawn point');
+
+if (requireAssets) {
+  const required = [
+    'assets/vehicles/mustang.glb',
+    'assets/buildings/villa.glb',
+    'assets/buildings/glass_tower.glb',
+    'assets/props/street_lamp.glb',
+    'assets/vegetation/plants.glb',
+    'assets/textures/user_asphalt_dashed.jpg',
+    'assets/textures/user_water_turquoise.jpg',
+  ];
+  for (const relative of required) {
+    const file = path.join(root, relative);
+    const info = await stat(file);
+    assert(info.size > 1000, `${file} is unexpectedly small`);
+    if (file.endsWith('.glb')) {
+      const bytes = await readFile(file);
+      assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', `${file} is an LFS pointer or corrupt GLB`);
+    }
+  }
+}
+
+console.log('Native Godot project validation OK');
+console.log(JSON.stringify(data.stats, null, 2));

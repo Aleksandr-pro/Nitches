@@ -6,3 +6,11 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Native Godot generated/staged data. Canonical models and textures remain in
+# public/ and src/; scripts/sync-native-assets.mjs recreates native/assets.
+native/assets/
+native/.godot/
+native/android/
+native/build/
+native/icon.svg.import
