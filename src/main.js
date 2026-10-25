@@ -18,12 +18,15 @@ import {
 import { iconMarkup, setIcon } from './ui/icons.js';
 import { createRealWorldFoundation } from './world/realWorld.js';
 import { createRealWorldScene } from './world/realWorldScene.js';
+import skyPanoUrl from './assets/textures/realworld/sky_pano.jpg';
+import sunGlowUrl from './assets/textures/realworld/sun_glow.jpg';
+import cloudPuffUrl from './assets/textures/realworld/cloud_puff.jpg';
 import { distanceToCollider } from './world/spatialIndex.js';
 import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.11.0: реалистичный мир Real Valley 1×1 км на сгенерированных
+   v0.12.0: реалистичный мир Real Valley 1×1 км на сгенерированных
    фототекстурах (асфальт с разметкой, фасады, трава, скалы, кровля),
    Mustang Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт
    и нитро. Старый остров: ?world=legacy.
@@ -571,7 +574,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.11.0',
+    version: '0.12.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -1468,6 +1471,81 @@ const LEGACY_SCENE_MARK = scene.children.length;
   halo.position.copy(sunBall.position);
   scene.add(halo);
   sunHaloMesh = halo;
+}
+
+// Реалистичное небо и солнце (v0.12): сгенерированная фотопанорама заката
+// заменяет канвасный градиент на сфере неба и даёт настоящие отражения
+// окружения (PMREM) для краски машин и стеклянных фасадов. Канвасные
+// текстуры остаются мгновенным фолбэком до загрузки.
+{
+  const skyLoader = new THREE.TextureLoader();
+  skyLoader.load(skyPanoUrl, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    if (skyMesh) {
+      skyMesh.material.map = tex;
+      skyMesh.material.needsUpdate = true;
+    }
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromEquirectangular(tex).texture;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 1.05;
+    pmrem.dispose();
+  });
+  skyLoader.load(sunGlowUrl, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (sunHaloMesh) {
+      sunHaloMesh.material.map = tex;
+      sunHaloMesh.material.color.set(0xffffff);
+      sunHaloMesh.material.opacity = 0.95;
+      sunHaloMesh.material.needsUpdate = true;
+      sunHaloMesh.scale.set(540, 540, 1);
+    }
+    if (sunBallMesh) {
+      sunBallMesh.material.color.set(0xfff6dc);
+      sunBallMesh.scale.setScalar(0.5);
+    }
+  });
+  // Облака: альфа-канал строится из яркости сгенерированного облака на
+  // чёрном фоне — получается мягкий реалистичный спрайт без квадратной рамки.
+  const cloudImg = new Image();
+  cloudImg.onload = () => {
+    const W = 512;
+    const H = Math.max(64, Math.round(W * cloudImg.naturalHeight / Math.max(1, cloudImg.naturalWidth)));
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    g.drawImage(cloudImg, 0, 0, W, H);
+    const data = g.getImageData(0, 0, W, H);
+    const px = data.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const lum = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) / 255;
+      px[i + 3] = Math.round(Math.pow(clamp((lum - 0.03) / 0.97, 0, 1), 1.15) * 255);
+    }
+    g.putImageData(data, 0, 0);
+    const cloudTex = new THREE.CanvasTexture(c);
+    cloudTex.colorSpace = THREE.SRGBColorSpace;
+    cloudGroup.children.forEach((sprite) => {
+      sprite.material.map = cloudTex;
+      sprite.material.color.set(0xffffff);
+      sprite.material.needsUpdate = true;
+    });
+    // Дополнительный дальний слой крупных облаков.
+    for (let i = 0; i < 14; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: cloudTex, color: 0xffffff, transparent: true,
+        opacity: 0.5 + Math.random() * 0.3, depthWrite: false, fog: false,
+      }));
+      const a = Math.random() * Math.PI * 2;
+      const dist = 320 + Math.random() * 330;
+      sprite.position.set(Math.cos(a) * dist, 120 + Math.random() * 90, Math.sin(a) * dist);
+      const w = 170 + Math.random() * 190;
+      sprite.scale.set(w, w * 0.38, 1);
+      sprite.userData.speed = 0.6 + Math.random() * 1.1;
+      cloudGroup.add(sprite);
+    }
+  };
+  cloudImg.src = cloudPuffUrl;
 }
 
 // Океан и остров (рельефная местность)

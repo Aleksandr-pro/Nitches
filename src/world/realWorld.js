@@ -18,7 +18,7 @@ import { buildRoadGraph, buildRoadSegments, findRoute as graphFindRoute, roadPoi
 import { ColliderIndex, RoadSpatialIndex } from './spatialIndex.js';
 
 export const REAL_WORLD_ID = 'real-valley';
-export const REAL_WORLD_VERSION = '0.11.0';
+export const REAL_WORLD_VERSION = '0.12.0';
 export const REAL_WORLD_SIZE_M = 1000;
 export const REAL_WORLD_HALF_M = REAL_WORLD_SIZE_M / 2;
 export const REAL_WORLD_BOUNDS = Object.freeze({
@@ -531,6 +531,7 @@ function planDressing(core, seed) {
   const plan = {
     buildings: [], trees: [], bushes: [], rocks: [], lamps: [], colliders: [],
     busStops: [], benches: [], hedges: [],
+    signs: [], bins: [], bollards: [], fences: [], powerPoles: [],
     pavedAreas: [
       { ...REAL_WORLD_ZONES.plaza, kind: 'plaza' },
       ...REAL_WORLD_ZONES.parkings.map((r) => ({ ...r, kind: 'parking' })),
@@ -578,8 +579,8 @@ function planDressing(core, seed) {
             : kind === 'townhouse' ? 7 + rng() * 4 : 4.6 + rng() * 2.2;
           const roofH = kind === 'apartment' ? 0 : (rng() < 0.55 ? 2 + rng() * 1.6 : 0);
           const facadePool = kind === 'apartment'
-            ? ['modern', 'glass', 'brick', 'panel']
-            : ['brick', 'panel'];
+            ? ['modern', 'glass', 'brick', 'panel', 'loft', 'pastel']
+            : ['brick', 'panel', 'pastel'];
           const facade = facadePool[Math.floor(rng() * facadePool.length)];
           const py = core.heightAt(px, pz);
           if (py < 0.8 || slopeApprox(core.heightAt, px, pz) > 0.3) continue;
@@ -605,6 +606,13 @@ function planDressing(core, seed) {
     x: 112, z: 303, y: cafeY - 0.25, rotY: 0, w: 26, d: 16, h: 6.5, roofH: 0,
     kind: 'cafe', facade: 'shop', tint: 1,
   });
+  // Two light-industrial warehouses south of the highway, gates facing it.
+  for (const wx of [180, 335]) {
+    pushBuilding({
+      x: wx, z: 264, y: core.heightAt(wx, 264) - 0.25, rotY: Math.PI, w: 38, d: 20, h: 8, roofH: 0,
+      kind: 'warehouse', facade: 'industrial', tint: 0.95,
+    });
+  }
 
   // --- Sparse houses along the riverside road and southern links ------------
   const rural = /^(river-road|north-link|south-st|sw-link|se-link)/;
@@ -632,7 +640,7 @@ function planDressing(core, seed) {
       const rotY = Math.atan2(-frame.normal.x * side, -frame.normal.z * side);
       pushBuilding({
         x: px, z: pz, y: py - 0.25, rotY, ...dims, kind: 'house',
-        facade: rng() < 0.5 ? 'brick' : 'panel', tint: 0.82 + rng() * 0.36,
+        facade: ['brick', 'panel', 'loft'][Math.floor(rng() * 3)], tint: 0.82 + rng() * 0.36,
       });
     }
   }
@@ -747,6 +755,100 @@ function planDressing(core, seed) {
   };
   for (let x = 312; x <= 466; x += 11) pushHedge(x, -52);
   for (let x = 312; x <= 466; x += 11) pushHedge(x, 31);
+
+  // --- Road signs: district plates, parking and speed signs ------------------------
+  const pushSign = (x, z, rotY, type, text) => {
+    plan.signs.push({ x, z, y: core.heightAt(x, z), rotY, type, text });
+    addCollider({ kind: 'circle', x, z, r: 0.22 });
+  };
+  pushSign(-252, 242, Math.PI, 'text', 'ДРИФТ-ЗОНА');
+  pushSign(258, -96, -Math.PI / 2, 'text', 'ФЕСТИВАЛЬ');
+  pushSign(11, -196, 0, 'text', 'ДРЭГ-ТРАССА');
+  pushSign(-452, 210, Math.PI / 2, 'text', 'REAL VALLEY');
+  pushSign(452, 240, -Math.PI / 2, 'text', 'REAL VALLEY');
+  pushSign(330, 56, -Math.PI / 2, 'parking');
+  pushSign(336, -276, -Math.PI / 2, 'parking');
+  pushSign(-44, 344, Math.PI, 'parking');
+  pushSign(44, 344, Math.PI, 'parking');
+  pushSign(-146, 241, Math.PI, 'parking');
+  pushSign(-296, -62, Math.PI / 2, 'parking');
+  for (const e of core.roadGraph.edges) {
+    if (!/^(hw-|avenue-\d)/.test(e.id)) continue;
+    let nextAt = 60;
+    for (let i = 2; i < e.samples.length - 2; i++) {
+      const sample = e.samples[i];
+      if (sample.s < nextAt) continue;
+      nextAt += 175;
+      const frame = sampleFrame(e.samples, i);
+      const px = sample.x + frame.normal.x * (e.halfWidthM + 2.4);
+      const pz = sample.z + frame.normal.z * (e.halfWidthM + 2.4);
+      if (Math.hypot(px - plan.roundabout.x, pz - plan.roundabout.z) < 44) continue;
+      // Plate faces oncoming traffic travelling along +tangent.
+      pushSign(px, pz, Math.atan2(-frame.tangent.x, -frame.tangent.z), 'speed');
+    }
+  }
+
+  // --- Litter bins at bus stops and benches ------------------------------------------
+  const pushBin = (x, z) => {
+    plan.bins.push({ x, z, y: core.heightAt(x, z), rotY: rng() * Math.PI });
+    addCollider({ kind: 'circle', x, z, r: 0.34 });
+  };
+  for (const stop of plan.busStops) {
+    const fx = Math.sin(stop.rotY);
+    const fz = Math.cos(stop.rotY);
+    pushBin(stop.x + fz * 3.0 + fx * 0.7, stop.z - fx * 3.0 + fz * 0.7);
+  }
+  plan.benches.forEach((b, i) => {
+    if (i % 2 === 0) pushBin(b.x + 1.9, b.z + 0.5);
+  });
+
+  // --- Bollards guarding shopfronts and the plaza gate --------------------------------
+  const pushBollard = (x, z) => {
+    plan.bollards.push({ x, z, y: core.heightAt(x, z) });
+    addCollider({ kind: 'circle', x, z, r: 0.2 });
+  };
+  for (let x = -139; x <= -97; x += 5.2) pushBollard(x, 313);
+  for (let x = 101; x <= 123; x += 5.4) pushBollard(x, 313.5);
+  pushBollard(352, -97);
+  pushBollard(352, -123);
+  pushBollard(342, 57);
+  pushBollard(342, 83);
+
+  // --- Stone fences around parking lots ------------------------------------------------
+  const pushFence = (x, z, rotY, w = 11.6) => {
+    plan.fences.push({ x, z, y: core.heightAt(x, z), rotY, w });
+    addCollider({ kind: 'obb', x, z, halfWidthM: w / 2, halfDepthM: 0.3, rotationY: rotY });
+  };
+  for (let x = 308; x <= 466; x += 12) pushFence(x, 191, 0);
+  for (let x = -144; x <= -46; x += 12) pushFence(x, 242, 0);
+  for (let z = -128; z <= -72; z += 12) pushFence(-379, z, Math.PI / 2);
+
+  // --- Power line poles along the highway and riverside road ----------------------------
+  const poleGroups = [
+    { match: /^hw-w/, group: 'hw-west', spacing: 55 },
+    { match: /^hw-e/, group: 'hw-east', spacing: 55 },
+    { match: /^river-road/, group: 'river', spacing: 62 },
+  ];
+  const poleSeq = new Map();
+  for (const e of core.roadGraph.edges) {
+    const cfg = poleGroups.find((g) => g.match.test(e.id));
+    if (!cfg) continue;
+    let nextAt = 26;
+    for (let i = 2; i < e.samples.length - 2; i++) {
+      const sample = e.samples[i];
+      if (sample.s < nextAt) continue;
+      nextAt += cfg.spacing;
+      const frame = sampleFrame(e.samples, i);
+      const px = sample.x - frame.normal.x * (e.halfWidthM + 6);
+      const pz = sample.z - frame.normal.z * (e.halfWidthM + 6);
+      if (Math.abs(px - riverCenterX(pz)) < 30) continue;
+      if (Math.hypot(px - plan.roundabout.x, pz - plan.roundabout.z) < 48) continue;
+      const seq = poleSeq.get(cfg.group) || 0;
+      poleSeq.set(cfg.group, seq + 1);
+      plan.powerPoles.push({ x: px, z: pz, y: core.heightAt(px, pz), rotY: frame.yaw, group: cfg.group, seq });
+      addCollider({ kind: 'circle', x: px, z: pz, r: 0.35 });
+    }
+  }
 
   // --- Street trees along the avenue ---------------------------------------------
   for (const e of core.roadGraph.edges) {
@@ -927,6 +1029,11 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
         busStops: dressingPlan.busStops.length,
         benches: dressingPlan.benches.length,
         hedges: dressingPlan.hedges.length,
+        signs: dressingPlan.signs.length,
+        bins: dressingPlan.bins.length,
+        bollards: dressingPlan.bollards.length,
+        fences: dressingPlan.fences.length,
+        powerPoles: dressingPlan.powerPoles.length,
       },
     };
   }

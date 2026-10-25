@@ -76,10 +76,17 @@ test('dressing plan is dense and buildings keep off the asphalt', () => {
   assert.ok(plan.benches.length >= 14, `benches ${plan.benches.length}`);
   assert.ok(plan.hedges.length >= 24, `hedges ${plan.hedges.length}`);
   assert.ok(plan.lamps.every((l) => l.side === 1 || l.side === -1), 'lamps know their road side');
+  assert.ok(plan.signs.length >= 16, `road signs ${plan.signs.length}`);
+  assert.ok(plan.bins.length >= 18, `litter bins ${plan.bins.length}`);
+  assert.ok(plan.bollards.length >= 14, `bollards ${plan.bollards.length}`);
+  assert.ok(plan.fences.length >= 20, `fences ${plan.fences.length}`);
+  assert.ok(plan.powerPoles.length >= 20, `power poles ${plan.powerPoles.length}`);
+  const poleGroups = new Set(plan.powerPoles.map((p) => p.group));
+  assert.ok(poleGroups.size >= 3, 'power lines form chains');
   const kinds = new Set(plan.buildings.map((b) => b.kind));
   assert.ok(kinds.has('shop') && kinds.has('cafe'), 'shop and cafe landmarks exist');
   const facades = new Set(plan.buildings.map((b) => b.facade));
-  assert.ok(facades.size >= 5, `facade variety: ${[...facades].join(',')}`);
+  assert.ok(facades.size >= 7, `facade variety: ${[...facades].join(',')}`);
   for (const b of plan.buildings) {
     const near = foundation.nearestRoad(b.x, b.z, { maxDistanceM: 80 });
     assert.ok(!near || near.edgeDistanceM > 1, `building at ${b.x},${b.z} intrudes on a road`);
