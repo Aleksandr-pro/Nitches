@@ -12,6 +12,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { buildRoadRibbonGeometry, roadPointAt } from './roadGraph.js';
 import grassUrl from '../assets/textures/realworld/grass.jpg';
 import rockUrl from '../assets/textures/realworld/rock.jpg';
@@ -46,6 +47,13 @@ import foliageAutumnUrl from '../assets/textures/realworld/foliage_autumn.jpg';
 import asphaltRuralUrl from '../assets/textures/realworld/asphalt_rural.jpg';
 import roofSlateUrl from '../assets/textures/realworld/roof_slate.jpg';
 import stoneWallUrl from '../assets/textures/realworld/stone_wall.jpg';
+// User-provided oak tree (Tree.fbx via Google Drive, 2026-10-25): the model
+// replaces every procedural tree; leaf/bark maps were extracted from its
+// embedded Archicad media and downscaled for mobile VRAM.
+import oakTreeUrl from '../assets/models/oak-tree.fbx?url';
+import oakLeafUrl from '../assets/textures/realworld/oak_leaf.png';
+import oakLeaf2Url from '../assets/textures/realworld/oak_leaf2.png';
+import oakBarkUrl from '../assets/textures/realworld/oak_bark.jpg';
 
 const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry)/;
 
@@ -278,10 +286,14 @@ export function createRealWorldScene(foundation) {
   const ruralTex = makeTexture(loader, asphaltRuralUrl);
   const slateTex = makeTexture(loader, roofSlateUrl, { rx: 2, ry: 2, mirror: true });
   const stoneTex = makeTexture(loader, stoneWallUrl);
+  const oakLeafTex = makeTexture(loader, oakLeafUrl);
+  const oakLeaf2Tex = makeTexture(loader, oakLeaf2Url);
+  const oakBarkTex = makeTexture(loader, oakBarkUrl, { ry: 2 });
 
   const group = new THREE.Group();
   group.name = 'nh-real-valley-1km';
   let triangles = 0;
+  let liveStats = null;
   const countTris = (geometry, instances = 1) => {
     const index = geometry.getIndex();
     const tris = (index ? index.count : geometry.getAttribute('position').count) / 3;
@@ -656,12 +668,6 @@ export function createRealWorldScene(foundation) {
 
   // --- Vegetation, rocks, lamps -------------------------------------------------
   const foliageMaterial = new THREE.MeshStandardMaterial({ map: foliageTex, roughness: 1 });
-  const trunkGeometry = new THREE.CylinderGeometry(0.15, 0.32, 3.4, 7);
-  trunkGeometry.translate(0, 1.7, 0);
-  const oakCanopy = jitterGeometry(new THREE.IcosahedronGeometry(2.15, 1), 0.34, 0.78);
-  oakCanopy.translate(0, 3.9, 0);
-  const pineCanopy = jitterGeometry(new THREE.ConeGeometry(1.85, 5.4, 9, 3), 0.2, 1);
-  pineCanopy.translate(0, 4.6, 0);
   const bushGeometry = jitterGeometry(new THREE.IcosahedronGeometry(0.95, 1), 0.36, 0.62);
   bushGeometry.translate(0, 0.65, 0);
   const oaks = plan.trees.filter((t) => t.type === 'oak');
@@ -680,11 +686,133 @@ export function createRealWorldScene(foundation) {
     dummy.rotation.set(0, item.rotY || 0, 0);
     dummy.scale.set(item.s, item.sy || item.s, item.s);
   };
-  addInstanced('real-trunks', trunkGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(rockTex, 0.4, 1), color: 0x8a6844, roughness: 1 }), plan.trees, placeScaled);
-  addInstanced('real-oak-canopy', oakCanopy, foliageMaterial, oaks.filter((_, i) => i % 4 !== 0), placeScaled);
-  addInstanced('real-oak-autumn', oakCanopy, new THREE.MeshStandardMaterial({ map: autumnTex, roughness: 1 }), oaks.filter((_, i) => i % 4 === 0), placeScaled);
-  addInstanced('real-pine-canopy', pineCanopy, foliageMaterial, pines, placeScaled);
   addInstanced('real-bushes', bushGeometry, foliageMaterial, plan.bushes, placeScaled);
+
+  // Emergency fallback if the FBX oak cannot be fetched/parsed: the previous
+  // procedural trees, so the valley is never left bare.
+  const buildProceduralTrees = () => {
+    const trunkGeometry = new THREE.CylinderGeometry(0.15, 0.32, 3.4, 7);
+    trunkGeometry.translate(0, 1.7, 0);
+    const oakCanopy = jitterGeometry(new THREE.IcosahedronGeometry(2.15, 1), 0.34, 0.78);
+    oakCanopy.translate(0, 3.9, 0);
+    const pineCanopy = jitterGeometry(new THREE.ConeGeometry(1.85, 5.4, 9, 3), 0.2, 1);
+    pineCanopy.translate(0, 4.6, 0);
+    addInstanced('real-trunks', trunkGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(rockTex, 0.4, 1), color: 0x8a6844, roughness: 1 }), plan.trees, placeScaled);
+    addInstanced('real-oak-canopy', oakCanopy, foliageMaterial, oaks.filter((_, i) => i % 4 !== 0), placeScaled);
+    addInstanced('real-oak-autumn', oakCanopy, new THREE.MeshStandardMaterial({ map: autumnTex, roughness: 1 }), oaks.filter((_, i) => i % 4 === 0), placeScaled);
+    addInstanced('real-pine-canopy', pineCanopy, foliageMaterial, pines, placeScaled);
+    if (liveStats) liveStats.triangles = triangles;
+    group.userData.oakTrees = { status: 'fallback-procedural' };
+  };
+
+  // The user's oak (Tree.fbx): branched "Wood - Bark" trunk plus two leaf-card
+  // canopies ("Leaf Oak" / "Leaf Oak2"), ~10.4k tris, 9.35 m tall in metres.
+  // All 620 plan trees instance this one model; an 8x8 grid of 125 m cells
+  // keeps frustum culling effective so off-screen groves cost nothing, and
+  // per-instance tints keep oaks varied green, every 4th oak autumn-orange,
+  // and west-woods "pines" darker and narrower/taller.
+  const buildOakTrees = (root) => {
+    root.updateMatrixWorld(true);
+    const parts = [];
+    root.traverse((obj) => {
+      if (!obj.isMesh) return;
+      const key = /bark|wood|trunk/i.test(obj.name) ? 'trunk'
+        : /oak2|leaf.*2/i.test(obj.name) ? 'leaf2' : 'leaf';
+      const geometry = obj.geometry.clone().applyMatrix4(obj.matrixWorld);
+      geometry.deleteAttribute('color');
+      parts.push({ key, geometry });
+    });
+    // Free the loader's own copies (geometry + full-res embedded maps): the
+    // game uses the extracted, downscaled textures instead.
+    root.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        for (const m of (Array.isArray(obj.material) ? obj.material : [obj.material])) {
+          if (m.map) m.map.dispose();
+          m.dispose();
+        }
+      }
+    });
+    if (!parts.length) { buildProceduralTrees(); return; }
+    const union = new THREE.Box3();
+    for (const p of parts) { p.geometry.computeBoundingBox(); union.union(p.geometry.boundingBox); }
+    const size = new THREE.Vector3(); union.getSize(size);
+    const centre = new THREE.Vector3(); union.getCenter(centre);
+    const modelHeight = Math.max(0.1, size.y);
+    for (const p of parts) {
+      p.geometry.translate(-centre.x, -union.min.y, -centre.z);
+      p.geometry.computeBoundingSphere();
+    }
+    const materials = {
+      trunk: new THREE.MeshStandardMaterial({ map: oakBarkTex, roughness: 1 }),
+      leaf: new THREE.MeshStandardMaterial({ map: oakLeafTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.95 }),
+      leaf2: new THREE.MeshStandardMaterial({ map: oakLeaf2Tex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.95 }),
+    };
+    const depthMats = {
+      leaf: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeafTex, alphaTest: 0.42 }),
+      leaf2: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: oakLeaf2Tex, alphaTest: 0.42 }),
+    };
+    const CELLS = 8;
+    const CELL = 1000 / CELLS;
+    const cells = new Map();
+    plan.trees.forEach((t, idx) => {
+      const cx = Math.min(CELLS - 1, Math.max(0, Math.floor((t.x + 500) / CELL)));
+      const cz = Math.min(CELLS - 1, Math.max(0, Math.floor((t.z + 500) / CELL)));
+      const k = `${cx},${cz}`;
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push({ t, idx });
+    });
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    let meshCount = 0;
+    for (const [k, items] of cells) {
+      for (const part of parts) {
+        const mesh = new THREE.InstancedMesh(part.geometry, materials[part.key], items.length);
+        mesh.name = `real-oak-${part.key}-${k}`;
+        items.forEach(({ t, idx }, i) => {
+          const h1 = hashFromKey(`oak:${idx}:a`);
+          const h2 = hashFromKey(`oak:${idx}:b`);
+          // Match the height range of the trees they replace (~6.3*s metres).
+          const base = (6.3 * (t.s || 1)) / modelHeight;
+          let sx = base * (0.92 + 0.16 * h1);
+          let sy = base * (0.92 + 0.2 * h2);
+          if (t.type === 'pine') { sx *= 0.78; sy *= 1.22; }
+          dummy.position.set(t.x, t.y, t.z);
+          dummy.rotation.set(0, t.rotY || 0, 0);
+          dummy.scale.set(sx, sy, sx);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+          if (part.key !== 'trunk') {
+            const tint = t.tint || 1;
+            if (t.type === 'oak' && idx % 4 === 0) color.setRGB(1.05 * tint, 0.58 * tint, 0.24 * tint);
+            else if (t.type === 'pine') color.setRGB(0.5 * tint, 0.78 * tint, 0.48 * tint);
+            else color.setRGB((0.82 + 0.3 * h1) * tint, (0.92 + 0.18 * h2) * tint, 0.7 * tint);
+            mesh.setColorAt(i, color);
+          }
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        if (depthMats[part.key]) mesh.customDepthMaterial = depthMats[part.key];
+        mesh.computeBoundingSphere();
+        group.add(mesh);
+        meshCount += 1;
+        countTris(part.geometry, items.length);
+      }
+    }
+    if (liveStats) {
+      liveStats.triangles = triangles;
+      liveStats.treeModel = 'user-oak-fbx';
+      liveStats.treeMeshes = meshCount;
+    }
+    group.userData.oakTrees = { status: 'ready', meshes: meshCount, modelHeightM: +modelHeight.toFixed(2) };
+    console.info('[world] user oak FBX instanced:', plan.trees.length, 'trees,', meshCount, 'cell meshes');
+  };
+  new FBXLoader().loadAsync(oakTreeUrl).then(buildOakTrees).catch((error) => {
+    console.warn('[world] oak FBX failed, using procedural trees:', error);
+    buildProceduralTrees();
+  });
 
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
   addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(rockTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
@@ -1049,21 +1177,21 @@ export function createRealWorldScene(foundation) {
     }
   }
 
-  return {
-    group,
-    stats: {
-      triangles,
-      buildings: plan.buildings.length,
-      trees: plan.trees.length,
-      bushes: plan.bushes.length,
-      rocks: plan.rocks.length,
-      lamps: plan.lamps.length,
-      tents: plan.festival.tents.length,
-      busStops: plan.busStops.length,
-      benches: plan.benches.length,
-      signs: plan.signs.length,
-      powerPoles: plan.powerPoles.length,
-      textures: 33,
-    },
+  const stats = {
+    triangles,
+    buildings: plan.buildings.length,
+    trees: plan.trees.length,
+    bushes: plan.bushes.length,
+    rocks: plan.rocks.length,
+    lamps: plan.lamps.length,
+    tents: plan.festival.tents.length,
+    busStops: plan.busStops.length,
+    benches: plan.benches.length,
+    signs: plan.signs.length,
+    powerPoles: plan.powerPoles.length,
+    textures: 36,
+    treeModel: 'loading-fbx',
   };
+  liveStats = stats;
+  return { group, stats };
 }
