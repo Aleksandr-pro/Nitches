@@ -105,6 +105,9 @@ import plantsUrl from '../assets/models/plants.glb?url';
 import busShelterUrl from '../assets/models/props/bus_shelter.glb?url';
 import streetLampUrl from '../assets/models/props/street_lamp.glb?url';
 import heroBuildingUrl from '../assets/models/props/hero_building.glb?url';
+import townhouseUrl from '../assets/models/props/townhouse.glb?url';
+import villaUrl from '../assets/models/props/villa.glb?url';
+import glassTowerModelUrl from '../assets/models/props/glass_tower.glb?url';
 import userGrassNormalUrl from '../assets/textures/realworld/user_grass_normal.jpg';
 import rockNormalUrl from '../assets/textures/realworld/rock_normal.jpg';
 import userSandRippledNormalUrl from '../assets/textures/realworld/user_sand_rippled_normal.jpg';
@@ -1191,9 +1194,32 @@ export function createRealWorldScene(foundation) {
     .filter((b) => b.kind === 'apartment' && b.h >= 11 && b.h <= 20 && b.w >= 15 && b.w <= 32 && b.d >= 9 && b.d <= 22)
     .sort((a, c) => ((a.x * a.x + (a.z - 100) * (a.z - 100)) - (c.x * c.x + (c.z - 100) * (c.z - 100))))
     .slice(0, 12);
+  // The v0.19 Blender set covers three more silhouette families.  Candidates
+  // are chosen by authored proportions first, then by how often the player
+  // sees them from the main drive loops.
+  const townhouseBuildings = plan.buildings
+    .filter((b) => b.kind === 'house' && b.w >= 9 && b.w <= 18 && b.d >= 7 && b.d <= 15
+      && (b.h + (b.roofH || 0)) >= 6 && (b.h + (b.roofH || 0)) <= 11)
+    .sort((a, c) => ((a.x * a.x + (a.z - 100) * (a.z - 100)) - (c.x * c.x + (c.z - 100) * (c.z - 100))))
+    .slice(0, 6);
+  const villaBuildings = plan.buildings
+    .filter((b) => b.kind === 'rt-villa' && b.w <= 25 && b.d <= 18 && (b.h + (b.roofH || 0)) <= 11)
+    .sort((a, c) => (((a.x > 1100 ? 0 : 1000000) + (a.x - 760) ** 2 + (a.z - 60) ** 2)
+      - ((c.x > 1100 ? 0 : 1000000) + (c.x - 760) ** 2 + (c.z - 60) ** 2)))
+    .slice(0, 14);
+  const glassTowerBuildings = plan.buildings
+    .filter((b) => b.kind === 'rt-tower')
+    .sort((a, c) => (((a.x - 760) ** 2 + (a.z - 60) ** 2) - ((c.x - 760) ** 2 + (c.z - 60) ** 2)))
+    .slice(0, 8);
   const heroBuildingSet = new Set(heroBuildings);
+  const blenderBuildingSet = new Set([
+    ...heroBuildings,
+    ...townhouseBuildings,
+    ...villaBuildings,
+    ...glassTowerBuildings,
+  ]);
   for (const b of plan.buildings) {
-    if (heroBuildingSet.has(b)) continue;
+    if (blenderBuildingSet.has(b)) continue;
     if (b.facade && b.facade.startsWith('user')) {
       bodyItems[b.facade].push(b);
       if (b.roofH > 0) pitchedRoofs.push(b);
@@ -1328,7 +1354,7 @@ export function createRealWorldScene(foundation) {
     const canopies = [];
     const balconies = [];
     for (const b of plan.buildings) {
-      if (heroBuildingSet.has(b)) continue;
+      if (blenderBuildingSet.has(b)) continue;
       plinths.push(b);
       const isTowerFacade = b.facade && RT_FACADES.includes(b.facade);
       if (b.roofH > 0 || (!isTowerFacade && b.h < 16)) {
@@ -2573,11 +2599,18 @@ export function createRealWorldScene(foundation) {
       FacadeAccent: new THREE.MeshStandardMaterial({ map: cloneTexture(travertineTex, 2, 1), roughness: 0.85 }),
       RoofDark: new THREE.MeshStandardMaterial({ map: cloneTexture(blackRoughTex, 2, 2), roughness: 0.95 }),
       LampGlow: new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xffdf9e, emissiveIntensity: 1.6, roughness: 0.4 }),
+      FacadeGlass: new THREE.MeshStandardMaterial({
+        map: cloneTexture(glassTowerTex, 3, 6), roughness: 0.22, metalness: 0.48, envMapIntensity: 1.35,
+      }),
+      RoofTile: new THREE.MeshStandardMaterial({ map: cloneTexture(roofTex, 3, 3), roughness: 0.92 }),
     };
     for (const material of Object.values(propMats)) applyNormalMap(material);
     propMats.PropsGlass.emissive.set(0xffc98a);
     registerNightMaterial(propMats.PropsGlass, { day: 0, sunset: 0.06, night: 0.2 });
     registerNightMaterial(propMats.LampGlow, { day: 0.25, sunset: 1.3, night: 2.8 });
+    propMats.FacadeGlass.emissive.set(0xffc27d);
+    propMats.FacadeGlass.emissiveMap = propMats.FacadeGlass.map;
+    registerNightMaterial(propMats.FacadeGlass, { day: 0, sunset: 0.1, night: 0.34 });
 
     const extractPropParts = (gltf) => {
       const root = gltf.scene;
@@ -2623,6 +2656,63 @@ export function createRealWorldScene(foundation) {
     const propLoader = new GLTFLoader();
     const propsReady = {};
     const noteProps = () => { group.userData.props = { ...propsReady }; };
+
+    const toBuildingItems = (list) => list.map((b) => ({
+      x: b.x, y: b.y, z: b.z, rotY: b.rotY || 0,
+      w: b.w, d: b.d, h: b.h, roofH: b.roofH || 0,
+      totalH: b.h + (b.roofH || 0), kind: b.kind, facade: b.facade,
+    }));
+    const buildBuildingFallback = (name, items) => {
+      const groups = new Map();
+      for (const item of items) {
+        let material = materials.brickApt;
+        if (item.facade && materials[item.facade]) material = materials[item.facade];
+        else if (item.facade && RT_FACADES.includes(item.facade)) material = materials[rtFacadeKey(item)];
+        else if (item.kind === 'house') material = materials.brickHouse;
+        if (!groups.has(material)) groups.set(material, []);
+        groups.get(material).push(item);
+      }
+      for (const [material, groupItems] of groups) {
+        addInstanced(`${name}-fallback`, unitBox, material, groupItems, (dummy, b) => {
+          dummy.position.set(b.x, b.y, b.z);
+          dummy.rotation.set(0, b.rotY, 0);
+          dummy.scale.set(b.w, b.h, b.d);
+        });
+      }
+      const pitched = items.filter((b) => b.roofH > 0);
+      if (pitched.length) {
+        addInstanced(`${name}-fallback-roof`, roofGeometry,
+          new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.97 }), pitched, (dummy, b) => {
+            dummy.position.set(b.x, b.y + b.h, b.z);
+            dummy.rotation.set(0, b.rotY, 0);
+            dummy.scale.set(b.w + 0.8, b.roofH, b.d + 0.8);
+          });
+      }
+      const flat = items.filter((b) => !b.roofH);
+      if (flat.length) {
+        addInstanced(`${name}-fallback-roof`, unitBox,
+          new THREE.MeshStandardMaterial({ map: cloneTexture(roofFlatTex, 1, 1), roughness: 1 }), flat, (dummy, b) => {
+            dummy.position.set(b.x, b.y + b.h, b.z);
+            dummy.rotation.set(0, b.rotY, 0);
+            dummy.scale.set(b.w + 0.5, 0.45, b.d + 0.5);
+          });
+      }
+    };
+    const loadBuildingModel = ({ key, name, url, items, place }) => {
+      if (!items.length) return;
+      propLoader.loadAsync(url).then((gltf) => {
+        const built = addPropInstances(name, gltf, items, place);
+        if (!built) buildBuildingFallback(name, items);
+        propsReady[key] = built ? items.length : 'fallback';
+        noteProps();
+        if (liveStats) liveStats.triangles = triangles;
+      }).catch((error) => {
+        console.warn(`[world] ${name} GLB failed, using textured fallback:`, error);
+        buildBuildingFallback(name, items);
+        propsReady[key] = 'fallback';
+        noteProps();
+      });
+    };
 
     // Street lamps: swap the procedural posts for the Blender model.
     propLoader.loadAsync(streetLampUrl).then((gltf) => {
@@ -2697,6 +2787,45 @@ export function createRealWorldScene(foundation) {
         noteProps();
       });
     }
+
+    // Townhouses authored at 12.8 x 9.45 x 11 m (fence/path overhang extra).
+    loadBuildingModel({
+      key: 'townhouses',
+      name: 'real-blender-townhouses',
+      url: townhouseUrl,
+      items: toBuildingItems(townhouseBuildings),
+      place: (dummy, b) => {
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(0, b.rotY, 0);
+        dummy.scale.set(b.w / 12.8, b.totalH / 9.45, b.d / 11);
+      },
+    });
+
+    // Villas authored at 18.5 x 7.27 x 14.5 m.
+    loadBuildingModel({
+      key: 'villas',
+      name: 'real-blender-villas',
+      url: villaUrl,
+      items: toBuildingItems(villaBuildings),
+      place: (dummy, b) => {
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(0, b.rotY, 0);
+        dummy.scale.set(b.w / 18.5, b.totalH / 7.27, b.d / 14.5);
+      },
+    });
+
+    // Glass towers authored on a 30 m podium and a 66 m crown line.
+    loadBuildingModel({
+      key: 'glassTowers',
+      name: 'real-blender-glass-towers',
+      url: glassTowerModelUrl,
+      items: toBuildingItems(glassTowerBuildings),
+      place: (dummy, b) => {
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(0, b.rotY, 0);
+        dummy.scale.set(b.w / 30, b.h / 66, b.d / 30);
+      },
+    });
   }
 
   const stats = {
@@ -2714,6 +2843,10 @@ export function createRealWorldScene(foundation) {
     textures: 119,
     normalMaps: normalBySource.size,
     heroBuildings: heroBuildings.length,
+    blenderBuildings: blenderBuildingSet.size,
+    townhouses: townhouseBuildings.length,
+    villas: villaBuildings.length,
+    glassTowers: glassTowerBuildings.length,
     treeModel: 'loading-fbx',
   };
   liveStats = stats;
