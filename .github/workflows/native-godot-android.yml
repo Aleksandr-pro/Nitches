@@ -221,6 +221,48 @@ jobs:
             exit 1
           fi
 
+      - name: Publish native smoke diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          log_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "native-logs"
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          markers = (
+              "[native] RichTown build stats:",
+              "[native-smoke]",
+              "SCRIPT ERROR",
+              "ERROR:",
+              "Native world",
+              "Mustang GLB",
+              "Native texture is missing",
+              "Native model is missing",
+          )
+
+          def annotation_escape(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("\n## Native Godot smoke diagnostics\n\n")
+              if not log_dir.exists():
+                  summary.write("No native smoke logs were produced.\n")
+              for log_path in sorted(log_dir.glob("*.log")):
+                  lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                  selected = [line for line in lines if any(marker in line for marker in markers)]
+                  if not selected:
+                      selected = lines[-40:]
+                  summary.write(f"### {log_path.name}\n\n```text\n")
+                  summary.write("\n".join(selected[-80:]))
+                  summary.write("\n```\n\n")
+                  for line in selected:
+                      if "[native-smoke] FAIL" in line or "SCRIPT ERROR" in line or "Native world" in line:
+                          print(f"::error title=Native smoke {log_path.name}::{annotation_escape(line[:900])}")
+                      elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line:
+                          print(f"::notice title=Native smoke {log_path.name}::{annotation_escape(line[:900])}")
+          PY
+
       - name: Export signed native Android APK
         run: |
           set -euo pipefail
