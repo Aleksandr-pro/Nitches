@@ -863,6 +863,13 @@ export function createRealWorldScene(foundation) {
     userWood: new THREE.MeshStandardMaterial({ map: cloneTexture(woodSlatsTex, 2, 1), roughness: 0.8, metalness: 0 }),
     userConcrete: new THREE.MeshStandardMaterial({ map: cloneTexture(darkConcreteTex, 2, 1), roughness: 0.9, metalness: 0 }),
   };
+  // Window/joint relief from each facade's own photo texture: at grazing sun
+  // angles the bump shading reads as mullions, frames and panel joints.
+  for (const m of Object.values(materials)) {
+    if (!m.map) continue;
+    m.bumpMap = m.map;
+    m.bumpScale = m.metalness >= 0.4 ? 0.25 : 0.6;
+  }
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
     glassApt: [], panelTown: [], panelApt: [], shopFront: [],
@@ -996,6 +1003,124 @@ export function createRealWorldScene(foundation) {
     group.add(mesh);
     countTris(unitBox, poolRoofs.length);
   }
+  // --- Building detail: plinths, cornices, roof furniture, balconies --------
+  {
+    const rotOff = (b, lx, lz) => {
+      const c = Math.cos(b.rotY || 0);
+      const sn = Math.sin(b.rotY || 0);
+      return { x: b.x + lx * c + lz * sn, z: b.z - lx * sn + lz * c };
+    };
+    const plinths = [];
+    const cornices = [];
+    const roofBoxes = [];
+    const roofTanks = [];
+    const canopies = [];
+    const balconies = [];
+    for (const b of plan.buildings) {
+      plinths.push(b);
+      const isTowerFacade = b.facade && RT_FACADES.includes(b.facade);
+      if (b.roofH > 0 || (!isTowerFacade && b.h < 16)) {
+        cornices.push({ ...b, cy: b.y + b.h - 0.36 });
+      }
+      if (!b.roofH && b.w >= 10 && b.d >= 9) {
+        const n = 1 + Math.floor(hashFromKey(`ac${b.x},${b.z}`) * 3);
+        for (let i = 0; i < n; i++) {
+          const h1 = hashFromKey(`acx${b.x},${b.z},${i}`);
+          const h2 = hashFromKey(`acz${b.x},${b.z},${i}`);
+          const pt = rotOff(b, (h1 - 0.5) * (b.w - 4.5), (h2 - 0.5) * (b.d - 4.5));
+          const item = {
+            x: pt.x, y: b.y + b.h + 0.4, z: pt.z,
+            rotY: (b.rotY || 0) + (h1 - 0.5) * 0.8, s: 0.8 + h2 * 0.9,
+          };
+          (i === 0 && h2 > 0.55 ? roofTanks : roofBoxes).push(item);
+        }
+      }
+      if (b.x > 500 && b.h >= 9) {
+        const pt = rotOff(b, 0, b.d / 2 + 0.9);
+        canopies.push({ x: pt.x, y: b.y, z: pt.z, rotY: b.rotY || 0 });
+        if (b.h >= 18) {
+          const floors = Math.min(13, Math.floor((b.h - 6) / 3.1));
+          const cols = Math.max(2, Math.floor(b.w / 5.2));
+          for (let f = 0; f < floors; f++) {
+            for (let cI = 0; cI < cols; cI++) {
+              const lx = -b.w / 2 + (b.w * (cI + 0.5)) / cols;
+              for (const sgn of [1, -1]) {
+                const bp = rotOff(b, lx, sgn * (b.d / 2));
+                balconies.push({
+                  x: bp.x, y: b.y + 5 + f * 3.1, z: bp.z,
+                  rotY: (b.rotY || 0) + (sgn < 0 ? Math.PI : 0),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    const addDetail = (name, geometry, material, items, compose) => {
+      if (!items.length) return;
+      const mesh = new THREE.InstancedMesh(geometry, material, items.length);
+      mesh.name = name;
+      setInstances(mesh, items, compose);
+      group.add(mesh);
+      countTris(geometry, items.length);
+    };
+    const graniteDetailMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(blackGraniteTex, 2, 1), roughness: 0.45, metalness: 0.1, envMapIntensity: 1.1,
+    });
+    const corniceMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(travertineTex, 2, 1), roughness: 0.85,
+    });
+    const roofMetalMat = new THREE.MeshStandardMaterial({
+      map: cloneTexture(brushedMetalTex, 1, 1), roughness: 0.55, metalness: 0.6,
+    });
+    addDetail('real-plinths', unitBox, graniteDetailMat, plinths, (dummy, b) => {
+      dummy.position.set(b.x, b.y - 0.05, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w + 0.3, 1.05, b.d + 0.3);
+    });
+    addDetail('real-cornices', unitBox, corniceMat, cornices, (dummy, b) => {
+      dummy.position.set(b.x, b.cy, b.z);
+      dummy.rotation.set(0, b.rotY || 0, 0);
+      dummy.scale.set(b.w + 0.45, 0.36, b.d + 0.45);
+    });
+    addDetail('real-roof-boxes', unitBox, roofMetalMat, roofBoxes, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1.7 * it.s, 0.9 * it.s, 1.1 * it.s);
+    });
+    const tankGeo = new THREE.CylinderGeometry(0.85, 0.85, 1.25, 12);
+    tankGeo.translate(0, 0.625, 0);
+    addDetail('real-roof-tanks', tankGeo, roofMetalMat, roofTanks, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(it.s, it.s, it.s);
+    });
+    const canopySlab = new THREE.BoxGeometry(5, 0.16, 2.1);
+    canopySlab.translate(0, 3.1, 0);
+    const canopyColL = new THREE.CylinderGeometry(0.06, 0.06, 3.1, 8);
+    canopyColL.translate(-2.2, 1.55, 0.85);
+    const canopyColR = canopyColL.clone();
+    canopyColR.translate(4.4, 0, 0);
+    const canopyGeo = mergeGeometries([canopySlab, canopyColL, canopyColR]);
+    addDetail('real-canopies', canopyGeo, roofMetalMat, canopies, (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+    });
+    const balcSlab = new THREE.BoxGeometry(2.0, 0.12, 0.85);
+    balcSlab.translate(0, 0, 0.42);
+    const balcFront = new THREE.BoxGeometry(2.0, 0.55, 0.05);
+    balcFront.translate(0, 0.33, 0.82);
+    const balcRail = new THREE.BoxGeometry(2.0, 0.06, 0.08);
+    balcRail.translate(0, 0.63, 0.82);
+    const balcGeo = mergeGeometries([balcSlab, balcFront, balcRail]);
+    addDetail('real-balconies', balcGeo, corniceMat, balconies.slice(0, 4200), (dummy, it) => {
+      dummy.position.set(it.x, it.y, it.z);
+      dummy.rotation.set(0, it.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+    });
+  }
+
   if (plan.pools?.length) {
     const deckMesh = new THREE.InstancedMesh(
       unitBox,
@@ -1576,6 +1701,77 @@ export function createRealWorldScene(foundation) {
 
   const rockGeometry = jitterGeometry(new THREE.DodecahedronGeometry(1.15, 0), 0.42, 0.8);
   addInstanced('real-rocks', rockGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(stoneRubbleTex, 1, 1), roughness: 1 }), plan.rocks, placeScaled);
+
+  // --- Street hedge rows: green edges along the arterials --------------------
+  {
+    const junctionPts = [];
+    for (const e of foundation.roadGraph.edges) {
+      const sm = e.samples || [];
+      if (sm.length) junctionPts.push(sm[0], sm[sm.length - 1]);
+    }
+    const nearJunction = (x, z) => junctionPts.some(
+      (n) => (n.x - x) * (n.x - x) + (n.z - z) * (n.z - z) < 169,
+    );
+    const insideBuilding = (x, z) => plan.buildings.some((bd) => {
+      const r = Math.max(bd.w, bd.d) / 2 + 1.4;
+      return Math.abs(x - bd.x) < r && Math.abs(z - bd.z) < r;
+    });
+    const rows = [];
+    for (const e of foundation.roadGraph.edges) {
+      const isRT = /^rt-/.test(e.id);
+      const isTown = /^(street-h|avenue|street-v)/.test(e.id);
+      if (!isRT && !isTown) continue;
+      const smp = e.samples || [];
+      const stepTarget = isRT ? 8.5 : 14;
+      let acc = stepTarget * 0.5;
+      for (let i = 1; i < smp.length; i++) {
+        const a = smp[i - 1];
+        const b = smp[i];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const seg = Math.hypot(dx, dz) || 0.001;
+        acc += seg;
+        if (acc < stepTarget) continue;
+        acc = 0;
+        const yaw = Math.atan2(dx, dz);
+        const off = (e.halfWidthM || 4) + 2.7;
+        const sides = isRT ? [1, -1] : [hashFromKey(`${e.id}:${i}`) > 0.5 ? 1 : -1];
+        for (const sgn of sides) {
+          const x = b.x + (-dz / seg) * off * sgn;
+          const z = b.z + (dx / seg) * off * sgn;
+          if (x > 1035 || nearJunction(x, z) || insideBuilding(x, z)) continue;
+          const y = foundation.heightAt(x, z);
+          if (y < 0.8) continue;
+          rows.push({ x, y: y - 0.05, z, rotY: yaw, len: isRT ? 7 : 8.5 });
+        }
+        if (rows.length > 2600) break;
+      }
+      if (rows.length > 2600) break;
+    }
+    if (rows.length) {
+      const hedgeGeo = jitterGeometry(new THREE.BoxGeometry(1, 1, 1, 4, 2, 2), 0.16, 1);
+      hedgeGeo.translate(0, 0.5, 0);
+      const hedgeMesh = new THREE.InstancedMesh(
+        hedgeGeo,
+        new THREE.MeshStandardMaterial({ map: cloneTexture(hedgeTex, 4, 1), roughness: 1 }),
+        rows.length,
+      );
+      hedgeMesh.name = 'real-street-hedges';
+      const dummy = new THREE.Object3D();
+      rows.forEach((r, i) => {
+        dummy.position.set(r.x, r.y, r.z);
+        dummy.rotation.set(0, r.rotY, 0);
+        dummy.scale.set(1.05, 0.95, r.len);
+        dummy.updateMatrix();
+        hedgeMesh.setMatrixAt(i, dummy.matrix);
+      });
+      hedgeMesh.instanceMatrix.needsUpdate = true;
+      hedgeMesh.castShadow = true;
+      hedgeMesh.receiveShadow = true;
+      group.add(hedgeMesh);
+      countTris(hedgeGeo, rows.length);
+    }
+  }
 
   // Modelled street lamp: tapered pole, swept arm and a housing whose arm
   // reaches over the road (plan rotY already faces the asphalt).
