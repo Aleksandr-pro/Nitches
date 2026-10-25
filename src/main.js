@@ -26,7 +26,7 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.15.0: мир Real Valley вырос на восток новым районом RichTown в
+   v0.16.0: мир Real Valley вырос на восток новым районом RichTown в
    стиле Дубая (бульвар с пальмами, стеклянные и золотые небоскрёбы,
    башня-игла, золотая арка, фонтан и марина) на фототекстурах,
    дуб из FBX-модели пользователя и растительный пак из его Obj.obj
@@ -577,7 +577,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.15.0',
+    version: '0.16.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,

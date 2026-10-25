@@ -23,14 +23,14 @@ import { buildRoadGraph, buildRoadSegments, findRoute as graphFindRoute, roadPoi
 import { ColliderIndex, RoadSpatialIndex } from './spatialIndex.js';
 
 export const REAL_WORLD_ID = 'real-valley';
-export const REAL_WORLD_VERSION = '0.15.0';
+export const REAL_WORLD_VERSION = '0.16.0';
 /** World width (x extent) in metres; the world grew east in v0.15. */
-export const REAL_WORLD_SIZE_M = 1650;
+export const REAL_WORLD_SIZE_M = 2000;
 export const REAL_WORLD_HALF_M = 500;
 export const REAL_WORLD_BOUNDS = Object.freeze({
   minX: -500,
   minZ: -500,
-  maxX: 1150,
+  maxX: 1500,
   maxZ: 500,
 });
 
@@ -62,8 +62,12 @@ export const REAL_WORLD_ZONES = Object.freeze({
     Object.freeze({ minX: -375, maxX: -300, minZ: -135, maxZ: -65, style: 'angled' }),
   ]),
   city: Object.freeze({ minX: -185, maxX: 285, minZ: -415, maxZ: 205 }),
-  richtown: Object.freeze({ minX: 520, maxX: 1140, minZ: -470, maxZ: 470 }),
-  marina: Object.freeze({ minX: 840, maxX: 1040, minZ: 140, maxZ: 400 }),
+  richtown: Object.freeze({ minX: 520, maxX: 1490, minZ: -470, maxZ: 470 }),
+  marina: Object.freeze({ minX: 780, maxX: 1045, minZ: 150, maxZ: 380 }),
+  sea: Object.freeze({ minX: 1030, maxX: 1500, minZ: -500, maxZ: 500 }),
+  beach: Object.freeze({ minX: 940, maxX: 1045, minZ: -480, maxZ: 480 }),
+  palmIsland: Object.freeze({ minX: 1140, maxX: 1480, minZ: -430, maxZ: -80 }),
+  sailIsland: Object.freeze({ minX: 1110, maxX: 1250, minZ: 10, maxZ: 150 }),
   rtPlaza: Object.freeze({ minX: 600, maxX: 730, minZ: -90, maxZ: 40 }),
   roundabout: Object.freeze({ x: 0, z: 225, r: 34, islandR: 27 }),
   drift: Object.freeze({ x: -292, z: 338 }),
@@ -77,7 +81,9 @@ export const REAL_WORLD_DISTRICTS = Object.freeze([
   { id: 'riverside', name: 'Риверсайд', x: -355, z: -60, radiusM: 210, biome: 'forest' },
   { id: 'south-quarter', name: 'Южный квартал', x: 0, z: 345, radiusM: 195, biome: 'urban' },
   { id: 'richtown', name: 'RichTown', x: 700, z: -60, radiusM: 360, biome: 'urban' },
-  { id: 'richtown-marina', name: 'RichTown Marina', x: 950, z: 270, radiusM: 200, biome: 'urban' },
+  { id: 'richtown-marina', name: 'RichTown Marina', x: 870, z: 265, radiusM: 210, biome: 'urban' },
+  { id: 'richtown-beach', name: 'Пляж RichTown', x: 985, z: -60, radiusM: 260, biome: 'park' },
+  { id: 'palm-island', name: 'Остров-Пальма', x: 1340, z: -250, radiusM: 240, biome: 'urban' },
 ]);
 
 export const REAL_WORLD_SURFACES = Object.freeze({
@@ -191,9 +197,12 @@ function rawHeightSampler(seed) {
     h = lerp(h, 4.2, radialBlend(px, pz, REAL_WORLD_ZONES.drift.x, REAL_WORLD_ZONES.drift.z, 105, 200) * 0.92);
     h = lerp(h, 3.9, rectBlend(px, pz, { minX: -250, maxX: 250, minZ: 270, maxZ: 430 }, 70) * 0.8);
 
-    // RichTown plateau east of the old rim, then the marina basin cut.
-    h = lerp(h, 4.0, rectBlend(px, pz, REAL_WORLD_ZONES.richtown, 80) * 0.95);
-    h = lerp(h, -1.2, rectBlend(px, pz, REAL_WORLD_ZONES.marina, 10) * 0.99);
+    // RichTown plateau, beach shelf, then the marina inlet cut (the x=930
+    // Corniche crosses the inlet on a land bridge, like the river causeway).
+    h = lerp(h, 4.0, rectBlend(px, pz, { minX: 520, maxX: 1045, minZ: -470, maxZ: 470 }, 80) * 0.95);
+    h = lerp(h, 1.5, rectBlend(px, pz, REAL_WORLD_ZONES.beach, 30) * 0.96);
+    const marinaBridge = rectBlend(px, pz, { minX: 912, maxX: 948, minZ: 140, maxZ: 390 }, 8);
+    h = lerp(h, -1.4, rectBlend(px, pz, REAL_WORLD_ZONES.marina, 10) * 0.99 * (1 - marinaBridge * 0.98));
 
     // River channel along the west edge, with a land bridge where the
     // highway and the riverside road cross (z ~ 192..238).
@@ -212,6 +221,18 @@ function rawHeightSampler(seed) {
     );
     const edge = 1 - smoothstep(0, 45, dEdge);
     h = lerp(h, h + 18, edge * 0.8);
+
+    // Sea and artificial islands are applied after the rim so the eastern
+    // border stays open water (no rim wall in the sea). Causeways are land
+    // bridges at road level, the same trick as the river crossing.
+    h = lerp(h, -2.2, rectBlend(px, pz, REAL_WORLD_ZONES.sea, 26) * 0.99);
+    h = lerp(h, 2.5, rectBlend(px, pz, { minX: 930, maxX: 1340, minZ: -264, maxZ: -236 }, 10) * 0.98);
+    h = lerp(h, 2.5, rectBlend(px, pz, { minX: 930, maxX: 1195, minZ: 67, maxZ: 93 }, 10) * 0.98);
+    h = lerp(h, 2.2, rectBlend(px, pz, { minX: 1240, maxX: 1400, minZ: -282, maxZ: -218 }, 26) * 0.97);
+    for (const [cx, cz] of [[1360, -350], [1410, -300], [1435, -240], [1410, -180], [1355, -125]]) {
+      h = lerp(h, 2.1, radialBlend(px, pz, cx, cz, 38, 82) * 0.97);
+    }
+    h = lerp(h, 2.2, radialBlend(px, pz, 1180, 80, 34, 74) * 0.97);
     return Number.isFinite(h) ? h : 0;
   };
 }
@@ -419,29 +440,50 @@ function buildRoadDefinition() {
   const parking2Gate = addNode('parking2-gate', 340, -290);
   addEdge('parking2-entry', grid[3][1], parking2Gate, straight(250, -290, 340, -290), { widthM: 10, speedLimitKmh: 30 });
 
-  // --- RichTown (v0.15): boulevard grid east of the old rim -------------------
-  // Columns: west frontage x=560, RichTown Boulevard x=760, east (marina)
-  // frontage x=1060. The highway terminates at the boulevard; the marina
-  // basin (x 840..1040, z 140..400) is reached via the z=60 / z=430 streets.
-  const RT_Z = [-430, -300, -110, 60, HIGHWAY_Z, 430];
+  // --- RichTown (v0.16): sea-to-inland zoning east of the old rim -------------
+  // Shore highway (Corniche, x=930) -> boulevard (760) -> west frontage
+  // (560). The marina inlet opens to the sea; the Corniche crosses it on a
+  // land bridge. Causeways lead east to Sail Island (z=80) and Palm Island
+  // (z=-250).
+  const RT_Z = [-430, -300, -250, -110, 60, HIGHWAY_Z, 430];
   const rtW = RT_Z.map((z, i) => addNode(`rt-w${i}`, 560, z));
   const rtB = RT_Z.map((z, i) => addNode(`rt-b${i}`, 760, z));
-  const rtE = RT_Z.map((z, i) => addNode(`rt-e${i}`, 1060, z));
+  const rtE = RT_Z.map((z, i) => addNode(`rt-e${i}`, 930, z));
   const rtStreet = { widthM: 13, speedLimitKmh: 50 };
+  const corniche = { widthM: 24, lanes: 4, speedLimitKmh: 80, name: 'RichTown Corniche' };
+  let sailJunction = null;
   for (let i = 0; i < RT_Z.length - 1; i++) {
     addEdge(`rt-blvd-${i}`, rtB[i], rtB[i + 1], straight(760, RT_Z[i], 760, RT_Z[i + 1]), { widthM: 22, lanes: 4, speedLimitKmh: 70, name: 'RichTown Boulevard' });
     addEdge(`rt-west-${i}`, rtW[i], rtW[i + 1], straight(560, RT_Z[i], 560, RT_Z[i + 1]), { widthM: 11, speedLimitKmh: 50 });
-    addEdge(`rt-east-${i}`, rtE[i], rtE[i + 1], straight(1060, RT_Z[i], 1060, RT_Z[i + 1]), { widthM: 11, speedLimitKmh: 50 });
+    if (RT_Z[i] === 60) {
+      sailJunction = addNode('rt-sail-j', 930, 80);
+      addEdge(`rt-east-${i}a`, rtE[i], sailJunction, straight(930, 60, 930, 80), corniche);
+      addEdge(`rt-east-${i}b`, sailJunction, rtE[i + 1], straight(930, 80, 930, RT_Z[i + 1]), corniche);
+    } else {
+      addEdge(`rt-east-${i}`, rtE[i], rtE[i + 1], straight(930, RT_Z[i], 930, RT_Z[i + 1]), corniche);
+    }
   }
   RT_Z.forEach((z, i) => {
     if (z === HIGHWAY_Z) return;
     addEdge(`rt-st-${i}w`, rtW[i], rtB[i], straight(560, z, 760, z), rtStreet);
-    addEdge(`rt-st-${i}e`, rtB[i], rtE[i], straight(760, z, 1060, z), rtStreet);
+    addEdge(`rt-st-${i}e`, rtB[i], rtE[i], straight(760, z, 930, z), rtStreet);
   });
-  addEdge('rt-highway-1', eastGate, rtW[4], straight(472, HIGHWAY_Z, 560, HIGHWAY_Z), { widthM: 15, speedLimitKmh: 90 });
-  addEdge('rt-highway-2', rtW[4], rtB[4], straight(560, HIGHWAY_Z, 760, HIGHWAY_Z), { widthM: 16, speedLimitKmh: 70 });
-  addEdge('rt-link-plaza', plazaGate, rtW[2], straight(345, -110, 560, -110), { widthM: 11, speedLimitKmh: 40 });
-  addEdge('rt-link-south', southE, rtW[5], [[220, 330], [380, 395], [560, 430]], { widthM: 10, speedLimitKmh: 60 });
+  addEdge('rt-highway-1', eastGate, rtW[5], straight(472, HIGHWAY_Z, 560, HIGHWAY_Z), { widthM: 15, speedLimitKmh: 90 });
+  addEdge('rt-highway-2', rtW[5], rtB[5], straight(560, HIGHWAY_Z, 760, HIGHWAY_Z), { widthM: 16, speedLimitKmh: 70 });
+  addEdge('rt-link-plaza', plazaGate, rtW[3], straight(345, -110, 560, -110), { widthM: 11, speedLimitKmh: 40 });
+  addEdge('rt-link-south', southE, rtW[6], [[220, 330], [380, 395], [560, 430]], { widthM: 10, speedLimitKmh: 60 });
+  const palmMid = addNode('rt-palm-mid', 1150, -250);
+  const palmTrunk = addNode('rt-palm-trunk', 1330, -250);
+  const palmCrown = addNode('rt-palm-crown', 1395, -250);
+  addEdge('rt-palm-1', rtE[2], palmMid, straight(930, -250, 1150, -250), { widthM: 13, speedLimitKmh: 60, name: 'Palm Island Bridge' });
+  addEdge('rt-palm-2', palmMid, palmTrunk, straight(1150, -250, 1330, -250), { widthM: 12, speedLimitKmh: 50 });
+  addEdge('rt-palm-3', palmTrunk, palmCrown, straight(1330, -250, 1395, -250), { widthM: 11, speedLimitKmh: 40 });
+  const palmN = addNode('rt-palm-n', 1395, -345);
+  const palmS = addNode('rt-palm-s', 1395, -155);
+  addEdge('rt-palm-frond-n', palmCrown, palmN, [[1395, -250], [1412, -300], [1395, -345]], { widthM: 9, speedLimitKmh: 40 });
+  addEdge('rt-palm-frond-s', palmCrown, palmS, [[1395, -250], [1412, -200], [1395, -155]], { widthM: 9, speedLimitKmh: 40 });
+  const sailEnd = addNode('rt-sail-end', 1180, 80);
+  addEdge('rt-sail-road', sailJunction, sailEnd, straight(930, 80, 1180, 80), { widthM: 10, speedLimitKmh: 50, name: 'Sail Island Causeway' });
 
   return { id: 'real-valley-roads', version: REAL_WORLD_VERSION, nodes, edges };
 }
@@ -574,7 +616,7 @@ function planDressing(core, seed) {
     buildings: [], trees: [], bushes: [], rocks: [], lamps: [], colliders: [],
     busStops: [], benches: [], hedges: [],
     signs: [], bins: [], bollards: [], fences: [], powerPoles: [],
-    palms: [], landmarks: [],
+    palms: [], landmarks: [], pools: [],
     pavedAreas: [
       { ...REAL_WORLD_ZONES.plaza, kind: 'plaza' },
       ...REAL_WORLD_ZONES.parkings.map((r) => ({ ...r, kind: 'parking' })),
@@ -660,8 +702,32 @@ function planDressing(core, seed) {
 
   // --- RichTown: skyscraper blocks, landmarks, palms, fountain plaza ---------
   {
-    const RT_COLS_X = [560, 760, 1060];
-    const RT_ROWS_Z = [-430, -300, -110, 60, 225, 430];
+    const RT_COLS_X = [560, 760, 930];
+    const RT_ROWS_Z = [-430, -300, -250, -110, 60, 225, 430];
+    const pushPool = (x, z, w = 11, d = 5.5) => {
+      plan.pools.push({ x, z, y: core.heightAt(x, z) + 0.02, w, d, rotY: 0 });
+      addCollider({ kind: 'obb', x, z, halfWidthM: w / 2, halfDepthM: d / 2, rotationY: 0 });
+    };
+    const landmarkPlots = [
+      [665, -340, 40], [820, 25, 34], [620, 335, 44], [812, 118, 34],
+      [812, 412, 34], [872, 118, 32], [712, 150, 36], [868, -330, 40],
+    ];
+    // Mall and the five shore hotels go in first so the block generator
+    // keeps their plots clear. Each hotel gets its own facade.
+    pushBuilding({
+      x: 628, z: 150, y: core.heightAt(628, 150) - 0.3, rotY: 0, w: 84, d: 56, h: 16, roofH: 0,
+      kind: 'rt-mall', facade: 'userMarble', tint: 1,
+    });
+    const shoreHotels = [
+      [892, -385, 42, 'glassTower'], [892, -185, 54, 'goldTower'], [892, -35, 38, 'hotelTower'],
+      [892, 105, 46, 'marbleTower'], [892, 415, 34, 'sandTower'],
+    ];
+    for (const [hx, hz, hh, hf] of shoreHotels) {
+      pushBuilding({
+        x: hx, z: hz, y: core.heightAt(hx, hz) - 0.3, rotY: -Math.PI / 2, w: 34, d: 26, h: hh, roofH: 0,
+        kind: 'rt-hotel', facade: hf, tint: 0.95 + rng() * 0.15,
+      });
+    }
     const towerFacades = ['glassTower', 'goldTower', 'marbleTower'];
     const hotelFacades = ['hotelTower', 'glassTower', 'marbleTower', 'sandTower'];
     const midFacades = ['sandTower', 'marbleTower', 'hotelTower', 'glassTower'];
@@ -671,8 +737,8 @@ function planDressing(core, seed) {
         const x1 = RT_COLS_X[ix + 1] - 22;
         const z0 = RT_ROWS_Z[iz] + 20;
         const z1 = RT_ROWS_Z[iz + 1] - 20;
-        const cols = Math.max(1, Math.floor((x1 - x0) / 52));
-        const rows = Math.max(1, Math.floor((z1 - z0) / 52));
+        const cols = Math.max(1, Math.floor((x1 - x0) / 40));
+        const rows = Math.max(1, Math.floor((z1 - z0) / 40));
         const cellW = (x1 - x0) / cols;
         const cellD = (z1 - z0) / rows;
         for (let cx = 0; cx < cols; cx++) {
@@ -682,7 +748,28 @@ function planDressing(core, seed) {
             if (inRect(px, pz, REAL_WORLD_ZONES.marina, 26)) continue;
             if (inRect(px, pz, REAL_WORLD_ZONES.rtPlaza, 14)) continue;
             if (Math.hypot(px - 665, pz + 170) < 46) continue; // landmark tower plot
-            if (rng() < 0.14) continue; // open plot / plaza gap
+            if (landmarkPlots.some(([lx, lz, lr]) => Math.hypot(px - lx, pz - lz) < lr)) continue;
+            if (rng() < 0.08) continue; // open plot / plaza gap
+            const py = core.heightAt(px, pz);
+            if (py < 0.8 || slopeApprox(core.heightAt, px, pz) > 0.25) continue;
+            const near = core.nearestRoad(px, pz, { maxDistanceM: 40 });
+            if (near && near.edgeDistanceM < 5) continue;
+            // Residential zoning: villas with pools south-west and far north,
+            // towers/hotels in the downtown-business-marina core.
+            const villaZone = (pz > 240 && px < 745) || pz < -320;
+            if (villaZone) {
+              const w = 16 + rng() * 10;
+              const d = 12 + rng() * 7;
+              if (overlapsBuilding(px, pz, Math.max(w, d) * 0.5)) continue;
+              pushBuilding({
+                x: px, z: pz, y: py - 0.25, rotY: 0, w, d, h: 5.5 + rng() * 3.5,
+                roofH: 2.2 + rng() * 1.2, kind: 'rt-villa',
+                facade: ['userPlaster', 'userStone', 'userWood'][Math.floor(rng() * 3)],
+                tint: 0.92 + rng() * 0.2,
+              });
+              if (rng() < 0.65) pushPool(px + w / 2 + 8, pz, 10 + rng() * 3, 5 + rng() * 1.5);
+              continue;
+            }
             const distCore = Math.hypot(px - 760, pz - 60);
             const kind = distCore < 270 ? 'rt-tower' : distCore < 430 ? 'rt-hotel' : 'rt-mid';
             const h = kind === 'rt-tower' ? 42 + rng() * 63
@@ -690,10 +777,6 @@ function planDressing(core, seed) {
             const pool = kind === 'rt-tower' ? towerFacades : kind === 'rt-hotel' ? hotelFacades : midFacades;
             const w = clamp(cellW * (0.5 + rng() * 0.22), 18, 40);
             const d = clamp(cellD * (0.5 + rng() * 0.22), 18, 40);
-            const py = core.heightAt(px, pz);
-            if (py < 0.8 || slopeApprox(core.heightAt, px, pz) > 0.25) continue;
-            const near = core.nearestRoad(px, pz, { maxDistanceM: 40 });
-            if (near && near.edgeDistanceM < 5) continue;
             if (overlapsBuilding(px, pz, Math.max(w, d) * 0.4)) continue;
             pushBuilding({
               x: px, z: pz, y: py - 0.3, rotY: rng() < 0.12 ? Math.PI / 4 : 0,
@@ -706,6 +789,22 @@ function planDressing(core, seed) {
       }
     }
 
+    // Palm Island: villas on the frond lobes + the Atlantis hotel at the tip.
+    const palmVillaSpots = [
+      [1348, -352], [1424, -304], [1440, -222], [1424, -176], [1343, -122], [1285, -270], [1285, -230],
+    ];
+    palmVillaSpots.forEach(([vx, vz], i) => {
+      pushBuilding({
+        x: vx, z: vz, y: core.heightAt(vx, vz) - 0.25, rotY: 0, w: 20, d: 14, h: 7, roofH: 2.6,
+        kind: 'rt-villa', facade: i % 2 ? 'userStone' : 'userPlaster', tint: 1,
+      });
+      pushPool(vx, vz + 14, 11, 5.5);
+    });
+    pushBuilding({
+      x: 1448, z: -250, y: core.heightAt(1448, -250) - 0.3, rotY: Math.PI / 2, w: 54, d: 28, h: 34, roofH: 0,
+      kind: 'rt-hotel', facade: 'goldTower', tint: 1,
+    });
+
     // Landmarks are rendered bespoke by the scene; here only data + colliders.
     plan.landmarks.push({ kind: 'rt-tower', x: 665, z: -170, y: core.heightAt(665, -170) - 0.3, h: 148 });
     addCollider({ kind: 'obb', x: 665, z: -170, halfWidthM: 24, halfDepthM: 24, rotationY: 0 });
@@ -715,6 +814,22 @@ function planDressing(core, seed) {
     }
     plan.landmarks.push({ kind: 'rt-fountain', x: 665, z: -25, y: core.heightAt(665, -25), r: 16 });
     addCollider({ kind: 'circle', x: 665, z: -25, r: 16.8 });
+    const addLandmark = (kind, x, z, extra, col) => {
+      plan.landmarks.push({ kind, x, z, y: core.heightAt(x, z) - 0.1, ...extra });
+      if (col) addCollider(col);
+    };
+    addLandmark('rt-sail', 1180, 80, { h: 95 }, { kind: 'obb', x: 1180, z: 80, halfWidthM: 20, halfDepthM: 14, rotationY: 0 });
+    addLandmark('rt-museum', 665, -340, { h: 26 }, { kind: 'circle', x: 665, z: -340, r: 24 });
+    addLandmark('rt-opera', 820, 25, { h: 22 }, { kind: 'obb', x: 820, z: 25, halfWidthM: 26, halfDepthM: 20, rotationY: 0 });
+    addLandmark('rt-mosque', 620, 335, { h: 30 }, { kind: 'obb', x: 620, z: 335, halfWidthM: 24, halfDepthM: 24, rotationY: 0 });
+    addLandmark('rt-twist', 812, 118, { h: 105 }, { kind: 'obb', x: 812, z: 118, halfWidthM: 15, halfDepthM: 15, rotationY: 0 });
+    addLandmark('rt-lean', 812, 412, { h: 88 }, { kind: 'obb', x: 812, z: 412, halfWidthM: 15, halfDepthM: 15, rotationY: 0 });
+    addLandmark('rt-hole', 872, 118, { h: 78 }, { kind: 'obb', x: 872, z: 118, halfWidthM: 18, halfDepthM: 14, rotationY: 0 });
+    addLandmark('rt-parking', 712, 150, { h: 15 }, { kind: 'obb', x: 712, z: 150, halfWidthM: 20, halfDepthM: 26, rotationY: 0 });
+    addLandmark('rt-aquapark', 868, -330, { r: 26 }, { kind: 'circle', x: 868, z: -330, r: 27 });
+    for (const lz of [-180, -20, 115]) {
+      addLandmark('rt-lifeguard', 985, lz, { h: 6 }, { kind: 'circle', x: 985, z: lz, r: 2.2 });
+    }
 
     // Palms: boulevard sidewalks, marina promenade, fountain ring.
     const pushPalm = (x, z) => {
@@ -726,7 +841,16 @@ function planDressing(core, seed) {
       pushPalm(745.5, z);
       pushPalm(774.5, z + 10);
     }
-    for (let z = 160; z <= 385; z += 23) pushPalm(826, z);
+    for (let z = -420; z <= 420; z += 28) {
+      if (RT_ROWS_Z.some((rz) => Math.abs(z - rz) < 12)) continue;
+      pushPalm(946, z);
+    }
+    for (const [vx, vz] of palmVillaSpots) {
+      pushPalm(vx - 14, vz + 10);
+      pushPalm(vx + 14, vz - 10);
+    }
+    pushPalm(1160, 58);
+    pushPalm(1202, 102);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + 0.39;
       pushPalm(665 + Math.cos(a) * 26, -25 + Math.sin(a) * 26);
@@ -762,6 +886,8 @@ function planDressing(core, seed) {
     rtSign(505, 242, -Math.PI / 2, 'RICHTOWN');
     rtSign(748, 412, Math.PI, 'RICHTOWN');
     rtSign(832, 72, -Math.PI / 2, 'MARINA');
+    rtSign(914, -236, -Math.PI / 2, 'PALM ISLAND');
+    rtSign(914, 96, -Math.PI / 2, 'BEACH');
   }
 
   // --- Sparse houses along the riverside road and southern links ------------
@@ -1025,7 +1151,7 @@ function planDressing(core, seed) {
   let attempts = 0;
   while (plan.trees.length < 620 && attempts < 6500) {
     attempts++;
-    const x = -485 + rng() * 1620;
+    const x = -485 + rng() * 1970;
     const z = -485 + rng() * 970;
     if (Math.abs(x - riverCenterX(z)) < 20) continue;
     if (inRect(x, z, REAL_WORLD_ZONES.richtown, 10)) continue; // palms dress the district instead
@@ -1057,7 +1183,7 @@ function planDressing(core, seed) {
   attempts = 0;
   while (plan.rocks.length < 90 && attempts < 2600) {
     attempts++;
-    const x = -488 + rng() * 1626;
+    const x = -488 + rng() * 1976;
     const z = -488 + rng() * 976;
     if (inRect(x, z, REAL_WORLD_ZONES.richtown, 6)) continue;
     const y = core.heightAt(x, z);
@@ -1126,6 +1252,12 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
     if (h <= REAL_WORLD_RIVER.waterLevelM + 0.05 && inRect(x, z, REAL_WORLD_ZONES.marina, 4)) {
       return { ...REAL_WORLD_SURFACES.water, heightM: h, road: nearest, district };
     }
+    if (h <= REAL_WORLD_RIVER.waterLevelM + 0.05 && inRect(x, z, REAL_WORLD_ZONES.sea, 2)) {
+      return { ...REAL_WORLD_SURFACES.water, heightM: h, road: nearest, district };
+    }
+    if (h < 2.8 && (inRect(x, z, REAL_WORLD_ZONES.beach) || inRect(x, z, REAL_WORLD_ZONES.palmIsland) || inRect(x, z, REAL_WORLD_ZONES.sailIsland))) {
+      return { ...REAL_WORLD_SURFACES.sand, heightM: h, road: nearest, district };
+    }
     if (inRect(x, z, REAL_WORLD_ZONES.plaza) || REAL_WORLD_ZONES.parkings.some((r) => inRect(x, z, r))) {
       return { ...REAL_WORLD_SURFACES.concrete, heightM: h, road: nearest, district };
     }
@@ -1193,6 +1325,7 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
         fences: dressingPlan.fences.length,
         powerPoles: dressingPlan.powerPoles.length,
         palms: dressingPlan.palms.length,
+        pools: dressingPlan.pools.length,
         landmarks: dressingPlan.landmarks.length,
       },
     };
