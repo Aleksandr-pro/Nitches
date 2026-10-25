@@ -1062,14 +1062,14 @@ func _build_road_markings(parent: Node) -> void:
 			var center_z := float(z_variant)
 			# Zebra crossings on both approaches to the vertical road.
 			for side in [-1.0, 1.0]:
-				var crossing_z := center_z + side * (cross_width * 0.5 + 2.35)
+				var crossing_z: float = center_z + float(side) * (cross_width * 0.5 + 2.35)
 				var stripe_count := maxi(int(floor((width - 1.4) / 1.08)), 3)
 				var start_x := center_x - float(stripe_count - 1) * 0.54
 				for i in stripe_count:
 					var x := start_x + float(i) * 1.08
 					var y := height_at(x, crossing_z) + 0.165
 					stripe_transforms.append(make_transform(Vector3(x, y, crossing_z), 0.0, Vector3(0.58, 0.028, 3.15)))
-				var stop_z := crossing_z + side * 2.15
+				var stop_z: float = crossing_z + float(side) * 2.15
 				stripe_transforms.append(make_transform(
 					Vector3(center_x + width * 0.25, height_at(center_x, stop_z) + 0.165, stop_z),
 					0.0,
@@ -1078,14 +1078,14 @@ func _build_road_markings(parent: Node) -> void:
 
 			# Matching zebras across the horizontal street.
 			for side in [-1.0, 1.0]:
-				var crossing_x := center_x + side * (width * 0.5 + 2.35)
+				var crossing_x: float = center_x + float(side) * (width * 0.5 + 2.35)
 				var stripe_count_h := maxi(int(floor((cross_width - 1.4) / 1.08)), 3)
 				var start_z := center_z - float(stripe_count_h - 1) * 0.54
 				for i in stripe_count_h:
 					var z := start_z + float(i) * 1.08
 					var y := height_at(crossing_x, z) + 0.165
 					stripe_transforms.append(make_transform(Vector3(crossing_x, y, z), 0.0, Vector3(3.15, 0.028, 0.58)))
-				var stop_x := crossing_x + side * 2.15
+				var stop_x: float = crossing_x + float(side) * 2.15
 				stripe_transforms.append(make_transform(
 					Vector3(stop_x, height_at(stop_x, center_z) + 0.165, center_z - cross_width * 0.25),
 					0.0,
@@ -1122,11 +1122,11 @@ func _build_bridge_guardrails(parent: Node) -> void:
 			var yaw := atan2(-direction.x, -direction.z)
 			var segment_length := a.distance_to(b)
 			for side in [-1.0, 1.0]:
-				var edge_a := a + side_vector * half_width * side + Vector3.UP * 0.10
-				var edge_b := b + side_vector * half_width * side + Vector3.UP * 0.10
+				var edge_a: Vector3 = a + side_vector * half_width * float(side) + Vector3.UP * 0.10
+				var edge_b: Vector3 = b + side_vector * half_width * float(side) + Vector3.UP * 0.10
 				if i % 2 == 0:
 					post_transforms.append(make_transform(edge_a + Vector3.UP * 0.43, yaw, Vector3(0.16, 0.86, 0.16)))
-				var centre := (edge_a + edge_b) * 0.5
+				var centre: Vector3 = (edge_a + edge_b) * 0.5
 				_add_box_collider(centre + Vector3.UP * 0.45, Vector3(0.24, 0.92, segment_length + 0.05), yaw)
 				for rail_height in [0.52, 0.82]:
 					rail_transforms.append(make_transform(centre + Vector3.UP * rail_height, yaw, Vector3(0.09, 0.13, segment_length + 0.08)))
@@ -1677,7 +1677,7 @@ func _build_vegetation() -> void:
 		# exported six distant hill trees as the city's only broadleaf trees.
 		for i in 10:
 			var angle := TAU * float(i) / 10.0 + 0.18
-			var candidate := Vector3(665.0 + cos(angle) * 30.0, 0.0, -25.0 + sin(angle) * 30.0)
+			var candidate: Vector3 = Vector3(665.0 + cos(angle) * 30.0, 0.0, -25.0 + sin(angle) * 30.0)
 			candidate.y = height_at(candidate.x, candidate.z)
 			if _is_position_clear(candidate, 2.0, 2.5):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": angle * 1.7, "s": 0.92, "type": "oak"})
@@ -1687,7 +1687,7 @@ func _build_vegetation() -> void:
 		var west_index := 0
 		for z in range(-390, 391, 65):
 			var x := 546.0 if west_index % 2 == 0 else 574.0
-			var candidate := Vector3(x, height_at(x, float(z)), float(z))
+			var candidate: Vector3 = Vector3(x, height_at(x, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(west_index) * 0.83, "s": 0.86 + float(west_index % 3) * 0.08, "type": "oak"})
 				extra_tree_count += 1
@@ -1698,7 +1698,7 @@ func _build_vegetation() -> void:
 		# intersections and driveways while keeping a continuous canopy.
 		var promenade_index := 0
 		for z in range(-390, 391, 65):
-			var candidate := Vector3(912.0, height_at(912.0, float(z)), float(z))
+			var candidate: Vector3 = Vector3(912.0, height_at(912.0, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(promenade_index) * 0.71, "s": 0.84 + float(promenade_index % 3) * 0.07, "type": "oak"})
 				extra_tree_count += 1
@@ -1774,7 +1774,7 @@ func _build_vegetation() -> void:
 			var w := _f(building, "w", 20.0)
 			var d := _f(building, "d", 16.0)
 			for local_offset in [Vector3(-w * 0.34, 0.0, d * 0.5 + 2.1), Vector3(w * 0.34, 0.0, d * 0.5 + 2.1), Vector3(-w * 0.34, 0.0, -d * 0.5 - 2.1), Vector3(w * 0.34, 0.0, -d * 0.5 - 2.1)]:
-				var candidate := centre + building_basis * local_offset
+				var candidate: Vector3 = centre + building_basis * local_offset
 				candidate.y = height_at(candidate.x, candidate.z)
 				var surface_kind := String(get_surface_at(candidate).get("kind", ""))
 				if surface_kind != "asphalt" and surface_kind != "water" and candidate.y > 1.2:
