@@ -18,7 +18,7 @@ import { buildRoadGraph, buildRoadSegments, findRoute as graphFindRoute, roadPoi
 import { ColliderIndex, RoadSpatialIndex } from './spatialIndex.js';
 
 export const REAL_WORLD_ID = 'real-valley';
-export const REAL_WORLD_VERSION = '0.10.0';
+export const REAL_WORLD_VERSION = '0.11.0';
 export const REAL_WORLD_SIZE_M = 1000;
 export const REAL_WORLD_HALF_M = REAL_WORLD_SIZE_M / 2;
 export const REAL_WORLD_BOUNDS = Object.freeze({
@@ -51,6 +51,9 @@ export const REAL_WORLD_ZONES = Object.freeze({
     Object.freeze({ minX: 296, maxX: 478, minZ: 36, maxZ: 186 }),
     Object.freeze({ minX: -202, maxX: -38, minZ: 348, maxZ: 402 }),
     Object.freeze({ minX: 38, maxX: 202, minZ: 348, maxZ: 402 }),
+    Object.freeze({ minX: 300, maxX: 470, minZ: -405, maxZ: -295 }),
+    Object.freeze({ minX: -150, maxX: -40, minZ: 245, maxZ: 305, style: 'angled' }),
+    Object.freeze({ minX: -375, maxX: -300, minZ: -135, maxZ: -65, style: 'angled' }),
   ]),
   city: Object.freeze({ minX: -185, maxX: 285, minZ: -415, maxZ: 205 }),
   roundabout: Object.freeze({ x: 0, z: 225, r: 34, islandR: 27 }),
@@ -171,7 +174,9 @@ function rawHeightSampler(seed) {
     // Flat buildable zones: city grid, festival/parking, drift, south.
     h = lerp(h, 3.6, radialBlend(px, pz, 30, -110, 250, 430) * 0.94);
     h = lerp(h, 3.8, rectBlend(px, pz, REAL_WORLD_ZONES.plaza, 60) * 0.95);
-    h = lerp(h, 3.8, rectBlend(px, pz, REAL_WORLD_ZONES.parkings[0], 60) * 0.95);
+    for (const r of REAL_WORLD_ZONES.parkings) {
+      h = lerp(h, 3.8, rectBlend(px, pz, r, 55) * 0.92);
+    }
     h = lerp(h, 4.2, radialBlend(px, pz, REAL_WORLD_ZONES.drift.x, REAL_WORLD_ZONES.drift.z, 105, 200) * 0.92);
     h = lerp(h, 3.9, rectBlend(px, pz, { minX: -250, maxX: 250, minZ: 270, maxZ: 430 }, 70) * 0.8);
 
@@ -232,27 +237,51 @@ function buildRoadDefinition() {
   const straight = (x1, z1, x2, z2) => [[x1, z1], [(x1 + x2) / 2, (z1 + z2) / 2], [x2, z2]];
 
   // City grid: verticals run south->north so avenue tangents face north.
+  // Two mid-block alleys cut the grid with real junction nodes: a N-S alley
+  // at x=70 (z -200..-20) and an E-W alley at z=-65 (x -150..0).
   const grid = CITY_VX.map((col, ix) => CITY_HZ.map((z, iz) => addNode(`n${ix}_${iz}`, col.x, z)));
+  const ewAlleyNodes = {};
   CITY_VX.forEach((col, ix) => {
     for (let iz = 0; iz < CITY_HZ.length - 1; iz++) {
+      const baseId = col.avenue ? `avenue-${iz}` : `street-v${ix}-${iz}`;
+      const opt = { widthM: col.widthM, speedLimitKmh: col.avenue ? 60 : 40 };
+      if ((ix === 0 || ix === 1) && iz === 3) {
+        const midId = addNode(`am${ix}`, col.x, -65);
+        ewAlleyNodes[ix] = midId;
+        addEdge(`${baseId}a`, grid[ix][4], midId, straight(col.x, -20, col.x, -65), opt);
+        addEdge(`${baseId}b`, midId, grid[ix][3], straight(col.x, -65, col.x, -110), opt);
+        continue;
+      }
       addEdge(
-        col.avenue ? `avenue-${iz}` : `street-v${ix}-${iz}`,
+        baseId,
         grid[ix][iz + 1], grid[ix][iz],
         straight(col.x, CITY_HZ[iz + 1], col.x, CITY_HZ[iz]),
-        { widthM: col.widthM, speedLimitKmh: col.avenue ? 60 : 40 },
+        opt,
       );
     }
   });
+  addEdge('alley-h-0', ewAlleyNodes[0], ewAlleyNodes[1], straight(-150, -65, 0, -65), { widthM: 7, speedLimitKmh: 30 });
+  const nsAlleyNodes = {};
   CITY_HZ.forEach((z, iz) => {
     for (let ix = 0; ix < CITY_VX.length - 1; ix++) {
+      const opt = { widthM: z === -110 ? 12 : 10, speedLimitKmh: 40 };
+      if (ix === 1 && iz >= 2 && iz <= 4) {
+        const midId = addNode(`ax${iz}`, 70, z);
+        nsAlleyNodes[iz] = midId;
+        addEdge(`street-h${iz}-1a`, grid[1][iz], midId, straight(0, z, 70, z), opt);
+        addEdge(`street-h${iz}-1b`, midId, grid[2][iz], straight(70, z, 140, z), opt);
+        continue;
+      }
       addEdge(
         `street-h${iz}-${ix}`,
         grid[ix][iz], grid[ix + 1][iz],
         straight(CITY_VX[ix].x, z, CITY_VX[ix + 1].x, z),
-        { widthM: z === -110 ? 12 : 10, speedLimitKmh: 40 },
+        opt,
       );
     }
   });
+  addEdge('alley-v-0', nsAlleyNodes[3], nsAlleyNodes[2], straight(70, -110, 70, -200), { widthM: 7, speedLimitKmh: 30 });
+  addEdge('alley-v-1', nsAlleyNodes[4], nsAlleyNodes[3], straight(70, -20, 70, -110), { widthM: 7, speedLimitKmh: 30 });
 
   // Drag strip: avenue continues dead-straight to the north edge.
   const dragNorth = addNode('drag-north', 0, -472);
@@ -369,6 +398,8 @@ function buildRoadDefinition() {
   addEdge('plaza-entry', grid[3][3], plazaGate, straight(250, -110, 345, -110), { widthM: 10, speedLimitKmh: 30 });
   const parkingGate = addNode('parking-gate', 335, 70);
   addEdge('parking-entry', grid[3][5], parkingGate, straight(250, 70, 335, 70), { widthM: 10, speedLimitKmh: 30 });
+  const parking2Gate = addNode('parking2-gate', 340, -290);
+  addEdge('parking2-entry', grid[3][1], parking2Gate, straight(250, -290, 340, -290), { widthM: 10, speedLimitKmh: 30 });
 
   return { id: 'real-valley-roads', version: REAL_WORLD_VERSION, nodes, edges };
 }
@@ -499,6 +530,7 @@ function planDressing(core, seed) {
   const rng = mulberry32(seed ^ 0x5EED);
   const plan = {
     buildings: [], trees: [], bushes: [], rocks: [], lamps: [], colliders: [],
+    busStops: [], benches: [], hedges: [],
     pavedAreas: [
       { ...REAL_WORLD_ZONES.plaza, kind: 'plaza' },
       ...REAL_WORLD_ZONES.parkings.map((r) => ({ ...r, kind: 'parking' })),
@@ -648,10 +680,73 @@ function planDressing(core, seed) {
       const px = sample.x + frame.normal.x * side * (e.halfWidthM + 1.4);
       const pz = sample.z + frame.normal.z * side * (e.halfWidthM + 1.4);
       if (Math.hypot(px - plan.roundabout.x, pz - plan.roundabout.z) < 30) continue;
-      plan.lamps.push({ x: px, z: pz, y: core.heightAt(px, pz), rotY: frame.yaw });
+      // rotY faces the road so the modelled arm reaches over the asphalt.
+      plan.lamps.push({
+        x: px, z: pz, y: core.heightAt(px, pz),
+        rotY: Math.atan2(-frame.normal.x * side, -frame.normal.z * side),
+        side,
+      });
       addCollider({ kind: 'circle', x: px, z: pz, r: 0.3 });
     }
   }
+
+  // --- Bus stops along the avenue, highway and southern street ------------------
+  const busEdges = /^(avenue-\d|avenue-rb|avenue-south|hw-|south-st)/;
+  for (const e of core.roadGraph.edges) {
+    if (plan.busStops.length >= 18) break;
+    if (!busEdges.test(e.id)) continue;
+    for (let i = 4; i < e.samples.length - 4; i++) {
+      const sample = e.samples[i];
+      const sMod = sample.s % 80;
+      if (sMod < 36 || sMod > 41) continue;
+      const frame = sampleFrame(e.samples, i);
+      const side = plan.busStops.length % 2 === 0 ? 1 : -1;
+      const px = sample.x + frame.normal.x * side * (e.halfWidthM + 4.4);
+      const pz = sample.z + frame.normal.z * side * (e.halfWidthM + 4.4);
+      if (Math.abs(px) > 470 || Math.abs(pz) > 470) continue;
+      if (Math.hypot(px - plan.roundabout.x, pz - plan.roundabout.z) < 46) continue;
+      // Sidewalk shelters sit close to facades; reject only real overlaps.
+      if (plan.buildings.some((b) => Math.hypot(b.x - px, b.z - pz) < Math.max(b.w, b.d) * 0.5 + 3.5)) continue;
+      if (plan.busStops.some((b) => Math.hypot(b.x - px, b.z - pz) < 40)) continue;
+      const rotY = Math.atan2(-frame.normal.x * side, -frame.normal.z * side);
+      plan.busStops.push({ x: px, z: pz, y: core.heightAt(px, pz), rotY });
+      // Shelter posts as colliders in local frame corners.
+      const fx = Math.sin(rotY);
+      const fz = Math.cos(rotY);
+      const rxv = fz;
+      const rzv = -fx;
+      for (const lx of [-2.3, 2.3]) {
+        addCollider({ kind: 'circle', x: px + rxv * lx - fx * 0.8, z: pz + rzv * lx - fz * 0.8, r: 0.28 });
+      }
+    }
+  }
+
+  // --- Benches: plaza edges and the roundabout island -----------------------------
+  const pushBench = (x, z, rotY, lift = 0) => {
+    plan.benches.push({ x, z, y: core.heightAt(x, z) + lift, rotY });
+    addCollider({ kind: 'circle', x, z, r: 0.85 });
+  };
+  for (let x = 322; x <= 462; x += 28) pushBench(x, -62, Math.PI);
+  for (let z = -238; z <= -80; z += 40) pushBench(306, z, Math.PI / 2);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    pushBench(
+      plan.roundabout.x + Math.cos(a) * 17,
+      plan.roundabout.z + Math.sin(a) * 17,
+      Math.atan2(-Math.cos(a), -Math.sin(a)),
+      0.38,
+    );
+  }
+  pushBench(-70, 318, 0);
+  pushBench(70, 318, 0);
+
+  // --- Trimmed hedges along the plaza and main parking ----------------------------
+  const pushHedge = (x, z) => {
+    plan.hedges.push({ x, z, y: core.heightAt(x, z), rotY: 0, w: 10.4 });
+    addCollider({ kind: 'obb', x, z, halfWidthM: 5.2, halfDepthM: 0.65, rotationY: 0 });
+  };
+  for (let x = 312; x <= 466; x += 11) pushHedge(x, -52);
+  for (let x = 312; x <= 466; x += 11) pushHedge(x, 31);
 
   // --- Street trees along the avenue ---------------------------------------------
   for (const e of core.roadGraph.edges) {
@@ -665,6 +760,7 @@ function planDressing(core, seed) {
         const px = sample.x + frame.normal.x * side * (e.halfWidthM + 3.1);
         const pz = sample.z + frame.normal.z * side * (e.halfWidthM + 3.1);
         if (overlapsBuilding(px, pz, 4)) continue;
+        if (plan.busStops.some((b) => Math.hypot(b.x - px, b.z - pz) < 6)) continue;
         const py = core.heightAt(px, pz);
         const s = 0.8 + rng() * 0.5;
         plan.trees.push({ x: px, z: pz, y: py - 0.1, rotY: rng() * Math.PI * 2, s, type: 'oak', tint: 0.85 + rng() * 0.35 });
@@ -828,6 +924,9 @@ export function createRealWorldFoundation({ seed = 20261026, colliderCellM = 40 
         rocks: dressingPlan.rocks.length,
         lamps: dressingPlan.lamps.length,
         tents: dressingPlan.festival.tents.length,
+        busStops: dressingPlan.busStops.length,
+        benches: dressingPlan.benches.length,
+        hedges: dressingPlan.hedges.length,
       },
     };
   }
