@@ -734,7 +734,7 @@ func _update_drivetrain(delta: float) -> void:
 	# control decide how much of it reaches the road.
 	var approximate_rear_peak := mass * 9.81 * 0.47 * maxf(_surface_mu, 0.05)
 	var load_ratio := absf(total_drive_force) / maxf(approximate_rear_peak, 1.0)
-	var target_excess := clampf((load_ratio - 0.72) * 9.0, 0.0, 11.0)
+	var target_excess := clampf((load_ratio - 0.72) * 7.0, 0.0, 11.0)
 	if _reverse_engaged:
 		target_excess = -target_excess
 	if handbrake_active:
@@ -851,12 +851,16 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 				var traction_limit := 0.30 if boost_active else 0.19
 				if handbrake_active:
 					traction_limit = 10.0
-				var traction_scale := 1.0
-				if absf(slip_ratio) > traction_limit:
-					traction_scale = clampf(traction_limit / absf(slip_ratio), 0.18, 1.0)
-				requested_drive *= traction_scale
 				var curve_force := absf(_pacejka(maxf(absf(slip_ratio), 0.035), 13.0, 1.30, 0.90)) * peak_force
-				longitudinal_force += signf(requested_drive) * minf(absf(requested_drive), maxf(curve_force, absf(requested_drive) * 0.25))
+				var available_drive := minf(absf(requested_drive), maxf(curve_force, absf(requested_drive) * 0.25))
+				if absf(slip_ratio) > traction_limit:
+					# Traction control targets the force at the optimal
+					# slip ratio instead of multiplying a huge first-gear
+					# request by a tiny factor and killing the launch.
+					var optimal_force := absf(_pacejka(traction_limit, 13.0, 1.30, 0.90)) * peak_force
+					var recovery := clampf(traction_limit / absf(slip_ratio), 0.84, 1.0)
+					available_drive = minf(available_drive, optimal_force * recovery)
+				longitudinal_force += signf(requested_drive) * available_drive
 			if absf(throttle_input) <= 0.03 and not _reverse_engaged:
 				longitudinal_force += -signf(forward_velocity) * _engine_brake_force_per_wheel
 
@@ -903,7 +907,8 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		if grounded_wheel_count >= 2 and absf(_forward_speed) > 3.0:
 			var understeer_gradient := 0.0028
 			var desired_yaw_rate := _forward_speed / WHEELBASE * tan(steering_angle) / (1.0 + understeer_gradient * _forward_speed * _forward_speed)
-			desired_yaw_rate = clampf(desired_yaw_rate, -1.15, 1.15)
+			var grip_limited_yaw_rate := clampf(_surface_mu * 9.81 * 0.92 / maxf(absf(_forward_speed), 1.0), 0.22, 1.15)
+			desired_yaw_rate = clampf(desired_yaw_rate, -grip_limited_yaw_rate, grip_limited_yaw_rate)
 			var yaw_error := desired_yaw_rate - angular_velocity.y
 			var stability_strength := 900.0 if handbrake_active else (1900.0 if is_drifting() else 5200.0)
 			apply_torque(Vector3.UP * clampf(yaw_error * stability_strength, -9000.0, 9000.0))
