@@ -23,7 +23,7 @@ import './style.css';
 
 /* =====================================================================
    NITCHES HORIZON — мобильный гоночный фестиваль в открытом мире.
-   v0.9.0: новый реалистичный мир Real Valley 1×1 км на сгенерированных
+   v0.10.0: реалистичный мир Real Valley 1×1 км на сгенерированных
    фототекстурах (асфальт с разметкой, фасады, трава, скалы, кровля),
    Mustang Fastback из GLB-модели, шинная физика, шоурум, свет, дрифт
    и нитро. Старый остров: ?world=legacy.
@@ -571,7 +571,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.9.0',
+    version: '0.10.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -4226,12 +4226,15 @@ function buildBritainMinimapBase(S) {
   g.strokeStyle = 'rgba(236, 211, 156, 0.78)';
   g.lineWidth = 2;
   g.strokeRect(lx, ly, rx - lx, ry - ly);
-  if (worldFoundation.lake) {
-    const [ox, oy] = toMap(worldFoundation.lake.x, worldFoundation.lake.z);
+  if (worldFoundation.river) {
     g.beginPath();
-    g.ellipse(ox, oy, worldFoundation.lake.radiusM * scale, worldFoundation.lake.radiusM * scale, 0, 0, TAU);
-    g.fillStyle = '#155e7d';
-    g.fill();
+    worldFoundation.river.path.forEach((pt, i) => {
+      const [x, y] = toMap(pt.x, pt.z);
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    });
+    g.strokeStyle = '#155e7d';
+    g.lineWidth = Math.max(3, worldFoundation.river.widthM * scale);
+    g.stroke();
   }
   g.lineCap = 'round';
   g.lineJoin = 'round';
