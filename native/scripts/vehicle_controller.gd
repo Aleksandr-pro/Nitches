@@ -56,7 +56,7 @@ func _ready() -> void:
 	center_of_mass = Vector3(0.0, 0.38, 0.02)
 	linear_damp = 0.035
 	angular_damp = 1.25
-	continuous_cd = RigidBody3D.CCD_MODE_CAST_RAY
+	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 10
 	can_sleep = false

@@ -408,7 +408,7 @@ func _material(
 	material.roughness = roughness
 	material.metallic = metallic
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	material.texture_repeat = BaseMaterial3D.TEXTURE_REPEAT_ENABLED
+	material.texture_repeat = true
 	material.uv1_scale = uv_scale
 	if triplanar:
 		material.uv1_triplanar = true
