@@ -39,6 +39,13 @@ import asphaltCityUrl from '../assets/textures/realworld/asphalt_city.jpg';
 import benchWoodUrl from '../assets/textures/realworld/bench_wood.jpg';
 import hedgeUrl from '../assets/textures/realworld/hedge.jpg';
 import metalPoleUrl from '../assets/textures/realworld/metal_pole.jpg';
+import facadeLoftUrl from '../assets/textures/realworld/facade_loft.jpg';
+import facadePastelUrl from '../assets/textures/realworld/facade_pastel.jpg';
+import facadeIndustrialUrl from '../assets/textures/realworld/facade_industrial.jpg';
+import foliageAutumnUrl from '../assets/textures/realworld/foliage_autumn.jpg';
+import asphaltRuralUrl from '../assets/textures/realworld/asphalt_rural.jpg';
+import roofSlateUrl from '../assets/textures/realworld/roof_slate.jpg';
+import stoneWallUrl from '../assets/textures/realworld/stone_wall.jpg';
 
 const SIDEWALK_EDGE_PATTERN = /^(street-|avenue|hw-|south-|rb-arc|plaza-entry|parking-entry)/;
 
@@ -264,6 +271,13 @@ export function createRealWorldScene(foundation) {
   const benchWoodTex = makeTexture(loader, benchWoodUrl);
   const hedgeTex = makeTexture(loader, hedgeUrl, { mirror: true });
   const metalPoleTex = makeTexture(loader, metalPoleUrl);
+  const loftTex = makeTexture(loader, facadeLoftUrl);
+  const pastelTex = makeTexture(loader, facadePastelUrl);
+  const industrialTex = makeTexture(loader, facadeIndustrialUrl);
+  const autumnTex = makeTexture(loader, foliageAutumnUrl, { rx: 2, ry: 2, mirror: true });
+  const ruralTex = makeTexture(loader, asphaltRuralUrl);
+  const slateTex = makeTexture(loader, roofSlateUrl, { rx: 2, ry: 2, mirror: true });
+  const stoneTex = makeTexture(loader, stoneWallUrl);
 
   const group = new THREE.Group();
   group.name = 'nh-real-valley-1km';
@@ -395,6 +409,7 @@ export function createRealWorldScene(foundation) {
   // --- Roads + sidewalks -------------------------------------------------------
   const roadRibbons = [];
   const cityRibbons = [];
+  const ruralRibbons = [];
   const dragRibbons = [];
   const walkRibbons = [];
   const curbRibbons = [];
@@ -405,7 +420,13 @@ export function createRealWorldScene(foundation) {
     return mid && Math.abs(mid.x) < 6 && mid.z < -190;
   };
   for (const e of foundation.roadGraph.edges) {
-    const target = isDragEdge(e) ? dragRibbons : e.id.startsWith('street-h') ? cityRibbons : roadRibbons;
+    const target = isDragEdge(e)
+      ? dragRibbons
+      : e.id.startsWith('street-h')
+        ? cityRibbons
+        : /^(river-|north-link|drift-entry|drift-west-entry)/.test(e.id)
+          ? ruralRibbons
+          : roadRibbons;
     target.push(buildRoadRibbonGeometry(e, { liftM: 0.13, uvScaleM: 11 }));
     if (SIDEWALK_EDGE_PATTERN.test(e.id)) {
       walkRibbons.push(buildRoadRibbonGeometry(
@@ -452,6 +473,16 @@ export function createRealWorldScene(foundation) {
     cityRoads.renderOrder = 2;
     group.add(cityRoads);
     countTris(cityGeometry);
+  }
+
+  if (ruralRibbons.length) {
+    const ruralGeometry = ribbonToGeometry(ruralRibbons);
+    const ruralRoads = new THREE.Mesh(ruralGeometry, new THREE.MeshStandardMaterial({ map: ruralTex, roughness: 0.98 }));
+    ruralRoads.name = 'real-rural-roads';
+    ruralRoads.receiveShadow = true;
+    ruralRoads.renderOrder = 2;
+    group.add(ruralRoads);
+    countTris(ruralGeometry);
   }
 
   if (dragRibbons.length) {
@@ -531,23 +562,34 @@ export function createRealWorldScene(foundation) {
     panelTown: new THREE.MeshStandardMaterial({ map: cloneTexture(panelTex, 0.85, 0.8), roughness: 0.92 }),
     panelApt: new THREE.MeshStandardMaterial({ map: cloneTexture(panelTex, 1.15, 1.35), roughness: 0.92 }),
     shopFront: new THREE.MeshStandardMaterial({ map: cloneTexture(shopTex, 2.2, 1), roughness: 0.6, metalness: 0.1 }),
+    loftApt: new THREE.MeshStandardMaterial({ map: cloneTexture(loftTex, 1.05, 1.2), roughness: 0.9 }),
+    pastelApt: new THREE.MeshStandardMaterial({ map: cloneTexture(pastelTex, 1.1, 1.25), roughness: 0.92 }),
+    pastelTown: new THREE.MeshStandardMaterial({ map: cloneTexture(pastelTex, 0.8, 0.75), roughness: 0.92 }),
+    industrial: new THREE.MeshStandardMaterial({ map: cloneTexture(industrialTex, 1.6, 0.9), roughness: 0.7, metalness: 0.25 }),
   };
   const bodyItems = {
     brickHouse: [], brickTown: [], brickApt: [], modernApt: [],
     glassApt: [], panelTown: [], panelApt: [], shopFront: [],
+    loftApt: [], pastelApt: [], pastelTown: [], industrial: [],
   };
   const pitchedRoofs = [];
   const flatRoofs = [];
   for (const b of plan.buildings) {
     const key = b.facade === 'shop'
       ? 'shopFront'
-      : b.facade === 'glass'
-        ? 'glassApt'
-        : b.facade === 'modern'
-          ? 'modernApt'
-          : b.facade === 'panel'
-            ? (b.kind === 'apartment' ? 'panelApt' : 'panelTown')
-            : b.kind === 'apartment' ? 'brickApt' : b.kind === 'townhouse' ? 'brickTown' : 'brickHouse';
+      : b.facade === 'industrial'
+        ? 'industrial'
+        : b.facade === 'loft'
+          ? 'loftApt'
+          : b.facade === 'pastel'
+            ? (b.kind === 'apartment' ? 'pastelApt' : 'pastelTown')
+            : b.facade === 'glass'
+              ? 'glassApt'
+              : b.facade === 'modern'
+                ? 'modernApt'
+                : b.facade === 'panel'
+                  ? (b.kind === 'apartment' ? 'panelApt' : 'panelTown')
+                  : b.kind === 'apartment' ? 'brickApt' : b.kind === 'townhouse' ? 'brickTown' : 'brickHouse';
     bodyItems[key].push(b);
     if (b.kind === 'apartment' && b.h > 16) {
       // Setback penthouse floor so tall blocks are not plain slabs.
@@ -574,19 +616,27 @@ export function createRealWorldScene(foundation) {
     countTris(unitBox, items.length);
   }
   if (pitchedRoofs.length) {
-    const mesh = new THREE.InstancedMesh(
-      roofGeometry,
-      new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.97 }),
-      pitchedRoofs.length,
-    );
-    mesh.name = 'real-roofs-pitched';
-    setInstances(mesh, pitchedRoofs, (dummy, b) => {
-      dummy.position.set(b.x, b.y + b.h, b.z);
-      dummy.rotation.set(0, b.rotY, 0);
-      dummy.scale.set(b.w + 0.8, b.roofH, b.d + 0.8);
-    });
-    group.add(mesh);
-    countTris(roofGeometry, pitchedRoofs.length);
+    // Alternate clay tiles and dark slate by a stable position hash.
+    const roofGroups = [
+      { name: 'real-roofs-pitched', tex: roofTex, items: pitchedRoofs.filter((b) => Math.abs(Math.round(b.x + b.z)) % 2 === 0) },
+      { name: 'real-roofs-slate', tex: slateTex, items: pitchedRoofs.filter((b) => Math.abs(Math.round(b.x + b.z)) % 2 === 1) },
+    ];
+    for (const rg of roofGroups) {
+      if (!rg.items.length) continue;
+      const mesh = new THREE.InstancedMesh(
+        roofGeometry,
+        new THREE.MeshStandardMaterial({ map: rg.tex, roughness: 0.97 }),
+        rg.items.length,
+      );
+      mesh.name = rg.name;
+      setInstances(mesh, rg.items, (dummy, b) => {
+        dummy.position.set(b.x, b.y + b.h, b.z);
+        dummy.rotation.set(0, b.rotY, 0);
+        dummy.scale.set(b.w + 0.8, b.roofH, b.d + 0.8);
+      });
+      group.add(mesh);
+      countTris(roofGeometry, rg.items.length);
+    }
   }
   if (flatRoofs.length) {
     const mesh = new THREE.InstancedMesh(
@@ -631,7 +681,8 @@ export function createRealWorldScene(foundation) {
     dummy.scale.set(item.s, item.sy || item.s, item.s);
   };
   addInstanced('real-trunks', trunkGeometry, new THREE.MeshStandardMaterial({ map: cloneTexture(rockTex, 0.4, 1), color: 0x8a6844, roughness: 1 }), plan.trees, placeScaled);
-  addInstanced('real-oak-canopy', oakCanopy, foliageMaterial, oaks, placeScaled);
+  addInstanced('real-oak-canopy', oakCanopy, foliageMaterial, oaks.filter((_, i) => i % 4 !== 0), placeScaled);
+  addInstanced('real-oak-autumn', oakCanopy, new THREE.MeshStandardMaterial({ map: autumnTex, roughness: 1 }), oaks.filter((_, i) => i % 4 === 0), placeScaled);
   addInstanced('real-pine-canopy', pineCanopy, foliageMaterial, pines, placeScaled);
   addInstanced('real-bushes', bushGeometry, foliageMaterial, plan.bushes, placeScaled);
 
@@ -727,6 +778,151 @@ export function createRealWorldScene(foundation) {
         dummy.rotation.set(0, item.rotY || 0, 0);
         dummy.scale.set(item.w || 10.4, 1.05, 1.15);
       });
+    }
+  }
+
+  // --- Road signs, bins, bollards, fences, power lines --------------------------------
+  {
+    const placeUnit = (dummy, item) => {
+      dummy.position.set(item.x, item.y, item.z);
+      dummy.rotation.set(0, item.rotY || 0, 0);
+      dummy.scale.set(1, 1, 1);
+    };
+    const metalMat = new THREE.MeshStandardMaterial({ map: cloneTexture(metalPoleTex, 1, 2), roughness: 0.45, metalness: 0.6 });
+    const makeSquareSignTexture = (draw) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      draw(c.getContext('2d'), 256);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 8;
+      return t;
+    };
+    if (plan.signs.length) {
+      const signPost = new THREE.CylinderGeometry(0.045, 0.06, 3, 6);
+      signPost.translate(0, 1.5, 0);
+      addInstanced('real-sign-posts', signPost, metalMat, plan.signs, placeUnit);
+      const byType = new Map();
+      for (const s of plan.signs) {
+        const key = s.type === 'text' ? `text:${s.text}` : s.type;
+        if (!byType.has(key)) byType.set(key, []);
+        byType.get(key).push(s);
+      }
+      for (const [key, items] of byType.entries()) {
+        let geometry;
+        let texture;
+        if (key.startsWith('text:')) {
+          geometry = new THREE.BoxGeometry(3.6, 0.95, 0.08);
+          geometry.translate(0, 2.7, 0);
+          texture = makeSignTexture(key.slice(5), '#123524', '#ffd54a');
+        } else if (key === 'parking') {
+          geometry = new THREE.BoxGeometry(0.95, 0.95, 0.07);
+          geometry.translate(0, 2.5, 0);
+          texture = makeSquareSignTexture((g, S) => {
+            g.fillStyle = '#0d47a1';
+            g.fillRect(0, 0, S, S);
+            g.strokeStyle = '#fff';
+            g.lineWidth = 10;
+            g.strokeRect(8, 8, S - 16, S - 16);
+            g.fillStyle = '#fff';
+            g.font = '900 170px Arial, sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('P', S / 2, S / 2 + 8);
+          });
+        } else {
+          geometry = new THREE.BoxGeometry(0.9, 0.9, 0.07);
+          geometry.translate(0, 2.5, 0);
+          texture = makeSquareSignTexture((g, S) => {
+            g.fillStyle = '#f4f4f4';
+            g.fillRect(0, 0, S, S);
+            g.beginPath();
+            g.arc(S / 2, S / 2, S / 2 - 16, 0, Math.PI * 2);
+            g.fillStyle = '#fff';
+            g.fill();
+            g.lineWidth = 26;
+            g.strokeStyle = '#d32f2f';
+            g.stroke();
+            g.fillStyle = '#111';
+            g.font = '900 104px Arial, sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('60', S / 2, S / 2 + 6);
+          });
+        }
+        addInstanced(`real-sign-${key.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`, geometry,
+          new THREE.MeshStandardMaterial({ map: texture, roughness: 0.6 }), items, placeUnit);
+      }
+    }
+    if (plan.bins.length) {
+      const binBody = new THREE.CylinderGeometry(0.3, 0.26, 0.78, 10);
+      binBody.translate(0, 0.39, 0);
+      const binRim = new THREE.CylinderGeometry(0.34, 0.34, 0.09, 10);
+      binRim.translate(0, 0.8, 0);
+      const binGeometry = mergeGeometries([binBody, binRim]);
+      addInstanced('real-bins', binGeometry, new THREE.MeshStandardMaterial({
+        map: cloneTexture(metalPoleTex, 2, 1), color: 0x7fae8d, roughness: 0.55, metalness: 0.45,
+      }), plan.bins, placeUnit);
+    }
+    if (plan.bollards.length) {
+      const bollard = new THREE.CylinderGeometry(0.09, 0.105, 0.85, 8);
+      bollard.translate(0, 0.425, 0);
+      const band = new THREE.CylinderGeometry(0.097, 0.097, 0.13, 8);
+      band.translate(0, 0.66, 0);
+      addInstanced('real-bollards', bollard, metalMat, plan.bollards, placeUnit);
+      addInstanced('real-bollard-bands', band, new THREE.MeshStandardMaterial({ color: 0xfff3c0, emissive: 0x444422, roughness: 0.5 }), plan.bollards, placeUnit);
+    }
+    if (plan.fences.length) {
+      addInstanced('real-stone-fences', unitBox, new THREE.MeshStandardMaterial({ map: cloneTexture(stoneTex, 5, 1), roughness: 1 }), plan.fences, (dummy, item) => {
+        dummy.position.set(item.x, item.y, item.z);
+        dummy.rotation.set(0, item.rotY || 0, 0);
+        dummy.scale.set(item.w || 11.6, 1.15, 0.38);
+      });
+    }
+    if (plan.powerPoles.length) {
+      const pole = new THREE.CylinderGeometry(0.09, 0.15, 9, 7);
+      pole.translate(0, 4.5, 0);
+      const armTop = new THREE.BoxGeometry(2.4, 0.13, 0.13);
+      armTop.translate(0, 8.3, 0);
+      const armLow = new THREE.BoxGeometry(1.8, 0.11, 0.11);
+      armLow.translate(0, 7.55, 0);
+      const poleGeometry = mergeGeometries([pole, armTop, armLow]);
+      addInstanced('real-power-poles', poleGeometry, new THREE.MeshStandardMaterial({
+        map: cloneTexture(benchWoodTex, 1, 2), color: 0xa0825e, roughness: 0.95,
+      }), plan.powerPoles, placeUnit);
+      // Sagging wires between consecutive poles of each line.
+      const wirePositions = [];
+      const tip = (p, lx, y) => [
+        p.x + lx * Math.cos(p.rotY || 0),
+        p.y + y,
+        p.z - lx * Math.sin(p.rotY || 0),
+      ];
+      const groups = new Map();
+      for (const p of plan.powerPoles) {
+        if (!groups.has(p.group)) groups.set(p.group, []);
+        groups.get(p.group).push(p);
+      }
+      for (const poles of groups.values()) {
+        poles.sort((a, b) => a.seq - b.seq);
+        for (let i = 0; i < poles.length - 1; i++) {
+          for (const [lx, y] of [[-1.1, 8.3], [1.1, 8.3], [-0.8, 7.55], [0.8, 7.55]]) {
+            const a = tip(poles[i], lx, y);
+            const b = tip(poles[i + 1], lx, y);
+            const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 0.7, (a[2] + b[2]) / 2];
+            wirePositions.push(...a, ...mid, ...mid, ...b);
+          }
+        }
+      }
+      if (wirePositions.length) {
+        const wireGeometry = new THREE.BufferGeometry();
+        wireGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(wirePositions), 3));
+        const wires = new THREE.LineSegments(
+          wireGeometry,
+          new THREE.LineBasicMaterial({ color: 0x14161a, transparent: true, opacity: 0.85 }),
+        );
+        wires.name = 'real-power-wires';
+        group.add(wires);
+      }
     }
   }
 
@@ -865,7 +1061,9 @@ export function createRealWorldScene(foundation) {
       tents: plan.festival.tents.length,
       busStops: plan.busStops.length,
       benches: plan.benches.length,
-      textures: 26,
+      signs: plan.signs.length,
+      powerPoles: plan.powerPoles.length,
+      textures: 33,
     },
   };
 }
