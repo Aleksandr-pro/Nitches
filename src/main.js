@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildGTR35, GTR_PAINTS } from './gtr.js';
 import { buildMustang, preloadMustangModel, MUSTANG_PAINTS } from './mustang.js';
 import { installCloudPrototype } from './cloudPrototype.js';
@@ -478,6 +482,39 @@ scene.fog = new THREE.Fog(0xdca16f, 150, 880);
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 26, -140);
 
+// HDR Bloom is reserved for the realistic preset.  A 2x-MSAA half-float
+// target keeps sun glints, LEDs and lamps glowing without giving up the
+// direct renderer's edge quality; fast mode always renders directly.
+let composer = null;
+let bloomPass = null;
+const syncComposerSize = () => {
+  if (!composer) return;
+  const pr = graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio || 1, 1.65) : 1;
+  composer.setPixelRatio(pr);
+  composer.setSize(window.innerWidth, window.innerHeight);
+};
+try {
+  const composerTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+    type: THREE.HalfFloatType,
+    samples: 2,
+  });
+  composer = new EffectComposer(renderer, composerTarget);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.2,
+    0.55,
+    0.84,
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+  syncComposerSize();
+} catch (error) {
+  console.warn('[gfx] HDR Bloom unavailable, using direct renderer:', error);
+  composer = null;
+  bloomPass = null;
+}
+
 /* =====================================================================
    МИР v0.6: Festival Britain 4×4 км — ИГРАБЕЛЬНАЯ карта по умолчанию
    (вертикальный срез: свободная поездка по всей карте; гонки, трафик и
@@ -582,7 +619,7 @@ function buildBritainFerrisWheel() {
 function initWorldMode() {
   const diagnostics = {
     world: 'real-valley',
-    version: '0.18.0',
+    version: '0.19.0',
     mode: WORLD_MODE,
     foundation: null,
     streamer: null,
@@ -1521,6 +1558,10 @@ const LEGACY_SCENE_MARK = scene.children.length;
     if ('environmentIntensity' in scene) scene.environmentIntensity = tune.env;
     renderer.toneMappingExposure = (SKY_EXPOSURE[skyMood] || 1.3)
       * (graphicsQuality === 'realistic' ? 1 : 0.85);
+    if (bloomPass) {
+      bloomPass.strength = skyMood === 'night' ? 0.55 : skyMood === 'sunset' ? 0.34 : 0.2;
+    }
+    if (realWorldSceneHandle?.setSkyMood) realWorldSceneHandle.setSkyMood(skyMood);
     if (sunBallMesh) sunBallMesh.visible = skyMood !== 'night';
     if (sunHaloMesh) sunHaloMesh.visible = skyMood !== 'night';
     document.querySelectorAll('[data-sky]').forEach((btn) => {
@@ -4751,7 +4792,8 @@ function animate() {
   }
 
   updateCamera(dt);
-  renderer.render(scene, camera);
+  if (composer && graphicsQuality === 'realistic') composer.render();
+  else renderer.render(scene, camera);
 }
 
 /* ============================ Управление: клавиатура ============================ */
@@ -5283,6 +5325,7 @@ function applyGraphicsQuality(quality, announce = false) {
   });
   renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
+  syncComposerSize();
   const shadowSize = graphicsQuality === 'realistic' ? 2048 : 1024;
   sun.shadow.radius = graphicsQuality === 'realistic' ? 3.2 : 2;
   sun.shadow.camera.left = graphicsQuality === 'realistic' ? -64 : -40;
@@ -5358,6 +5401,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(graphicsQuality === 'realistic' ? Math.min(window.devicePixelRatio, 2) : 1);
+  syncComposerSize();
   updateRotateHint();
 });
 
