@@ -107,14 +107,21 @@ node scripts/validate-native-project.mjs --require-assets
 Полная Android-сборка выполняется workflow
 `.github/workflows/native-godot-android.yml`. Он скачивает официальный
 Godot 4.7.2 и export templates из GitHub Releases, настраивает Android SDK,
-подписывает APK ключом из секретов (или одноразовым ключом раннера, если
-секретов нет), проверяет подпись и наличие `lib/arm64-v8a/libgodot_android.so`
-и загружает артефакт `NitchesHorizonNative-apk`. С 0.2.1 workflow также
+подписывает APK ключом из секретов, проверяет подпись и наличие
+`lib/arm64-v8a/libgodot_android.so` и загружает артефакт
+`NitchesHorizonNative-apk`. Если production-секретов
+`ANDROID_KEYSTORE_BASE64`/`ANDROID_KEYSTORE_PASSWORD` в репозитории нет,
+0.2.1 больше не создаёт одноразовый ключ на каждую сборку (именно из-за этого
+Android не ставил 0.2.0 поверх 0.1.1: сертификаты не совпадали). Вместо этого
+первая сборка с ветки `main` создаёт постоянный alpha-ключ в приватном
+Actions cache `nitches-android-signing-v1`, а следующие сборки его
+восстанавливают; отдельный weekly workflow не даёт GitHub удалить cache за
+7 дней бездействия. Это временное alpha-решение, а не production keystore:
+перед публичным релизом владелец должен завести настоящие Secrets, и при
+переходе на них Android один раз попросит переустановить игру. Workflow
 публикует режим подписи, SHA-256 сертификата, package/versionCode, minSdk и
-ABI в annotations и job summary: если Android отказывается обновлять игру
-поверх старой версии, по этим данным сразу видно, совпадает ли подпись. При
-одноразовом ключе каждая сборка подписана новым сертификатом, и Android
-требует сначала удалить предыдущую версию.
+ABI в annotations и job summary, чтобы совпадение подписи между версиями
+было проверяемым.
 
 Перед APK workflow запускает строгий `--native-smoke`: данные мира не пустые,
 Mustang стоит на колёсах у спавна и находится в frustum текущей камеры,

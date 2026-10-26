@@ -160,35 +160,69 @@ jobs:
           PY
           grep -E 'export/android/(android_sdk_path|java_sdk_path)' "$HOME/.config/godot/editor_settings-4.tres"
 
-      - name: Prepare Android signing key (secret or one-time CI key)
+      # Alpha signing persistence: repository Secrets are the production-grade
+      # option, but until they exist Android refuses to update an installed
+      # app when every run mints a new certificate.  The fallback therefore
+      # restores one CI-generated keystore from a private Actions cache.
+      # The canonical cache is created by the first run on the default
+      # branch; feature branches can read default-branch caches.
+      - name: Restore persistent CI signing key cache
+        id: signing-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.config/nitches-signing
+          key: nitches-android-signing-v1
+          fail-on-cache-miss: false
+
+      - name: Prepare Android signing key (secret or persistent CI cache)
+        id: signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          KS="$RUNNER_TEMP/nitches-native-release.jks"
+          SIGNING_DIR="$HOME/.config/nitches-signing"
+          mkdir -p "$SIGNING_DIR"
+          chmod 700 "$SIGNING_DIR"
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
             SIGNING_MODE="persistent-secret"
+            KS="$RUNNER_TEMP/nitches-native-release.jks"
             echo "Using the persistent Android signing key from repository secrets"
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
             KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+          elif [ -s "$SIGNING_DIR/nitches-native-release.jks" ] && [ -s "$SIGNING_DIR/password.txt" ]; then
+            SIGNING_MODE="persistent-ci-cache"
+            KS="$SIGNING_DIR/nitches-native-release.jks"
+            KS_PASS="$(cat "$SIGNING_DIR/password.txt")"
+            echo "Using the persistent alpha signing key restored from the private Actions cache"
           else
-            SIGNING_MODE="one-time-ci-key"
-            echo "Signing secrets are absent; generating a one-time CI key"
+            SIGNING_MODE="persistent-ci-cache-new"
+            KS="$SIGNING_DIR/nitches-native-release.jks"
+            echo "Signing secrets/cache are absent; generating the persistent alpha CI key"
             KS_PASS="$(openssl rand -base64 24)"
             keytool -genkeypair -keystore "$KS" -alias nitches \
               -keyalg RSA -keysize 4096 -validity 10000 \
               -storepass "$KS_PASS" -keypass "$KS_PASS" \
               -dname "CN=Nitches Horizon, O=ProfitNiche"
+            printf '%s' "$KS_PASS" > "$SIGNING_DIR/password.txt"
+            chmod 600 "$KS" "$SIGNING_DIR/password.txt"
           fi
           echo "::add-mask::$KS_PASS"
           echo "APK_SIGNING_MODE=$SIGNING_MODE" >> "$GITHUB_ENV"
+          echo "signing_mode=$SIGNING_MODE" >> "$GITHUB_OUTPUT"
           echo "::notice title=APK signing mode::$SIGNING_MODE"
           {
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=nitches"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS"
           } >> "$GITHUB_ENV"
+
+      - name: Save persistent CI signing key cache
+        if: steps.signing.outputs.signing_mode == 'persistent-ci-cache-new' && steps.signing-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.config/nitches-signing
+          key: nitches-android-signing-v1
 
       - name: Import Godot project and run strict source smoke test
         run: |
