@@ -416,6 +416,10 @@ func _run_smoke_checks() -> void:
 	if not _camera_smoothing_initialized or not is_finite(_camera_follow_yaw):
 		failures.append("0.2.5 chase-camera smoothing is not initialized")
 
+	var water_visual_state := _world.get_water_visual_state()
+	if not bool(water_visual_state.get("sea_shader", false)) or not bool(water_visual_state.get("animated_waves", false)) or not bool(water_visual_state.get("depth_foam", false)) or float(water_visual_state.get("reflection_strength", 0.0)) < 0.5:
+		failures.append("0.2.x sea PBR/wave/shoreline water is incomplete: %s" % str(water_visual_state))
+
 	var road_visual_state := _world.get_road_visual_state()
 	if not bool(road_visual_state.get("asphalt_shader", false)) or not bool(road_visual_state.get("asphalt_textures", false)) or not bool(road_visual_state.get("asphalt_wear_texture", false)) or int(road_visual_state.get("asphalt_layers", 0)) < 3 or float(road_visual_state.get("road_crown_m", 0.0)) < 0.03 or not bool(road_visual_state.get("ground_winding_godot_cw", false)) or not bool(road_visual_state.get("road_mesh_ready", false)):
 		failures.append("0.2.6 road/terrain visual state would be culled or untextured: %s" % str(road_visual_state))
