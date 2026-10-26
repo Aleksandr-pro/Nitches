@@ -380,6 +380,8 @@ func _run_smoke_checks() -> void:
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
 		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("premium_villa_models", 0)) < 14 or not bool(enhancement_stats.get("premium_villa_fixed_scale", false)):
+		failures.append("0.2.7 Building Model No.1 premium villa is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:
@@ -419,8 +421,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.6 raised sidewalk/curb/gutter road edge is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("manholes", 0)) < 80 or int(enhancement_stats.get("drainage_grates", 0)) < 80 or int(enhancement_stats.get("asphalt_patches", 0)) < 70 or int(enhancement_stats.get("road_studs", 0)) < 600:
 		failures.append("0.2.6 road-surface detail is incomplete: %s" % str(enhancement_stats))
-	if int(enhancement_stats.get("lane_arrows", 0)) < 80 or int(enhancement_stats.get("traffic_signals", 0)) < 48 or int(enhancement_stats.get("intersection_pads", 0)) < 18:
-		failures.append("0.2.6 intersection road furniture is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("lane_arrows", 0)) < 80 or int(enhancement_stats.get("traffic_signals", 0)) < 48 or int(enhancement_stats.get("traffic_signal_models", 0)) < 48 or not bool(enhancement_stats.get("traffic_signal_static_red", false)) or int(enhancement_stats.get("intersection_pads", 0)) < 18:
+		failures.append("0.2.7 Blender traffic-signal/intersection furniture is incomplete: %s" % str(enhancement_stats))
 
 	var traffic_stats := {"moving": 0, "parked": 0, "total": 0, "removed": true}
 	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 260.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:

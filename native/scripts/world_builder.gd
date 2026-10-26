@@ -979,6 +979,56 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			return _material("prop_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.72, 0.76, 0.80), 0.38, 0.78)
 		"PropsWood":
 			return _material("prop_wood", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color.WHITE, 0.86)
+		"FacadeStone":
+			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
+		"FacadeWoodSlat":
+			return _material("prop_facade_wood_slat", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.90, 0.78, 0.66), 0.82, 0.0, Vector3(0.32, 0.32, 0.32), true)
+		"WindowFrame":
+			return _material("prop_window_frame", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.24, 0.26, 0.28), 0.50, 0.38, Vector3(0.45, 0.45, 0.45), true)
+		"WindowGlassDark":
+			var dark_glass := _material("prop_window_glass_dark", "", "", Color(0.11, 0.27, 0.37, 0.76), 0.07, 0.18)
+			dark_glass.metallic_specular = 1.0
+			dark_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			dark_glass.emission_enabled = true
+			dark_glass.emission = Color(1.0, 0.72, 0.44)
+			_register_night_material(dark_glass, 0.0, 0.07, 0.30)
+			return dark_glass
+		"ConcreteLight":
+			return _material("prop_concrete_light", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.76, 0.77, 0.75), 0.95, 0.0, Vector3(0.20, 0.20, 0.20), true)
+		"RoofGravel":
+			return _material("prop_roof_gravel", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.42, 0.42, 0.43), 1.0, 0.0, Vector3(0.42, 0.42, 0.42), true)
+		"SolarCell":
+			var solar := _material("prop_solar_cell", "", "", Color(0.025, 0.09, 0.20), 0.16, 0.45)
+			solar.metallic_specular = 1.0
+			return solar
+		"SignalMetal":
+			return _material("signal_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.48, 0.52, 0.56), 0.36, 0.84, Vector3(0.55, 0.55, 0.55), true)
+		"SignalHousing":
+			return _material("signal_housing", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.16, 0.17, 0.18), 0.62, 0.08, Vector3(0.65, 0.65, 0.65), true)
+		"SignalRedOn":
+			var red_lens := _material("signal_red_on", "", "", Color(0.48, 0.025, 0.015), 0.24, 0.05)
+			red_lens.metallic_specular = 0.85
+			red_lens.emission_enabled = true
+			red_lens.emission = Color(1.0, 0.035, 0.015)
+			# Static red only by request: no signal phase logic exists.
+			_register_night_material(red_lens, 0.95, 1.65, 2.55)
+			return red_lens
+		"SignalAmberOff":
+			var amber_lens := _material("signal_amber_off", "", "", Color(0.23, 0.105, 0.008), 0.18, 0.08)
+			amber_lens.metallic_specular = 0.85
+			return amber_lens
+		"SignalGreenOff":
+			var green_lens := _material("signal_green_off", "", "", Color(0.008, 0.13, 0.045), 0.18, 0.08)
+			green_lens.metallic_specular = 0.85
+			return green_lens
+		"SignalReflector":
+			var reflector := _material("signal_reflector", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.78, 0.55, 0.05), 0.42, 0.04)
+			reflector.emission_enabled = true
+			reflector.emission = Color(1.0, 0.62, 0.05)
+			_register_night_material(reflector, 0.02, 0.08, 0.18)
+			return reflector
+		"SignalCable":
+			return _material("signal_cable", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.055, 0.055, 0.06), 0.74, 0.0)
 		"RoofDark":
 			return _material("prop_roof_dark", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.48, 0.48, 0.50), 0.96)
 		"RoofTile":
@@ -2114,16 +2164,13 @@ func _build_road_details(parent: Node) -> void:
 							))
 		road_index += 1
 
-	# Mast-arm signals on the main grid. Vertical approaches are shown
-	# green and horizontal approaches red; all other lamps use a dark
-	# unlit material. The signal itself is static street furniture and
-	# has no connection to the removed traffic-car system.
-	var signal_pole_transforms: Array[Transform3D] = []
-	var signal_arm_transforms: Array[Transform3D] = []
-	var signal_head_transforms: Array[Transform3D] = []
-	var signal_red_transforms: Array[Transform3D] = []
-	var signal_green_transforms: Array[Transform3D] = []
-	var signal_dark_transforms: Array[Transform3D] = []
+	# Detailed Blender mast-arm signals replace the 0.2.6 primitive
+	# pole/arm/head boxes. There is deliberately no phase controller:
+	# the GLB's SignalRedOn lens is lit, amber and green are dark.
+	# Model convention after glTF Y-up export: pole at the origin, arm
+	# along local +X and lenses facing local -Z.
+	var signal_short_transforms: Array[Transform3D] = []
+	var signal_long_transforms: Array[Transform3D] = []
 	var signal_count := 0
 	var signal_verticals := [
 		{"x": 560.0, "width": 11.0},
@@ -2141,56 +2188,35 @@ func _build_road_details(parent: Node) -> void:
 			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
 			var cross_half := cross_width * 0.5
 			var approaches := [
-				{"pole": Vector2(vertical_half + 1.0, -(cross_half + 1.0)), "head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "axis": "z", "face": 1.0, "green": true},
-				{"pole": Vector2(-(vertical_half + 1.0), cross_half + 1.0), "head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "axis": "z", "face": -1.0, "green": true},
-				{"pole": Vector2(vertical_half + 1.0, cross_half + 1.0), "head": Vector2(vertical_half + 1.0, cross_width * 0.25), "axis": "x", "face": -1.0, "green": false},
-				{"pole": Vector2(-(vertical_half + 1.0), -(cross_half + 1.0)), "head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "axis": "x", "face": 1.0, "green": false},
+				{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0},
+				{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0},
+				{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": false},
+				{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": false},
 			]
 			for approach_variant in approaches:
 				var approach: Dictionary = approach_variant
-				var pole_offset: Vector2 = approach.get("pole", Vector2.ZERO)
 				var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
+				var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
+				var is_long := bool(approach.get("long", false))
+				# The far/only Blender signal head is 4.18 m from the
+				# short pole and 6.68 m from the long pole.
+				var head_reach := 6.68 if is_long else 4.18
+				var pole_offset: Vector2 = head_offset - arm_dir * head_reach
 				var pole_x := center_x + pole_offset.x
 				var pole_z := center_z + pole_offset.y
-				var head_x := center_x + head_offset.x
-				var head_z := center_z + head_offset.y
-				var ground_y := height_at(pole_x, pole_z) + 0.23
-				signal_pole_transforms.append(make_transform(
-					Vector3(pole_x, ground_y + 2.70, pole_z),
-					0.0,
-					Vector3(0.18, 5.40, 0.18)
-				))
-				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.70, pole_z), 0.11, 5.40)
-				var arm_length := Vector2(head_x - pole_x, head_z - pole_z).length()
-				var arm_center := Vector3((pole_x + head_x) * 0.5, ground_y + 5.25, (pole_z + head_z) * 0.5)
-				var axis := String(approach.get("axis", "z"))
-				var arm_yaw := PI * 0.5 if axis == "z" else 0.0
-				signal_arm_transforms.append(make_transform(arm_center, arm_yaw, Vector3(0.13, 0.14, arm_length)))
-				var head_yaw := 0.0 if axis == "z" else PI * 0.5
-				signal_head_transforms.append(make_transform(
-					Vector3(head_x, ground_y + 4.55, head_z),
-					head_yaw,
-					Vector3(0.38, 1.05, 0.26)
-				))
-				var face := float(approach.get("face", 1.0))
-				var is_green := bool(approach.get("green", false))
-				var lamp_heights := [4.92, 4.55, 4.18]
-				for lamp_index in 3:
-					var lamp_x := head_x + (face * 0.145 if axis == "x" else 0.0)
-					var lamp_z := head_z + (face * 0.145 if axis == "z" else 0.0)
-					var lamp_scale := Vector3(0.17, 0.17, 0.035) if axis == "z" else Vector3(0.035, 0.17, 0.17)
-					var lamp_transform := make_transform(
-						Vector3(lamp_x, ground_y + float(lamp_heights[lamp_index]), lamp_z),
-						0.0,
-						lamp_scale
-					)
-					if is_green and lamp_index == 2:
-						signal_green_transforms.append(lamp_transform)
-					elif not is_green and lamp_index == 0:
-						signal_red_transforms.append(lamp_transform)
-					else:
-						signal_dark_transforms.append(lamp_transform)
+				var ground_y := height_at(pole_x, pole_z) + 0.14
+				var signal_transform := make_transform(
+					Vector3(pole_x, ground_y, pole_z),
+					float(approach.get("yaw", 0.0)),
+					Vector3.ONE
+				)
+				if is_long:
+					signal_long_transforms.append(signal_transform)
+				else:
+					signal_short_transforms.append(signal_transform)
+				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
 				signal_count += 1
+
 
 	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
 	var drainage_material := _material("drainage_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.13, 0.15, 0.17), 0.42, 0.76, Vector3(4.0, 4.0, 1.0))
@@ -2215,18 +2241,6 @@ func _build_road_details(parent: Node) -> void:
 	stud_red.emission = Color(1.0, 0.08, 0.04)
 	_register_night_material(stud_red, 0.03, 0.45, 1.25)
 
-	var signal_pole_material := _material("traffic_signal_pole", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.34, 0.36), 0.42, 0.78)
-	var signal_head_material := _material("traffic_signal_head", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.16, 0.17, 0.18), 0.72, 0.18)
-	var signal_red := _material("traffic_signal_red", "", "", Color(0.42, 0.03, 0.02), 0.34)
-	signal_red.emission_enabled = true
-	signal_red.emission = Color(1.0, 0.08, 0.03)
-	_register_night_material(signal_red, 0.65, 1.7, 3.0)
-	var signal_green := _material("traffic_signal_green", "", "", Color(0.03, 0.38, 0.12), 0.34)
-	signal_green.emission_enabled = true
-	signal_green.emission = Color(0.08, 1.0, 0.28)
-	_register_night_material(signal_green, 0.65, 1.7, 3.0)
-	var signal_dark := _material("traffic_signal_dark_lamp", "", "", Color(0.035, 0.04, 0.045), 0.38)
-
 	var box_mesh := BoxMesh.new()
 	box_mesh.size = Vector3.ONE
 	box_mesh.material = tar_material
@@ -2248,12 +2262,8 @@ func _build_road_details(parent: Node) -> void:
 	_add_multimesh(parent, box_mesh, stud_white, stud_white_transforms, "RoadStudsWhite", false)
 	_add_multimesh(parent, box_mesh, stud_yellow, stud_yellow_transforms, "RoadStudsYellow", false)
 	_add_multimesh(parent, box_mesh, stud_red, stud_red_transforms, "RoadStudsRed", false)
-	_add_multimesh(parent, disc_mesh, signal_pole_material, signal_pole_transforms, "TrafficSignalPoles", true)
-	_add_multimesh(parent, box_mesh, signal_pole_material, signal_arm_transforms, "TrafficSignalArms", true)
-	_add_multimesh(parent, box_mesh, signal_head_material, signal_head_transforms, "TrafficSignalHeads", true)
-	_add_multimesh(parent, box_mesh, signal_red, signal_red_transforms, "TrafficSignalRedLamps", false)
-	_add_multimesh(parent, box_mesh, signal_green, signal_green_transforms, "TrafficSignalGreenLamps", false)
-	_add_multimesh(parent, box_mesh, signal_dark, signal_dark_transforms, "TrafficSignalDarkLamps", false)
+	var signal_short_built := _add_batched_model(parent, "res://assets/props/traffic_signal_short.glb", signal_short_transforms, "BlenderTrafficSignalsShort")
+	var signal_long_built := _add_batched_model(parent, "res://assets/props/traffic_signal_long.glb", signal_long_transforms, "BlenderTrafficSignalsLong")
 
 	_enhancement_stats["manholes"] = manhole_transforms.size()
 	_enhancement_stats["drainage_grates"] = drainage_transforms.size()
@@ -2263,6 +2273,8 @@ func _build_road_details(parent: Node) -> void:
 	_enhancement_stats["skid_marks"] = skid_transforms.size()
 	_enhancement_stats["road_studs"] = stud_white_transforms.size() + stud_yellow_transforms.size() + stud_red_transforms.size()
 	_enhancement_stats["traffic_signals"] = signal_count
+	_enhancement_stats["traffic_signal_models"] = (signal_short_transforms.size() if signal_short_built else 0) + (signal_long_transforms.size() if signal_long_built else 0)
+	_enhancement_stats["traffic_signal_static_red"] = signal_short_built and signal_long_built
 
 
 func _build_bridge_guardrails(parent: Node) -> void:
@@ -2616,14 +2628,18 @@ func _build_buildings() -> void:
 		# node transforms included.  These denominators preserve the JSON
 		# footprint/height instead of the earlier approximate 7-12% oversize.
 		if model == "villa":
+			# Building Model No.1 is a fixed architectural design, not a
+			# massing proxy. Keeping scale exactly 1.0 preserves its
+			# 19.20 x 15.24 m footprint, 8.84 m height, door/window sizes
+			# and floor heights at every villa parcel.
 			villa_items.append(building)
 			villa_transforms.append(_centered_model_transform(
 				position_value,
 				yaw,
-				Vector3(w / 19.15, total_height / 7.90, d / 15.14),
-				Vector3(-0.325, 0.0, -0.23)
+				Vector3.ONE,
+				Vector3(0.0, 0.0, 0.05)
 			))
-			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
+			_add_box_collider(position_value + Vector3(0.0, 4.42, 0.0), Vector3(19.20, 8.84, 15.24), yaw)
 		elif model == "glass_tower":
 			tower_items.append(building)
 			tower_transforms.append(make_transform(
@@ -2652,7 +2668,8 @@ func _build_buildings() -> void:
 		else:
 			_add_generic_building(buildings_root, building)
 
-	if not _add_batched_model(buildings_root, "res://assets/buildings/villa.glb", villa_transforms, "BlenderVillas"):
+	var premium_villa_built := _add_batched_model(buildings_root, "res://assets/buildings/villa.glb", villa_transforms, "BlenderVillas")
+	if not premium_villa_built:
 		for item in villa_items:
 			_add_generic_building(buildings_root, item)
 	if not _add_batched_model(buildings_root, "res://assets/buildings/glass_tower.glb", tower_transforms, "BlenderGlassTowers"):
@@ -2666,6 +2683,8 @@ func _build_buildings() -> void:
 			_add_generic_building(buildings_root, item)
 	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
 	_enhancement_stats["hero_building_models"] = hero_transforms.size()
+	_enhancement_stats["premium_villa_models"] = villa_transforms.size() if premium_villa_built else 0
+	_enhancement_stats["premium_villa_fixed_scale"] = premium_villa_built
 	_build_infill_buildings(buildings_root)
 
 
