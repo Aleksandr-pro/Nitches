@@ -5,5 +5,5 @@ props_out/street_lamp.glb: meshes=10 tris=560 size=0.48x6.63x4.90m minY=0.00 mat
 props_out/townhouse.glb: meshes=92 tris=1904 size=13.15x9.99x13.40m minY=0.00 mats=FacadeAccent,FacadeMain,RoofTile,RoofDark,PropsMetal,PropsGlass,PropsWood
 props_out/traffic_signal_long.glb: meshes=92 tris=10916 size=8.05x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
 props_out/traffic_signal_short.glb: meshes=62 tris=7352 size=5.55x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
-props_out/villa.glb: meshes=406 tris=8592 size=19.20x8.84x15.24m minY=0.00 mats=FacadeStone,FacadeMain,FacadeAccent,ConcreteLight,WindowFrame,RoofDark,RoofGravel,PropsMetal,WindowGlassDark,FacadeWoodSlat,LampGlow,SolarCell
+props_out/villa.glb: meshes=866 tris=17232 size=19.20x8.84x15.24m minY=0.00 mats=VillaGranite,VillaPlaster,VillaStone,WindowFrame,VillaLimestone,RoofDark,RoofGravel,VillaInterior,VillaCurtain,LampGlow,VillaGlass,PropsMetal,VillaWood,VillaDeck,VillaHedge,VillaPavement,SolarCell,VillaMulch,VillaLawn
 SMOKE OK

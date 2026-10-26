@@ -79,6 +79,22 @@ def standard_mats():
     mat("ConcreteLight", (0.72, 0.71, 0.68), roughness=0.94)
     mat("RoofGravel", (0.28, 0.27, 0.25), roughness=1.0)
     mat("SolarCell", (0.02, 0.08, 0.18), roughness=0.18, metallic=0.35)
+    # 0.2.8 second pass on Building Model No.1. These names are reserved
+    # for the villa so its world-scale plaster/stone/glass treatment does
+    # not accidentally restyle the older hero/townhouse/tower props.
+    mat("VillaPlaster", (0.86, 0.81, 0.72), roughness=0.94)
+    mat("VillaStone", (0.72, 0.64, 0.52), roughness=0.88)
+    mat("VillaLimestone", (0.76, 0.67, 0.54), roughness=0.90)
+    mat("VillaGranite", (0.05, 0.055, 0.06), roughness=0.50, metallic=0.08)
+    mat("VillaWood", (0.30, 0.18, 0.09), roughness=0.76)
+    mat("VillaGlass", (0.10, 0.24, 0.31), roughness=0.06, metallic=0.10)
+    mat("VillaInterior", (0.035, 0.030, 0.028), roughness=0.96)
+    mat("VillaCurtain", (0.72, 0.66, 0.56), roughness=1.0)
+    mat("VillaPavement", (0.67, 0.61, 0.51), roughness=0.90)
+    mat("VillaDeck", (0.45, 0.32, 0.19), roughness=0.84)
+    mat("VillaMulch", (0.12, 0.075, 0.045), roughness=1.0)
+    mat("VillaLawn", (0.18, 0.36, 0.12), roughness=1.0)
+    mat("VillaHedge", (0.08, 0.25, 0.07), roughness=1.0)
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -593,72 +609,189 @@ def build_townhouse():
 # and floor dimensions remain architectural at every placement.
 # --------------------------------------------------------------------------- #
 def build_villa():
-    main = MATS["FacadeMain"]
-    accent = MATS["FacadeAccent"]
-    stone = MATS["FacadeStone"]
-    wood = MATS["FacadeWoodSlat"]
+    main = MATS["VillaPlaster"]
+    accent = MATS["VillaStone"]
+    stone = MATS["VillaLimestone"]
+    granite = MATS["VillaGranite"]
+    wood = MATS["VillaWood"]
     frame = MATS["WindowFrame"]
-    glass = MATS["WindowGlassDark"]
-    concrete = MATS["ConcreteLight"]
+    glass = MATS["VillaGlass"]
+    interior = MATS["VillaInterior"]
+    curtain = MATS["VillaCurtain"]
+    pavement = MATS["VillaPavement"]
+    deck = MATS["VillaDeck"]
+    mulch = MATS["VillaMulch"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
     metal = MATS["PropsMetal"]
     dark = MATS["RoofDark"]
     gravel = MATS["RoofGravel"]
     solar = MATS["SolarCell"]
     glow = MATS["LampGlow"]
 
-    # Site slab and the three interlocking house volumes.
-    box("villa_plinth", 0.0, 0.0, 0.14, 19.15, 15.14, 0.28, stone, bevel=0.02)
+    # Site slab and the three interlocking house volumes. A polished dark
+    # granite plinth now separates the warm plaster/stone walls from the
+    # ground instead of leaving the whole parcel as one pale slab.
+    box("villa_plinth", 0.0, 0.0, 0.14, 19.15, 15.14, 0.28, granite, bevel=0.02)
     box("villa_west_volume", -3.6, -0.7, 3.315, 10.8, 11.6, 6.07, main, bevel=0.045)
     box("villa_east_volume", 4.7, -0.4, 3.64, 7.4, 10.8, 6.72, accent, bevel=0.045)
     box("villa_link_volume", 0.3, 0.6, 1.81, 2.8, 8.6, 3.06, main, bevel=0.03)
 
-    # Expressed floor slabs and a stone base course stop the large walls
-    # reading as unbroken coloured boxes.
-    box("villa_west_floor_band", -3.6, -0.7, 3.42, 10.96, 11.76, 0.18, concrete)
-    box("villa_east_floor_band", 4.7, -0.4, 3.48, 7.56, 10.96, 0.18, concrete)
-    box("villa_west_base", -3.6, -6.54, 0.78, 10.85, 0.14, 1.00, stone)
-    box("villa_east_base", 4.7, -5.84, 0.78, 7.45, 0.14, 1.00, stone)
-    for seam_x in (-7.2, -4.8, -2.4, 0.0):
-        box("villa_facade_reveal", seam_x, -6.535, 3.35, 0.035, 0.025, 5.75, frame)
-    for seam_z in (1.85, 3.35, 4.85, 6.35):
-        box("villa_stone_joint", 3.0, -5.895, seam_z, 3.58, 0.025, 0.035, frame)
+    # Expressed floor slabs and a continuous granite base course stop the
+    # large walls reading as unbroken coloured boxes. The base wraps all
+    # four elevations; it is no longer a single dressed strip at the front.
+    box("villa_west_floor_band", -3.6, -0.7, 3.42, 10.96, 11.76, 0.18, granite)
+    box("villa_east_floor_band", 4.7, -0.4, 3.48, 7.56, 10.96, 0.18, granite)
+    box("villa_west_base_front", -3.6, -6.55, 0.72, 10.88, 0.16, 0.88, granite)
+    box("villa_west_base_rear", -3.6, 5.15, 0.72, 10.88, 0.16, 0.88, granite)
+    box("villa_east_base_front", 4.7, -5.85, 0.72, 7.48, 0.16, 0.88, granite)
+    box("villa_east_base_rear", 4.7, 5.05, 0.72, 7.48, 0.16, 0.88, granite)
+    box("villa_west_base_side", -9.05, -0.7, 0.72, 0.16, 11.68, 0.88, granite)
+    box("villa_east_base_side", 8.45, -0.4, 0.72, 0.16, 10.88, 0.88, granite)
 
-    def roof(cx, cy, wall_top, width, depth, name):
+    def reveal_v(cx, cy, cz, height, face):
+        if face in ("front", "back"):
+            box("villa_facade_reveal_v", cx, cy, cz, 0.055, 0.045, height, frame)
+        else:
+            box("villa_facade_reveal_v", cx, cy, cz, 0.045, 0.055, height, frame)
+
+    def reveal_h(cx, cy, cz, length, face):
+        if face in ("front", "back"):
+            box("villa_facade_reveal_h", cx, cy, cz, length, 0.045, 0.055, frame)
+        else:
+            box("villa_facade_reveal_h", cx, cy, cz, 0.045, length, 0.055, frame)
+
+    def facade_pier(cx, cy, cz, width, height, face, material=None):
+        pier_material = stone if material is None else material
+        if face in ("front", "back"):
+            box("villa_facade_pier", cx, cy, cz, width, 0.15, height, pier_material, bevel=0.012)
+        else:
+            box("villa_facade_pier", cx, cy, cz, 0.15, width, height, pier_material, bevel=0.012)
+
+    # Panel joints on every elevation. Window frames are deeper than
+    # these 45 mm shadow gaps, so aligned joints pass behind the glazing
+    # and reappear in the solid wall exactly as a panelised facade would.
+    for seam_x in (-8.35, -4.70, -1.05, 1.45):
+        reveal_v(seam_x, -6.515, 3.35, 5.75, "front")
+        reveal_v(seam_x, 5.115, 3.35, 5.75, "back")
+    for seam_z in (1.12, 5.92):
+        reveal_h(-3.6, -6.515, seam_z, 10.55, "front")
+        reveal_h(-3.6, 5.115, seam_z, 10.55, "back")
+    for seam_y in (-5.85, -0.80, 4.45):
+        reveal_v(-9.015, seam_y, 3.35, 5.75, "left")
+    for seam_z in (1.12, 5.92):
+        reveal_h(-9.015, -0.7, seam_z, 11.35, "left")
+    for seam_y in (-5.15, -0.45, 4.35):
+        reveal_v(8.415, seam_y, 3.65, 6.35, "right")
+    for seam_z in (1.12, 6.55):
+        reveal_h(8.415, -0.4, seam_z, 10.55, "right")
+    for seam_x in (1.25, 4.70, 8.15):
+        reveal_v(seam_x, 5.015, 3.65, 6.35, "back")
+    for seam_z in (1.12, 6.55):
+        reveal_h(4.7, 5.015, seam_z, 7.15, "back")
+
+    # Projecting limestone piers give the two-storey walls a real bay
+    # rhythm and cast narrow shadows at phone distance.
+    for pier_x in (-8.78, -4.70, 1.58):
+        facade_pier(pier_x, -6.545, 3.35, 0.34, 5.85, "front")
+        facade_pier(pier_x, 5.145, 3.35, 0.34, 5.85, "back")
+    for pier_y in (-5.90, -0.80, 4.55):
+        facade_pier(-9.045, pier_y, 3.35, 0.34, 5.85, "left")
+    for pier_y in (-5.20, -0.45, 4.45):
+        facade_pier(8.445, pier_y, 3.65, 0.34, 6.35, "right")
+    for pier_x in (1.22, 8.18):
+        facade_pier(pier_x, 5.045, 3.65, 0.34, 6.35, "back")
+    facade_pier(1.02, -5.875, 3.65, 0.30, 6.35, "front", granite)
+    facade_pier(4.98, -5.875, 3.65, 0.30, 6.35, "front", granite)
+
+    def roof(cx, cy, wall_top, width, depth, name, parapet_material):
         box(f"{name}_slab", cx, cy, wall_top + 0.15, width + 0.55, depth + 0.55, 0.30, dark, bevel=0.025)
         box(f"{name}_gravel", cx, cy, wall_top + 0.335, width - 0.35, depth - 0.35, 0.07, gravel)
-        # Parapet ring plus a lighter metal coping cap.
+        # Parapet ring in the same finish as its own volume, finished by
+        # segmented black-granite coping rather than a bright metal strip.
         for sy, sign in ((cy - depth / 2 + 0.12, -1), (cy + depth / 2 - 0.12, 1)):
-            box(f"{name}_parapet", cx, sy, wall_top + 0.56, width - 0.20, 0.24, 0.48, main)
-            box(f"{name}_coping", cx, sy, wall_top + 0.84, width - 0.08, 0.34, 0.08, metal)
+            box(f"{name}_parapet", cx, sy, wall_top + 0.56, width - 0.20, 0.24, 0.48, parapet_material)
+            box(f"{name}_coping", cx, sy, wall_top + 0.84, width - 0.08, 0.34, 0.08, granite)
+            segment_count = max(2, int(width // 2.7))
+            for segment in range(1, segment_count):
+                joint_x = cx - width / 2.0 + width * segment / segment_count
+                box(f"{name}_coping_joint", joint_x, sy + sign * 0.185, wall_top + 0.84, 0.035, 0.025, 0.085, frame)
         for sx in (cx - width / 2 + 0.12, cx + width / 2 - 0.12):
-            box(f"{name}_parapet", sx, cy, wall_top + 0.56, 0.24, depth - 0.20, 0.48, main)
-            box(f"{name}_coping", sx, cy, wall_top + 0.84, 0.34, depth - 0.08, 0.08, metal)
+            box(f"{name}_parapet", sx, cy, wall_top + 0.56, 0.24, depth - 0.20, 0.48, parapet_material)
+            box(f"{name}_coping", sx, cy, wall_top + 0.84, 0.34, depth - 0.08, 0.08, granite)
 
-    roof(-3.6, -0.7, 6.35, 10.8, 11.6, "villa_west_roof")
-    roof(4.7, -0.4, 7.00, 7.4, 10.8, "villa_east_roof")
+    roof(-3.6, -0.7, 6.35, 10.8, 11.6, "villa_west_roof", main)
+    roof(4.7, -0.4, 7.00, 7.4, 10.8, "villa_east_roof", accent)
     box("villa_link_roof", 0.3, 0.6, 3.46, 3.25, 9.05, 0.24, dark, bevel=0.02)
 
     def face_window(cx, cy, cz, width, height, face):
         sign = -1.0 if face in ("front", "left") else 1.0
         divisions = max(1, int(width // 1.05))
+        variant = int(abs(cx * 3.7 + cy * 5.3 + cz * 7.1)) % 4
+        blind_fraction = (0.24, 0.38, 0.0, 0.52)[variant]
+        blind_drop = height * blind_fraction
         if face in ("front", "back"):
-            box("villa_window_frame", cx, cy, cz, width + 0.17, 0.13, height + 0.17, frame)
-            box("villa_window_glass", cx, cy + sign * 0.048, cz, width, 0.055, height, glass)
+            # A dark granite reveal, a separate interior backing and then
+            # the reflective pane give each opening physical depth. In
+            # 0.2.7 the transparent pane sat almost directly on the solid
+            # wall box, which is why it read as flat black paint.
+            box("villa_window_reveal", cx, cy + sign * 0.018, cz, width + 0.38, 0.085, height + 0.38, granite)
+            box("villa_window_interior", cx, cy + sign * 0.038, cz, width - 0.03, 0.040, height - 0.03, interior)
+            if variant != 1:
+                for curtain_side in (-1.0, 1.0):
+                    curtain_x = cx + curtain_side * (width / 2.0 - 0.17)
+                    box("villa_window_curtain", curtain_x, cy + sign * 0.064, cz, 0.24, 0.034, height - 0.14, curtain)
+            if blind_drop > 0.05:
+                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.035
+                box("villa_window_blind", cx, cy + sign * 0.066, blind_z, width - 0.12, 0.032, blind_drop, curtain)
+                box("villa_window_blind_rail", cx, cy + sign * 0.070, blind_z - blind_drop / 2.0, width - 0.10, 0.038, 0.045, frame)
+            box("villa_window_interior_light", cx - width * 0.18, cy + sign * 0.068, cz + height * 0.34, width * 0.38, 0.026, 0.040, glow)
+            box("villa_window_frame", cx, cy + sign * 0.028, cz, width + 0.19, 0.17, height + 0.19, frame)
+            box("villa_window_glass", cx, cy + sign * 0.098, cz, width, 0.045, height, glass)
             for division in range(1, divisions):
                 mx = cx - width / 2.0 + width * division / divisions
-                box("villa_window_mullion", mx, cy + sign * 0.082, cz, 0.055, 0.06, height, frame)
-            box("villa_window_transom", cx, cy + sign * 0.082, cz + height * 0.24, width, 0.06, 0.055, frame)
-            box("villa_window_sill", cx, cy + sign * 0.085, cz - height / 2.0 - 0.075, width + 0.30, 0.22, 0.09, concrete)
-            box("villa_window_header", cx, cy + sign * 0.055, cz + height / 2.0 + 0.085, width + 0.24, 0.15, 0.10, frame)
+                box("villa_window_mullion", mx, cy + sign * 0.112, cz, 0.055, 0.055, height, frame)
+            box("villa_window_transom", cx, cy + sign * 0.112, cz + height * 0.24, width, 0.055, 0.055, frame)
+            box("villa_window_handle", cx + width * 0.22, cy + sign * 0.128, cz - 0.05, 0.045, 0.035, 0.34, metal)
+            box("villa_window_sill", cx, cy + sign * 0.110, cz - height / 2.0 - 0.085, width + 0.42, 0.30, 0.10, granite)
+            box("villa_window_drip_groove", cx, cy + sign * 0.205, cz - height / 2.0 - 0.155, width + 0.30, 0.045, 0.028, frame)
+            box("villa_window_header", cx, cy + sign * 0.065, cz + height / 2.0 + 0.095, width + 0.28, 0.16, 0.11, frame)
+            if cz > 3.8:
+                for shade_index in range(3):
+                    shade_z = cz + height / 2.0 + 0.28 + shade_index * 0.11
+                    box("villa_window_shade_louvre", cx, cy + sign * 0.30, shade_z, width + 0.24, 0.50, 0.035, frame)
+                for bracket_side in (-1.0, 1.0):
+                    bracket_x = cx + bracket_side * (width / 2.0 - 0.08)
+                    box("villa_window_shade_bracket", bracket_x, cy + sign * 0.24, cz + height / 2.0 + 0.30, 0.055, 0.42, 0.28, metal)
         else:
-            box("villa_window_frame", cx, cy, cz, 0.13, width + 0.17, height + 0.17, frame)
-            box("villa_window_glass", cx + sign * 0.048, cy, cz, 0.055, width, height, glass)
+            box("villa_window_reveal", cx + sign * 0.018, cy, cz, 0.085, width + 0.38, height + 0.38, granite)
+            box("villa_window_interior", cx + sign * 0.038, cy, cz, 0.040, width - 0.03, height - 0.03, interior)
+            if variant != 1:
+                for curtain_side in (-1.0, 1.0):
+                    curtain_y = cy + curtain_side * (width / 2.0 - 0.17)
+                    box("villa_window_curtain", cx + sign * 0.064, curtain_y, cz, 0.034, 0.24, height - 0.14, curtain)
+            if blind_drop > 0.05:
+                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.035
+                box("villa_window_blind", cx + sign * 0.066, cy, blind_z, 0.032, width - 0.12, blind_drop, curtain)
+                box("villa_window_blind_rail", cx + sign * 0.070, cy, blind_z - blind_drop / 2.0, 0.038, width - 0.10, 0.045, frame)
+            box("villa_window_interior_light", cx + sign * 0.068, cy - width * 0.18, cz + height * 0.34, 0.026, width * 0.38, 0.040, glow)
+            box("villa_window_frame", cx + sign * 0.028, cy, cz, 0.17, width + 0.19, height + 0.19, frame)
+            box("villa_window_glass", cx + sign * 0.098, cy, cz, 0.045, width, height, glass)
             for division in range(1, divisions):
                 my = cy - width / 2.0 + width * division / divisions
-                box("villa_window_mullion", cx + sign * 0.082, my, cz, 0.06, 0.055, height, frame)
-            box("villa_window_transom", cx + sign * 0.082, cy, cz + height * 0.24, 0.06, width, 0.055, frame)
-            box("villa_window_sill", cx + sign * 0.085, cy, cz - height / 2.0 - 0.075, 0.22, width + 0.30, 0.09, concrete)
-            box("villa_window_header", cx + sign * 0.055, cy, cz + height / 2.0 + 0.085, 0.15, width + 0.24, 0.10, frame)
+                box("villa_window_mullion", cx + sign * 0.112, my, cz, 0.055, 0.055, height, frame)
+            box("villa_window_transom", cx + sign * 0.112, cy, cz + height * 0.24, 0.055, width, 0.055, frame)
+            box("villa_window_handle", cx + sign * 0.128, cy + width * 0.22, cz - 0.05, 0.035, 0.045, 0.34, metal)
+            box("villa_window_sill", cx + sign * 0.110, cy, cz - height / 2.0 - 0.085, 0.30, width + 0.42, 0.10, granite)
+            box("villa_window_drip_groove", cx + sign * 0.205, cy, cz - height / 2.0 - 0.155, 0.045, width + 0.30, 0.028, frame)
+            box("villa_window_header", cx + sign * 0.065, cy, cz + height / 2.0 + 0.095, 0.16, width + 0.28, 0.11, frame)
+            if cz > 3.8:
+                for shade_index in range(3):
+                    shade_z = cz + height / 2.0 + 0.28 + shade_index * 0.11
+                    box("villa_window_shade_louvre", cx + sign * 0.30, cy, shade_z, 0.50, width + 0.24, 0.035, frame)
+                for bracket_side in (-1.0, 1.0):
+                    bracket_y = cy + bracket_side * (width / 2.0 - 0.08)
+                    box("villa_window_shade_bracket", cx + sign * 0.24, bracket_y, cz + height / 2.0 + 0.30, 0.42, 0.055, 0.28, metal)
 
     # Front (Blender -Y) glazing. Upper west/east openings are full-height
     # balcony doors, not floating picture windows.
@@ -687,19 +820,37 @@ def build_villa():
     face_window(8.40, -2.7, 5.10, 2.3, 1.80, "right")
     face_window(8.40, 1.8, 5.10, 2.3, 1.80, "right")
 
-    # Stone feature wall with a separated timber privacy screen.
+    # Stone feature wall with a separated timber privacy screen. The
+    # 0.2.7 panel joints were accidentally buried inside this overlay;
+    # they now sit on its face and remain visible between the fins, and
+    # the screen itself stands a real 105 mm clear of the stone.
     box("villa_feature_stone", 3.0, -5.88, 3.58, 3.6, 0.17, 6.55, stone, bevel=0.02)
+    for seam_z in (1.55, 3.15, 4.75, 6.35):
+        box("villa_stone_joint", 3.0, -5.985, seam_z, 3.58, 0.035, 0.045, frame)
+    for seam_x in (2.10, 3.00, 3.90):
+        box("villa_stone_joint_v", seam_x, -5.985, 3.58, 0.040, 0.035, 6.45, frame)
     for fin_index in range(9):
         fin_x = 1.62 + fin_index * 0.345
-        box("villa_timber_fin", fin_x, -6.06, 3.52, 0.15, 0.18, 5.85, wood)
-    box("villa_fin_rail_top", 3.0, -6.06, 6.50, 3.55, 0.14, 0.10, frame)
-    box("villa_fin_rail_bottom", 3.0, -6.06, 0.57, 3.55, 0.14, 0.10, frame)
+        box("villa_timber_fin", fin_x, -6.16, 3.52, 0.15, 0.18, 5.85, wood)
+        for spacer_z in (1.05, 3.52, 5.95):
+            box("villa_timber_fin_spacer", fin_x, -6.035, spacer_z, 0.055, 0.09, 0.055, frame)
+    box("villa_fin_rail_top", 3.0, -6.16, 6.50, 3.55, 0.14, 0.10, frame)
+    box("villa_fin_rail_bottom", 3.0, -6.16, 0.57, 3.55, 0.14, 0.10, frame)
 
     def balcony(cx, face_y, sign, floor_z, width):
         slab_y = face_y + sign * 0.58
-        box("villa_balcony_slab", cx, slab_y, floor_z + 0.09, width, 1.18, 0.18, concrete)
+        box("villa_balcony_slab", cx, slab_y, floor_z + 0.09, width, 1.18, 0.18, granite)
         box("villa_balcony_beam", cx, slab_y, floor_z - 0.05, width - 0.25, 0.22, 0.12, frame)
+        # Warm timber soffit boards are visible from the street below and
+        # keep the balcony edge from reading as a plain concrete tray.
+        soffit_count = max(4, int(width // 0.82))
+        for soffit_index in range(soffit_count):
+            soffit_x = cx - width / 2.0 + width * (soffit_index + 0.5) / soffit_count
+            box("villa_balcony_soffit", soffit_x, slab_y, floor_z - 0.018, width / soffit_count - 0.055, 1.04, 0.035, deck)
         rail_y = face_y + sign * 1.12
+        planter_y = rail_y - sign * 0.17
+        box("villa_balcony_planter", cx, planter_y, floor_z + 0.30, width - 0.55, 0.20, 0.24, granite)
+        box("villa_balcony_hedge", cx, planter_y, floor_z + 0.50, width - 0.70, 0.15, 0.22, hedge, bevel=0.045)
         panel_count = 3
         panel_width = width / panel_count
         for panel in range(panel_count):
@@ -742,15 +893,42 @@ def build_villa():
     box("villa_entry_door_glass", 0.03, -3.845, 1.78, 0.42, 0.035, 1.55, glass)
     cyl("villa_entry_handle", 0.78, -3.88, 1.62, 0.025, 1.08, metal, vertices=10)
     face_window(1.45, -3.70, 1.66, 0.75, 2.20, "front")
+    # Granite portal, grooved pivot door, canopy soffit and house
+    # furniture turn the recess into an unmistakable residential entry.
+    box("villa_entry_portal_left", -0.78, -3.82, 1.62, 0.28, 0.18, 2.75, granite)
+    box("villa_entry_portal_right", 2.10, -3.82, 1.62, 0.28, 0.18, 2.75, granite)
+    box("villa_entry_portal_header", 0.66, -3.82, 3.00, 3.05, 0.18, 0.28, granite)
+    for groove_x in (-0.18, 0.18, 0.54):
+        box("villa_entry_door_groove", groove_x, -3.842, 1.62, 0.025, 0.025, 2.35, frame)
+    for soffit_x in (-1.65, -1.26, -0.87, -0.48, -0.09, 0.30, 0.69, 1.08, 1.47, 1.86, 2.25):
+        box("villa_entry_canopy_soffit", soffit_x, -5.25, 3.045, 0.22, 3.00, 0.045, deck)
+    for downlight_x in (-1.05, 0.30, 1.65):
+        cyl("villa_entry_downlight", downlight_x, -5.25, 3.008, 0.055, 0.025, glow, vertices=14)
+    box("villa_entry_threshold", 0.3, -4.02, 0.34, 2.80, 0.55, 0.12, granite)
+    box("villa_house_number_plaque", -1.28, -3.84, 1.78, 0.42, 0.06, 0.55, granite)
+    box("villa_house_number_inset", -1.28, -3.88, 1.78, 0.28, 0.025, 0.36, metal)
+    box("villa_intercom", 2.02, -3.88, 1.34, 0.15, 0.055, 0.24, frame)
+    box("villa_intercom_lens", 2.02, -3.915, 1.42, 0.07, 0.025, 0.07, glass)
+    box("villa_intercom_call_light", 2.02, -3.915, 1.27, 0.07, 0.025, 0.045, glow)
     for step_index, (step_y, step_top) in enumerate(((-4.25, 0.42), (-4.72, 0.32), (-5.19, 0.22))):
-        box(f"villa_entry_step_{step_index}", 0.3, step_y, step_top / 2.0 + 0.14, 2.60, 0.47, step_top, concrete)
+        box(f"villa_entry_step_{step_index}", 0.3, step_y, step_top / 2.0 + 0.14, 2.60, 0.47, step_top, pavement)
+    for path_y in (-5.72, -6.32, -6.92):
+        box("villa_entry_path_paver", 0.3, path_y, 0.315, 2.30, 0.48, 0.05, pavement)
+    for planter_x in (-1.55, 2.15):
+        box("villa_entry_planter", planter_x, -5.35, 0.50, 0.72, 0.56, 0.42, granite)
+        box("villa_entry_planter_hedge", planter_x, -5.35, 0.79, 0.62, 0.46, 0.28, hedge, bevel=0.055)
     for light_x in (-0.95, 1.95):
         box("villa_entry_light_body", light_x, -3.80, 2.45, 0.16, 0.10, 0.28, frame)
         box("villa_entry_light", light_x, -3.86, 2.45, 0.10, 0.035, 0.18, glow)
 
-    # Sectional garage door: frame, panel seams, top lights and hardware.
+    # Flush timber sectional garage door in a granite portal: panel
+    # seams, top lights, hardware, threshold drainage and a keypad post.
     box("villa_garage_frame", 6.15, -5.84, 1.58, 4.72, 0.14, 2.58, frame)
-    box("villa_garage_door", 6.15, -5.92, 1.58, 4.45, 0.08, 2.32, metal, bevel=0.012)
+    box("villa_garage_door", 6.15, -5.92, 1.58, 4.45, 0.08, 2.32, wood, bevel=0.012)
+    box("villa_garage_portal_left", 3.66, -5.90, 1.58, 0.30, 0.24, 2.86, granite)
+    box("villa_garage_portal_right", 8.64, -5.90, 1.58, 0.30, 0.24, 2.86, granite)
+    box("villa_garage_portal_header", 6.15, -5.90, 3.02, 5.28, 0.24, 0.28, granite)
+    box("villa_garage_light_bar", 6.15, -6.035, 2.82, 1.35, 0.035, 0.07, glow)
     for seam_z in (0.95, 1.48, 2.01):
         box("villa_garage_seam_h", 6.15, -5.97, seam_z, 4.40, 0.025, 0.045, frame)
     for seam_x in (5.05, 6.15, 7.25):
@@ -758,7 +936,24 @@ def build_villa():
     for window_x in (4.95, 5.75, 6.55, 7.35):
         box("villa_garage_window", window_x, -5.975, 2.38, 0.58, 0.03, 0.34, glass)
     box("villa_garage_handle", 6.15, -5.99, 1.18, 0.42, 0.035, 0.07, frame)
-    box("villa_driveway_apron", 6.15, -6.70, 0.305, 4.85, 1.65, 0.045, dark)
+    box("villa_garage_bottom_seal", 6.15, -5.975, 0.46, 4.42, 0.035, 0.09, frame)
+    box("villa_driveway_apron", 6.15, -6.70, 0.295, 4.85, 1.65, 0.035, granite)
+    for paver_x in (4.15, 5.35, 6.55, 7.75):
+        for paver_y in (-6.35, -7.08):
+            box("villa_driveway_paver", paver_x, paver_y, 0.325, 1.08, 0.62, 0.045, pavement)
+    box("villa_garage_drainage_channel", 6.15, -6.03, 0.335, 4.60, 0.16, 0.035, frame)
+    for drain_x in (4.25, 4.85, 5.45, 6.05, 6.65, 7.25, 7.85):
+        box("villa_garage_drainage_slot", drain_x, -6.03, 0.356, 0.28, 0.055, 0.012, metal)
+    cyl("villa_garage_keypad_post", 3.55, -6.72, 0.62, 0.045, 0.68, frame, vertices=10)
+    box("villa_garage_keypad", 3.55, -6.74, 1.03, 0.16, 0.07, 0.24, granite)
+    box("villa_garage_keypad_light", 3.55, -6.785, 1.08, 0.08, 0.025, 0.08, glow)
+    # The sliding vehicle gate is parked fully open inside the east
+    # boundary so the house reads as a secured villa without blocking
+    # the player's driveway sightline.
+    box("villa_vehicle_gate_panel", 9.08, -5.35, 0.98, 0.07, 3.15, 1.28, wood)
+    box("villa_vehicle_gate_rail_top", 9.08, -5.35, 1.66, 0.10, 3.25, 0.08, frame)
+    box("villa_vehicle_gate_rail_bottom", 9.08, -5.35, 0.36, 0.10, 3.25, 0.08, frame)
+    box("villa_vehicle_gate_track", 9.08, -5.35, 0.315, 0.16, 3.45, 0.035, metal)
 
     # Roof terrace over the ground-floor link and a rear garden pergola.
     for px in (-0.95, 1.55):
@@ -778,13 +973,18 @@ def build_villa():
     box("villa_garden_pergola_beam", -4.8, 5.32, 3.05, 5.55, 0.16, 0.18, wood)
     box("villa_garden_pergola_beam", -4.8, 7.08, 3.05, 5.55, 0.16, 0.18, wood)
 
-    # Solar array with individual framed modules and support rails.
+    # Solar array with individual framed modules, cell busbars, support
+    # rails and a cable tray; the modules are not eight blank blue slabs.
     for panel_x in (-7.3, -5.9, -4.5, -3.1):
         for panel_y in (-2.4, -0.2):
             rbox("villa_solar_frame", panel_x, panel_y, 7.02, 1.18, 1.85, 0.065, metal, rotation=(0.22, 0.0, 0.0), bevel=0.008)
             rbox("villa_solar_cell", panel_x, panel_y - 0.012, 7.065, 1.05, 1.68, 0.028, solar, rotation=(0.22, 0.0, 0.0))
+            for busbar_offset in (-0.26, 0.0, 0.26):
+                rbox("villa_solar_busbar", panel_x + busbar_offset, panel_y - 0.018, 7.084, 0.018, 1.62, 0.007, metal, rotation=(0.22, 0.0, 0.0))
             box("villa_solar_leg", panel_x - 0.42, panel_y + 0.68, 6.76, 0.07, 0.07, 0.22, metal)
             box("villa_solar_leg", panel_x + 0.42, panel_y + 0.68, 6.76, 0.07, 0.07, 0.22, metal)
+    box("villa_solar_cable_tray", -5.2, 0.78, 6.78, 5.55, 0.18, 0.08, frame)
+    box("villa_solar_inverter", -2.05, 0.78, 6.98, 0.58, 0.28, 0.42, metal, bevel=0.015)
 
     def roof_hvac(cx, cy, base_z):
         box("villa_roof_hvac", cx, cy, base_z + 0.42, 1.65, 1.05, 0.84, metal, bevel=0.025)
@@ -820,23 +1020,52 @@ def build_villa():
     box("villa_meter_cabinet", -9.18, -0.7, 1.05, 0.16, 0.72, 1.05, metal, bevel=0.015)
     box("villa_meter_window", -9.28, -0.7, 1.22, 0.025, 0.34, 0.34, glass)
 
+    # Finished grounds inside the unchanged architectural footprint:
+    # planting beds, a rear lawn/deck, side service strips and clipped
+    # hedges replace the exposed pale site slab seen in the 0.2.7 shots.
+    box("villa_front_planting_bed_west", -5.0, -7.00, 0.305, 7.80, 0.62, 0.055, mulch)
+    box("villa_front_planting_bed_east", 2.75, -6.82, 0.305, 2.55, 0.78, 0.055, mulch)
+    box("villa_front_bed_edging_west", -5.0, -6.67, 0.335, 7.90, 0.07, 0.09, granite)
+    box("villa_front_bed_edging_east", 2.75, -6.40, 0.335, 2.65, 0.07, 0.09, granite)
+    box("villa_rear_lawn", -4.8, 6.28, 0.300, 6.20, 1.85, 0.050, lawn)
+    box("villa_rear_deck", -4.8, 6.20, 0.345, 4.85, 1.45, 0.060, deck)
+    box("villa_rear_planting_bed_west", -4.5, 5.45, 0.305, 8.50, 0.55, 0.055, mulch)
+    box("villa_rear_planting_bed_east", 4.7, 5.35, 0.305, 6.80, 0.55, 0.055, mulch)
+    box("villa_side_planting_west", -9.23, -0.7, 0.305, 0.32, 10.80, 0.055, mulch)
+    box("villa_side_planting_east", 8.92, -0.4, 0.305, 0.78, 9.80, 0.055, mulch)
+    for stepper_y in (-4.2, -2.4, -0.6, 1.2, 3.0):
+        box("villa_side_stepping_paver", 8.92, stepper_y, 0.345, 0.58, 0.92, 0.045, pavement)
+    for hedge_x in (-7.35, -4.05, -0.75, 2.55, 5.85):
+        box("villa_rear_hedge", hedge_x, 6.98, 0.58, 2.85, 0.34, 0.52, hedge, bevel=0.055)
+    box("villa_rear_outdoor_table", -4.8, 6.20, 0.78, 1.65, 0.82, 0.08, stone)
+    box("villa_rear_outdoor_table_leg", -4.8, 6.20, 0.55, 0.18, 0.58, 0.38, granite)
+    for bench_y in (5.68, 6.72):
+        box("villa_rear_outdoor_bench", -4.8, bench_y, 0.55, 1.45, 0.32, 0.09, deck)
+        box("villa_rear_outdoor_bench_leg", -5.35, bench_y, 0.40, 0.10, 0.26, 0.22, frame)
+        box("villa_rear_outdoor_bench_leg", -4.25, bench_y, 0.40, 0.10, 0.26, 0.22, frame)
+
     # Low garden walls, coping, an open pedestrian gate, planters and a
-    # mailbox complete the street edge without adding fake vegetation.
+    # mailbox complete the street edge.
     def garden_wall(cx, cy, dx, dy):
         box("villa_garden_wall", cx, cy, 0.67, dx, dy, 0.78, stone)
-        box("villa_garden_wall_coping", cx, cy, 1.10, dx + 0.08, dy + 0.08, 0.09, concrete)
+        box("villa_garden_wall_coping", cx, cy, 1.10, dx + 0.08, dy + 0.08, 0.09, granite)
 
     garden_wall(-6.75, -7.35, 5.55, 0.22)
     garden_wall(3.05, -7.35, 2.15, 0.22)
     garden_wall(-9.45, 0.0, 0.22, 14.45)
     garden_wall(9.45, 0.0, 0.22, 14.45)
     garden_wall(0.0, 7.35, 18.70, 0.22)
+    for pillar_x in (-3.92, 2.02):
+        box("villa_gate_pillar", pillar_x, -7.35, 0.78, 0.40, 0.40, 1.08, granite)
+        box("villa_gate_pillar_cap", pillar_x, -7.35, 1.38, 0.50, 0.50, 0.10, stone)
+        box("villa_gate_pillar_light", pillar_x, -7.58, 1.08, 0.18, 0.035, 0.24, glow)
     rbox("villa_pedestrian_gate", -3.55, -6.88, 0.86, 1.55, 0.06, 1.08, wood, rotation=(0.0, 0.0, 0.52))
     box("villa_mailbox", -3.82, -7.20, 1.02, 0.48, 0.22, 0.34, frame, bevel=0.015)
     box("villa_mailbox_slot", -3.82, -7.325, 1.08, 0.30, 0.025, 0.045, metal)
     for planter_x in (-7.6, -5.2, 2.2, 8.1):
-        box("villa_planter", planter_x, -6.95, 0.48, 1.25, 0.48, 0.42, stone, bevel=0.015)
-        box("villa_planter_soil", planter_x, -6.95, 0.70, 1.12, 0.36, 0.045, dark)
+        box("villa_planter", planter_x, -6.95, 0.48, 1.25, 0.48, 0.42, granite, bevel=0.015)
+        box("villa_planter_soil", planter_x, -6.95, 0.70, 1.12, 0.36, 0.045, mulch)
+        box("villa_planter_hedge", planter_x, -6.95, 0.84, 1.05, 0.34, 0.28, hedge, bevel=0.055)
     for light_x in (-2.1, 3.9, 8.3):
         box("villa_path_light_post", light_x, -7.02, 0.48, 0.09, 0.09, 0.42, frame)
         box("villa_path_light", light_x, -7.02, 0.72, 0.15, 0.15, 0.10, glow)
