@@ -14,6 +14,9 @@ const FoliageWindShader: Shader = preload("res://shaders/foliage_wind.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
+const MULTIMESH_CHUNK_SIZE_M := 220.0
+const ROAD_GRID_CELL_M := 40.0
+const ROAD_GRID_QUERY_CLEARANCE_M := 10.0
 
 var data: Dictionary = {}
 var spawn_transform := Transform3D.IDENTITY
@@ -45,6 +48,8 @@ var _dynamic_world: NativeDynamicWorld
 var _road_segment_starts: Array[Vector3] = []
 var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
+var _road_segment_grid: Dictionary = {}
+var _multimesh_chunk_count := 0
 var _reflection_probes: Array[ReflectionProbe] = []
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
@@ -189,13 +194,26 @@ func get_road_visual_state() -> Dictionary:
 		"terrain_meshes": _terrain_meshes.size(),
 		"road_mesh_ready": _road_mesh != null,
 		"foliage_wind_materials": _foliage_wind_materials.size(),
+		"multimesh_chunks": _multimesh_chunk_count,
+		"multimesh_chunk_size_m": MULTIMESH_CHUNK_SIZE_M,
+		"road_grid_cells": _road_segment_grid.size(),
+		"road_segments": _road_segment_starts.size(),
 	}
+
+
+func _road_grid_cell(x: float, z: float) -> Vector2i:
+	return Vector2i(
+		floori((x - WORLD_AABB.position.x) / ROAD_GRID_CELL_M),
+		floori((z - WORLD_AABB.position.z) / ROAD_GRID_CELL_M)
+	)
 
 
 func _build_road_surface_index() -> void:
 	_road_segment_starts.clear()
 	_road_segment_ends.clear()
 	_road_segment_half_widths.clear()
+	_road_segment_grid.clear()
+	var grid_entries := 0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var samples: Array = road.get("samples", [])
@@ -205,9 +223,29 @@ func _build_road_surface_index() -> void:
 			var b := _sample_point(samples[i + 1])
 			if Vector2(b.x - a.x, b.z - a.z).length_squared() < 0.0001:
 				continue
+			var segment_index := _road_segment_starts.size()
 			_road_segment_starts.append(a)
 			_road_segment_ends.append(b)
 			_road_segment_half_widths.append(half_width)
+
+			# The old lookup scanned all 1085 road segments for every tyre,
+			# every physics tick. This uniform grid contains every segment
+			# that can possibly be within the largest clearance threshold
+			# used by the game (10 m), so surface/clearance decisions stay
+			# exact while the per-wheel candidate set becomes tiny.
+			var expand := half_width + ROAD_GRID_QUERY_CLEARANCE_M + 0.5
+			var min_cell := _road_grid_cell(minf(a.x, b.x) - expand, minf(a.z, b.z) - expand)
+			var max_cell := _road_grid_cell(maxf(a.x, b.x) + expand, maxf(a.z, b.z) + expand)
+			for cell_x in range(min_cell.x, max_cell.x + 1):
+				for cell_z in range(min_cell.y, max_cell.y + 1):
+					var cell := Vector2i(cell_x, cell_z)
+					if not _road_segment_grid.has(cell):
+						_road_segment_grid[cell] = []
+					(_road_segment_grid[cell] as Array).append(segment_index)
+					grid_entries += 1
+	_enhancement_stats["road_grid_cells"] = _road_segment_grid.size()
+	_enhancement_stats["road_grid_entries"] = grid_entries
+	_enhancement_stats["road_segments"] = _road_segment_starts.size()
 
 
 func _distance_to_segment_xz(point: Vector3, a: Vector3, b: Vector3) -> float:
@@ -221,8 +259,18 @@ func _distance_to_segment_xz(point: Vector3, a: Vector3, b: Vector3) -> float:
 
 
 func _road_clearance_xz(point: Vector3) -> float:
-	var best_clearance := INF
-	for i in _road_segment_starts.size():
+	# Only thresholds up to ROAD_GRID_QUERY_CLEARANCE_M are consumed by
+	# get_surface_at()/_is_position_clear(). Returning that cap for an empty
+	# cell is therefore decision-identical to the old full scan, without
+	# paying for 1085 distance checks per tyre contact.
+	if _road_segment_grid.is_empty():
+		return ROAD_GRID_QUERY_CLEARANCE_M
+	var candidates: Array = _road_segment_grid.get(_road_grid_cell(point.x, point.z), [])
+	if candidates.is_empty():
+		return ROAD_GRID_QUERY_CLEARANCE_M
+	var best_clearance := ROAD_GRID_QUERY_CLEARANCE_M
+	for index_variant in candidates:
+		var i := int(index_variant)
 		var clearance := _distance_to_segment_xz(point, _road_segment_starts[i], _road_segment_ends[i]) - _road_segment_half_widths[i]
 		best_clearance = minf(best_clearance, clearance)
 	return best_clearance
@@ -446,6 +494,8 @@ func set_time_of_day(mode: String) -> void:
 		_dynamic_world.apply_mode(mode, _environment, _sun)
 		_enhancement_stats["dynamic_world_presets"] = _dynamic_world.get_preset_count()
 		_enhancement_stats["dynamic_world_preset"] = _dynamic_world.get_current_preset_name()
+		_enhancement_stats["glow_enabled"] = _environment.glow_enabled
+		_enhancement_stats["mobile_performance_mode"] = OS.has_feature("android")
 
 	if _asphalt_material != null:
 		var wetness := 0.12
@@ -593,7 +643,7 @@ func _build_environment() -> void:
 	_sky = Sky.new()
 	_sky.sky_material = _procedural_sky_material
 	_sky.process_mode = Sky.PROCESS_MODE_AUTOMATIC
-	_sky.radiance_size = Sky.RADIANCE_SIZE_512
+	_sky.radiance_size = Sky.RADIANCE_SIZE_256 if OS.has_feature("android") else Sky.RADIANCE_SIZE_512
 
 	_environment = Environment.new()
 	_environment.background_mode = Environment.BG_SKY
@@ -604,7 +654,7 @@ func _build_environment() -> void:
 	_environment.ambient_light_sky_contribution = 0.88
 	_environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	_environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	_environment.glow_enabled = true
+	_environment.glow_enabled = not OS.has_feature("android")
 	_environment.glow_intensity = 1.18
 	_environment.glow_strength = 0.86
 	_environment.glow_bloom = 0.055
@@ -631,14 +681,16 @@ func _build_environment() -> void:
 	_sun.shadow_bias = 0.045
 	_sun.shadow_normal_bias = 1.65
 	_sun.shadow_blur = 1.15
-	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	# 360 m keeps readable shadows around the car and nearby streets while
-	# avoiding the 520 m shadow submission seen in the 6 FPS phone capture.
-	_sun.directional_shadow_max_distance = 360.0
-	_enhancement_stats["shadow_max_distance"] = 360.0
-	_sun.directional_shadow_split_1 = 0.055
-	_sun.directional_shadow_split_2 = 0.16
-	_sun.directional_shadow_split_3 = 0.42
+	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	# 0.2.4 mobile budget: two splits over 240 m. The player and nearby
+	# streets retain real shadows, while distant districts no longer force
+	# four large shadow submissions on a phone GPU.
+	_sun.directional_shadow_max_distance = 240.0
+	_enhancement_stats["shadow_max_distance"] = 240.0
+	_enhancement_stats["shadow_splits"] = 2
+	_sun.directional_shadow_split_1 = 0.12
+	_sun.directional_shadow_split_2 = 0.42
+	_sun.directional_shadow_split_3 = 0.72
 	_sun.directional_shadow_fade_start = 0.82
 	_sun.directional_shadow_blend_splits = true
 	_sun.directional_shadow_pancake_size = 18.0
@@ -1534,27 +1586,87 @@ func _get_model_parts(path: String) -> Array:
 	return parts
 
 
+func _multimesh_visual_range(node_name: String) -> float:
+	var key := node_name.to_lower()
+	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
+		return 380.0
+	if key.contains("streetlamp") or key.contains("busshelter") or key.contains("guardrail"):
+		return 430.0
+	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane"):
+		return 680.0
+	if key.contains("pool"):
+		return 520.0
+	if key.contains("tree") or key.contains("palm"):
+		return 780.0
+	return 0.0
+
+
 func _add_multimesh(parent: Node, mesh: Mesh, material: Material, transforms: Array, node_name: String, cast_shadow: bool = true) -> bool:
 	if mesh == null or transforms.is_empty():
 		return false
-	var multi := MultiMesh.new()
-	multi.transform_format = MultiMesh.TRANSFORM_3D
-	multi.use_colors = false
-	multi.mesh = mesh
-	multi.instance_count = transforms.size()
-	for i in transforms.size():
-		multi.set_instance_transform(i, transforms[i] as Transform3D)
 
-	var instance := MultiMeshInstance3D.new()
-	instance.name = node_name
-	instance.multimesh = multi
-	if material != null:
-		instance.material_override = material
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	instance.custom_aabb = WORLD_AABB
-	parent.add_child(instance)
-	return true
+	# 0.2.4 performance architecture: one MultiMesh for the whole city was
+	# given WORLD_AABB, so frustum culling could never reject it and every
+	# building/tree/lamp/marking batch was submitted every frame. Split the
+	# same batches into 220 m spatial chunks with tight merged AABBs. The
+	# world content and scales do not change; off-screen chunks simply stop
+	# consuming vertex/shadow work.
+	var grouped: Dictionary = {}
+	var mesh_aabb := mesh.get_aabb()
+	for transform_variant in transforms:
+		var transform_value := transform_variant as Transform3D
+		var cell := Vector2i(
+			floori((transform_value.origin.x - WORLD_AABB.position.x) / MULTIMESH_CHUNK_SIZE_M),
+			floori((transform_value.origin.z - WORLD_AABB.position.z) / MULTIMESH_CHUNK_SIZE_M)
+		)
+		if not grouped.has(cell):
+			grouped[cell] = []
+		(grouped[cell] as Array).append(transform_value)
+
+	var built_any := false
+	for cell_variant in grouped.keys():
+		var cell := cell_variant as Vector2i
+		var cell_transforms: Array = grouped[cell]
+		if cell_transforms.is_empty():
+			continue
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.use_colors = false
+		multi.mesh = mesh
+		multi.instance_count = cell_transforms.size()
+		var chunk_aabb := AABB()
+		var have_chunk_aabb := false
+		for i in cell_transforms.size():
+			var transform_value := cell_transforms[i] as Transform3D
+			multi.set_instance_transform(i, transform_value)
+			var instance_aabb: AABB = transform_value * mesh_aabb
+			chunk_aabb = instance_aabb if not have_chunk_aabb else chunk_aabb.merge(instance_aabb)
+			have_chunk_aabb = true
+
+		var instance := MultiMeshInstance3D.new()
+		instance.name = "%s_C%d_%d" % [node_name, cell.x, cell.y]
+		instance.multimesh = multi
+		if material != null:
+			instance.material_override = material
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else WORLD_AABB
+		var visual_range := _multimesh_visual_range(node_name)
+		if visual_range > 0.0:
+			instance.visibility_range_end = visual_range
+			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+			instance.lod_bias = 0.60
+		else:
+			# Buildings keep the skyline at city scale but still switch to
+			# imported mesh LODs somewhat earlier on the phone.
+			instance.lod_bias = 0.85
+		parent.add_child(instance)
+		_multimesh_chunk_count += 1
+		built_any = true
+
+	_enhancement_stats["multimesh_chunks"] = _multimesh_chunk_count
+	_enhancement_stats["multimesh_chunk_size_m"] = MULTIMESH_CHUNK_SIZE_M
+	return built_any
 
 
 func _add_batched_model(parent: Node, path: String, transforms: Array, node_name: String) -> bool:
@@ -1574,7 +1686,7 @@ func _add_batched_model(parent: Node, path: String, transforms: Array, node_name
 			part.get("mesh") as Mesh,
 			part.get("material") as Material,
 			transforms,
-			String(part.get("material_name", "Part")),
+			"%s_%s" % [node_name, String(part.get("material_name", "Part"))],
 			true
 		) or built_any
 	return built_any
@@ -2092,7 +2204,9 @@ func _build_vegetation() -> void:
 		for part_name in bush_transforms.keys():
 			if _plant_parts.has(part_name):
 				var part: Dictionary = _plant_parts[part_name]
-				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, bush_transforms[part_name], String(part_name))
+				# Small shrubs no longer spend a second high-poly pass in the
+				# directional shadow map; mature trees above still cast.
+				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, bush_transforms[part_name], String(part_name), false)
 
 	var trunk_mesh := CylinderMesh.new()
 	trunk_mesh.top_radius = 0.15
@@ -2109,7 +2223,7 @@ func _build_vegetation() -> void:
 		crown_transforms.append(make_transform(base + Vector3(0.0, 5.72 * scale_value, 0.0), _f(palm, "rotY") * 1.7, Vector3.ONE * scale_value))
 		_add_cylinder_collider(base + Vector3(0.0, 2.5, 0.0), 0.30, 5.2)
 	_add_multimesh(root, trunk_mesh, _prop_material("nh_bark"), trunk_transforms, "PalmTrunks")
-	_add_multimesh(root, _get_palm_crown_mesh(), _palm_leaf_material(), crown_transforms, "PalmCrowns")
+	_add_multimesh(root, _get_palm_crown_mesh(), _palm_leaf_material(), crown_transforms, "PalmCrowns", false)
 
 
 func _build_street_lamps() -> void:
@@ -2181,8 +2295,8 @@ func _build_reflection_probes() -> void:
 		probe.box_projection = true
 		probe.enable_shadows = false
 		probe.intensity = 1.12
-		probe.max_distance = 320.0
-		probe.mesh_lod_threshold = 0.35
+		probe.max_distance = 220.0
+		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
 		probe.update_mode = ReflectionProbe.UPDATE_ONCE
 		# Слои 1-19: слой 20 зарезервирован под камеру SpeedPost и не должен
@@ -2191,7 +2305,7 @@ func _build_reflection_probes() -> void:
 		root.add_child(probe)
 		_reflection_probes.append(probe)
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
-	_enhancement_stats["reflection_probe_max_distance"] = 320.0
+	_enhancement_stats["reflection_probe_max_distance"] = 220.0
 
 
 func _build_benches() -> void:

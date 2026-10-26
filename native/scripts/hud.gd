@@ -24,6 +24,7 @@ var _nitro_bar: ProgressBar
 var _speed_panel: PanelContainer
 var _pedal_row: HBoxContainer
 var _refresh_timer := 0.0
+var _fast_timer := 0.0
 var _build_error := ""
 
 
@@ -278,6 +279,13 @@ func _on_touch_button_up(action_name: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# Full-rate UI writes can invalidate Canvas every frame. Driving input
+	# remains continuous through VehicleController; only visible labels are
+	# refreshed at 12 Hz, and district/minimap/performance at 4 Hz below.
+	_fast_timer += delta
+	if _fast_timer < 0.083:
+		return
+	_fast_timer = 0.0
 	if _speed_label == null or _gear_label == null or _nitro_bar == null or _state_label == null:
 		return
 	if _vehicle == null:
@@ -296,7 +304,7 @@ func _process(delta: float) -> void:
 		_state_label.text = _vehicle.get_surface_label()
 
 	_refresh_timer += delta
-	if _refresh_timer < 0.14:
+	if _refresh_timer < 0.25:
 		return
 	_refresh_timer = 0.0
 
@@ -309,12 +317,13 @@ func _process(delta: float) -> void:
 	var primitives := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 	var process_ms := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 	var physics_ms := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-	_performance_label.text = "FPS %d  •  DRAW %d\nTRIS %s  •  CPU %.1f ms\nPHYS %.1f ms  •  %s" % [
+	_performance_label.text = "FPS %d  •  DRAW %d\nTRIS %s  •  CPU %.1f ms\nPHYS %.1f ms  •  Q %d%%  •  %s" % [
 		Engine.get_frames_per_second(),
 		draw_calls,
 		_format_count(primitives),
 		process_ms,
 		physics_ms,
+		int(round(get_viewport().scaling_3d_scale * 100.0)) if get_viewport() != null else 100,
 		_current_time_label(),
 	]
 	if not _build_error.is_empty():
