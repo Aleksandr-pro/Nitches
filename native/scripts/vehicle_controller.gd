@@ -71,6 +71,11 @@ var _steering_visual_angle := 0.0
 var _current_gear := 0
 var _engine_rpm := ENGINE_IDLE_RPM
 var _gear_shift_timer := 0.0
+var _gear_shift_duration := 0.0
+var _shift_torque_blend := 1.0
+var _throttle_command := 0.0
+var _smoothed_drive_force_per_wheel := 0.0
+var _drivetrain_forward_speed := 0.0
 var _reverse_engaged := false
 var _drive_force_per_wheel := 0.0
 var _engine_brake_force_per_wheel := 0.0
@@ -98,8 +103,8 @@ func _ready() -> void:
 	collision_mask = 1
 
 	var physics_material := PhysicsMaterial.new()
-	physics_material.friction = 0.28
-	physics_material.bounce = 0.025
+	physics_material.friction = 0.12
+	physics_material.bounce = 0.0
 	physics_material_override = physics_material
 
 	_ensure_input_actions()
@@ -146,11 +151,15 @@ func _ensure_action(action_name: StringName, keys: Array) -> void:
 
 func _create_collision_shapes() -> void:
 	var body_shape := BoxShape3D.new()
-	body_shape.size = Vector3(1.84, 0.74, 4.64)
+	body_shape.size = Vector3(1.84, 0.68, 4.64)
 	var body_collision := CollisionShape3D.new()
 	body_collision.name = "BodyCollision"
 	body_collision.shape = body_shape
-	body_collision.position = Vector3(0.0, 0.55, 0.0)
+	# Keep the collision floor a little higher than the visual sill. At
+	# maximum raycast-suspension compression the old box could intermittently
+	# scrape the heightmap, adding a second, much harsher ground contact
+	# on top of the tyre forces and making the body twitch under load.
+	body_collision.position = Vector3(0.0, 0.62, 0.0)
 	add_child(body_collision)
 
 	var cabin_shape := BoxShape3D.new()
@@ -184,6 +193,9 @@ func _create_suspension_raycasts() -> void:
 		wheel["displacement"] = 0.0
 		wheel["spring_force"] = 0.0
 		wheel["slip_angle"] = 0.0
+		wheel["filtered_spring_force"] = 0.0
+		wheel["filtered_normal"] = Vector3.UP
+		wheel["filtered_displacement"] = 0.0
 		wheel["surface"] = {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 		_wheels.append(wheel)
 
@@ -615,7 +627,7 @@ func _read_inputs() -> void:
 		touch_throttle += 1.0
 	if _touch_pressed("brake_reverse"):
 		touch_throttle -= 1.0
-	throttle_input = clampf(touch_throttle if absf(touch_throttle) > 0.01 else keyboard_throttle, -1.0, 1.0)
+	_throttle_command = clampf(touch_throttle if absf(touch_throttle) > 0.01 else keyboard_throttle, -1.0, 1.0)
 
 	var keyboard_steering := Input.get_axis(&"steer_left", &"steer_right")
 	var touch_steering := 0.0
@@ -626,7 +638,7 @@ func _read_inputs() -> void:
 	steering_input = clampf(touch_steering if absf(touch_steering) > 0.01 else keyboard_steering, -1.0, 1.0)
 
 	handbrake_active = Input.is_action_pressed(&"handbrake") or _touch_pressed("handbrake")
-	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and throttle_input > 0.05 and _nitro > 0.02
+	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and _throttle_command > 0.05 and _nitro > 0.02
 
 
 func _physics_process(delta: float) -> void:
@@ -636,6 +648,17 @@ func _physics_process(delta: float) -> void:
 
 	_forward_speed = linear_velocity.dot(-global_transform.basis.z)
 	_lateral_speed = linear_velocity.dot(global_transform.basis.x)
+
+	# Touch/keyboard pedals are digital, but a real throttle/brake actuator
+	# is not instantaneous.  Ramp the effective pedal instead of jumping
+	# 0 -> 100% in one 60 Hz physics tick; braking still applies almost
+	# twice as quickly as the throttle.  A filtered copy of forward speed
+	# also keeps tiny RigidBody velocity noise out of RPM/gear decisions.
+	var pedal_rate := 11.0 if _throttle_command < throttle_input else 5.4
+	throttle_input = lerpf(throttle_input, _throttle_command, 1.0 - exp(-pedal_rate * delta))
+	if absf(throttle_input - _throttle_command) < 0.002:
+		throttle_input = _throttle_command
+	_drivetrain_forward_speed = lerpf(_drivetrain_forward_speed, _forward_speed, 1.0 - exp(-10.0 * delta))
 
 	# Drive ArcadeCar steering curve: quadratic speed falloff and an
 	# exponential approach are much smoother for digital touch buttons than
@@ -701,12 +724,12 @@ func _update_drivetrain(delta: float) -> void:
 
 	_gear_shift_timer = maxf(_gear_shift_timer - delta, 0.0)
 	var ratio := REVERSE_RATIO if _reverse_engaged else GEAR_RATIOS[_current_gear]
-	var wheel_rpm := absf(_forward_speed) / WHEEL_RADIUS * 60.0 / TAU
+	var wheel_rpm := absf(_drivetrain_forward_speed) / WHEEL_RADIUS * 60.0 / TAU
 	var coupled_rpm := wheel_rpm * ratio * FINAL_DRIVE
 	var target_rpm := maxf(coupled_rpm, ENGINE_IDLE_RPM)
-	if absf(throttle_input) > 0.03 and absf(_forward_speed) < 7.0:
+	if absf(throttle_input) > 0.03 and absf(_drivetrain_forward_speed) < 7.0:
 		target_rpm = maxf(target_rpm, ENGINE_IDLE_RPM + absf(throttle_input) * 1750.0)
-	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 5600.0 * delta), ENGINE_IDLE_RPM, ENGINE_REDLINE_RPM)
+	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 4600.0 * delta), ENGINE_IDLE_RPM, ENGINE_REDLINE_RPM)
 
 	if not _reverse_engaged and _gear_shift_timer <= 0.0:
 		if throttle_input > 0.04 and _engine_rpm > 6250.0 and _current_gear < GEAR_RATIOS.size() - 1:
@@ -714,13 +737,15 @@ func _update_drivetrain(delta: float) -> void:
 			_current_gear += 1
 			ratio = GEAR_RATIOS[_current_gear]
 			_engine_rpm *= ratio / old_ratio
-			_gear_shift_timer = 0.18
+			_gear_shift_timer = 0.24
+			_gear_shift_duration = 0.24
 		elif _current_gear > 0 and _engine_rpm < 2050.0 and absf(_forward_speed) > 3.0:
 			var old_ratio_down := GEAR_RATIOS[_current_gear]
 			_current_gear -= 1
 			ratio = GEAR_RATIOS[_current_gear]
 			_engine_rpm *= ratio / old_ratio_down
-			_gear_shift_timer = 0.12
+			_gear_shift_timer = 0.17
+			_gear_shift_duration = 0.17
 
 	var throttle_magnitude := 0.0
 	if _reverse_engaged:
@@ -730,10 +755,27 @@ func _update_drivetrain(delta: float) -> void:
 	var torque := _engine_torque_curve(_engine_rpm) * throttle_magnitude
 	if boost_active and not _reverse_engaged:
 		torque *= 1.34
-	if _gear_shift_timer > 0.0:
-		torque *= 0.16
+	_shift_torque_blend = 1.0
+	if _gear_shift_timer > 0.0 and _gear_shift_duration > 0.0:
+		var shift_progress := clampf(1.0 - _gear_shift_timer / _gear_shift_duration, 0.0, 1.0)
+		# The previous rectangular 84% torque cut/restore felt like the whole
+		# car was tugging at every gear change.  A sinusoidal dip keeps the
+		# perceptible shift pause but has no force discontinuity.
+		_shift_torque_blend = 1.0 - 0.58 * sin(PI * shift_progress)
+		torque *= _shift_torque_blend
+	elif _gear_shift_duration > 0.0:
+		_gear_shift_duration = 0.0
 	var total_drive_force := torque * ratio * FINAL_DRIVE * DRIVETRAIN_EFFICIENCY / WHEEL_RADIUS
-	_drive_force_per_wheel = total_drive_force * 0.5 * (-1.0 if _reverse_engaged else 1.0)
+	var target_drive_force_per_wheel := total_drive_force * 0.5 * (-1.0 if _reverse_engaged else 1.0)
+	# One final 75 ms torque-actuator lag absorbs high-frequency changes
+	# from the RPM target and the wheelspin estimator without making the
+	# pedal feel disconnected.
+	_smoothed_drive_force_per_wheel = lerpf(
+		_smoothed_drive_force_per_wheel,
+		target_drive_force_per_wheel,
+		1.0 - exp(-13.0 * delta)
+	)
+	_drive_force_per_wheel = _smoothed_drive_force_per_wheel
 
 	var engine_brake_torque := clampf((_engine_rpm - ENGINE_IDLE_RPM) * 0.018, 0.0, 110.0)
 	_engine_brake_force_per_wheel = 0.0
@@ -745,7 +787,7 @@ func _update_drivetrain(delta: float) -> void:
 	# becomes wheelspin, then the longitudinal Pacejka curve and traction
 	# control decide how much of it reaches the road.
 	var approximate_rear_peak := mass * 9.81 * 0.47 * maxf(_surface_mu, 0.05)
-	var load_ratio := absf(total_drive_force) / maxf(approximate_rear_peak, 1.0)
+	var load_ratio := absf(_smoothed_drive_force_per_wheel) * 2.0 / maxf(approximate_rear_peak, 1.0)
 	var target_excess := clampf((load_ratio - 0.72) * 7.0, 0.0, 11.0)
 	if _reverse_engaged:
 		target_excess = -target_excess
@@ -768,21 +810,39 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		wheel["spring_force"] = 0.0
 		wheel["slip_angle"] = 0.0
 		if ray == null:
+			wheel["filtered_displacement"] = 0.0
+			wheel["filtered_spring_force"] = 0.0
 			continue
 		ray.force_raycast_update()
 		if not ray.is_colliding():
+			wheel["filtered_displacement"] = lerpf(float(wheel.get("filtered_displacement", 0.0)), 0.0, 0.35)
+			wheel["filtered_spring_force"] = lerpf(float(wheel.get("filtered_spring_force", 0.0)), 0.0, 0.35)
 			continue
 		var hit_point := ray.get_collision_point()
 		var ground_normal := ray.get_collision_normal().normalized()
 		var distance := ray.global_position.distance_to(hit_point)
 		var displacement := clampf(SUSPENSION_REST_LENGTH - distance, 0.0, SUSPENSION_TRAVEL)
 		if displacement <= 0.0005 and distance > SUSPENSION_REST_LENGTH:
+			wheel["filtered_displacement"] = lerpf(float(wheel.get("filtered_displacement", 0.0)), 0.0, 0.35)
+			wheel["filtered_spring_force"] = lerpf(float(wheel.get("filtered_spring_force", 0.0)), 0.0, 0.35)
 			continue
+		# HeightMapShape3D is triangulated on a coarse 10 m grid. Its raw
+		# normal and compression therefore step at triangle boundaries even
+		# on a visually flat road.  Short physics-rate filters turn those
+		# steps into tyre/suspension compliance instead of body twitches.
+		var previous_normal: Vector3 = wheel.get("filtered_normal", ground_normal)
+		if previous_normal.length_squared() < 0.0001:
+			previous_normal = ground_normal
+		var filtered_normal := previous_normal.lerp(ground_normal, 0.42).normalized()
+		var filtered_displacement := lerpf(float(wheel.get("filtered_displacement", displacement)), displacement, 0.55)
 		wheel["grounded"] = true
 		wheel["hit_point"] = hit_point
-		wheel["ground_normal"] = ground_normal
+		wheel["ground_normal"] = filtered_normal
+		wheel["filtered_normal"] = filtered_normal
 		wheel["distance"] = distance
-		wheel["displacement"] = displacement
+		wheel["displacement"] = filtered_displacement
+		wheel["filtered_displacement"] = filtered_displacement
+		wheel["raw_displacement"] = displacement
 		if _world != null:
 			wheel["surface"] = _world.get_surface_at(hit_point)
 		grounded_wheel_count += 1
@@ -792,14 +852,22 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 	for axle in [0, 1]:
 		var left_displacement := 0.0
 		var right_displacement := 0.0
+		var left_grounded := false
+		var right_grounded := false
 		for wheel in _wheels:
 			if int(wheel.get("axle", 0)) != axle or not bool(wheel.get("grounded", false)):
 				continue
 			if int(wheel.get("side", 0)) < 0:
 				left_displacement = float(wheel.get("displacement", 0.0))
+				left_grounded = true
 			else:
 				right_displacement = float(wheel.get("displacement", 0.0))
-		axle_adjustments[axle] = (left_displacement - right_displacement) * (ANTI_ROLL_FRONT if axle == 0 else ANTI_ROLL_REAR)
+				right_grounded = true
+		# An anti-roll bar can only couple two loaded wheels.  Treating an
+		# airborne wheel as displacement 0 used to invent a large roll
+		# correction on the other side whenever one ray briefly unloaded.
+		if left_grounded and right_grounded:
+			axle_adjustments[axle] = (left_displacement - right_displacement) * (ANTI_ROLL_FRONT if axle == 0 else ANTI_ROLL_REAR)
 
 	# Second pass: spring/damper plus tyre forces at actual contacts.
 	for wheel in _wheels:
@@ -818,6 +886,10 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		var adjustment := float(axle_adjustments.get(int(wheel.get("axle", 0)), 0.0))
 		spring_force += adjustment if int(wheel.get("side", 0)) < 0 else -adjustment
 		spring_force = clampf(spring_force, 0.0, 26500.0)
+		var previous_spring_force := float(wheel.get("filtered_spring_force", 0.0))
+		if previous_spring_force > 0.01:
+			spring_force = lerpf(previous_spring_force, spring_force, 0.58)
+		wheel["filtered_spring_force"] = spring_force
 		wheel["spring_force"] = spring_force
 		apply_force(ground_normal * spring_force, relative_position)
 
@@ -981,7 +1053,13 @@ func _process(delta: float) -> void:
 		if i < _wheels.size():
 			var base_position: Vector3 = wheel_visual.get("base_position", pivot.position)
 			var displacement := float(_wheels[i].get("displacement", 0.0))
-			pivot.position = base_position + Vector3.UP * displacement * 0.86
+			var visual_displacement := lerpf(
+				float(wheel_visual.get("visual_displacement", displacement)),
+				displacement,
+				1.0 - exp(-20.0 * maxf(delta, 0.0))
+			)
+			wheel_visual["visual_displacement"] = visual_displacement
+			pivot.position = base_position + Vector3.UP * visual_displacement * 0.86
 		if bool(wheel_visual.get("front", false)):
 			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _ackermann_angle(int(wheel_visual.get("side", 1)))
 		var visual_speed := _forward_speed
@@ -1037,6 +1115,12 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	_current_gear = 0
 	_engine_rpm = ENGINE_IDLE_RPM
 	_gear_shift_timer = 0.0
+	_gear_shift_duration = 0.0
+	_shift_torque_blend = 1.0
+	_throttle_command = 0.0
+	throttle_input = 0.0
+	_smoothed_drive_force_per_wheel = 0.0
+	_drivetrain_forward_speed = 0.0
 	_reverse_engaged = false
 	_drive_force_per_wheel = 0.0
 	_wheelspin_excess_speed = 0.0
@@ -1138,6 +1222,18 @@ func get_gear_label() -> String:
 
 func get_rpm_ratio() -> float:
 	return clampf((_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
+
+
+func get_smoothing_state() -> Dictionary:
+	return {
+		"pedal_actuator_smoothing": true,
+		"drive_force_smoothing": true,
+		"gear_shift_torque_blend": _shift_torque_blend,
+		"filtered_suspension": true,
+		"anti_roll_requires_both_wheels": true,
+		"throttle_command": _throttle_command,
+		"effective_throttle": throttle_input,
+	}
 
 
 func get_drive_base_state() -> Dictionary:

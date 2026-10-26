@@ -50,6 +50,7 @@ var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
 var _road_segment_grid: Dictionary = {}
 var _multimesh_chunk_count := 0
+var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
@@ -101,6 +102,7 @@ func build_world() -> Dictionary:
 	_build_street_lamps()
 	_build_bus_shelters()
 	_build_benches()
+	_build_city_details()
 	_build_reflection_probes()
 	_build_world_bounds()
 	set_time_of_day("day")
@@ -1598,6 +1600,12 @@ func _multimesh_visual_range(node_name: String) -> float:
 		return 520.0
 	if key.contains("tree") or key.contains("palm"):
 		return 780.0
+	if key.contains("bollard") or key.contains("planter") or key.contains("hedge") or key.contains("trashbin") or key.contains("roadsign") or key.contains("storefront") or key.contains("awning") or key.contains("balcony"):
+		return 430.0
+	if key.contains("beach"):
+		return 540.0
+	if key.contains("marina") or key.contains("rooftop") or key.contains("watertank"):
+		return 720.0
 	return 0.0
 
 
@@ -1696,6 +1704,32 @@ func _centered_model_transform(position_value: Vector3, yaw: float, scale_value:
 	return make_transform(position_value, yaw, scale_value) * Transform3D(Basis.IDENTITY, -source_center)
 
 
+func _nearest_road_point(point: Vector3) -> Dictionary:
+	var best_point := point
+	var best_direction := Vector3(0.0, 0.0, -1.0)
+	var best_distance_squared := INF
+	for i in _road_segment_starts.size():
+		var a := _road_segment_starts[i]
+		var b := _road_segment_ends[i]
+		var ab := b - a
+		var ab_xz := Vector2(ab.x, ab.z)
+		var length_squared := ab_xz.length_squared()
+		if length_squared <= 0.0001:
+			continue
+		var t := clampf(Vector2(point.x - a.x, point.z - a.z).dot(ab_xz) / length_squared, 0.0, 1.0)
+		var candidate := a + ab * t
+		var distance_squared := Vector2(point.x - candidate.x, point.z - candidate.z).length_squared()
+		if distance_squared < best_distance_squared:
+			best_distance_squared = distance_squared
+			best_point = candidate
+			best_direction = Vector3(ab_xz.x, 0.0, ab_xz.y).normalized()
+	return {
+		"point": best_point,
+		"direction": best_direction,
+		"distance": sqrt(best_distance_squared) if best_distance_squared < INF else INF,
+	}
+
+
 func _build_buildings() -> void:
 	var buildings_root := Node3D.new()
 	buildings_root.name = "Buildings"
@@ -1775,6 +1809,338 @@ func _build_buildings() -> void:
 			_add_generic_building(buildings_root, item)
 	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
 	_enhancement_stats["hero_building_models"] = hero_transforms.size()
+	_build_infill_buildings(buildings_root)
+
+
+func _build_infill_buildings(parent: Node) -> void:
+	_infill_buildings.clear()
+	var accepted: Array[Dictionary] = []
+	var search_ranges: Array[Vector2] = [
+		Vector2(535.0, 935.0),
+		Vector2(1150.0, 1470.0),
+	]
+
+	# The exported master plan deliberately contains only its hero parcels.
+	# This deterministic second pass fills genuinely empty city blocks:
+	# every footprint corner must clear roads and existing buildings, and
+	# candidates also avoid landmarks, pools, steep height changes and
+	# one another.  Building scale/mass follows the surrounding district.
+	for x_range in search_ranges:
+		for grid_z in range(-450, 451, 27):
+			var iz := int(floor((float(grid_z) + 500.0) / 27.0))
+			for grid_x in range(int(x_range.x), int(x_range.y) + 1, 24):
+				var ix := int(floor((float(grid_x) - 520.0) / 24.0))
+				var x := float(grid_x) + (_hash01(ix * 3 + 1, iz * 5 + 2) - 0.5) * 7.0
+				var z := float(grid_z) + (_hash01(ix * 7 + 4, iz * 11 + 3) - 0.5) * 8.0
+				if _in_zone(x, z, "rtPlaza"):
+					continue
+
+				var w := 15.0 + _hash01(ix, iz) * 9.0
+				var d := 13.0 + _hash01(iz, ix) * 8.0
+				var h := 8.0 + _hash01(ix + 9, iz + 4) * 20.0
+				if x >= 690.0 and x <= 880.0 and z >= -260.0 and z <= 240.0:
+					w = 16.0 + _hash01(ix, iz) * 9.0
+					d = 15.0 + _hash01(iz, ix) * 8.0
+					h = 18.0 + _hash01(ix + 9, iz + 4) * 42.0
+				elif x >= 1150.0:
+					w = 14.0 + _hash01(ix, iz) * 8.0
+					d = 11.0 + _hash01(iz, ix) * 7.0
+					h = 6.0 + _hash01(ix + 9, iz + 4) * 10.0
+				elif x >= 840.0:
+					w = 16.0 + _hash01(ix, iz) * 8.0
+					d = 14.0 + _hash01(iz, ix) * 7.0
+					h = 10.0 + _hash01(ix + 9, iz + 4) * 24.0
+				elif x < 650.0 and absf(z) > 230.0:
+					w = 13.0 + _hash01(ix, iz) * 8.0
+					d = 11.0 + _hash01(iz, ix) * 7.0
+					h = 6.0 + _hash01(ix + 9, iz + 4) * 8.0
+
+				x = clampf(x, 520.0 + w * 0.5 + 3.0, 1500.0 - w * 0.5 - 3.0)
+				z = clampf(z, -500.0 + d * 0.5 + 3.0, 500.0 - d * 0.5 - 3.0)
+				var centre_y := height_at(x, z)
+				if centre_y < 1.55:
+					continue
+				var corners: Array[Vector3] = [
+					Vector3(x - w * 0.5, 0.0, z - d * 0.5),
+					Vector3(x + w * 0.5, 0.0, z - d * 0.5),
+					Vector3(x - w * 0.5, 0.0, z + d * 0.5),
+					Vector3(x + w * 0.5, 0.0, z + d * 0.5),
+				]
+				var valid := true
+				var min_corner_height := INF
+				var max_corner_height := -INF
+				for corner in corners:
+					var corner_height := height_at(corner.x, corner.z)
+					min_corner_height = minf(min_corner_height, corner_height)
+					max_corner_height = maxf(max_corner_height, corner_height)
+					if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 4.5, 0.0):
+						valid = false
+						break
+				if not valid or max_corner_height - min_corner_height > 1.1:
+					continue
+				for existing in accepted:
+					if absf(x - _f(existing, "x")) < (w + _f(existing, "w")) * 0.5 + 5.0 and absf(z - _f(existing, "z")) < (d + _f(existing, "d")) * 0.5 + 5.0:
+						valid = false
+						break
+				if not valid:
+					continue
+				for landmark_variant in data.get("landmarks", []):
+					var landmark: Dictionary = landmark_variant
+					var landmark_pos := _item_position(landmark)
+					var safe_radius := maxf(_f(landmark, "r", 26.0), 26.0) + maxf(w, d) * 0.55
+					if Vector2(x - landmark_pos.x, z - landmark_pos.z).length() < safe_radius:
+						valid = false
+						break
+				if not valid:
+					continue
+				for pool_variant in data.get("pools", []):
+					var pool: Dictionary = pool_variant
+					var pool_pos := _item_position(pool)
+					if absf(x - pool_pos.x) < (w + _f(pool, "w", 8.0)) * 0.5 + 5.0 and absf(z - pool_pos.z) < (d + _f(pool, "d", 5.0)) * 0.5 + 5.0:
+						valid = false
+						break
+				if not valid:
+					continue
+
+				var facade_roll := _hash01(ix * 17 + 5, iz * 19 + 8)
+				var facade := "userPlaster"
+				if x >= 690.0 and x <= 880.0 and z >= -260.0 and z <= 240.0:
+					facade = "glassTower" if facade_roll < 0.42 else ("hotelTower" if facade_roll < 0.68 else ("marbleTower" if facade_roll < 0.86 else "goldTower"))
+				elif x >= 840.0 and x < 1150.0:
+					facade = "hotelTower" if facade_roll < 0.42 else ("glassTower" if facade_roll < 0.66 else ("sandTower" if facade_roll < 0.84 else "marbleTower"))
+				elif facade_roll < 0.34:
+					facade = "userStone"
+				elif facade_roll < 0.58:
+					facade = "userWood"
+				elif facade_roll < 0.78:
+					facade = "sandTower"
+				elif facade_roll < 0.91:
+					facade = "hotelTower"
+
+				accepted.append({
+					"x": x,
+					"y": centre_y,
+					"z": z,
+					"w": w,
+					"d": d,
+					"h": h,
+					"roofH": 0.0,
+					"rotY": 0.0,
+					"kind": "rt-infill",
+					"model": "generic",
+					"facade": facade,
+				})
+
+	_infill_buildings = accepted
+	_enhancement_stats["infill_buildings"] = accepted.size()
+	if accepted.is_empty():
+		_enhancement_stats["building_details"] = 0
+		return
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var unit_cylinder := CylinderMesh.new()
+	unit_cylinder.top_radius = 0.5
+	unit_cylinder.bottom_radius = 0.5
+	unit_cylinder.height = 1.0
+	unit_cylinder.radial_segments = 12
+
+	var facade_transforms: Dictionary = {}
+	var infill_townhouse_transforms: Array = []
+	var infill_hero_transforms: Array = []
+	var infill_glass_transforms: Array = []
+	var flat_roof_transforms: Array = []
+	var pitched_roof_transforms: Array = []
+	var storefront_transforms: Array = []
+	var balcony_transforms: Array = []
+	var rooftop_transforms: Array = []
+	var tank_transforms: Array = []
+	var sign_transforms: Array = [[], [], []]
+	var awning_transforms: Array = [[], [], []]
+
+	var sign_materials: Array[StandardMaterial3D] = []
+	for sign_spec in [
+		["city_sign_blue", Color(0.08, 0.34, 0.82)],
+		["city_sign_orange", Color(0.98, 0.38, 0.07)],
+		["city_sign_teal", Color(0.03, 0.58, 0.52)],
+	]:
+		var sign_material := _material(String(sign_spec[0]), "", "", sign_spec[1] as Color, 0.42, 0.04)
+		sign_material.emission_enabled = true
+		sign_material.emission = sign_spec[1] as Color
+		_register_night_material(sign_material, 0.10, 0.75, 2.3)
+		sign_materials.append(sign_material)
+	var awning_materials: Array[StandardMaterial3D] = [
+		_material("city_awning_red", "", "", Color(0.48, 0.07, 0.07), 0.82),
+		_material("city_awning_sand", "", "", Color(0.72, 0.58, 0.38), 0.86),
+		_material("city_awning_green", "", "", Color(0.08, 0.34, 0.24), 0.84),
+	]
+
+	for item_index in accepted.size():
+		var item := accepted[item_index]
+		var base := _item_position(item)
+		var w := _f(item, "w", 18.0)
+		var d := _f(item, "d", 15.0)
+		var h := _f(item, "h", 9.0)
+		var facade := String(item.get("facade", "userPlaster"))
+		var detail_roll := _hash01(item_index * 23 + 7, item_index * 31 + 11)
+		# Reuse the user's detailed Blender buildings wherever the parcel
+		# proportions allow it.  Only the remaining infill massing uses the
+		# textured facade-box fallback, avoiding a city of plain cuboids.
+		var model_kind := ""
+		if h >= 34.0:
+			model_kind = "glass"
+			infill_glass_transforms.append(make_transform(
+				base,
+				0.0,
+				Vector3(w / 33.60, h / 70.71, d / 33.60)
+			))
+		elif h >= 15.0 and detail_roll < 0.72:
+			model_kind = "hero"
+			infill_hero_transforms.append(make_transform(
+				base,
+				0.0,
+				Vector3(w / 24.50, h / 18.40, d / 18.20)
+			))
+		elif h <= 13.5 and detail_roll < 0.76:
+			model_kind = "townhouse"
+			infill_townhouse_transforms.append(_centered_model_transform(
+				base,
+				0.0,
+				Vector3(w / 13.15, h / 9.99, d / 13.40),
+				Vector3(0.075, 0.0, 1.075)
+			))
+		else:
+			if not facade_transforms.has(facade):
+				facade_transforms[facade] = []
+			(facade_transforms[facade] as Array).append(make_transform(
+				base + Vector3(0.0, h * 0.5 - 0.30, 0.0),
+				0.0,
+				Vector3(w, h, d)
+			))
+		var uses_model := not model_kind.is_empty()
+		item["model"] = model_kind if uses_model else "generic"
+
+		var roof_height := 0.0
+		var pitched := not uses_model and h <= 11.5 and detail_roll < 0.55
+		if pitched:
+			roof_height = 2.0 + detail_roll * 1.6
+			item["roofH"] = roof_height
+			pitched_roof_transforms.append(make_transform(
+				base + Vector3(0.0, h - 0.20, 0.0),
+				0.0,
+				Vector3(w + 0.9, roof_height, d + 0.9)
+			))
+		else:
+			if not uses_model:
+				flat_roof_transforms.append(make_transform(
+					base + Vector3(0.0, h - 0.02, 0.0),
+					0.0,
+					Vector3(w + 0.55, 0.42, d + 0.55)
+				))
+			var unit_count := 0
+			if not uses_model or model_kind == "glass":
+				unit_count = 1 if detail_roll < 0.68 else 2
+			for unit_index in unit_count:
+				var local_x := (_hash01(item_index * 13 + unit_index * 7, item_index * 3 + 2) - 0.5) * maxf(w - 7.0, 1.0)
+				var local_z := (_hash01(item_index * 5 + 1, item_index * 17 + unit_index * 9) - 0.5) * maxf(d - 6.0, 1.0)
+				rooftop_transforms.append(make_transform(
+					base + Vector3(local_x, h + 0.62, local_z),
+					detail_roll * TAU,
+					Vector3(2.5, 1.05, 1.8)
+				))
+			if h > 24.0 and detail_roll > 0.62 and (not uses_model or model_kind == "glass"):
+				tank_transforms.append(make_transform(
+					base + Vector3(w * 0.24, h + 1.85, -d * 0.18),
+					0.0,
+					Vector3(3.4, 3.7, 3.4)
+				))
+		_add_box_collider(base + Vector3(0.0, (h + roof_height) * 0.5, 0.0), Vector3(w, h + roof_height, d))
+
+		# Ground-floor frontage and balconies face the nearest actual road.
+		# They are all instanced thin boxes, so the city gains close-range
+		# architectural rhythm without hundreds of individual nodes.
+		var nearest := _nearest_road_point(base)
+		var nearest_point: Vector3 = nearest.get("point", base)
+		var to_road := nearest_point - base
+		to_road.y = 0.0
+		if to_road.length_squared() < 0.01:
+			continue
+		var outward := Vector3.ZERO
+		if absf(to_road.x) >= absf(to_road.z):
+			outward = Vector3(signf(to_road.x), 0.0, 0.0)
+		else:
+			outward = Vector3(0.0, 0.0, signf(to_road.z))
+		var front_is_x_face := absf(outward.x) > 0.5
+		var half_extent := w * 0.5 if front_is_x_face else d * 0.5
+		var front_width := d if front_is_x_face else w
+		var front_yaw := PI * 0.5 if front_is_x_face else 0.0
+		var face_centre := base + outward * (half_extent + 0.07)
+		if h >= 6.5:
+			storefront_transforms.append(make_transform(
+				face_centre + Vector3(0.0, 1.45, 0.0),
+				front_yaw,
+				Vector3(minf(front_width * 0.62, 14.0), 2.35, 0.14)
+			))
+			(sign_transforms[item_index % 3] as Array).append(make_transform(
+				face_centre + outward * 0.10 + Vector3(0.0, 3.05, 0.0),
+				front_yaw,
+				Vector3(minf(front_width * 0.38, 7.0), 0.72, 0.16)
+			))
+			(awning_transforms[item_index % 3] as Array).append(make_transform(
+				face_centre + outward * 0.62 + Vector3(0.0, 2.72, 0.0),
+				front_yaw,
+				Vector3(minf(front_width * 0.55, 11.0), 0.16, 1.35)
+			))
+		if h >= 12.0 and detail_roll < 0.72:
+			var lateral := Vector3(outward.z, 0.0, -outward.x)
+			var floor_y := 4.4
+			while floor_y < h - 1.4:
+				for offset_ratio in [-0.28, 0.0, 0.28]:
+					balcony_transforms.append(make_transform(
+						face_centre + outward * 0.48 + lateral * front_width * float(offset_ratio) + Vector3(0.0, floor_y, 0.0),
+						front_yaw,
+						Vector3(2.4, 0.18, 1.0)
+					))
+				floor_y += 3.15
+
+	for facade_variant in facade_transforms.keys():
+		var facade_name := String(facade_variant)
+		_add_multimesh(
+			parent,
+			unit_box,
+			_facade_material(facade_name, 28.0),
+			facade_transforms[facade_name],
+			"InfillBuildings_%s" % facade_name,
+			true
+		)
+	_add_batched_model(parent, "res://assets/buildings/townhouse.glb", infill_townhouse_transforms, "InfillBlenderTownhouses")
+	_add_batched_model(parent, "res://assets/buildings/hero_building.glb", infill_hero_transforms, "InfillBlenderHeroBuildings")
+	_add_batched_model(parent, "res://assets/buildings/glass_tower.glb", infill_glass_transforms, "InfillBlenderGlassTowers")
+	_enhancement_stats["infill_model_buildings"] = infill_townhouse_transforms.size() + infill_hero_transforms.size() + infill_glass_transforms.size()
+	_add_multimesh(parent, unit_box, _roof_material(false), flat_roof_transforms, "InfillFlatRoofs", false)
+	_add_multimesh(parent, _get_gable_mesh(), _roof_material(true), pitched_roof_transforms, "InfillPitchedRoofs", true)
+	_add_multimesh(parent, unit_box, _prop_material("FacadeGlass"), storefront_transforms, "CityStorefrontGlass", false)
+	_add_multimesh(parent, unit_box, _terrain_material("concrete"), balcony_transforms, "CityBalconySlabs", false)
+	_add_multimesh(parent, unit_box, _prop_material("PropsMetal"), rooftop_transforms, "CityRooftopUnits", false)
+	_add_multimesh(parent, unit_cylinder, _prop_material("PropsMetal"), tank_transforms, "CityWaterTanks", false)
+	for group_index in 3:
+		_add_multimesh(parent, unit_box, sign_materials[group_index], sign_transforms[group_index], "CityRoadSigns_%d" % group_index, false)
+		_add_multimesh(parent, unit_box, awning_materials[group_index], awning_transforms[group_index], "CityAwnings_%d" % group_index, false)
+
+	var detail_count := storefront_transforms.size() + balcony_transforms.size() + rooftop_transforms.size() + tank_transforms.size()
+	for group in sign_transforms:
+		detail_count += (group as Array).size()
+	for group in awning_transforms:
+		detail_count += (group as Array).size()
+	_enhancement_stats["building_details"] = detail_count
+
+	# Expose the completed parcels to vegetation placement and the minimap
+	# only after generation, so candidates never test against themselves
+	# through the generic clearance helper during the search.
+	var all_buildings: Array = data.get("buildings", [])
+	for item in accepted:
+		all_buildings.append(item)
+	data["buildings"] = all_buildings
 
 
 func _get_sail_mesh() -> ArrayMesh:
@@ -2083,7 +2449,7 @@ func _build_vegetation() -> void:
 
 		# Street trees along the western residential avenue.
 		var west_index := 0
-		for z in range(-390, 391, 65):
+		for z in range(-390, 391, 45):
 			var x := 546.0 if west_index % 2 == 0 else 574.0
 			var candidate: Vector3 = Vector3(x, height_at(x, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
@@ -2095,14 +2461,14 @@ func _build_vegetation() -> void:
 		# building/road clearance test removes candidates in hotel plots,
 		# intersections and driveways while keeping a continuous canopy.
 		var promenade_index := 0
-		for z in range(-390, 391, 65):
+		for z in range(-390, 391, 45):
 			var candidate: Vector3 = Vector3(912.0, height_at(912.0, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(promenade_index) * 0.71, "s": 0.84 + float(promenade_index % 3) * 0.07, "type": "oak"})
 				extra_tree_count += 1
 			promenade_index += 1
 		var boulevard_index := 0
-		for z in range(-380, 386, 85):
+		for z in range(-380, 386, 55):
 			for x in [738.0, 782.0]:
 				var candidate := Vector3(x, height_at(x, float(z)), float(z))
 				if _is_position_clear(candidate, 2.0, 4.0):
@@ -2113,9 +2479,9 @@ func _build_vegetation() -> void:
 		# Deterministic hillside woodland.  Candidates are rejected on
 		# roads, landmarks, steep/underwater terrain and building plots.
 		var hill_ix := 0
-		for base_x in range(970, 1241, 34):
+		for base_x in range(970, 1241, 28):
 			var hill_iz := 0
-			for base_z in range(-470, 471, 38):
+			for base_z in range(-470, 471, 32):
 				var jitter_x := (_hash01(hill_ix * 13 + 7, hill_iz * 17 + 3) - 0.5) * 18.0
 				var jitter_z := (_hash01(hill_ix * 19 + 11, hill_iz * 23 + 5) - 0.5) * 20.0
 				var candidate := Vector3(float(base_x) + jitter_x, 0.0, float(base_z) + jitter_z)
@@ -2213,9 +2579,27 @@ func _build_vegetation() -> void:
 	trunk_mesh.bottom_radius = 0.29
 	trunk_mesh.height = 5.8
 	trunk_mesh.radial_segments = 10
+	var palms: Array = data.get("palms", []).duplicate()
+	var extra_palm_count := 0
+	var beach_palm_index := 0
+	for palm_z in range(-420, 421, 42):
+		var palm_x := 950.0 + float(beach_palm_index % 3) * 9.0
+		var palm_candidate := Vector3(palm_x, height_at(palm_x, float(palm_z)), float(palm_z))
+		if palm_candidate.y > 0.7 and _is_position_clear(palm_candidate, 2.5, 5.0) and String(get_surface_at(palm_candidate).get("kind", "")) != "water":
+			palms.append({
+				"x": palm_candidate.x,
+				"y": palm_candidate.y,
+				"z": palm_candidate.z,
+				"rotY": float(beach_palm_index) * 0.77,
+				"s": 0.92 + float(beach_palm_index % 3) * 0.07,
+			})
+			extra_palm_count += 1
+		beach_palm_index += 1
+	_enhancement_stats["extra_palms"] = extra_palm_count
+
 	var trunk_transforms: Array[Transform3D] = []
 	var crown_transforms: Array[Transform3D] = []
-	for palm_variant in data.get("palms", []):
+	for palm_variant in palms:
 		var palm: Dictionary = palm_variant
 		var scale_value := _f(palm, "s", 1.0)
 		var base := _item_position(palm)
@@ -2271,6 +2655,254 @@ func _build_bus_shelters() -> void:
 		_add_box_collider(position_value + Vector3(0.0, 1.53, 0.0), Vector3(5.75, 3.06, 2.35), yaw)
 	var built := _add_batched_model(root, "res://assets/props/bus_shelter.glb", transforms, "BlenderBusShelters")
 	_enhancement_stats["bus_shelters"] = transforms.size() if built else 0
+
+
+func _yaw_for_x_direction(direction: Vector3) -> float:
+	return atan2(-direction.z, direction.x)
+
+
+func _yaw_for_z_normal(normal: Vector3) -> float:
+	return atan2(normal.x, normal.z)
+
+
+func _is_roadside_position_valid(candidate: Vector3) -> bool:
+	var clearance := _road_clearance_xz(candidate)
+	if clearance < 0.55 or clearance > 3.4:
+		return false
+	if not _is_position_clear(candidate, 0.35, 0.0):
+		return false
+	return String(get_surface_at(candidate).get("kind", "")) != "water"
+
+
+func _build_city_details() -> void:
+	var root := Node3D.new()
+	root.name = "CityDetails"
+	add_child(root)
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var bollard_mesh := CylinderMesh.new()
+	bollard_mesh.top_radius = 0.09
+	bollard_mesh.bottom_radius = 0.09
+	bollard_mesh.height = 0.85
+	bollard_mesh.radial_segments = 10
+	var bin_mesh := CylinderMesh.new()
+	bin_mesh.top_radius = 0.30
+	bin_mesh.bottom_radius = 0.27
+	bin_mesh.height = 0.78
+	bin_mesh.radial_segments = 12
+	var sign_post_mesh := CylinderMesh.new()
+	sign_post_mesh.top_radius = 0.045
+	sign_post_mesh.bottom_radius = 0.045
+	sign_post_mesh.height = 2.8
+	sign_post_mesh.radial_segments = 8
+	var umbrella_pole_mesh := CylinderMesh.new()
+	umbrella_pole_mesh.top_radius = 0.035
+	umbrella_pole_mesh.bottom_radius = 0.035
+	umbrella_pole_mesh.height = 2.1
+	umbrella_pole_mesh.radial_segments = 8
+	var umbrella_canopy_mesh := CylinderMesh.new()
+	umbrella_canopy_mesh.top_radius = 0.06
+	umbrella_canopy_mesh.bottom_radius = 1.35
+	umbrella_canopy_mesh.height = 0.42
+	umbrella_canopy_mesh.radial_segments = 10
+	var mast_mesh := CylinderMesh.new()
+	mast_mesh.top_radius = 0.05
+	mast_mesh.bottom_radius = 0.05
+	mast_mesh.height = 7.2
+	mast_mesh.radial_segments = 8
+
+	var metal := _prop_material("PropsMetal")
+	var wood := _prop_material("PropsWood")
+	var concrete := _terrain_material("concrete")
+	var hedge := _material(
+		"city_hedge",
+		"foliage.jpg",
+		"foliage_normal.jpg",
+		Color(0.42, 0.72, 0.33),
+		1.0,
+		0.0,
+		Vector3(0.35, 0.35, 0.35),
+		true
+	)
+	hedge.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var white_painted := _material("city_white_painted", "", "", Color(0.90, 0.92, 0.90), 0.52, 0.05)
+	var boat_blue := _material("city_boat_blue", "", "", Color(0.05, 0.28, 0.58), 0.38, 0.08)
+
+	var sign_materials: Array[StandardMaterial3D] = []
+	for sign_spec in [
+		["city_sign_blue", Color(0.08, 0.34, 0.82)],
+		["city_sign_orange", Color(0.98, 0.38, 0.07)],
+		["city_sign_teal", Color(0.03, 0.58, 0.52)],
+	]:
+		var sign_material := _material(String(sign_spec[0]), "", "", sign_spec[1] as Color, 0.42, 0.04)
+		sign_material.emission_enabled = true
+		sign_material.emission = sign_spec[1] as Color
+		_register_night_material(sign_material, 0.10, 0.75, 2.3)
+		sign_materials.append(sign_material)
+
+	var bollard_transforms: Array = []
+	var planter_transforms: Array = []
+	var hedge_transforms: Array = []
+	var bin_transforms: Array = []
+	var sign_post_transforms: Array = []
+	var sign_panel_transforms: Array = [[], [], []]
+
+	var segment_counter := 0
+	var bollard_counter := 0
+	var planter_counter := 0
+	var bin_counter := 0
+	var sign_counter := 0
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
+		var width := _f(road, "widthM", 10.0)
+		var half_width := width * 0.5
+		for i in range(samples.size() - 1):
+			var a := _sample_point(samples[i])
+			var b := _sample_point(samples[i + 1])
+			var direction := b - a
+			direction.y = 0.0
+			if direction.length_squared() < 0.01:
+				continue
+			direction = direction.normalized()
+			var side_vector := Vector3(-direction.z, 0.0, direction.x)
+			var midpoint := (a + b) * 0.5
+			var road_yaw := _yaw_for_x_direction(direction)
+
+			if width >= 17.0 and segment_counter % 3 == 0:
+				var bollard_side := -1.0 if bollard_counter % 2 == 0 else 1.0
+				bollard_counter += 1
+				var bollard_pos := midpoint + side_vector * bollard_side * (half_width + 1.45)
+				bollard_pos.y = maxf(height_at(bollard_pos.x, bollard_pos.z), midpoint.y + 0.04)
+				if _is_roadside_position_valid(bollard_pos):
+					bollard_transforms.append(make_transform(bollard_pos + Vector3(0.0, 0.43, 0.0), road_yaw, Vector3.ONE))
+
+			if width >= 8.0 and segment_counter % 5 == 1:
+				var planter_side := -1.0 if planter_counter % 2 == 0 else 1.0
+				planter_counter += 1
+				var planter_pos := midpoint + side_vector * planter_side * (half_width + 1.58)
+				planter_pos.y = maxf(height_at(planter_pos.x, planter_pos.z), midpoint.y + 0.04)
+				if _is_roadside_position_valid(planter_pos):
+					planter_transforms.append(make_transform(planter_pos + Vector3(0.0, 0.28, 0.0), road_yaw, Vector3(1.9, 0.55, 0.75)))
+					hedge_transforms.append(make_transform(planter_pos + Vector3(0.0, 0.76, 0.0), road_yaw, Vector3(1.68, 0.55, 0.56)))
+
+			if segment_counter % 11 == 4:
+				var bin_side := -1.0 if bin_counter % 2 == 0 else 1.0
+				bin_counter += 1
+				var bin_pos := midpoint + side_vector * bin_side * (half_width + 1.50)
+				bin_pos.y = maxf(height_at(bin_pos.x, bin_pos.z), midpoint.y + 0.04)
+				if _is_roadside_position_valid(bin_pos):
+					bin_transforms.append(make_transform(bin_pos + Vector3(0.0, 0.39, 0.0), road_yaw, Vector3.ONE))
+
+			if segment_counter % 14 == 7:
+				var sign_side := -1.0 if sign_counter % 2 == 0 else 1.0
+				var sign_group := sign_counter % 3
+				sign_counter += 1
+				var sign_pos := midpoint + side_vector * sign_side * (half_width + 1.65)
+				sign_pos.y = maxf(height_at(sign_pos.x, sign_pos.z), midpoint.y + 0.04)
+				if _is_roadside_position_valid(sign_pos):
+					sign_post_transforms.append(make_transform(sign_pos + Vector3(0.0, 1.4, 0.0), road_yaw, Vector3.ONE))
+					var panel_normal := -side_vector * sign_side
+					(sign_panel_transforms[sign_group] as Array).append(make_transform(
+						sign_pos + Vector3(0.0, 2.62, 0.0),
+						_yaw_for_z_normal(panel_normal),
+						Vector3(1.35, 0.82, 0.09)
+					))
+
+			segment_counter += 1
+
+	_add_multimesh(root, bollard_mesh, metal, bollard_transforms, "CityBollards", false)
+	_add_multimesh(root, unit_box, concrete, planter_transforms, "CityPlanters", false)
+	_add_multimesh(root, unit_box, hedge, hedge_transforms, "CityHedges", false)
+	_add_multimesh(root, bin_mesh, metal, bin_transforms, "CityTrashBins", false)
+	_add_multimesh(root, sign_post_mesh, metal, sign_post_transforms, "CityRoadSignPosts", false)
+	for group_index in 3:
+		_add_multimesh(root, unit_box, sign_materials[group_index], sign_panel_transforms[group_index], "CityRoadSigns_%d" % group_index, false)
+
+	var roadside_prop_count := bollard_transforms.size() + planter_transforms.size() + bin_transforms.size() + sign_post_transforms.size()
+	_enhancement_stats["city_detail_props"] = roadside_prop_count
+	_enhancement_stats["roadside_bollards"] = bollard_transforms.size()
+	_enhancement_stats["roadside_planters"] = planter_transforms.size()
+
+	# Beach furniture follows the actual exported sand surface.  It adds
+	# colour and human scale to the Corniche without placing objects in
+	# the marina water or on the carriageway.
+	var beach_pole_transforms: Array = []
+	var beach_canopy_transforms: Array = [[], [], [], []]
+	var beach_lounger_transforms: Array = []
+	var beach_materials: Array[StandardMaterial3D] = [
+		_material("beach_umbrella_red", "", "", Color(0.78, 0.12, 0.10), 0.78),
+		_material("beach_umbrella_blue", "", "", Color(0.08, 0.34, 0.74), 0.78),
+		_material("beach_umbrella_yellow", "", "", Color(0.94, 0.68, 0.12), 0.78),
+		_material("beach_umbrella_teal", "", "", Color(0.05, 0.58, 0.54), 0.78),
+	]
+	for grid_z in range(-430, 431, 24):
+		var beach_iz := int(floor((float(grid_z) + 500.0) / 24.0))
+		for grid_x in range(952, 1021, 14):
+			var beach_ix := int(floor((float(grid_x) - 520.0) / 14.0))
+			if _hash01(beach_ix * 7 + 3, beach_iz * 11 + 5) < 0.38:
+				continue
+			var beach_pos := Vector3(
+				float(grid_x) + (_hash01(beach_ix, beach_iz) - 0.5) * 6.0,
+				0.0,
+				float(grid_z) + (_hash01(beach_iz, beach_ix) - 0.5) * 9.0
+			)
+			beach_pos.y = height_at(beach_pos.x, beach_pos.z)
+			if beach_pos.y < 0.65 or beach_pos.y > 3.3:
+				continue
+			if _road_clearance_xz(beach_pos) < 2.2:
+				continue
+			if String(get_surface_at(beach_pos).get("kind", "")) != "sand":
+				continue
+			var beach_yaw := _hash01(beach_ix * 13, beach_iz * 17) * TAU
+			beach_pole_transforms.append(make_transform(beach_pos + Vector3(0.0, 1.05, 0.0), beach_yaw, Vector3.ONE))
+			(beach_canopy_transforms[(beach_ix + beach_iz) % 4] as Array).append(make_transform(
+				beach_pos + Vector3(0.0, 2.05, 0.0),
+				beach_yaw,
+				Vector3.ONE
+			))
+			var lounger_pos := beach_pos + Vector3(1.25, 0.0, 0.45)
+			lounger_pos.y = height_at(lounger_pos.x, lounger_pos.z) + 0.22
+			beach_lounger_transforms.append(make_transform(lounger_pos, PI * 0.5, Vector3(0.65, 0.18, 1.8)))
+
+	_add_multimesh(root, umbrella_pole_mesh, metal, beach_pole_transforms, "BeachUmbrellaPoles", false)
+	for beach_group in 4:
+		_add_multimesh(root, umbrella_canopy_mesh, beach_materials[beach_group], beach_canopy_transforms[beach_group], "BeachUmbrellas_%d" % beach_group, false)
+	_add_multimesh(root, unit_box, white_painted, beach_lounger_transforms, "BeachLoungers", false)
+	_enhancement_stats["beach_props"] = beach_pole_transforms.size() + beach_lounger_transforms.size()
+
+	# The marina channel west of the Corniche was previously just a flat
+	# water strip.  A wooden dock, fingers and simple sailboats make the
+	# district read correctly from the road at almost no triangle cost.
+	var dock_transforms: Array = []
+	dock_transforms.append(make_transform(Vector3(889.0, 0.38, 270.0), 0.0, Vector3(3.0, 0.28, 205.0)))
+	for dock_z in range(176, 365, 24):
+		dock_transforms.append(make_transform(Vector3(862.0, 0.32, float(dock_z)), 0.0, Vector3(54.0, 0.24, 2.4)))
+	var hull_transforms: Array = []
+	var hull_stripe_transforms: Array = []
+	var cabin_transforms: Array = []
+	var boat_mast_transforms: Array = []
+	var boat_sail_transforms: Array = []
+	var boat_index := 0
+	for boat_z in range(184, 361, 22):
+		var boat_pos := Vector3(848.0 if boat_index % 2 == 0 else 874.0, 0.0, float(boat_z))
+		hull_transforms.append(make_transform(boat_pos + Vector3(0.0, 0.28, 0.0), 0.0, Vector3(2.3, 0.75, 7.2)))
+		hull_stripe_transforms.append(make_transform(boat_pos + Vector3(0.0, 0.62, 0.0), 0.0, Vector3(2.36, 0.18, 7.25)))
+		cabin_transforms.append(make_transform(boat_pos + Vector3(0.0, 0.98, 0.45), 0.0, Vector3(1.5, 0.75, 2.1)))
+		boat_mast_transforms.append(make_transform(boat_pos + Vector3(0.0, 4.15, -0.25), 0.0, Vector3.ONE))
+		boat_sail_transforms.append(make_transform(boat_pos + Vector3(0.0, 1.22, -0.25), PI * 0.5, Vector3(3.0, 4.8, 0.10)))
+		boat_index += 1
+	_add_multimesh(root, unit_box, wood, dock_transforms, "MarinaDocks", false)
+	_add_multimesh(root, unit_box, white_painted, hull_transforms, "MarinaBoatHulls", false)
+	_add_multimesh(root, unit_box, boat_blue, hull_stripe_transforms, "MarinaBoatStripes", false)
+	_add_multimesh(root, unit_box, white_painted, cabin_transforms, "MarinaBoatCabins", false)
+	_add_multimesh(root, mast_mesh, metal, boat_mast_transforms, "MarinaBoatMasts", false)
+	_add_multimesh(root, _get_sail_mesh(), white_painted, boat_sail_transforms, "MarinaBoatSails", false)
+	_enhancement_stats["marina_boats"] = hull_transforms.size()
+	_enhancement_stats["marina_docks"] = dock_transforms.size()
 
 
 func _build_reflection_probes() -> void:
