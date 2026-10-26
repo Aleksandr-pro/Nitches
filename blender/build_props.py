@@ -16,7 +16,7 @@ Props:
   * traffic_signal_short.glb / traffic_signal_long.glb
                       detailed mast-arm signals, static red aspect only
   * hero_building.glb five-storey residential block with balconies
-  * townhouse.glb     two-storey suburban house with garage and gable roof
+  * townhouse.glb     Building Model No.2: fixed-scale semi-detached townhouse pair
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
   * glass_tower.glb   podium tower with finned glass curtain wall
 """
@@ -95,6 +95,16 @@ def standard_mats():
     mat("VillaMulch", (0.12, 0.075, 0.045), roughness=1.0)
     mat("VillaLawn", (0.18, 0.36, 0.12), roughness=1.0)
     mat("VillaHedge", (0.08, 0.25, 0.07), roughness=1.0)
+    # Building Model No.2 has its own plaster/stone/terracotta set so the
+    # fixed-scale townhouse does not inherit the villa's modern roof and
+    # facade treatment merely by sharing a model category.
+    mat("TownPlaster", (0.84, 0.76, 0.64), roughness=0.92)
+    mat("TownStone", (0.66, 0.58, 0.47), roughness=0.94)
+    mat("TownTrim", (0.88, 0.84, 0.76), roughness=0.86)
+    mat("TownRoof", (0.55, 0.25, 0.14), roughness=0.95)
+    mat("TownGarage", (0.18, 0.22, 0.22), roughness=0.55, metallic=0.25)
+    mat("TownDoor", (0.28, 0.12, 0.07), roughness=0.72)
+    mat("TownDoorAccent", (0.08, 0.25, 0.28), roughness=0.50)
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -525,81 +535,352 @@ def build_hero():
 
 
 # --------------------------------------------------------------------------- #
-# suburban townhouse: 12.8 x 11 m, 9.45 m including roof
+# Building Model No.2 — detailed semi-detached townhouse pair.
+# Fixed real-metre envelope: 18.80 x 16.20 m, 11.05 m high. Two mirrored
+# 9.4 m homes share a party wall; the runtime places the complete design
+# at scale 1.0 rather than stretching one small house over every parcel.
 # --------------------------------------------------------------------------- #
 def build_townhouse():
-    main = MATS["FacadeMain"]
-    accent = MATS["FacadeAccent"]
-    glass = MATS["PropsGlass"]
+    plaster = MATS["TownPlaster"]
+    stone = MATS["TownStone"]
+    trim = MATS["TownTrim"]
+    roof_tile = MATS["TownRoof"]
+    garage_mat = MATS["TownGarage"]
+    door_mat = MATS["TownDoor"]
+    door_accent = MATS["TownDoorAccent"]
+    granite = MATS["VillaGranite"]
+    wood = MATS["VillaWood"]
+    deck = MATS["VillaDeck"]
+    frame = MATS["WindowFrame"]
+    glass = MATS["VillaGlass"]
+    interior = MATS["VillaInterior"]
+    curtain = MATS["VillaCurtain"]
+    pavement = MATS["VillaPavement"]
+    mulch = MATS["VillaMulch"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
     metal = MATS["PropsMetal"]
-    wood = MATS["PropsWood"]
-    roof = MATS["RoofTile"]
     dark = MATS["RoofDark"]
+    solar = MATS["SolarCell"]
+    glow = MATS["LampGlow"]
 
-    box("foundation", 0, 0, 0.3, 12.8, 11.0, 0.6, accent, bevel=0.02)
-    box("house", -1.6, 0, 3.65, 8.8, 10.0, 6.1, main, bevel=0.04)
-    box("garage", 4.45, 0.65, 2.05, 3.7, 7.7, 3.5, accent, bevel=0.03)
-    gable_roof("main_roof", -1.6, 0, 8.05, 9.7, 11.2, 2.8, roof, ridge_axis="x")
-    rbox("garage_roof", 4.45, 0.65, 3.98, 4.3, 8.5, 0.22, dark,
-         rotation=(0.16, 0, 0), bevel=0.02)
-    box("ridge_cap", -1.6, 0, 9.48, 9.8, 0.32, 0.16, dark)
-    box("chimney", -4.2, 1.9, 8.75, 0.75, 0.75, 2.2, accent, bevel=0.02)
-    box("chimney_cap", -4.2, 1.9, 9.9, 0.95, 0.95, 0.18, dark)
+    # Shared lot slab. The finished landscaping below covers most of it;
+    # the dark stone edge separates the parcel from the city terrain.
+    box("townhouse_lot_plinth", 0.0, 0.0, 0.09, 18.80, 16.20, 0.18, granite, bevel=0.015)
 
-    def window(x, y, z, w, h, side="front"):
-        if side in ("front", "back"):
-            box("win_frame", x, y, z, w + 0.18, 0.09, h + 0.18, metal)
-            box("win_glass", x, y + (-0.03 if side == "front" else 0.03), z, w, 0.06, h, glass)
-            box("win_sill", x, y + (-0.05 if side == "front" else 0.05), z - h / 2 - 0.08, w + 0.3, 0.16, 0.1, accent)
+    def face_window(cx, cy, cz, width, height, face, shutters=False):
+        sign = -1.0 if face in ("front", "left") else 1.0
+        variant = int(abs(cx * 4.3 + cy * 6.1 + cz * 7.7)) % 4
+        blind_drop = height * (0.28, 0.44, 0.0, 0.58)[variant]
+        if face in ("front", "back"):
+            box("town_window_reveal", cx, cy + sign * 0.016, cz, width + 0.34, 0.080, height + 0.34, trim)
+            box("town_window_interior", cx, cy + sign * 0.036, cz, width - 0.03, 0.038, height - 0.03, interior)
+            if variant != 1:
+                for side in (-1.0, 1.0):
+                    box("town_window_curtain", cx + side * (width / 2.0 - 0.16), cy + sign * 0.060, cz, 0.22, 0.032, height - 0.13, curtain)
+            if blind_drop > 0.05:
+                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
+                box("town_window_blind", cx, cy + sign * 0.062, blind_z, width - 0.10, 0.030, blind_drop, curtain)
+                box("town_window_blind_rail", cx, cy + sign * 0.066, blind_z - blind_drop / 2.0, width - 0.08, 0.036, 0.040, frame)
+            box("town_window_light", cx - width * 0.17, cy + sign * 0.064, cz + height * 0.33, width * 0.34, 0.024, 0.035, glow)
+            box("town_window_frame", cx, cy + sign * 0.026, cz, width + 0.18, 0.155, height + 0.18, frame)
+            box("town_window_glass", cx, cy + sign * 0.090, cz, width, 0.042, height, glass)
+            divisions = max(1, int(width // 0.95))
+            for division in range(1, divisions):
+                mx = cx - width / 2.0 + width * division / divisions
+                box("town_window_mullion", mx, cy + sign * 0.103, cz, 0.050, 0.052, height, frame)
+            box("town_window_transom", cx, cy + sign * 0.103, cz + height * 0.22, width, 0.052, 0.050, frame)
+            box("town_window_handle", cx + width * 0.21, cy + sign * 0.118, cz - 0.04, 0.040, 0.032, 0.28, metal)
+            box("town_window_sill", cx, cy + sign * 0.100, cz - height / 2.0 - 0.075, width + 0.40, 0.28, 0.095, trim)
+            box("town_window_header", cx, cy + sign * 0.060, cz + height / 2.0 + 0.085, width + 0.30, 0.15, 0.10, trim)
+            if shutters:
+                for side in (-1.0, 1.0):
+                    sx = cx + side * (width / 2.0 + 0.28)
+                    box("town_window_shutter", sx, cy + sign * 0.045, cz, 0.38, 0.055, height + 0.08, wood)
+                    for groove in (-0.30, 0.0, 0.30):
+                        box("town_window_shutter_groove", sx, cy + sign * 0.078, cz + groove * height, 0.32, 0.020, 0.035, frame)
+            if cz < 3.0 and variant in (0, 3):
+                box("town_window_flower_box", cx, cy + sign * 0.18, cz - height / 2.0 - 0.24, width * 0.72, 0.22, 0.20, granite)
+                box("town_window_flower_hedge", cx, cy + sign * 0.18, cz - height / 2.0 - 0.10, width * 0.64, 0.16, 0.16, hedge, bevel=0.035)
         else:
-            sign = 1 if side == "right" else -1
-            box("win_frame", x, y, z, 0.09, w + 0.18, h + 0.18, metal)
-            box("win_glass", x + sign * 0.03, y, z, 0.06, w, h, glass)
-            box("win_sill", x + sign * 0.05, y, z - h / 2 - 0.08, 0.16, w + 0.3, 0.1, accent)
+            box("town_window_reveal", cx + sign * 0.016, cy, cz, 0.080, width + 0.34, height + 0.34, trim)
+            box("town_window_interior", cx + sign * 0.036, cy, cz, 0.038, width - 0.03, height - 0.03, interior)
+            if variant != 1:
+                for side in (-1.0, 1.0):
+                    box("town_window_curtain", cx + sign * 0.060, cy + side * (width / 2.0 - 0.16), cz, 0.032, 0.22, height - 0.13, curtain)
+            if blind_drop > 0.05:
+                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
+                box("town_window_blind", cx + sign * 0.062, cy, blind_z, 0.030, width - 0.10, blind_drop, curtain)
+                box("town_window_blind_rail", cx + sign * 0.066, cy, blind_z - blind_drop / 2.0, 0.036, width - 0.08, 0.040, frame)
+            box("town_window_light", cx + sign * 0.064, cy - width * 0.17, cz + height * 0.33, 0.024, width * 0.34, 0.035, glow)
+            box("town_window_frame", cx + sign * 0.026, cy, cz, 0.155, width + 0.18, height + 0.18, frame)
+            box("town_window_glass", cx + sign * 0.090, cy, cz, 0.042, width, height, glass)
+            divisions = max(1, int(width // 0.95))
+            for division in range(1, divisions):
+                my = cy - width / 2.0 + width * division / divisions
+                box("town_window_mullion", cx + sign * 0.103, my, cz, 0.052, 0.050, height, frame)
+            box("town_window_transom", cx + sign * 0.103, cy, cz + height * 0.22, 0.052, width, 0.050, frame)
+            box("town_window_handle", cx + sign * 0.118, cy + width * 0.21, cz - 0.04, 0.032, 0.040, 0.28, metal)
+            box("town_window_sill", cx + sign * 0.100, cy, cz - height / 2.0 - 0.075, 0.28, width + 0.40, 0.095, trim)
+            box("town_window_header", cx + sign * 0.060, cy, cz + height / 2.0 + 0.085, 0.15, width + 0.30, 0.10, trim)
+            if shutters:
+                for side in (-1.0, 1.0):
+                    sy = cy + side * (width / 2.0 + 0.28)
+                    box("town_window_shutter", cx + sign * 0.045, sy, cz, 0.055, 0.38, height + 0.08, wood)
+                    for groove in (-0.30, 0.0, 0.30):
+                        box("town_window_shutter_groove", cx + sign * 0.078, sy, cz + groove * height, 0.020, 0.32, 0.035, frame)
 
-    for z in (1.75, 4.75):
-        for x in (-4.7, -2.2, 0.6):
-            if z < 3 and x == -2.2:
-                continue
-            window(x, -5.03, z, 1.35, 1.45, "front")
-            window(x, 5.03, z, 1.35, 1.45, "back")
-    for z in (1.8, 4.8):
-        window(-6.03, -1.6, z, 1.5, 1.35, "left")
-        window(-6.03, 1.8, z, 1.5, 1.35, "left")
-        window(2.83, 2.2, z, 1.35, 1.25, "right")
+    def juliet_balcony(cx, face_y, sign):
+        slab_y = face_y + sign * 0.30
+        rail_y = face_y + sign * 0.54
+        box("town_juliet_slab", cx, slab_y, 3.68, 1.95, 0.58, 0.14, granite)
+        for bracket_x in (cx - 0.72, cx + 0.72):
+            rbox("town_juliet_bracket", bracket_x, slab_y, 3.42, 0.08, 0.48, 0.08, metal, rotation=(sign * 0.62, 0.0, 0.0))
+        for post_offset in (-0.88, -0.44, 0.0, 0.44, 0.88):
+            box("town_juliet_post", cx + post_offset, rail_y, 4.18, 0.038, 0.045, 0.86, frame)
+        box("town_juliet_top_rail", cx, rail_y, 4.64, 1.92, 0.07, 0.06, frame)
+        box("town_juliet_mid_rail", cx, rail_y, 4.18, 1.92, 0.045, 0.04, frame)
+        for side in (-1.0, 1.0):
+            box("town_juliet_side_rail", cx + side * 0.92, face_y + sign * 0.30, 4.64, 0.06, 0.52, 0.06, frame)
 
-    # porch, entrance and shutters
-    rbox("porch_roof", -2.2, -5.65, 3.12, 3.4, 1.45, 0.14, dark,
-         rotation=(-0.08, 0, 0), bevel=0.02)
-    for cx in (-3.65, -0.75):
-        cyl("porch_col", cx, -6.15, 1.55, 0.07, 3.1, wood)
-    box("front_door", -2.2, -5.06, 1.55, 1.05, 0.09, 2.25, wood)
-    box("door_glass", -2.2, -5.12, 1.95, 0.55, 0.04, 0.9, glass)
-    box("step", -2.2, -5.55, 0.22, 1.7, 0.9, 0.24, accent)
-    for x in (-5.55, -3.85, -0.25, 1.45):
-        box("shutter", x, -5.08, 4.75, 0.42, 0.05, 1.45, wood)
+    def roof_dormer(cx, unit_material):
+        box("town_dormer_body", cx, -3.55, 7.88, 1.35, 1.28, 1.60, unit_material, bevel=0.015)
+        for cheek_side in (-1.0, 1.0):
+            box("town_dormer_cheek", cx + cheek_side * 0.72, -3.55, 7.88, 0.09, 1.34, 1.62, trim)
+        gable_roof("town_dormer_roof", cx, -3.55, 8.98, 1.62, 1.52, 0.66, roof_tile, ridge_axis="y")
+        box("town_dormer_ridge", cx, -3.55, 9.34, 0.20, 1.58, 0.09, granite)
+        face_window(cx, -4.20, 7.95, 0.86, 1.02, "front")
 
-    # sectional garage door with seams and a window band
-    box("garage_door", 4.45, -3.24, 1.55, 2.9, 0.09, 2.25, metal)
-    for i in range(4):
-        box("garage_seam", 4.45, -3.3, 0.78 + i * 0.52, 2.86, 0.03, 0.05, dark)
-    for x in (3.55, 4.45, 5.35):
-        box("garage_win", x, -3.31, 2.33, 0.62, 0.04, 0.34, glass)
-    box("driveway", 4.45, -5.15, 0.12, 3.4, 2.5, 0.12, dark)
+    # Party wall between the two homes, carried up both roof slopes as a
+    # raised granite flashing line so the pair reads as two dwellings
+    # under one continuous semi-detached roof.
+    box("town_party_wall", 0.0, 0.55, 3.45, 0.30, 10.10, 6.30, trim)
+    tube_between("town_party_flashing_front", (0.0, -4.88, 6.72), (0.0, 0.55, 10.20), 0.10, 0.10, granite, vertices=10)
+    tube_between("town_party_flashing_rear", (0.0, 5.98, 6.72), (0.0, 0.55, 10.20), 0.10, 0.10, granite, vertices=10)
 
-    # downspouts, external AC, path and a low front fence
-    for x, y in ((-5.85, -4.85), (2.65, -4.85), (-5.85, 4.85)):
-        cyl("downspout", x, y, 3.3, 0.055, 6.2, metal, vertices=8)
-    box("ac_unit", 1.8, 5.35, 0.65, 1.0, 0.55, 0.75, metal, bevel=0.02)
-    for i, y in enumerate((-5.9, -6.7, -7.5)):
-        box(f"path_{i}", -2.2, y, 0.09, 1.25, 0.55, 0.1, accent)
-    for x in range(-6, 7, 2):
-        if -3 <= x <= -1:
-            continue
-        box("fence_post", x + 0.35, -7.15, 0.5, 0.11, 0.11, 1.0, wood)
-    for z in (0.38, 0.78):
-        box("fence_rail", -4.15, -7.15, z, 4.5, 0.05, 0.1, wood)
-        box("fence_rail", 3.15, -7.15, z, 7.0, 0.05, 0.1, wood)
+    # One continuous main roof over the pair: tile ridge, fascia boards,
+    # gutters and gable-end rake trim (per-home dormers sit on it below).
+    gable_roof("town_main_roof", 0.0, 0.55, 8.35, 18.72, 10.90, 3.50, roof_tile, ridge_axis="x")
+    box("town_main_ridge", 0.0, 0.55, 10.16, 18.78, 0.34, 0.15, granite)
+    for eave_y in (-4.95, 6.05):
+        box("town_roof_fascia", 0.0, eave_y, 6.52, 18.78, 0.18, 0.25, trim)
+        tube_between("town_roof_gutter", (-9.30, eave_y, 6.34), (9.30, eave_y, 6.34), 0.065, 0.065, frame, vertices=10)
+    for rake_x in (-9.34, 9.34):
+        tube_between("town_roof_rake_front", (rake_x, -4.92, 6.62), (rake_x, 0.55, 10.12), 0.055, 0.055, trim, vertices=8)
+        tube_between("town_roof_rake_rear", (rake_x, 6.02, 6.62), (rake_x, 0.55, 10.12), 0.055, 0.055, trim, vertices=8)
+
+    for unit_side in (-1.0, 1.0):
+        unit_x = unit_side * 4.60
+        garage_x = unit_side * 7.00
+        door_x = unit_side * 4.30
+        bay_x = unit_side * 1.95
+        body_material = plaster if unit_side < 0 else stone
+        accent_material = stone if unit_side < 0 else plaster
+        front_door_material = door_mat if unit_side < 0 else door_accent
+
+        # Main two-storey volume, stone foundation and string course.
+        box("town_foundation", unit_x, 0.55, 0.28, 9.30, 10.20, 0.56, stone, bevel=0.02)
+        box("town_main_body", unit_x, 0.55, 3.45, 9.00, 9.90, 6.30, body_material, bevel=0.035)
+        box("town_base_front", unit_x, -4.46, 0.72, 9.08, 0.14, 0.88, stone)
+        box("town_base_rear", unit_x, 5.56, 0.72, 9.08, 0.14, 0.88, stone)
+        box("town_base_outer", unit_x + unit_side * 4.54, 0.55, 0.72, 0.14, 9.98, 0.88, stone)
+        box("town_string_front", unit_x, -4.47, 3.42, 9.10, 0.15, 0.20, trim)
+        box("town_string_rear", unit_x, 5.57, 3.42, 9.10, 0.15, 0.20, trim)
+        box("town_string_outer", unit_x + unit_side * 4.55, 0.55, 3.42, 0.15, 10.00, 0.20, trim)
+        for quoin_z in (1.25, 2.55, 4.65, 5.95):
+            box("town_corner_quoin", unit_x + unit_side * 4.38, -4.42, quoin_z, 0.42, 0.16, 0.62, trim)
+            box("town_corner_quoin", unit_x + unit_side * 4.38, 5.52, quoin_z, 0.42, 0.16, 0.62, trim)
+
+        # Attached garage: projecting volume, front gable, sectional
+        # timber-look door, windows, lights and a real paved driveway.
+        box("town_garage_body", garage_x, -2.25, 1.72, 3.70, 5.90, 2.92, accent_material, bevel=0.025)
+        gable_roof("town_garage_roof", garage_x, -2.25, 3.68, 4.15, 6.35, 1.05, roof_tile, ridge_axis="y")
+        box("town_garage_ridge", garage_x, -2.25, 4.25, 0.22, 6.45, 0.10, granite)
+        box("town_garage_portal", garage_x, -5.25, 1.50, 3.25, 0.16, 2.62, trim)
+        box("town_garage_door", garage_x, -5.35, 1.48, 2.78, 0.09, 2.24, garage_mat, bevel=0.010)
+        for seam_z in (0.83, 1.38, 1.93):
+            box("town_garage_seam_h", garage_x, -5.405, seam_z, 2.70, 0.025, 0.045, frame)
+        for seam_offset in (-0.70, 0.0, 0.70):
+            box("town_garage_seam_v", garage_x + seam_offset, -5.405, 1.48, 0.035, 0.025, 2.16, frame)
+        for window_offset in (-0.82, 0.0, 0.82):
+            box("town_garage_window", garage_x + window_offset, -5.415, 2.28, 0.56, 0.030, 0.32, glass)
+        box("town_garage_handle", garage_x, -5.425, 1.08, 0.42, 0.035, 0.07, frame)
+        box("town_garage_bottom_seal", garage_x, -5.41, 0.42, 2.74, 0.035, 0.09, frame)
+        for light_offset in (-1.70, 1.70):
+            box("town_garage_light_body", garage_x + light_offset, -5.27, 2.55, 0.16, 0.10, 0.28, frame)
+            box("town_garage_light", garage_x + light_offset, -5.335, 2.55, 0.10, 0.035, 0.18, glow)
+        box("town_driveway_bed", garage_x, -6.68, 0.205, 3.45, 2.75, 0.045, granite)
+        for paver_dx in (-1.12, 0.0, 1.12):
+            for paver_y in (-5.83, -6.68, -7.53):
+                box("town_driveway_paver", garage_x + paver_dx, paver_y, 0.245, 1.00, 0.72, 0.045, pavement)
+        box("town_driveway_drain", garage_x, -5.50, 0.255, 2.90, 0.16, 0.030, frame)
+
+        # Two-storey front bay. The angled side panes are separate
+        # framed/interior/glass layers, not a texture wrapped round a box.
+        box("town_bay_ground", bay_x, -4.72, 1.62, 3.15, 0.78, 2.72, accent_material, bevel=0.018)
+        box("town_bay_upper", bay_x, -4.62, 4.82, 2.75, 0.50, 2.28, accent_material, bevel=0.015)
+        box("town_bay_roof", bay_x, -4.82, 3.08, 3.48, 1.05, 0.18, roof_tile)
+        box("town_bay_cornice", bay_x, -4.88, 6.02, 3.05, 0.72, 0.16, trim)
+        for corbel_offset in (-1.05, 0.0, 1.05):
+            box("town_bay_corbel", bay_x + corbel_offset, -4.62, 3.48, 0.18, 0.28, 0.34, trim)
+        face_window(bay_x, -5.11, 1.72, 2.20, 1.92, "front", shutters=False)
+        face_window(bay_x, -4.87, 4.86, 2.05, 1.78, "front", shutters=True)
+        for pane_side in (-1.0, 1.0):
+            pane_x = bay_x + pane_side * 1.43
+            rotation = (0.0, 0.0, pane_side * 0.62)
+            rbox("town_bay_side_interior", pane_x, -4.86, 1.72, 0.78, 0.045, 1.78, interior, rotation=rotation)
+            rbox("town_bay_side_glass", pane_x, -4.92, 1.72, 0.82, 0.055, 1.82, glass, rotation=rotation)
+            rbox("town_bay_side_frame", pane_x, -4.96, 1.72, 0.90, 0.045, 0.12, frame, rotation=rotation)
+
+        # Porch and entrance. Each home has its own door colour,
+        # sidelight, lanterns, number plaque, mailbox and paved path.
+        box("town_porch_slab", door_x, -5.18, 0.32, 2.35, 1.70, 0.22, pavement)
+        box("town_porch_step", door_x, -6.12, 0.20, 1.75, 0.55, 0.18, trim)
+        gable_roof("town_porch_roof", door_x, -5.05, 3.24, 2.95, 1.78, 0.78, roof_tile, ridge_axis="y")
+        box("town_porch_ridge", door_x, -5.05, 3.67, 0.20, 1.86, 0.09, granite)
+        for column_offset in (-1.18, 1.18):
+            column_x = door_x + column_offset
+            box("town_porch_column_base", column_x, -5.78, 0.50, 0.28, 0.28, 0.36, stone)
+            cyl("town_porch_column", column_x, -5.78, 1.78, 0.075, 2.55, trim, vertices=12)
+            box("town_porch_column_cap", column_x, -5.78, 3.02, 0.25, 0.25, 0.14, trim)
+        box("town_entry_frame", door_x, -4.46, 1.58, 1.42, 0.16, 2.62, trim)
+        box("town_entry_door", door_x, -4.53, 1.56, 1.12, 0.10, 2.34, front_door_material, bevel=0.012)
+        box("town_entry_door_glass", door_x - 0.20, -4.60, 1.82, 0.38, 0.035, 1.28, glass)
+        for groove_offset in (-0.28, 0.08, 0.38):
+            box("town_entry_door_groove", door_x + groove_offset, -4.592, 1.56, 0.025, 0.022, 2.18, frame)
+        cyl("town_entry_handle", door_x + 0.43, -4.63, 1.55, 0.022, 0.72, metal, vertices=10)
+        for lantern_offset in (-1.18, 1.18):
+            lantern_x = door_x + lantern_offset
+            box("town_entry_lantern_body", lantern_x, -5.90, 2.30, 0.15, 0.12, 0.28, frame)
+            box("town_entry_lantern", lantern_x, -5.97, 2.30, 0.09, 0.035, 0.18, glow)
+        plaque_x = door_x - unit_side * 1.18
+        box("town_house_number", plaque_x, -5.89, 1.85, 0.34, 0.05, 0.44, granite)
+        box("town_house_number_inset", plaque_x, -5.92, 1.85, 0.22, 0.02, 0.28, metal)
+        mailbox_x = door_x - unit_side * 1.05
+        box("town_mailbox_post", mailbox_x, -7.30, 0.62, 0.09, 0.09, 0.85, frame)
+        box("town_mailbox", mailbox_x, -7.30, 1.12, 0.30, 0.58, 0.28, frame, bevel=0.02)
+        box("town_mailbox_slot", mailbox_x, -7.60, 1.16, 0.18, 0.025, 0.04, metal)
+        box("town_mailbox_flag", mailbox_x + 0.18, -7.45, 1.28, 0.03, 0.20, 0.16, door_mat)
+        for path_y in (-6.55, -7.22, -7.82):
+            box("town_entry_path_paver", door_x, path_y, 0.235, 1.28, 0.52, 0.045, pavement)
+
+        # Remaining front windows and a Juliet balcony over the porch.
+        face_window(garage_x, -4.40, 5.18, 1.65, 1.62, "front", shutters=True)
+        face_window(door_x, -4.40, 4.92, 1.42, 2.22, "front", shutters=False)
+        juliet_balcony(door_x, -4.40, -1.0)
+
+        # Rear elevation: sliding doors, kitchen window and bedrooms.
+        face_window(unit_x - unit_side * 1.55, 5.50, 1.62, 2.65, 2.34, "back")
+        face_window(garage_x, 5.50, 1.92, 1.75, 1.42, "back", shutters=True)
+        face_window(garage_x, 5.50, 5.02, 1.65, 1.70, "back", shutters=True)
+        face_window(door_x, 5.50, 5.02, 1.45, 1.70, "back", shutters=True)
+        face_window(bay_x, 5.50, 5.02, 1.85, 1.70, "back", shutters=False)
+        face_window(unit_x - unit_side * 3.55, 5.50, 1.95, 0.82, 1.15, "back")
+
+        # Outer side elevation; the party-wall side remains blank.
+        side_x = unit_x + unit_side * 4.50
+        side_face = "right" if unit_side > 0 else "left"
+        face_window(garage_x + unit_side * 1.85, -2.20, 1.95, 1.70, 1.05, side_face)
+        face_window(side_x, -1.75, 1.88, 1.55, 1.42, side_face, shutters=True)
+        face_window(side_x, 2.65, 1.88, 1.55, 1.42, side_face, shutters=True)
+        face_window(side_x, -1.75, 5.02, 1.55, 1.68, side_face, shutters=True)
+        face_window(side_x, 2.65, 5.02, 1.55, 1.68, side_face, shutters=False)
+
+        # Two dormers per home on the shared main roof.
+        roof_dormer(garage_x, body_material)
+        roof_dormer(bay_x, body_material)
+
+        # Stone chimney, flashing, twin flues and rear roof vent.
+        chimney_x = unit_side * 8.25
+        box("town_chimney", chimney_x, 2.20, 9.025, 0.86, 0.86, 3.65, stone, bevel=0.015)
+        rbox("town_chimney_flashing", chimney_x, 2.20, 9.02, 1.08, 1.18, 0.14, frame, rotation=(-0.57, 0.0, 0.0))
+        box("town_chimney_cap", chimney_x, 2.20, 10.94, 1.06, 1.06, 0.18, granite)
+        for flue_offset in (-0.22, 0.22):
+            box("town_chimney_flue", chimney_x + flue_offset, 2.20, 11.00, 0.28, 0.28, 0.10, dark)
+        cyl("town_roof_vent", unit_x - unit_side * 2.5, 3.25, 8.72, 0.11, 0.62, metal, vertices=12)
+        cone("town_roof_vent_cap", unit_x - unit_side * 2.5, 3.25, 9.08, 0.20, 0.045, 0.22, metal, vertices=12)
+
+        # Solar panels on the rear slope of the right-hand home only;
+        # identical equipment on both roofs looked stamped rather than lived in.
+        if unit_side > 0:
+            for panel_x in (2.55, 3.85, 5.15, 6.45):
+                rbox("town_solar_frame", panel_x, 3.28, 8.43, 1.12, 1.72, 0.07, metal, rotation=(-0.57, 0.0, 0.0), bevel=0.008)
+                rbox("town_solar_cell", panel_x, 3.31, 8.47, 1.00, 1.58, 0.028, solar, rotation=(-0.57, 0.0, 0.0))
+                for busbar_offset in (-0.25, 0.25):
+                    rbox("town_solar_busbar", panel_x + busbar_offset, 3.32, 8.48, 0.018, 1.52, 0.007, metal, rotation=(-0.57, 0.0, 0.0))
+
+        # Downspouts, side meter and rear condenser with a fan grille.
+        for pipe_y, pipe_x in ((-4.80, unit_x - unit_side * 4.32), (5.90, unit_x + unit_side * 4.25)):
+            cyl("town_downspout", pipe_x, pipe_y, 3.45, 0.055, 5.85, frame, vertices=10)
+            tube_between("town_downspout_shoe", (pipe_x, pipe_y, 0.58), (pipe_x, pipe_y - 0.28 if pipe_y < 0 else pipe_y + 0.28, 0.24), 0.055, 0.055, frame, vertices=8)
+            bracket_y = pipe_y + 0.20 if pipe_y < 0 else pipe_y - 0.20
+            for bracket_z in (1.25, 3.40, 5.55):
+                box("town_downspout_bracket", pipe_x, bracket_y, bracket_z, 0.16, 0.52, 0.05, metal)
+        meter_x = garage_x + unit_side * 1.94
+        box("town_meter_cabinet", meter_x, -4.20, 1.25, 0.16, 0.72, 1.05, metal, bevel=0.012)
+        box("town_meter_window", meter_x + unit_side * 0.09, -4.20, 1.42, 0.025, 0.34, 0.34, glass)
+        ac_x = unit_side * 8.15
+        box("town_ac_unit", ac_x, 6.05, 0.68, 1.00, 0.42, 0.78, metal, bevel=0.018)
+        cyl("town_ac_fan", ac_x, 6.285, 0.68, 0.27, 0.045, frame, vertices=20, rotation=(math.pi / 2.0, 0.0, 0.0))
+        for grille_offset in (-0.18, 0.0, 0.18):
+            box("town_ac_grille", ac_x + grille_offset, 6.315, 0.68, 0.040, 0.025, 0.52, metal)
+
+        # Rear patio with pergola, outdoor counter and garden furniture.
+        box("town_rear_patio", unit_x, 6.50, 0.27, 7.80, 2.25, 0.12, pavement)
+        for post_x in (unit_x - 3.35, unit_x + 3.35):
+            for post_y in (5.78, 7.32):
+                box("town_pergola_post", post_x, post_y, 1.48, 0.16, 0.16, 2.55, wood)
+        for beam_y in (5.74, 7.36):
+            box("town_pergola_beam", unit_x, beam_y, 2.80, 7.15, 0.17, 0.18, wood)
+        for slat_index in range(11):
+            slat_x = unit_x - 3.3 + slat_index * 0.66
+            box("town_pergola_slat", slat_x, 6.55, 2.94, 0.14, 1.95, 0.13, wood)
+        counter_x = unit_x + unit_side * 2.55
+        box("town_outdoor_counter", counter_x, 6.55, 0.72, 0.72, 1.85, 0.86, stone)
+        box("town_outdoor_grill", counter_x, 6.35, 1.22, 0.58, 0.72, 0.18, dark)
+        box("town_outdoor_table", unit_x - unit_side * 0.65, 6.55, 0.78, 1.55, 0.82, 0.08, deck)
+        box("town_outdoor_table_leg", unit_x - unit_side * 0.65, 6.55, 0.52, 0.16, 0.58, 0.42, granite)
+        for bench_y in (6.02, 7.08):
+            box("town_outdoor_bench", unit_x - unit_side * 0.65, bench_y, 0.54, 1.35, 0.30, 0.09, deck)
+
+        # Finished front/rear planting and lawn areas per home.
+        box("town_front_lawn", unit_side * 2.60, -7.05, 0.215, 4.90, 1.75, 0.05, lawn)
+        bed_x = bay_x - unit_side * 0.25
+        box("town_bay_planting_bed", bed_x, -5.48, 0.225, 2.90, 0.58, 0.055, mulch)
+        for bed_hedge_offset in (-0.95, 0.0, 0.95):
+            box("town_bay_bed_hedge", bed_x + bed_hedge_offset, -5.48, 0.42, 0.72, 0.36, 0.34, hedge, bevel=0.05)
+        box("town_rear_lawn_strip", unit_x, 7.78, 0.215, 8.65, 0.58, 0.05, lawn)
+        for planter_x in (door_x - 0.82, door_x + 0.82):
+            box("town_porch_planter", planter_x, -5.75, 0.56, 0.50, 0.42, 0.28, granite)
+            box("town_porch_planter_soil", planter_x, -5.75, 0.71, 0.42, 0.34, 0.040, mulch)
+            box("town_porch_planter_hedge", planter_x, -5.75, 0.83, 0.40, 0.28, 0.22, hedge, bevel=0.040)
+        for hedge_x in (unit_side * 1.35, unit_side * 3.05):
+            box("town_front_hedge", hedge_x, -7.55, 0.52, 1.35, 0.34, 0.50, hedge, bevel=0.05)
+
+    # Boundary walls and gates. Driveways and both pedestrian paths are
+    # left open; the timber pedestrian gates are parked ajar.
+    def boundary_wall(cx, cy, dx, dy):
+        box("town_boundary_wall", cx, cy, 0.58, dx, dy, 0.72, stone)
+        box("town_boundary_coping", cx, cy, 0.99, dx + 0.07, dy + 0.07, 0.09, granite)
+
+    boundary_wall(0.0, -8.00, 7.20, 0.20)
+    boundary_wall(-5.12, -8.00, 0.38, 0.20)
+    boundary_wall(5.12, -8.00, 0.38, 0.20)
+    boundary_wall(-9.05, -8.00, 0.70, 0.20)
+    boundary_wall(9.05, -8.00, 0.70, 0.20)
+    boundary_wall(-9.30, 0.0, 0.20, 16.20)
+    boundary_wall(9.30, 0.0, 0.20, 16.20)
+    boundary_wall(0.0, 8.00, 18.80, 0.20)
+    boundary_wall(0.0, 6.78, 0.16, 2.45)
+    for pillar_x in (-8.68, -5.32, -3.62, 3.62, 5.32, 8.68):
+        box("town_gate_pillar", pillar_x, -8.00, 0.72, 0.36, 0.36, 1.02, granite)
+        box("town_gate_pillar_cap", pillar_x, -8.00, 1.29, 0.46, 0.46, 0.10, trim)
+        box("town_gate_pillar_light", pillar_x, -8.20, 1.00, 0.16, 0.035, 0.22, glow)
+    for gate_side in (-1.0, 1.0):
+        rbox("town_pedestrian_gate", gate_side * 3.86, -7.58, 0.82, 1.08, 0.06, 1.02, wood, rotation=(0.0, 0.0, gate_side * 0.48))
+        box("town_driveway_gate_track", gate_side * 8.92, -6.70, 0.25, 0.15, 2.55, 0.035, metal)
+        box("town_driveway_gate_panel", gate_side * 9.02, -6.70, 0.92, 0.07, 2.45, 1.22, wood)
+        box("town_driveway_gate_rail", gate_side * 9.02, -6.70, 1.58, 0.10, 2.55, 0.08, frame)
 
 
 # --------------------------------------------------------------------------- #
