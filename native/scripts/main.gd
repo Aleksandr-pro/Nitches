@@ -405,16 +405,22 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.5 chase-camera smoothing is not initialized")
 
 	var road_visual_state := _world.get_road_visual_state()
-	if not bool(road_visual_state.get("asphalt_shader", false)) or not bool(road_visual_state.get("asphalt_textures", false)) or not bool(road_visual_state.get("ground_winding_godot_cw", false)) or not bool(road_visual_state.get("road_mesh_ready", false)):
-		failures.append("road/terrain visual state would be culled or untextured: %s" % str(road_visual_state))
+	if not bool(road_visual_state.get("asphalt_shader", false)) or not bool(road_visual_state.get("asphalt_textures", false)) or not bool(road_visual_state.get("asphalt_wear_texture", false)) or int(road_visual_state.get("asphalt_layers", 0)) < 3 or float(road_visual_state.get("road_crown_m", 0.0)) < 0.03 or not bool(road_visual_state.get("ground_winding_godot_cw", false)) or not bool(road_visual_state.get("road_mesh_ready", false)):
+		failures.append("0.2.6 road/terrain visual state would be culled or untextured: %s" % str(road_visual_state))
 	if int(road_visual_state.get("foliage_wind_materials", 0)) < 3:
 		failures.append("foliage wind Drive base is incomplete: %s" % str(road_visual_state))
 	if int(road_visual_state.get("multimesh_chunks", 0)) < 40 or float(road_visual_state.get("multimesh_chunk_size_m", 9999.0)) > 260.0 or int(road_visual_state.get("road_grid_cells", 0)) < 40:
 		failures.append("0.2.4 spatial chunking/road grid is incomplete: %s" % str(road_visual_state))
 	if render_quality_state.is_empty():
 		failures.append("adaptive render quality state is missing")
-	if int(enhancement_stats.get("road_edge_lines", 0)) < 1500 or int(enhancement_stats.get("lane_dashes", 0)) < 800:
-		failures.append("continuous road paint is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("road_edge_lines", 0)) < 1500 or int(enhancement_stats.get("lane_dashes", 0)) < 450 or int(enhancement_stats.get("center_lines", 0)) < 1400:
+		failures.append("0.2.6 lane/centre road paint is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("raised_sidewalk_slabs", 0)) < 1200 or int(enhancement_stats.get("concrete_curbs", 0)) < 1200 or int(enhancement_stats.get("road_gutters", 0)) < 1200:
+		failures.append("0.2.6 raised sidewalk/curb/gutter road edge is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("manholes", 0)) < 80 or int(enhancement_stats.get("drainage_grates", 0)) < 80 or int(enhancement_stats.get("asphalt_patches", 0)) < 70 or int(enhancement_stats.get("road_studs", 0)) < 600:
+		failures.append("0.2.6 road-surface detail is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("lane_arrows", 0)) < 80 or int(enhancement_stats.get("traffic_signals", 0)) < 48 or int(enhancement_stats.get("intersection_pads", 0)) < 18:
+		failures.append("0.2.6 intersection road furniture is incomplete: %s" % str(enhancement_stats))
 
 	var traffic_stats := {"moving": 0, "parked": 0, "total": 0, "removed": true}
 	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 260.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:

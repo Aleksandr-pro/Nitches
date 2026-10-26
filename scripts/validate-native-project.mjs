@@ -41,15 +41,15 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=8'), 'Native 0.2.5 must bump Android versionCode to 8');
-assert(preset.includes('version/name="0.2.5-native-alpha"'), 'Native version name must be 0.2.5-native-alpha');
+assert(preset.includes('version/code=9'), 'Native 0.2.6 must bump Android versionCode to 9');
+assert(preset.includes('version/name="0.2.6-native-alpha"'), 'Native version name must be 0.2.6-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
 const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}`;
-assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.5 must not load any traffic-car system');
+assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.6 must not load any traffic-car system');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
@@ -78,8 +78,23 @@ for (const marker of [
   'get_road_visual_state',
   'ground_winding_godot_cw',
   'user_asphalt_plain.jpg',
+  'asphalt_city.jpg',
+  'user_asphalt_pothole.jpg',
+  'wear_tex',
+  'ROAD_CROWN_M',
+  '_build_road_edges',
+  '_build_road_details',
+  '_build_intersection_pads',
   'road_edge_lines',
   'lane_dashes',
+  'center_lines',
+  'raised_sidewalk_slabs',
+  'concrete_curbs',
+  'road_gutters',
+  'manholes',
+  'drainage_grates',
+  'road_studs',
+  'traffic_signals',
   'BACKLIGHT',
   'ALPHA_SCISSOR_THRESHOLD',
   'visibility_range_end',
@@ -105,7 +120,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.5 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.6 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
@@ -134,6 +149,9 @@ if (requireAssets) {
     'assets/textures/user_asphalt_dashed.jpg',
     'assets/textures/user_asphalt_plain.jpg',
     'assets/textures/user_asphalt_plain_normal.jpg',
+    'assets/textures/asphalt_city.jpg',
+    'assets/textures/user_asphalt_pothole.jpg',
+    'assets/textures/user_asphalt_pothole_normal.jpg',
     'assets/textures/user_water_turquoise.jpg',
     'assets/textures/user_sky_day.jpg',
     'assets/textures/user_sky_sunset.jpg',

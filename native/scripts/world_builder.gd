@@ -17,6 +17,8 @@ const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
 const ROAD_GRID_CELL_M := 40.0
 const ROAD_GRID_QUERY_CLEARANCE_M := 10.0
+const ROAD_SURFACE_OFFSET_M := 0.095
+const ROAD_CROWN_M := 0.045
 
 var data: Dictionary = {}
 var spawn_transform := Transform3D.IDENTITY
@@ -175,9 +177,11 @@ func _mesh_winding_cross_y(mesh: Mesh) -> float:
 
 func get_road_visual_state() -> Dictionary:
 	var asphalt_textures := false
+	var asphalt_wear_texture := false
 	var asphalt_wetness := -1.0
 	if _asphalt_material != null:
 		asphalt_textures = bool(_asphalt_material.get_shader_parameter("use_textures"))
+		asphalt_wear_texture = bool(_asphalt_material.get_shader_parameter("use_wear_texture"))
 		asphalt_wetness = float(_asphalt_material.get_shader_parameter("wetness"))
 	var terrain_cross_y := 0.0
 	for kind in ["concrete", "grass", "sand", "rock"]:
@@ -189,6 +193,10 @@ func get_road_visual_state() -> Dictionary:
 	return {
 		"asphalt_shader": _asphalt_material != null and _asphalt_material.shader == WetAsphaltShader,
 		"asphalt_textures": asphalt_textures,
+		"asphalt_wear_texture": asphalt_wear_texture,
+		"asphalt_layers": 3 if asphalt_textures and asphalt_wear_texture else 1,
+		"road_crown_m": ROAD_CROWN_M,
+		"road_surface_offset_m": ROAD_SURFACE_OFFSET_M,
 		"asphalt_wetness": asphalt_wetness,
 		"terrain_cross_y": terrain_cross_y,
 		"road_cross_y": road_cross_y,
@@ -793,24 +801,31 @@ func _create_asphalt_material() -> ShaderMaterial:
 	material.shader = WetAsphaltShader
 	var albedo := _texture("user_asphalt_plain.jpg")
 	var normal := _texture("user_asphalt_plain_normal.jpg")
+	var wear := _texture("asphalt_city.jpg")
 	var has_textures := albedo != null and normal != null
 	if albedo != null:
 		material.set_shader_parameter("albedo_tex", albedo)
 	if normal != null:
 		material.set_shader_parameter("normal_tex", normal)
+	if wear != null:
+		material.set_shader_parameter("wear_tex", wear)
 	material.set_shader_parameter("use_textures", has_textures)
+	material.set_shader_parameter("use_wear_texture", wear != null)
 	material.set_shader_parameter("asphalt_color", Color(0.030, 0.032, 0.036))
-	material.set_shader_parameter("texture_brightness", 0.58)
-	material.set_shader_parameter("tex_scale", 0.14)
+	material.set_shader_parameter("texture_brightness", 1.08)
+	material.set_shader_parameter("tex_scale", 0.115)
 	material.set_shader_parameter("wetness", 0.12)
 	material.set_shader_parameter("puddle_amount", 0.22)
 	material.set_shader_parameter("dry_roughness", 0.94)
 	material.set_shader_parameter("wet_roughness", 0.48)
 	material.set_shader_parameter("puddle_roughness", 0.16)
-	material.set_shader_parameter("bump_strength", 0.55)
+	material.set_shader_parameter("bump_strength", 0.62)
 	_asphalt_material = material
 	_enhancement_stats["asphalt_shader"] = true
 	_enhancement_stats["asphalt_textures"] = has_textures
+	_enhancement_stats["asphalt_wear_texture"] = wear != null
+	_enhancement_stats["asphalt_layers"] = 3 if has_textures and wear != null else 1
+	_enhancement_stats["road_crown_m"] = ROAD_CROWN_M
 	_enhancement_stats["asphalt_wetness"] = 0.12
 	return material
 
@@ -1210,12 +1225,58 @@ func _build_water_and_pools() -> void:
 
 
 func _road_vertex(tool: SurfaceTool, position_value: Vector3, uv: Vector2) -> void:
-	tool.set_normal(Vector3.UP)
+	# Normals are generated from the indexed geometry below. A forced
+	# Vector3.UP hid both longitudinal grades and the 0.2.6 road Crown.
 	tool.set_uv(uv)
 	tool.add_vertex(position_value)
 
 
-func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float) -> ArrayMesh:
+func _road_surface_y(center_y: float, lateral_offset: float, half_width: float, crown_scale: float = 1.0) -> float:
+	var lateral_ratio := clampf(absf(lateral_offset) / maxf(half_width, 0.1), 0.0, 1.0)
+	return center_y + ROAD_SURFACE_OFFSET_M + ROAD_CROWN_M * (1.0 - lateral_ratio) * clampf(crown_scale, 0.0, 1.0)
+
+
+func _junction_info(point: Vector3, current_id: String, current_direction: Vector3) -> Dictionary:
+	var current_flat := Vector2(current_direction.x, current_direction.z)
+	if current_flat.length_squared() < 0.0001:
+		current_flat = Vector2(0.0, 1.0)
+	current_flat = current_flat.normalized()
+	var is_junction := false
+	var cross_half_width := 0.0
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		if String(road.get("id", "")) == current_id:
+			continue
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
+		for endpoint_index in [0, samples.size() - 1]:
+			var endpoint := _sample_point(samples[endpoint_index])
+			if Vector2(endpoint.x - point.x, endpoint.z - point.z).length() > 2.5:
+				continue
+			is_junction = true
+			var neighbour_index := 1 if endpoint_index == 0 else samples.size() - 2
+			var neighbour := _sample_point(samples[neighbour_index])
+			var other_flat := Vector2(neighbour.x - endpoint.x, neighbour.z - endpoint.z)
+			if other_flat.length_squared() < 0.0001:
+				continue
+			other_flat = other_flat.normalized()
+			# A continuation of the same street is not a cross street. Only
+			# a non-collinear road determines how much of this carriageway
+			# belongs to the flat intersection box.
+			if absf(current_flat.dot(other_flat)) < 0.70:
+				cross_half_width = maxf(cross_half_width, _f(road, "widthM", 10.0) * 0.5)
+	var trim := cross_half_width + 0.9 if is_junction and cross_half_width > 0.0 else 0.0
+	return {"is_junction": is_junction, "trim_m": trim, "cross_half_width_m": cross_half_width}
+
+
+func _road_crown_scale(distance_from_start: float, total_length: float, trim_start: float, trim_end: float) -> float:
+	var start_scale := clampf((distance_from_start - trim_start) / 7.0, 0.0, 1.0)
+	var end_scale := clampf(((total_length - distance_from_start) - trim_end) / 7.0, 0.0, 1.0)
+	return minf(start_scale, end_scale)
+
+
+func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float, crown_height: float = 0.0) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for road_variant in data.get("roads", []):
@@ -1227,13 +1288,21 @@ func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float) -
 		var points: Array[Vector3] = []
 		for sample in samples:
 			points.append(_sample_point(sample))
-		var distance := 0.0
-		var left_points: Array[Vector3] = []
-		var right_points: Array[Vector3] = []
 		var distances: Array[float] = []
+		var total_length := 0.0
 		for i in points.size():
 			if i > 0:
-				distance += points[i].distance_to(points[i - 1])
+				total_length += points[i].distance_to(points[i - 1])
+			distances.append(total_length)
+		var road_id := String(road.get("id", ""))
+		var start_direction := points[1] - points[0]
+		var end_direction := points[points.size() - 1] - points[points.size() - 2]
+		var trim_start := float(_junction_info(points[0], road_id, start_direction).get("trim_m", 0.0)) if crown_height > 0.0 else 0.0
+		var trim_end := float(_junction_info(points[points.size() - 1], road_id, end_direction).get("trim_m", 0.0)) if crown_height > 0.0 else 0.0
+		var left_points: Array[Vector3] = []
+		var center_points: Array[Vector3] = []
+		var right_points: Array[Vector3] = []
+		for i in points.size():
 			var direction := Vector3.ZERO
 			if i == 0:
 				direction = points[1] - points[0]
@@ -1248,25 +1317,43 @@ func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float) -
 			var side := Vector3(-direction.z, 0.0, direction.x)
 			var center := points[i] + Vector3.UP * y_offset
 			left_points.append(center - side * half_width)
+			var crown_scale := _road_crown_scale(distances[i], total_length, trim_start, trim_end)
+			center_points.append(center + Vector3.UP * crown_height * crown_scale)
 			right_points.append(center + side * half_width)
-			distances.append(distance)
 		for i in range(points.size() - 1):
 			var l0 := left_points[i]
+			var c0 := center_points[i]
 			var r0 := right_points[i]
 			var l1 := left_points[i + 1]
+			var c1 := center_points[i + 1]
 			var r1 := right_points[i + 1]
 			var v0 := distances[i] / uv_distance
 			var v1 := distances[i + 1] / uv_distance
 			# Same Godot clockwise-front-face rule as the terrain: viewed
-			# from above these triangles are front-facing, while their
-			# explicit shading normals remain Vector3.UP.
-			_road_vertex(tool, l0, Vector2(0.0, v0))
-			_road_vertex(tool, l1, Vector2(0.0, v1))
-			_road_vertex(tool, r1, Vector2(1.0, v1))
-			_road_vertex(tool, l0, Vector2(0.0, v0))
-			_road_vertex(tool, r1, Vector2(1.0, v1))
-			_road_vertex(tool, r0, Vector2(1.0, v0))
+			# from above these triangles are front-facing. Generated
+			# normals then shade the Crown and longitudinal slope.
+			if crown_height > 0.0:
+				_road_vertex(tool, l0, Vector2(0.0, v0))
+				_road_vertex(tool, l1, Vector2(0.0, v1))
+				_road_vertex(tool, c1, Vector2(0.5, v1))
+				_road_vertex(tool, l0, Vector2(0.0, v0))
+				_road_vertex(tool, c1, Vector2(0.5, v1))
+				_road_vertex(tool, c0, Vector2(0.5, v0))
+				_road_vertex(tool, c0, Vector2(0.5, v0))
+				_road_vertex(tool, c1, Vector2(0.5, v1))
+				_road_vertex(tool, r1, Vector2(1.0, v1))
+				_road_vertex(tool, c0, Vector2(0.5, v0))
+				_road_vertex(tool, r1, Vector2(1.0, v1))
+				_road_vertex(tool, r0, Vector2(1.0, v0))
+			else:
+				_road_vertex(tool, l0, Vector2(0.0, v0))
+				_road_vertex(tool, l1, Vector2(0.0, v1))
+				_road_vertex(tool, r1, Vector2(1.0, v1))
+				_road_vertex(tool, l0, Vector2(0.0, v0))
+				_road_vertex(tool, r1, Vector2(1.0, v1))
+				_road_vertex(tool, r0, Vector2(1.0, v0))
 	tool.index()
+	tool.generate_normals()
 	tool.generate_tangents()
 	return tool.commit()
 
@@ -1283,7 +1370,8 @@ func _build_roads() -> void:
 		Color(0.52, 0.53, 0.52),
 		0.96,
 		0.0,
-		Vector3(2.4, 2.4, 1.0)
+		Vector3(0.16, 0.16, 0.16),
+		true
 	)
 	sidewalk_material.normal_scale = 0.9
 	sidewalk_material.metallic_specular = 0.28
@@ -1297,70 +1385,408 @@ func _build_roads() -> void:
 	# shader. Lane paint is real geometry below, so it no longer depends on
 	# a baked centre line stretched across roads of different widths.
 	var asphalt_material := _create_asphalt_material()
-	_road_mesh = _build_road_mesh(0.0, 0.095, 18.0)
+	_road_mesh = _build_road_mesh(0.0, ROAD_SURFACE_OFFSET_M, 18.0, ROAD_CROWN_M)
 	if _road_mesh != null:
 		var roads := _mesh_instance(roads_root, _road_mesh, asphalt_material, Transform3D.IDENTITY, "Asphalt", false)
 		roads.custom_aabb = WORLD_AABB
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false))
 
+	_build_intersection_pads(roads_root, asphalt_material)
+	_build_road_edges(roads_root)
 	_build_road_markings(roads_root)
+	_build_road_details(roads_root)
 	_build_bridge_guardrails(roads_root)
 
 
-func _build_road_markings(parent: Node) -> void:
-	var stripe_transforms: Array[Transform3D] = []
-	var edge_transforms: Array[Transform3D] = []
-	var dash_transforms: Array[Transform3D] = []
+func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) -> void:
+	# The exported ribbons deliberately overlap inside junction boxes. A
+	# 13 mm proud asphalt pad hides coplanar depth fighting and gives each
+	# main intersection one continuous surface; the Crown has already been
+	# flattened there by _build_road_mesh(). Lane paint stops before the
+	# pad, so the pad never covers a crosswalk or stop line.
+	var transforms: Array[Transform3D] = []
+	var vertical_roads := [
+		{"x": 560.0, "width": 11.0},
+		{"x": 760.0, "width": 22.0},
+		{"x": 930.0, "width": 24.0},
+	]
+	var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	for vertical_variant in vertical_roads:
+		var vertical: Dictionary = vertical_variant
+		var center_x := float(vertical.get("x", 760.0))
+		var width := float(vertical.get("width", 12.0))
+		for z_variant in cross_z:
+			var center_z := float(z_variant)
+			var y := height_at(center_x, center_z) + ROAD_SURFACE_OFFSET_M + 0.007
+			transforms.append(make_transform(
+				Vector3(center_x, y, center_z),
+				0.0,
+				Vector3(width + 0.04, 0.012, 13.04 if absf(center_z - 225.0) > 0.1 else 16.04)
+			))
+	var pad_mesh := BoxMesh.new()
+	pad_mesh.size = Vector3.ONE
+	pad_mesh.material = asphalt_material
+	_add_multimesh(parent, pad_mesh, asphalt_material, transforms, "IntersectionPads", false)
+	_enhancement_stats["intersection_pads"] = transforms.size()
 
-	# Continuous edge paint and lane dashes follow every exported road, not
-	# just the main intersections. They are thin boxes in two MultiMeshes, so
-	# the whole city gains readable carriageways for only two draw calls.
+
+func _build_road_edges(parent: Node) -> void:
+	# 0.2.6 gives the carriageway a physical edge instead of a flat
+	# sidewalk ribbon lying below the asphalt: dark gutter, concrete curb
+	# and a raised slab. They are visual-only in this pass by design; no
+	# new colliders are introduced while the user asked not to touch the
+	# remaining drive-twitch investigation.
+	var slab_transforms: Array[Transform3D] = []
+	var curb_transforms: Array[Transform3D] = []
+	var painted_curb_transforms: Array[Transform3D] = []
+	var gutter_transforms: Array[Transform3D] = []
+	var driveway_gaps := 0
+	var road_index := 0
+	var bridgeless_ids := ["rt-palm-1", "rt-sail-road", "rt-highway-1"]
+
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
 		var samples: Array = road.get("samples", [])
-		if samples.size() < 2:
+		if samples.size() < 2 or bridgeless_ids.has(road_id):
+			road_index += 1
 			continue
 		var width := _f(road, "widthM", 10.0)
 		var half_width := width * 0.5
-		var lane_offsets: Array[float] = [0.0]
-		if width >= 17.0:
-			lane_offsets = [-width * 0.25, 0.0, width * 0.25]
-		for i in range(samples.size() - 1):
-			var a := _sample_point(samples[i])
-			var b := _sample_point(samples[i + 1])
+		var points: Array[Vector3] = []
+		for sample in samples:
+			points.append(_sample_point(sample))
+		var total_length := 0.0
+		for i in range(points.size() - 1):
+			var flat := points[i + 1] - points[i]
+			flat.y = 0.0
+			total_length += flat.length()
+		var start_direction := points[1] - points[0]
+		var end_direction := points[points.size() - 1] - points[points.size() - 2]
+		var trim_start := float(_junction_info(points[0], road_id, start_direction).get("trim_m", 0.0))
+		var trim_end := float(_junction_info(points[points.size() - 1], road_id, end_direction).get("trim_m", 0.0))
+		var distance_from_start := 0.0
+		for i in range(points.size() - 1):
+			var a := points[i]
+			var b := points[i + 1]
 			var segment := b - a
 			segment.y = 0.0
 			var length := segment.length()
+			var segment_start := distance_from_start
+			distance_from_start += length
+			var segment_end := distance_from_start
+			if length < 0.45:
+				continue
+			if segment_end <= trim_start + 0.5 or segment_start >= total_length - trim_end - 0.5:
+				continue
+			var direction := segment / length
+			var side := Vector3(-direction.z, 0.0, direction.x)
+			var yaw := atan2(direction.x, direction.z)
+			var midpoint := (a + b) * 0.5
+			var crown_scale := _road_crown_scale(segment_start + length * 0.5, total_length, trim_start, trim_end)
+			var near_junction := (trim_start > 0.0 and segment_start < trim_start + 11.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 11.0)
+			for side_sign_variant in [-1.0, 1.0]:
+				var side_sign := float(side_sign_variant)
+				var gutter_offset := half_width - 0.22
+				var gutter_center: Vector3 = midpoint + side * side_sign * gutter_offset
+				gutter_transforms.append(make_transform(
+					Vector3(gutter_center.x, _road_surface_y(midpoint.y, gutter_offset, half_width, crown_scale) + 0.006, gutter_center.z),
+					yaw,
+					Vector3(0.60, 0.016, length + 0.05)
+				))
+
+				var slab_center: Vector3 = midpoint + side * side_sign * (half_width + 1.28)
+				slab_transforms.append(make_transform(
+					Vector3(slab_center.x, midpoint.y + 0.155, slab_center.z),
+					yaw,
+					Vector3(1.90, 0.15, length + 0.06)
+				))
+
+				var driveway_roll := _hash01(road_index * 197 + i * 13, int(side_sign) * 37 + 101)
+				if driveway_roll < 0.07 and not near_junction:
+					driveway_gaps += 1
+					continue
+				var curb_center: Vector3 = midpoint + side * side_sign * (half_width + 0.20)
+				var curb_transform := make_transform(
+					Vector3(curb_center.x, midpoint.y + 0.145, curb_center.z),
+					yaw,
+					Vector3(0.26, 0.19, length + 0.05)
+				)
+				if near_junction and i % 2 == 0:
+					painted_curb_transforms.append(curb_transform)
+				else:
+					curb_transforms.append(curb_transform)
+		road_index += 1
+
+	var slab_material := _material(
+		"sidewalk",
+		"user_concrete_slabs.jpg",
+		"user_concrete_slabs_normal.jpg",
+		Color(0.52, 0.53, 0.52),
+		0.96,
+		0.0,
+		Vector3(0.16, 0.16, 0.16),
+		true
+	)
+	var curb_material := _material(
+		"road_curb",
+		"user_concrete_slabs.jpg",
+		"user_concrete_slabs_normal.jpg",
+		Color(0.36, 0.37, 0.36),
+		0.97,
+		0.0,
+		Vector3(0.30, 0.30, 0.30),
+		true
+	)
+	var painted_curb_material := _material(
+		"road_curb_painted",
+		"user_concrete_slabs.jpg",
+		"user_concrete_slabs_normal.jpg",
+		Color(0.72, 0.48, 0.08),
+		0.90,
+		0.0,
+		Vector3(0.30, 0.30, 0.30),
+		true
+	)
+	var gutter_material := _material(
+		"road_gutter",
+		"asphalt_city.jpg",
+		"",
+		Color(0.34, 0.35, 0.36),
+		0.94,
+		0.0,
+		Vector3(0.18, 0.18, 0.18),
+		true
+	)
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = Vector3.ONE
+	box_mesh.material = slab_material
+	_add_multimesh(parent, box_mesh, gutter_material, gutter_transforms, "RoadGutters", false)
+	_add_multimesh(parent, box_mesh, curb_material, curb_transforms, "RoadCurbs", true)
+	_add_multimesh(parent, box_mesh, painted_curb_material, painted_curb_transforms, "RoadPaintedCurbs", true)
+	_add_multimesh(parent, box_mesh, slab_material, slab_transforms, "RaisedSidewalkSlabs", true)
+	_enhancement_stats["road_gutters"] = gutter_transforms.size()
+	_enhancement_stats["concrete_curbs"] = curb_transforms.size() + painted_curb_transforms.size()
+	_enhancement_stats["painted_curbs"] = painted_curb_transforms.size()
+	_enhancement_stats["raised_sidewalk_slabs"] = slab_transforms.size()
+	_enhancement_stats["driveway_curb_gaps"] = driveway_gaps
+
+
+func _append_lane_arrow(transforms: Array, lane_center: Vector3, direction: Vector3, surface_y: float) -> void:
+	var flat_direction := direction
+	flat_direction.y = 0.0
+	if flat_direction.length_squared() < 0.0001:
+		return
+	flat_direction = flat_direction.normalized()
+	var side := Vector3(-flat_direction.z, 0.0, flat_direction.x)
+	var yaw := atan2(flat_direction.x, flat_direction.z)
+	var paint_y := surface_y + 0.019
+	var shaft_center: Vector3 = lane_center - flat_direction * 0.48
+	transforms.append(make_transform(
+		Vector3(shaft_center.x, paint_y, shaft_center.z),
+		yaw,
+		Vector3(0.34, 0.032, 2.70)
+	))
+	var tip: Vector3 = lane_center + flat_direction * 1.15
+	for wing_sign_variant in [-1.0, 1.0]:
+		var wing_direction: Vector3 = (-flat_direction * 0.72 + side * float(wing_sign_variant) * 0.69).normalized()
+		var wing_center: Vector3 = tip + wing_direction * 0.48
+		transforms.append(make_transform(
+			Vector3(wing_center.x, paint_y, wing_center.z),
+			atan2(wing_direction.x, wing_direction.z),
+			Vector3(0.29, 0.032, 1.22)
+		))
+
+
+func _build_road_markings(parent: Node) -> void:
+	# Paint is split into new/worn/faded batches. The geometry is still
+	# cheap thin boxes, but adjacent segments no longer look like one
+	# perfectly clean plastic strip laid over the whole city.
+	var stripe_groups: Array[Array] = [[], [], []]
+	var edge_groups: Array[Array] = [[], [], []]
+	var dash_groups: Array[Array] = [[], [], []]
+	var arrow_groups: Array[Array] = [[], [], []]
+	var parking_groups: Array[Array] = [[], [], []]
+	var center_groups: Array[Array] = [[], []]
+	var bike_transforms: Array[Transform3D] = []
+	var tactile_transforms: Array[Transform3D] = []
+	var lane_arrow_count := 0
+	var road_index := 0
+
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			road_index += 1
+			continue
+		var width := _f(road, "widthM", 10.0)
+		var half_width := width * 0.5
+		var lanes := maxi(int(road.get("lanes", 2)), 1)
+		var divider_offsets: Array[float] = []
+		var lane_centers: Array[float] = [-width * 0.25, width * 0.25]
+		if lanes >= 4 or width >= 17.0:
+			divider_offsets = [-width * 0.25, width * 0.25]
+			lane_centers = [-width * 0.375, -width * 0.125, width * 0.125, width * 0.375]
+		var points: Array[Vector3] = []
+		for sample in samples:
+			points.append(_sample_point(sample))
+		var total_length := 0.0
+		for point_index in range(points.size() - 1):
+			var flat_segment := points[point_index + 1] - points[point_index]
+			flat_segment.y = 0.0
+			total_length += flat_segment.length()
+		var start_direction := points[1] - points[0]
+		var end_direction := points[points.size() - 1] - points[points.size() - 2]
+		var start_info := _junction_info(points[0], road_id, start_direction)
+		var end_info := _junction_info(points[points.size() - 1], road_id, end_direction)
+		var trim_start := float(start_info.get("trim_m", 0.0))
+		var trim_end := float(end_info.get("trim_m", 0.0))
+		var has_parking := road_id.begins_with("rt-west") or road_id.begins_with("rt-st")
+		var parking_side := 1.0 if road_index % 2 == 0 else -1.0
+		var has_bike_lane := road_id.begins_with("rt-east")
+		var distance_from_start := 0.0
+
+		for i in range(points.size() - 1):
+			var a := points[i]
+			var b := points[i + 1]
+			var segment := b - a
+			segment.y = 0.0
+			var length := segment.length()
+			var segment_start := distance_from_start
+			distance_from_start += length
+			var segment_end := distance_from_start
 			if length < 0.45:
 				continue
 			var direction := segment / length
 			var side := Vector3(-direction.z, 0.0, direction.x)
 			var yaw := atan2(direction.x, direction.z)
 			var midpoint := (a + b) * 0.5
-			var paint_y := midpoint.y + 0.138
-			for edge_side in [-1.0, 1.0]:
-				var edge_center: Vector3 = midpoint + side * float(edge_side) * maxf(half_width - 0.42, 0.6)
-				edge_transforms.append(make_transform(
-					Vector3(edge_center.x, paint_y, edge_center.z),
+			var crown_scale := _road_crown_scale(segment_start + length * 0.5, total_length, trim_start, trim_end)
+			var near_edge_break := (trim_start > 0.0 and segment_start < trim_start + 1.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 1.0)
+			var near_paint_break := (trim_start > 0.0 and segment_start < trim_start + 4.2) or (trim_end > 0.0 and segment_end > total_length - trim_end - 4.2)
+
+			if not near_edge_break:
+				for edge_side_variant in [-1.0, 1.0]:
+					var edge_side := float(edge_side_variant)
+					var edge_offset := edge_side * maxf(half_width - 0.42, 0.6)
+					var edge_center: Vector3 = midpoint + side * edge_offset
+					var edge_group := mini(2, int(_hash01(road_index * 271 + i * 11, int(edge_side) * 43 + 17) * 3.0))
+					(edge_groups[edge_group] as Array).append(make_transform(
+						Vector3(edge_center.x, _road_surface_y(midpoint.y, edge_offset, half_width, crown_scale) + 0.019, edge_center.z),
+						yaw,
+						Vector3(0.16, 0.034, length + 0.05)
+					))
+
+			if not near_paint_break:
+				# Opposing traffic is separated by a double yellow solid
+				# centreline. White dashes below are only between lanes
+				# travelling in the same direction.
+				for center_offset_variant in [-0.18, 0.18]:
+					var center_offset := float(center_offset_variant)
+					var center_point: Vector3 = midpoint + side * center_offset
+					var center_group := 0 if _hash01(road_index * 149 + i * 7, 91) < 0.68 else 1
+					(center_groups[center_group] as Array).append(make_transform(
+						Vector3(center_point.x, _road_surface_y(midpoint.y, center_offset, half_width, crown_scale) + 0.018, center_point.z),
+						yaw,
+						Vector3(0.145, 0.032, length + 0.04)
+					))
+
+				for lane_offset in divider_offsets:
+					var wear_roll := _hash01(road_index * 331 + i * 19, int(lane_offset * 10.0) + 53)
+					if wear_roll < 0.08:
+						continue
+					var dash_center: Vector3 = midpoint + side * lane_offset
+					var dash_group := mini(2, int(wear_roll * 3.0))
+					var dash_length := minf(3.0, length * (0.46 + 0.12 * wear_roll))
+					(dash_groups[dash_group] as Array).append(make_transform(
+						Vector3(dash_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.020, dash_center.z),
+						yaw,
+						Vector3(0.17, 0.036, dash_length)
+					))
+
+				if has_parking:
+					var parking_group := mini(2, int(_hash01(road_index * 113 + i * 23, 61) * 3.0))
+					var boundary_offset := parking_side * (half_width - 2.28)
+					var boundary_center: Vector3 = midpoint + side * boundary_offset
+					(parking_groups[parking_group] as Array).append(make_transform(
+						Vector3(boundary_center.x, _road_surface_y(midpoint.y, boundary_offset, half_width, crown_scale) + 0.017, boundary_center.z),
+						yaw,
+						Vector3(0.13, 0.030, length + 0.03)
+					))
+					var tick_offset := parking_side * (half_width - 1.28)
+					var tick_center: Vector3 = midpoint + side * tick_offset
+					(parking_groups[parking_group] as Array).append(make_transform(
+						Vector3(tick_center.x, _road_surface_y(midpoint.y, tick_offset, half_width, crown_scale) + 0.017, tick_center.z),
+						yaw + PI * 0.5,
+						Vector3(0.13, 0.030, 1.90)
+					))
+
+			if has_bike_lane:
+				# The seaward side of the Corniche is world +X regardless
+				# of the exported chain direction.
+				var seaward_sign := 1.0 if side.x >= 0.0 else -1.0
+				var bike_offset := seaward_sign * (half_width - 1.24)
+				var bike_center: Vector3 = midpoint + side * bike_offset
+				bike_transforms.append(make_transform(
+					Vector3(bike_center.x, _road_surface_y(midpoint.y, bike_offset, half_width, crown_scale) + 0.007, bike_center.z),
 					yaw,
-					Vector3(0.16, 0.034, length + 0.05)
+					Vector3(1.52, 0.018, length + 0.03)
 				))
-			var dash_length := minf(3.0, length * 0.52)
-			for lane_offset in lane_offsets:
-				var dash_center: Vector3 = midpoint + side * lane_offset
-				dash_transforms.append(make_transform(
-					Vector3(dash_center.x, paint_y + 0.004, dash_center.z),
-					yaw,
-					Vector3(0.17, 0.036, dash_length)
-				))
+				if not near_paint_break:
+					var bike_line_offset := seaward_sign * (half_width - 2.06)
+					var bike_line_center: Vector3 = midpoint + side * bike_line_offset
+					var bike_group := mini(2, int(_hash01(road_index * 181 + i * 29, 73) * 3.0))
+					(edge_groups[bike_group] as Array).append(make_transform(
+						Vector3(bike_line_center.x, _road_surface_y(midpoint.y, bike_line_offset, half_width, crown_scale) + 0.018, bike_line_center.z),
+						yaw,
+						Vector3(0.14, 0.032, length + 0.04)
+					))
+
+		if total_length > 34.0:
+			var chain_direction := start_direction
+			chain_direction.y = 0.0
+			if chain_direction.length_squared() > 0.0001:
+				chain_direction = chain_direction.normalized()
+				var chain_side := Vector3(-chain_direction.z, 0.0, chain_direction.x)
+				if bool(start_info.get("is_junction", false)):
+					var start_centerline: Vector3 = points[0] + chain_direction * 15.0
+					var start_crown := _road_crown_scale(15.0, total_length, trim_start, trim_end)
+					for lane_offset in lane_centers:
+						if lane_offset >= 0.0:
+							continue
+						var lane_center: Vector3 = start_centerline + chain_side * lane_offset
+						var arrow_group := mini(2, int(_hash01(road_index * 211, int(lane_offset * 10.0) + 31) * 3.0))
+						_append_lane_arrow(
+							arrow_groups[arrow_group] as Array,
+							lane_center,
+							-chain_direction,
+							_road_surface_y(points[0].y, lane_offset, half_width, start_crown)
+						)
+						lane_arrow_count += 1
+				if bool(end_info.get("is_junction", false)):
+					var end_centerline: Vector3 = points[points.size() - 1] - chain_direction * 15.0
+					var end_crown := _road_crown_scale(total_length - 15.0, total_length, trim_start, trim_end)
+					for lane_offset in lane_centers:
+						if lane_offset <= 0.0:
+							continue
+						var lane_center: Vector3 = end_centerline + chain_side * lane_offset
+						var arrow_group := mini(2, int(_hash01(road_index * 223 + 7, int(lane_offset * 10.0) + 37) * 3.0))
+						_append_lane_arrow(
+							arrow_groups[arrow_group] as Array,
+							lane_center,
+							chain_direction,
+							_road_surface_y(points[points.size() - 1].y, lane_offset, half_width, end_crown)
+						)
+						lane_arrow_count += 1
+		road_index += 1
 
 	var vertical_roads := [
 		{"x": 560.0, "width": 11.0},
 		{"x": 760.0, "width": 22.0},
 		{"x": 930.0, "width": 24.0},
 	]
-	var cross_z := [-300.0, -250.0, -110.0, 60.0, 225.0]
-	var cross_width := 13.0
+	var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
 
 	for vertical_variant in vertical_roads:
 		var vertical: Dictionary = vertical_variant
@@ -1368,50 +1794,475 @@ func _build_road_markings(parent: Node) -> void:
 		var width := float(vertical.get("width", 12.0))
 		for z_variant in cross_z:
 			var center_z := float(z_variant)
+			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
 			# Zebra crossings on both approaches to the vertical road.
-			for side in [-1.0, 1.0]:
-				var crossing_z: float = center_z + float(side) * (cross_width * 0.5 + 2.35)
+			for side_variant in [-1.0, 1.0]:
+				var side := float(side_variant)
+				var crossing_z: float = center_z + side * (cross_width * 0.5 + 2.35)
 				var stripe_count := maxi(int(floor((width - 1.4) / 1.08)), 3)
 				var start_x := center_x - float(stripe_count - 1) * 0.54
 				for i in stripe_count:
+					var wear_roll := _hash01(int(center_x) + i * 17, int(crossing_z) + 431)
+					if wear_roll < 0.035:
+						continue
 					var x := start_x + float(i) * 1.08
-					var y := height_at(x, crossing_z) + 0.140
-					stripe_transforms.append(make_transform(Vector3(x, y, crossing_z), 0.0, Vector3(0.58, 0.028, 3.15)))
-				var stop_z: float = crossing_z + float(side) * 2.15
-				stripe_transforms.append(make_transform(
-					Vector3(center_x + width * 0.25, height_at(center_x, stop_z) + 0.140, stop_z),
+					var y := _road_surface_y(height_at(x, crossing_z), x - center_x, width * 0.5, 0.34) + 0.016
+					var stripe_group := mini(2, int(wear_roll * 3.0))
+					(stripe_groups[stripe_group] as Array).append(make_transform(
+						Vector3(x, y, crossing_z),
+						0.0,
+						Vector3(0.58, 0.028, 3.15 * (0.96 + 0.06 * wear_roll))
+					))
+				var stop_z: float = crossing_z + side * 2.15
+				var stop_center_x := center_x + side * width * 0.25
+				var stop_group := mini(2, int(_hash01(int(stop_center_x), int(stop_z) + 907) * 3.0))
+				(stripe_groups[stop_group] as Array).append(make_transform(
+					Vector3(stop_center_x, _road_surface_y(height_at(stop_center_x, stop_z), width * 0.25, width * 0.5, 0.64) + 0.016, stop_z),
 					0.0,
 					Vector3(width * 0.48, 0.028, 0.42)
 				))
+				for end_sign_variant in [-1.0, 1.0]:
+					var end_sign := float(end_sign_variant)
+					var tactile_x := center_x + end_sign * (width * 0.5 + 0.95)
+					tactile_transforms.append(make_transform(
+						Vector3(tactile_x, height_at(tactile_x, crossing_z) + 0.242, crossing_z),
+						0.0,
+						Vector3(0.95, 0.024, 0.75)
+					))
 
 			# Matching zebras across the horizontal street.
-			for side in [-1.0, 1.0]:
-				var crossing_x: float = center_x + float(side) * (width * 0.5 + 2.35)
+			for side_variant in [-1.0, 1.0]:
+				var side := float(side_variant)
+				var crossing_x: float = center_x + side * (width * 0.5 + 2.35)
 				var stripe_count_h := maxi(int(floor((cross_width - 1.4) / 1.08)), 3)
 				var start_z := center_z - float(stripe_count_h - 1) * 0.54
 				for i in stripe_count_h:
+					var wear_roll := _hash01(int(crossing_x) + 613, int(center_z) + i * 19)
+					if wear_roll < 0.035:
+						continue
 					var z := start_z + float(i) * 1.08
-					var y := height_at(crossing_x, z) + 0.140
-					stripe_transforms.append(make_transform(Vector3(crossing_x, y, z), 0.0, Vector3(3.15, 0.028, 0.58)))
-				var stop_x: float = crossing_x + float(side) * 2.15
-				stripe_transforms.append(make_transform(
-					Vector3(stop_x, height_at(stop_x, center_z) + 0.140, center_z - cross_width * 0.25),
+					var y := _road_surface_y(height_at(crossing_x, z), z - center_z, cross_width * 0.5, 0.34) + 0.016
+					var stripe_group := mini(2, int(wear_roll * 3.0))
+					(stripe_groups[stripe_group] as Array).append(make_transform(
+						Vector3(crossing_x, y, z),
+						0.0,
+						Vector3(3.15 * (0.96 + 0.06 * wear_roll), 0.028, 0.58)
+					))
+				var stop_x: float = crossing_x + side * 2.15
+				var stop_center_z := center_z - side * cross_width * 0.25
+				var stop_group := mini(2, int(_hash01(int(stop_x) + 719, int(stop_center_z)) * 3.0))
+				(stripe_groups[stop_group] as Array).append(make_transform(
+					Vector3(stop_x, _road_surface_y(height_at(stop_x, stop_center_z), cross_width * 0.25, cross_width * 0.5, 0.64) + 0.016, stop_center_z),
 					0.0,
 					Vector3(0.42, 0.028, cross_width * 0.48)
 				))
+				for end_sign_variant in [-1.0, 1.0]:
+					var end_sign := float(end_sign_variant)
+					var tactile_z := center_z + end_sign * (cross_width * 0.5 + 0.95)
+					tactile_transforms.append(make_transform(
+						Vector3(crossing_x, height_at(crossing_x, tactile_z) + 0.242, tactile_z),
+						0.0,
+						Vector3(0.75, 0.024, 0.95)
+					))
 
-	var paint := _material("road_paint", "", "", Color(0.88, 0.90, 0.88), 0.74)
-	paint.metallic_specular = 0.30
+	var white_paints: Array[StandardMaterial3D] = [
+		_material("road_paint_new", "", "user_asphalt_plain_normal.jpg", Color(0.88, 0.90, 0.88), 0.68),
+		_material("road_paint_worn", "", "user_asphalt_plain_normal.jpg", Color(0.735, 0.755, 0.725), 0.79),
+		_material("road_paint_faded", "", "user_asphalt_plain_normal.jpg", Color(0.60, 0.62, 0.59), 0.87),
+	]
+	for paint in white_paints:
+		paint.metallic_specular = 0.30
+		paint.normal_scale = 0.38
+	var yellow_paints: Array[StandardMaterial3D] = [
+		_material("road_center_paint", "", "user_asphalt_plain_normal.jpg", Color(0.78, 0.55, 0.075), 0.72),
+		_material("road_center_paint_worn", "", "user_asphalt_plain_normal.jpg", Color(0.63, 0.45, 0.08), 0.84),
+	]
+	for paint in yellow_paints:
+		paint.metallic_specular = 0.28
+		paint.normal_scale = 0.38
+	var bike_material := _material("bike_lane", "user_asphalt_plain.jpg", "user_asphalt_plain_normal.jpg", Color(0.10, 0.35, 0.24), 0.89, 0.0, Vector3(0.22, 0.22, 0.22), true)
+	bike_material.metallic_specular = 0.30
+	var tactile_material := _material("tactile_paving", "", "user_black_rough_normal.jpg", Color(0.70, 0.56, 0.21), 0.92)
+	tactile_material.normal_scale = 0.85
+
 	var stripe_mesh := BoxMesh.new()
 	stripe_mesh.size = Vector3.ONE
-	stripe_mesh.material = paint
-	_add_multimesh(parent, stripe_mesh, paint, stripe_transforms, "CrosswalksAndStopLines", false)
-	_add_multimesh(parent, stripe_mesh, paint, edge_transforms, "RoadEdgeLines", false)
-	_add_multimesh(parent, stripe_mesh, paint, dash_transforms, "RoadLaneDashes", false)
-	_enhancement_stats["crosswalk_markings"] = stripe_transforms.size()
-	_enhancement_stats["road_edge_lines"] = edge_transforms.size()
-	_enhancement_stats["lane_dashes"] = dash_transforms.size()
-	_enhancement_stats["road_markings"] = stripe_transforms.size() + edge_transforms.size() + dash_transforms.size()
+	stripe_mesh.material = white_paints[0]
+	var stripe_total := 0
+	var edge_total := 0
+	var dash_total := 0
+	var arrow_total := 0
+	var parking_total := 0
+	var center_total := 0
+	for group in 3:
+		stripe_total += (stripe_groups[group] as Array).size()
+		edge_total += (edge_groups[group] as Array).size()
+		dash_total += (dash_groups[group] as Array).size()
+		arrow_total += (arrow_groups[group] as Array).size()
+		parking_total += (parking_groups[group] as Array).size()
+		# One batch per paint shade, not one per marking category: all
+		# five categories share the same unit box and material, so this
+		# preserves the worn look without multiplying draw submissions.
+		var combined_white: Array = []
+		combined_white.append_array(stripe_groups[group])
+		combined_white.append_array(edge_groups[group])
+		combined_white.append_array(dash_groups[group])
+		combined_white.append_array(arrow_groups[group])
+		combined_white.append_array(parking_groups[group])
+		_add_multimesh(parent, stripe_mesh, white_paints[group], combined_white, "CrosswalkRoadEdgeLanePaint_W%d" % group, false)
+	for group in 2:
+		center_total += (center_groups[group] as Array).size()
+		_add_multimesh(parent, stripe_mesh, yellow_paints[group], center_groups[group], "RoadCenterLines_Y%d" % group, false)
+	_add_multimesh(parent, stripe_mesh, bike_material, bike_transforms, "BikeLaneSurfaces", false)
+	_add_multimesh(parent, stripe_mesh, tactile_material, tactile_transforms, "TactilePaving", false)
+
+	_enhancement_stats["crosswalk_markings"] = stripe_total
+	_enhancement_stats["road_edge_lines"] = edge_total
+	_enhancement_stats["lane_dashes"] = dash_total
+	_enhancement_stats["center_lines"] = center_total
+	_enhancement_stats["lane_arrows"] = lane_arrow_count
+	_enhancement_stats["parking_markings"] = parking_total
+	_enhancement_stats["bike_lane_segments"] = bike_transforms.size()
+	_enhancement_stats["tactile_paving"] = tactile_transforms.size()
+	_enhancement_stats["road_markings"] = stripe_total + edge_total + dash_total + center_total + arrow_total + parking_total
+
+
+func _build_road_details(parent: Node) -> void:
+	# Small repeated furniture sells the road at chase-camera height:
+	# inspection covers, curb drains, repaired rectangles, tar seams,
+	# oil, braking rubber and reflective studs. Everything is instanced
+	# and chunked by _add_multimesh(); there are no per-item nodes.
+	var manhole_transforms: Array[Transform3D] = []
+	var drainage_transforms: Array[Transform3D] = []
+	var patch_city_transforms: Array[Transform3D] = []
+	var patch_pothole_transforms: Array[Transform3D] = []
+	var tar_transforms: Array[Transform3D] = []
+	var oil_transforms: Array[Transform3D] = []
+	var skid_transforms: Array[Transform3D] = []
+	var stud_white_transforms: Array[Transform3D] = []
+	var stud_yellow_transforms: Array[Transform3D] = []
+	var stud_red_transforms: Array[Transform3D] = []
+	var road_index := 0
+	var bridge_ids := ["rt-palm-1", "rt-sail-road"]
+
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			road_index += 1
+			continue
+		var width := _f(road, "widthM", 10.0)
+		var half_width := width * 0.5
+		var lanes := maxi(int(road.get("lanes", 2)), 1)
+		var lane_centers: Array[float] = [-width * 0.25, width * 0.25]
+		var divider_offsets: Array[float] = []
+		if lanes >= 4 or width >= 17.0:
+			lane_centers = [-width * 0.375, -width * 0.125, width * 0.125, width * 0.375]
+			divider_offsets = [-width * 0.25, width * 0.25]
+		var points: Array[Vector3] = []
+		for sample in samples:
+			points.append(_sample_point(sample))
+		var total_length := 0.0
+		for point_index in range(points.size() - 1):
+			var flat_segment := points[point_index + 1] - points[point_index]
+			flat_segment.y = 0.0
+			total_length += flat_segment.length()
+		var start_direction := points[1] - points[0]
+		var end_direction := points[points.size() - 1] - points[points.size() - 2]
+		var start_info := _junction_info(points[0], road_id, start_direction)
+		var end_info := _junction_info(points[points.size() - 1], road_id, end_direction)
+		var trim_start := float(start_info.get("trim_m", 0.0))
+		var trim_end := float(end_info.get("trim_m", 0.0))
+		var is_bridge := bridge_ids.has(road_id)
+		var distance_from_start := 0.0
+
+		for i in range(points.size() - 1):
+			var a := points[i]
+			var b := points[i + 1]
+			var segment := b - a
+			segment.y = 0.0
+			var length := segment.length()
+			var segment_start := distance_from_start
+			distance_from_start += length
+			var segment_end := distance_from_start
+			if length < 0.45:
+				continue
+			var direction := segment / length
+			var side := Vector3(-direction.z, 0.0, direction.x)
+			var yaw := atan2(direction.x, direction.z)
+			var midpoint := (a + b) * 0.5
+			var crown_scale := _road_crown_scale(segment_start + length * 0.5, total_length, trim_start, trim_end)
+			var near_junction := (trim_start > 0.0 and segment_start < trim_start + 2.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 2.0)
+			var detail_roll := _hash01(road_index * 401 + i * 31, 17)
+			var lane_roll := _hash01(road_index * 419 + i * 37, 29)
+			var lane_offset := lane_centers[mini(lane_centers.size() - 1, int(lane_roll * float(lane_centers.size())))]
+
+			if is_bridge and i % 2 == 0:
+				tar_transforms.append(make_transform(
+					Vector3(midpoint.x, _road_surface_y(midpoint.y, half_width * 0.5, half_width, crown_scale) + 0.007, midpoint.z),
+					yaw,
+					Vector3(width - 1.1, 0.012, 0.18)
+				))
+
+			if near_junction:
+				continue
+
+			if not is_bridge and i % 7 == road_index % 7:
+				var manhole_center: Vector3 = midpoint + side * lane_offset
+				manhole_transforms.append(make_transform(
+					Vector3(manhole_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.012, manhole_center.z),
+					yaw,
+					Vector3(0.86, 0.022, 0.86)
+				))
+
+			if not is_bridge and i % 6 == (road_index + 2) % 6:
+				var drain_side := 1.0 if int(i / 6) % 2 == 0 else -1.0
+				var drain_offset := drain_side * (half_width - 0.62)
+				var drain_center: Vector3 = midpoint + side * drain_offset
+				drainage_transforms.append(make_transform(
+					Vector3(drain_center.x, _road_surface_y(midpoint.y, drain_offset, half_width, crown_scale) + 0.013, drain_center.z),
+					yaw,
+					Vector3(0.58, 0.024, 0.92)
+				))
+
+			if detail_roll < 0.11:
+				var patch_center: Vector3 = midpoint + side * lane_offset
+				var patch_transform := make_transform(
+					Vector3(patch_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.008, patch_center.z),
+					yaw + (detail_roll - 0.055) * 0.7,
+					Vector3(1.9 + lane_roll * 1.5, 0.014, 3.6 + detail_roll * 24.0)
+				)
+				if detail_roll < 0.035:
+					patch_pothole_transforms.append(patch_transform)
+				else:
+					patch_city_transforms.append(patch_transform)
+			elif detail_roll < 0.30:
+				var tar_offset := lane_offset + (lane_roll - 0.5) * 1.4
+				var tar_center: Vector3 = midpoint + side * tar_offset
+				tar_transforms.append(make_transform(
+					Vector3(tar_center.x, _road_surface_y(midpoint.y, tar_offset, half_width, crown_scale) + 0.007, tar_center.z),
+					yaw + (lane_roll - 0.5) * 0.45,
+					Vector3(0.13, 0.012, 2.2 + detail_roll * 7.0)
+				))
+			elif detail_roll < 0.42:
+				var oil_center: Vector3 = midpoint + side * lane_offset
+				oil_transforms.append(make_transform(
+					Vector3(oil_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.006, oil_center.z),
+					yaw,
+					Vector3(1.25 + lane_roll * 1.1, 0.012, 2.7 + detail_roll * 4.0)
+				))
+
+			var add_studs := (width >= 17.0 and i % 2 == 0) or (width < 17.0 and i % 3 == 0)
+			if add_studs:
+				stud_yellow_transforms.append(make_transform(
+					Vector3(midpoint.x, _road_surface_y(midpoint.y, 0.0, half_width, crown_scale) + 0.016, midpoint.z),
+					yaw,
+					Vector3(0.11, 0.028, 0.11)
+				))
+				if width >= 17.0:
+					for divider_offset in divider_offsets:
+						var stud_center: Vector3 = midpoint + side * divider_offset
+						stud_white_transforms.append(make_transform(
+							Vector3(stud_center.x, _road_surface_y(midpoint.y, divider_offset, half_width, crown_scale) + 0.016, stud_center.z),
+							yaw,
+							Vector3(0.11, 0.028, 0.11)
+						))
+					for edge_sign_variant in [-1.0, 1.0]:
+						var edge_offset := float(edge_sign_variant) * (half_width - 0.24)
+						var edge_stud: Vector3 = midpoint + side * edge_offset
+						stud_red_transforms.append(make_transform(
+							Vector3(edge_stud.x, _road_surface_y(midpoint.y, edge_offset, half_width, crown_scale) + 0.016, edge_stud.z),
+							yaw,
+							Vector3(0.11, 0.028, 0.11)
+						))
+
+		if total_length > 45.0 and _hash01(road_index * 521, 71) < 0.62:
+			var chain_direction := start_direction
+			chain_direction.y = 0.0
+			if chain_direction.length_squared() > 0.0001:
+				chain_direction = chain_direction.normalized()
+				var chain_side := Vector3(-chain_direction.z, 0.0, chain_direction.x)
+				var chain_yaw := atan2(chain_direction.x, chain_direction.z)
+				if bool(start_info.get("is_junction", false)):
+					var start_centerline: Vector3 = points[0] + chain_direction * 20.0
+					var start_crown := _road_crown_scale(20.0, total_length, trim_start, trim_end)
+					for lane_offset in lane_centers:
+						if lane_offset >= 0.0:
+							continue
+						for wheel_delta_variant in [-0.78, 0.78]:
+							var wheel_offset := lane_offset + float(wheel_delta_variant)
+							var skid_center: Vector3 = start_centerline + chain_side * wheel_offset
+							skid_transforms.append(make_transform(
+								Vector3(skid_center.x, _road_surface_y(points[0].y, wheel_offset, half_width, start_crown) + 0.005, skid_center.z),
+								chain_yaw,
+								Vector3(0.27, 0.009, 10.0)
+							))
+				if bool(end_info.get("is_junction", false)):
+					var end_centerline: Vector3 = points[points.size() - 1] - chain_direction * 20.0
+					var end_crown := _road_crown_scale(total_length - 20.0, total_length, trim_start, trim_end)
+					for lane_offset in lane_centers:
+						if lane_offset <= 0.0:
+							continue
+						for wheel_delta_variant in [-0.78, 0.78]:
+							var wheel_offset := lane_offset + float(wheel_delta_variant)
+							var skid_center: Vector3 = end_centerline + chain_side * wheel_offset
+							skid_transforms.append(make_transform(
+								Vector3(skid_center.x, _road_surface_y(points[points.size() - 1].y, wheel_offset, half_width, end_crown) + 0.005, skid_center.z),
+								chain_yaw,
+								Vector3(0.27, 0.009, 10.0)
+							))
+		road_index += 1
+
+	# Mast-arm signals on the main grid. Vertical approaches are shown
+	# green and horizontal approaches red; all other lamps use a dark
+	# unlit material. The signal itself is static street furniture and
+	# has no connection to the removed traffic-car system.
+	var signal_pole_transforms: Array[Transform3D] = []
+	var signal_arm_transforms: Array[Transform3D] = []
+	var signal_head_transforms: Array[Transform3D] = []
+	var signal_red_transforms: Array[Transform3D] = []
+	var signal_green_transforms: Array[Transform3D] = []
+	var signal_dark_transforms: Array[Transform3D] = []
+	var signal_count := 0
+	var signal_verticals := [
+		{"x": 560.0, "width": 11.0},
+		{"x": 760.0, "width": 22.0},
+		{"x": 930.0, "width": 24.0},
+	]
+	var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	for vertical_variant in signal_verticals:
+		var vertical: Dictionary = vertical_variant
+		var center_x := float(vertical.get("x", 760.0))
+		var vertical_width := float(vertical.get("width", 12.0))
+		var vertical_half := vertical_width * 0.5
+		for z_variant in signal_cross_z:
+			var center_z := float(z_variant)
+			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
+			var cross_half := cross_width * 0.5
+			var approaches := [
+				{"pole": Vector2(vertical_half + 1.0, -(cross_half + 1.0)), "head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "axis": "z", "face": 1.0, "green": true},
+				{"pole": Vector2(-(vertical_half + 1.0), cross_half + 1.0), "head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "axis": "z", "face": -1.0, "green": true},
+				{"pole": Vector2(vertical_half + 1.0, cross_half + 1.0), "head": Vector2(vertical_half + 1.0, cross_width * 0.25), "axis": "x", "face": -1.0, "green": false},
+				{"pole": Vector2(-(vertical_half + 1.0), -(cross_half + 1.0)), "head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "axis": "x", "face": 1.0, "green": false},
+			]
+			for approach_variant in approaches:
+				var approach: Dictionary = approach_variant
+				var pole_offset: Vector2 = approach.get("pole", Vector2.ZERO)
+				var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
+				var pole_x := center_x + pole_offset.x
+				var pole_z := center_z + pole_offset.y
+				var head_x := center_x + head_offset.x
+				var head_z := center_z + head_offset.y
+				var ground_y := height_at(pole_x, pole_z) + 0.23
+				signal_pole_transforms.append(make_transform(
+					Vector3(pole_x, ground_y + 2.70, pole_z),
+					0.0,
+					Vector3(0.18, 5.40, 0.18)
+				))
+				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.70, pole_z), 0.11, 5.40)
+				var arm_length := Vector2(head_x - pole_x, head_z - pole_z).length()
+				var arm_center := Vector3((pole_x + head_x) * 0.5, ground_y + 5.25, (pole_z + head_z) * 0.5)
+				var axis := String(approach.get("axis", "z"))
+				var arm_yaw := PI * 0.5 if axis == "z" else 0.0
+				signal_arm_transforms.append(make_transform(arm_center, arm_yaw, Vector3(0.13, 0.14, arm_length)))
+				var head_yaw := 0.0 if axis == "z" else PI * 0.5
+				signal_head_transforms.append(make_transform(
+					Vector3(head_x, ground_y + 4.55, head_z),
+					head_yaw,
+					Vector3(0.38, 1.05, 0.26)
+				))
+				var face := float(approach.get("face", 1.0))
+				var is_green := bool(approach.get("green", false))
+				var lamp_heights := [4.92, 4.55, 4.18]
+				for lamp_index in 3:
+					var lamp_x := head_x + (face * 0.145 if axis == "x" else 0.0)
+					var lamp_z := head_z + (face * 0.145 if axis == "z" else 0.0)
+					var lamp_scale := Vector3(0.17, 0.17, 0.035) if axis == "z" else Vector3(0.035, 0.17, 0.17)
+					var lamp_transform := make_transform(
+						Vector3(lamp_x, ground_y + float(lamp_heights[lamp_index]), lamp_z),
+						0.0,
+						lamp_scale
+					)
+					if is_green and lamp_index == 2:
+						signal_green_transforms.append(lamp_transform)
+					elif not is_green and lamp_index == 0:
+						signal_red_transforms.append(lamp_transform)
+					else:
+						signal_dark_transforms.append(lamp_transform)
+				signal_count += 1
+
+	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
+	var drainage_material := _material("drainage_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.13, 0.15, 0.17), 0.42, 0.76, Vector3(4.0, 4.0, 1.0))
+	var patch_city_material := _material("asphalt_patch_city", "asphalt_city.jpg", "", Color(0.44, 0.45, 0.46), 0.96)
+	var patch_pothole_material := _material("asphalt_patch_pothole", "user_asphalt_pothole.jpg", "user_asphalt_pothole_normal.jpg", Color(0.46, 0.46, 0.47), 0.98)
+	var tar_material := _material("tar_seam", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.10, 0.11), 0.82)
+	var oil_material := _material("oil_stain", "", "", Color(0.012, 0.014, 0.018, 0.36), 0.30)
+	oil_material.metallic_specular = 0.80
+	var skid_material := _material("skid_mark", "", "", Color(0.010, 0.010, 0.012, 0.28), 0.55)
+	skid_material.metallic_specular = 0.35
+
+	var stud_white := _material("road_stud_white", "", "", Color(0.82, 0.84, 0.80), 0.42)
+	stud_white.emission_enabled = true
+	stud_white.emission = Color(0.9, 0.95, 0.9)
+	_register_night_material(stud_white, 0.03, 0.45, 1.25)
+	var stud_yellow := _material("road_stud_yellow", "", "", Color(0.78, 0.55, 0.07), 0.44)
+	stud_yellow.emission_enabled = true
+	stud_yellow.emission = Color(1.0, 0.62, 0.08)
+	_register_night_material(stud_yellow, 0.03, 0.45, 1.25)
+	var stud_red := _material("road_stud_red", "", "", Color(0.52, 0.06, 0.045), 0.44)
+	stud_red.emission_enabled = true
+	stud_red.emission = Color(1.0, 0.08, 0.04)
+	_register_night_material(stud_red, 0.03, 0.45, 1.25)
+
+	var signal_pole_material := _material("traffic_signal_pole", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.34, 0.36), 0.42, 0.78)
+	var signal_head_material := _material("traffic_signal_head", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.16, 0.17, 0.18), 0.72, 0.18)
+	var signal_red := _material("traffic_signal_red", "", "", Color(0.42, 0.03, 0.02), 0.34)
+	signal_red.emission_enabled = true
+	signal_red.emission = Color(1.0, 0.08, 0.03)
+	_register_night_material(signal_red, 0.65, 1.7, 3.0)
+	var signal_green := _material("traffic_signal_green", "", "", Color(0.03, 0.38, 0.12), 0.34)
+	signal_green.emission_enabled = true
+	signal_green.emission = Color(0.08, 1.0, 0.28)
+	_register_night_material(signal_green, 0.65, 1.7, 3.0)
+	var signal_dark := _material("traffic_signal_dark_lamp", "", "", Color(0.035, 0.04, 0.045), 0.38)
+
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = Vector3.ONE
+	box_mesh.material = tar_material
+	var disc_mesh := CylinderMesh.new()
+	disc_mesh.top_radius = 0.5
+	disc_mesh.bottom_radius = 0.5
+	disc_mesh.height = 1.0
+	disc_mesh.radial_segments = 20
+	disc_mesh.rings = 1
+	disc_mesh.material = manhole_material
+
+	_add_multimesh(parent, disc_mesh, manhole_material, manhole_transforms, "Manholes", false)
+	_add_multimesh(parent, box_mesh, drainage_material, drainage_transforms, "DrainageGrates", false)
+	_add_multimesh(parent, box_mesh, patch_city_material, patch_city_transforms, "AsphaltPatchesCity", false)
+	_add_multimesh(parent, box_mesh, patch_pothole_material, patch_pothole_transforms, "AsphaltPatchesPothole", false)
+	_add_multimesh(parent, box_mesh, tar_material, tar_transforms, "TarSeams", false)
+	_add_multimesh(parent, disc_mesh, oil_material, oil_transforms, "OilStains", false)
+	_add_multimesh(parent, box_mesh, skid_material, skid_transforms, "SkidMarks", false)
+	_add_multimesh(parent, box_mesh, stud_white, stud_white_transforms, "RoadStudsWhite", false)
+	_add_multimesh(parent, box_mesh, stud_yellow, stud_yellow_transforms, "RoadStudsYellow", false)
+	_add_multimesh(parent, box_mesh, stud_red, stud_red_transforms, "RoadStudsRed", false)
+	_add_multimesh(parent, disc_mesh, signal_pole_material, signal_pole_transforms, "TrafficSignalPoles", true)
+	_add_multimesh(parent, box_mesh, signal_pole_material, signal_arm_transforms, "TrafficSignalArms", true)
+	_add_multimesh(parent, box_mesh, signal_head_material, signal_head_transforms, "TrafficSignalHeads", true)
+	_add_multimesh(parent, box_mesh, signal_red, signal_red_transforms, "TrafficSignalRedLamps", false)
+	_add_multimesh(parent, box_mesh, signal_green, signal_green_transforms, "TrafficSignalGreenLamps", false)
+	_add_multimesh(parent, box_mesh, signal_dark, signal_dark_transforms, "TrafficSignalDarkLamps", false)
+
+	_enhancement_stats["manholes"] = manhole_transforms.size()
+	_enhancement_stats["drainage_grates"] = drainage_transforms.size()
+	_enhancement_stats["asphalt_patches"] = patch_city_transforms.size() + patch_pothole_transforms.size()
+	_enhancement_stats["tar_seams"] = tar_transforms.size()
+	_enhancement_stats["oil_stains"] = oil_transforms.size()
+	_enhancement_stats["skid_marks"] = skid_transforms.size()
+	_enhancement_stats["road_studs"] = stud_white_transforms.size() + stud_yellow_transforms.size() + stud_red_transforms.size()
+	_enhancement_stats["traffic_signals"] = signal_count
 
 
 func _build_bridge_guardrails(parent: Node) -> void:
@@ -1594,8 +2445,14 @@ func _multimesh_visual_range(node_name: String) -> float:
 		return 380.0
 	if key.contains("streetlamp") or key.contains("busshelter") or key.contains("guardrail"):
 		return 430.0
-	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane"):
+	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
 		return 680.0
+	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
+		return 620.0
+	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
+		return 430.0
+	if key.contains("trafficsignal"):
+		return 560.0
 	if key.contains("pool"):
 		return 520.0
 	if key.contains("tree") or key.contains("palm"):
