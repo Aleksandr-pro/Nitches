@@ -1088,6 +1088,32 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			var town_door_accent := _material("townhouse_door_accent", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.34, 0.36), 0.50, 0.10, Vector3(0.50, 0.50, 0.50), true)
 			town_door_accent.metallic_specular = 0.60
 			return town_door_accent
+		"HeroPlaster":
+			# 0.2.10: Building Model No.3 keeps the same real-metre
+			# triplanar rule as Models No.1/No.2, with a slightly cooler
+			# tower render over its darker stone podium and end piers.
+			var hero_plaster := _material("hero_plaster", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.87, 0.81, 0.70), 0.94, 0.0, Vector3(0.16, 0.16, 0.16), true)
+			hero_plaster.normal_scale = 1.30
+			hero_plaster.metallic_specular = 0.35
+			return hero_plaster
+		"HeroStone":
+			var hero_stone := _material("hero_stone", "user_stone_tiles_beige.jpg", "", Color(0.60, 0.56, 0.49), 0.92, 0.0, Vector3(0.20, 0.20, 0.20), true)
+			hero_stone.metallic_specular = 0.45
+			return hero_stone
+		"HeroTrim":
+			var hero_trim := _material("hero_trim", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.90, 0.85, 0.75), 0.86, 0.0, Vector3(0.26, 0.26, 0.26), true)
+			hero_trim.normal_scale = 0.90
+			hero_trim.metallic_specular = 0.50
+			return hero_trim
+		"HeroWood":
+			var hero_wood := _material("hero_wood", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.72, 0.48, 0.28), 0.80, 0.0, Vector3(0.38, 0.38, 0.38), true)
+			hero_wood.normal_scale = 1.10
+			hero_wood.metallic_specular = 0.45
+			return hero_wood
+		"HeroMetal":
+			var hero_metal := _material("hero_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.22, 0.26, 0.29), 0.46, 0.65, Vector3(0.50, 0.50, 0.50), true)
+			hero_metal.metallic_specular = 0.90
+			return hero_metal
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -2708,6 +2734,43 @@ func _nearest_road_point(point: Vector3) -> Dictionary:
 	}
 
 
+## Building Model No.3 has a fixed 32.40 x 24.60 m footprint. Most
+## exported hero parcels were authored around a stretch-to-fit proxy,
+## and one parcel centre sits only about 8.5 m from the nearest asphalt
+## edge, so centring the real footprint there would put its podium on
+## the road. This search keeps the parcel yaw and tries the smallest
+## whole-metre offsets (at most 12 m) whose corners clear every road
+## and stay on reasonably level terrain; seven of the eight exported
+## parcels accept the original centre unchanged.
+func _hero_exported_position(position_value: Vector3, yaw: float) -> Vector3:
+	var basis := Basis(Vector3.UP, yaw)
+	var offsets: Array = [Vector3.ZERO]
+	for distance_variant in [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]:
+		var distance: float = distance_variant
+		offsets.append_array([
+			Vector3(0.0, 0.0, -distance), Vector3(0.0, 0.0, distance),
+			Vector3(-distance, 0.0, 0.0), Vector3(distance, 0.0, 0.0),
+			Vector3(-distance, 0.0, -distance), Vector3(distance, 0.0, -distance),
+			Vector3(-distance, 0.0, distance), Vector3(distance, 0.0, distance),
+		])
+	for offset_variant in offsets:
+		var offset: Vector3 = offset_variant
+		var candidate := Vector3(position_value.x + offset.x, 0.0, position_value.z + offset.z)
+		candidate.y = height_at(candidate.x, candidate.z)
+		var heights: Array[float] = [candidate.y]
+		var clear := true
+		for local_variant in [Vector3(-16.20, 0.0, -12.30), Vector3(16.20, 0.0, -12.30), Vector3(-16.20, 0.0, 12.30), Vector3(16.20, 0.0, 12.30)]:
+			var local_corner: Vector3 = local_variant
+			var corner := candidate + basis * local_corner
+			heights.append(height_at(corner.x, corner.z))
+			if _road_clearance_xz(corner) < 1.2:
+				clear = false
+				break
+		if clear and heights.max() - heights.min() <= 1.1:
+			return candidate
+	return position_value
+
+
 func _build_buildings() -> void:
 	var buildings_root := Node3D.new()
 	buildings_root.name = "Buildings"
@@ -2773,13 +2836,20 @@ func _build_buildings() -> void:
 			))
 			_add_box_collider(position_value + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), yaw)
 		elif kind == "rt-hotel" and h >= 15.0 and h <= 38.0 and w <= 55.0 and d <= 38.0:
+			# Building Model No.3 is a finished podium residential/hotel
+			# block measuring exactly 32.40 x 24.60 m and 28.56 m high
+			# (GLB AABB centre x/z = 0.0 / 0.0). It replaces a proxy that
+			# was stretched up to 2.20x in width and 2.07x in height,
+			# which turned real 3.2 m floors into double-height slabs.
+			var hero_position := _hero_exported_position(position_value, yaw)
 			hero_items.append(building)
-			hero_transforms.append(make_transform(
-				position_value,
+			hero_transforms.append(_centered_model_transform(
+				hero_position,
 				yaw,
-				Vector3(w / 24.50, h / 18.40, d / 18.20)
+				Vector3.ONE,
+				Vector3.ZERO
 			))
-			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d), yaw)
+			_add_box_collider(hero_position + Vector3(0.0, 14.279, 0.0), Vector3(32.40, 28.56, 24.60), yaw)
 		else:
 			_add_generic_building(buildings_root, building)
 
@@ -2794,7 +2864,8 @@ func _build_buildings() -> void:
 	if not premium_townhouse_built:
 		for item in townhouse_items:
 			_add_generic_building(buildings_root, item)
-	if not _add_batched_model(buildings_root, "res://assets/buildings/hero_building.glb", hero_transforms, "BlenderHeroBuildings"):
+	var premium_hero_built := _add_batched_model(buildings_root, "res://assets/buildings/hero_building.glb", hero_transforms, "BlenderHeroBuildings")
+	if not premium_hero_built:
 		for item in hero_items:
 			_add_generic_building(buildings_root, item)
 	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
@@ -2815,6 +2886,14 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_townhouse_detail_pass"] = premium_townhouse_built
 	_enhancement_stats["premium_townhouse_material_pass"] = premium_townhouse_built and _materials.has("townhouse_plaster") and _materials.has("townhouse_stone") and _materials.has("townhouse_trim") and _materials.has("townhouse_roof") and _materials.has("townhouse_garage")
 	_enhancement_stats["premium_townhouse_site_pass"] = premium_townhouse_built and _materials.has("townhouse_door") and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
+	# The 0.2.10 smoke proves the same chain for Building Model No.3:
+	# the hero GLB in the export must be the new fixed-scale podium
+	# block with its dedicated Hero* materials resolved in Godot.
+	_enhancement_stats["premium_hero_models"] = hero_transforms.size() if premium_hero_built else 0
+	_enhancement_stats["premium_hero_fixed_scale"] = premium_hero_built
+	_enhancement_stats["premium_hero_detail_pass"] = premium_hero_built
+	_enhancement_stats["premium_hero_material_pass"] = premium_hero_built and _materials.has("hero_plaster") and _materials.has("hero_stone") and _materials.has("hero_trim") and _materials.has("hero_wood") and _materials.has("hero_metal")
+	_enhancement_stats["premium_hero_site_pass"] = premium_hero_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
 
 
@@ -2828,6 +2907,51 @@ func _build_buildings() -> void:
 func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
 	var centre := Vector2(_f(item, "x"), _f(item, "z"))
 	for footprint_variant in [Vector2(18.87, 16.37), Vector2(16.37, 18.87)]:
+		var size: Vector2 = footprint_variant
+		var rect := Rect2(centre - size * 0.5 - Vector2.ONE, size + Vector2(2.0, 2.0))
+		var clear := true
+		var heights: Array[float] = [height_at(centre.x, centre.y)]
+		for corner_offset_variant in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			var corner_offset: Vector2 = corner_offset_variant
+			var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
+			var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
+			heights.append(height_at(corner_xz.x, corner_xz.y))
+			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+				clear = false
+				break
+		if clear and heights.max() - heights.min() > 1.1:
+			clear = false
+		if clear:
+			for other_index in accepted.size():
+				if other_index == self_index:
+					continue
+				var other: Dictionary = accepted[other_index]
+				var other_size := Vector2(_f(other, "w", 18.0), _f(other, "d", 15.0))
+				var other_rect := Rect2(Vector2(_f(other, "x"), _f(other, "z")) - other_size * 0.5, other_size)
+				if rect.intersects(other_rect):
+					clear = false
+					break
+		if clear:
+			for placed_variant in placed_rects:
+				var placed_rect: Rect2 = placed_variant
+				if rect.intersects(placed_rect):
+					clear = false
+					break
+		if clear:
+			return {"fits": true, "yaw": 0.0 if size.x > size.y else PI * 0.5, "rect": rect}
+	return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+
+
+## Building Model No.3 is a fixed 32.40 x 24.60 m design (28.56 m high,
+## GLB AABB centre x/z = 0.0 / 0.0). An infill parcel only receives it
+## when that real footprint — in either orientation — clears roads,
+## exported buildings, terrain slope, every other infill parcel and
+## every already-placed fixed-scale townhouse/hero model. Parcels that
+## cannot take it keep the textured facade fallback at their authored
+## height instead of a stretched copy with distorted floors.
+func _hero_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
+	var centre := Vector2(_f(item, "x"), _f(item, "z"))
+	for footprint_variant in [Vector2(32.40, 24.60), Vector2(24.60, 32.40)]:
 		var size: Vector2 = footprint_variant
 		var rect := Rect2(centre - size * 0.5 - Vector2.ONE, size + Vector2(2.0, 2.0))
 		var clear := true
@@ -2998,7 +3122,7 @@ func _build_infill_buildings(parent: Node) -> void:
 
 	var facade_transforms: Dictionary = {}
 	var infill_townhouse_transforms: Array = []
-	var townhouse_placed_rects: Array = []
+	var fixed_model_placed_rects: Array = []
 	var infill_hero_transforms: Array = []
 	var infill_glass_transforms: Array = []
 	var flat_roof_transforms: Array = []
@@ -3041,7 +3165,10 @@ func _build_infill_buildings(parent: Node) -> void:
 		var model_kind := ""
 		var townhouse_fit: Dictionary = {}
 		if h <= 13.5 and detail_roll < 0.76:
-			townhouse_fit = _townhouse_model_fit(item, item_index, accepted, townhouse_placed_rects)
+			townhouse_fit = _townhouse_model_fit(item, item_index, accepted, fixed_model_placed_rects)
+		var hero_fit: Dictionary = {}
+		if h >= 15.0 and h < 34.0 and detail_roll < 0.72:
+			hero_fit = _hero_model_fit(item, item_index, accepted, fixed_model_placed_rects)
 		if h >= 34.0:
 			model_kind = "glass"
 			infill_glass_transforms.append(make_transform(
@@ -3049,16 +3176,18 @@ func _build_infill_buildings(parent: Node) -> void:
 				0.0,
 				Vector3(w / 33.60, h / 70.71, d / 33.60)
 			))
-		elif h >= 15.0 and detail_roll < 0.72:
+		elif bool(hero_fit.get("fits", false)):
 			model_kind = "hero"
-			infill_hero_transforms.append(make_transform(
+			fixed_model_placed_rects.append(hero_fit.get("rect", Rect2()))
+			infill_hero_transforms.append(_centered_model_transform(
 				base,
-				0.0,
-				Vector3(w / 24.50, h / 18.40, d / 18.20)
+				float(hero_fit.get("yaw", 0.0)),
+				Vector3.ONE,
+				Vector3.ZERO
 			))
 		elif bool(townhouse_fit.get("fits", false)):
 			model_kind = "townhouse"
-			townhouse_placed_rects.append(townhouse_fit.get("rect", Rect2()))
+			fixed_model_placed_rects.append(townhouse_fit.get("rect", Rect2()))
 			infill_townhouse_transforms.append(_centered_model_transform(
 				base,
 				float(townhouse_fit.get("yaw", 0.0)),
@@ -3110,7 +3239,9 @@ func _build_infill_buildings(parent: Node) -> void:
 					0.0,
 					Vector3(3.4, 3.7, 3.4)
 				))
-		if model_kind == "townhouse":
+		if model_kind == "hero":
+			_add_box_collider(base + Vector3(0.0, 14.279, 0.0), Vector3(32.40, 28.56, 24.60), float(hero_fit.get("yaw", 0.0)))
+		elif model_kind == "townhouse":
 			_add_box_collider(base + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), float(townhouse_fit.get("yaw", 0.0)))
 		else:
 			_add_box_collider(base + Vector3(0.0, (h + roof_height) * 0.5, 0.0), Vector3(w, h + roof_height, d))
@@ -3134,7 +3265,7 @@ func _build_infill_buildings(parent: Node) -> void:
 		var front_width := d if front_is_x_face else w
 		var front_yaw := PI * 0.5 if front_is_x_face else 0.0
 		var face_centre := base + outward * (half_extent + 0.07)
-		if h >= 6.5 and model_kind != "townhouse":
+		if h >= 6.5 and model_kind != "townhouse" and model_kind != "hero":
 			storefront_transforms.append(make_transform(
 				face_centre + Vector3(0.0, 1.45, 0.0),
 				front_yaw,
@@ -3150,7 +3281,7 @@ func _build_infill_buildings(parent: Node) -> void:
 				front_yaw,
 				Vector3(minf(front_width * 0.55, 11.0), 0.16, 1.35)
 			))
-		if h >= 12.0 and detail_roll < 0.72 and model_kind != "townhouse":
+		if h >= 12.0 and detail_roll < 0.72 and model_kind != "townhouse" and model_kind != "hero":
 			var lateral := Vector3(outward.z, 0.0, -outward.x)
 			var floor_y := 4.4
 			while floor_y < h - 1.4:

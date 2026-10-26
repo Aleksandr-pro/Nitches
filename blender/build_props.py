@@ -478,7 +478,7 @@ def build_traffic_signal_long():
 
 # --------------------------------------------------------------------------- #
 # Building Model No.3 — detailed fixed-scale mid-rise residential/hotel block.
-# Planned envelope: 32.40 x 24.60 m, about 28.8 m high. A two-storey
+# Measured envelope: 32.40 x 24.60 m, 28.56 m high. A two-storey
 # stone podium carries six residential floors and a set-back penthouse;
 # the runtime places the finished design at scale 1.0 and only reuses it
 # on infill parcels where the real footprint physically fits.
