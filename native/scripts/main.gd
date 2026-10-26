@@ -390,6 +390,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.11 Building Model No.4 premium glass tower pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("premium_main_tower_built", false)) or not bool(enhancement_stats.get("premium_main_tower_fixed_scale", false)) or not bool(enhancement_stats.get("premium_main_tower_detail_pass", false)) or not bool(enhancement_stats.get("premium_main_tower_material_pass", false)) or not bool(enhancement_stats.get("premium_main_tower_site_pass", false)):
 		failures.append("0.2.13 Building Model No.5 premium 148 m main tower pass is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("curtain_wall_materials", 0)) < 5 or not bool(enhancement_stats.get("curtain_wall_shader", false)) or not bool(enhancement_stats.get("curtain_wall_opaque_shader", false)) or not bool(enhancement_stats.get("curtain_wall_panel_variation", false)) or not bool(enhancement_stats.get("curtain_wall_weathering", false)) or not bool(enhancement_stats.get("curtain_wall_neutral_glass", false)) or int(enhancement_stats.get("tall_reflection_probes", 0)) < 2:
+		failures.append("0.2.14 physical curtain-wall realism pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:

@@ -12,6 +12,8 @@ const DynamicWorldScript := preload("res://scripts/dynamic_world.gd")
 const WetAsphaltShader: Shader = preload("res://shaders/wet_asphalt.gdshader")
 const WaterSurfaceShader: Shader = preload("res://shaders/water_surface.gdshader")
 const FoliageWindShader: Shader = preload("res://shaders/foliage_wind.gdshader")
+const CurtainWallGlassShader: Shader = preload("res://shaders/curtain_wall_glass.gdshader")
+const CurtainWallFacadeShader: Shader = preload("res://shaders/curtain_wall_facade.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -36,6 +38,7 @@ var _terrain_meshes: Dictionary = {}
 var _road_mesh: ArrayMesh
 var _sidewalk_mesh: ArrayMesh
 var _asphalt_material: ShaderMaterial
+var _curtain_glass_materials: Array[ShaderMaterial] = []
 var _palm_leaf_shader_material: ShaderMaterial
 var _foliage_wind_materials: Array[ShaderMaterial] = []
 var _water_materials: Array[StandardMaterial3D] = []
@@ -520,6 +523,15 @@ func set_time_of_day(mode: String) -> void:
 		_asphalt_material.set_shader_parameter("wetness", wetness)
 		_enhancement_stats["asphalt_wetness"] = wetness
 
+	var curtain_light_strength := 0.0
+	if mode == "sunset":
+		curtain_light_strength = 0.12
+	elif mode == "night":
+		curtain_light_strength = 0.90
+	for curtain_material in _curtain_glass_materials:
+		curtain_material.set_shader_parameter("interior_light_strength", curtain_light_strength)
+	_enhancement_stats["curtain_wall_interior_light_strength"] = curtain_light_strength
+
 	for entry in _night_materials:
 		var material := entry.get("material") as StandardMaterial3D
 		if material == null:
@@ -834,6 +846,47 @@ func _create_asphalt_material() -> ShaderMaterial:
 	return material
 
 
+func _create_curtain_wall_material(
+	key: String,
+	opaque_facade: bool,
+	deep_color: Color,
+	smoke_color: Color,
+	blind_tint: Color,
+	warm_interior: Color,
+	floor_height_m: float,
+	bay_width_m: float,
+	seed: float,
+	base_alpha: float = 0.80
+) -> ShaderMaterial:
+	if _materials.has(key):
+		return _materials[key] as ShaderMaterial
+	var material := ShaderMaterial.new()
+	material.resource_name = key
+	material.shader = CurtainWallFacadeShader if opaque_facade else CurtainWallGlassShader
+	material.set_shader_parameter("deep_glass_color", deep_color)
+	material.set_shader_parameter("smoke_glass_color", smoke_color)
+	material.set_shader_parameter("blind_color", blind_tint)
+	material.set_shader_parameter("warm_interior_color", warm_interior)
+	material.set_shader_parameter("cool_interior_color", Color(0.035, 0.055, 0.064))
+	material.set_shader_parameter("floor_height_m", floor_height_m)
+	material.set_shader_parameter("bay_width_m", bay_width_m)
+	material.set_shader_parameter("base_alpha", base_alpha)
+	material.set_shader_parameter("material_seed", seed)
+	material.set_shader_parameter("interior_light_strength", 0.0)
+	material.set_shader_parameter("weathering_strength", 0.55)
+	_materials[key] = material
+	_curtain_glass_materials.append(material)
+	if opaque_facade:
+		_enhancement_stats["curtain_wall_opaque_shader"] = true
+	else:
+		_enhancement_stats["curtain_wall_shader"] = true
+	_enhancement_stats["curtain_wall_materials"] = _curtain_glass_materials.size()
+	_enhancement_stats["curtain_wall_panel_variation"] = true
+	_enhancement_stats["curtain_wall_weathering"] = true
+	_enhancement_stats["curtain_wall_neutral_glass"] = true
+	return material
+
+
 func _create_foliage_wind_material(
 	mesh: Mesh,
 	texture_file: String,
@@ -868,25 +921,43 @@ func _create_foliage_wind_material(
 	return material
 
 
-func _facade_material(facade: String, height: float) -> StandardMaterial3D:
+func _facade_material(facade: String, height: float) -> Material:
+	# 0.2.14: background glass/gold towers no longer use photographic
+	# blue/gold facade sheets. The opaque curtain-wall shader shades
+	# real-metre bays with per-instance tenant/blind/roughness states,
+	# so reflections come from the actual sky and district probes.
+	if facade == "glassTower":
+		return _create_curtain_wall_material(
+			"facade_glass_tower_physical",
+			true,
+			Color(0.016, 0.034, 0.043),
+			Color(0.040, 0.064, 0.073),
+			Color(0.270, 0.255, 0.215),
+			Color(0.095, 0.060, 0.035),
+			3.30,
+			1.75,
+			7.0,
+			0.84
+		)
+	if facade == "goldTower":
+		return _create_curtain_wall_material(
+			"facade_bronze_tower_physical",
+			true,
+			Color(0.045, 0.032, 0.018),
+			Color(0.115, 0.078, 0.042),
+			Color(0.300, 0.240, 0.170),
+			Color(0.130, 0.080, 0.040),
+			3.30,
+			1.85,
+			9.0,
+			0.86
+		)
 	var albedo := "user_plaster_white.jpg"
 	var normal := "user_plaster_white_normal.jpg"
 	var roughness := 0.88
 	var metallic := 0.0
 	var glassy := false
 	match facade:
-		"glassTower":
-			albedo = "user_facade_blue_glass.jpg"
-			normal = "user_facade_blue_glass_normal.jpg"
-			roughness = 0.16
-			metallic = 0.08
-			glassy = true
-		"goldTower":
-			albedo = "user_facade_gold_grid.jpg"
-			normal = "user_facade_gold_grid_normal.jpg"
-			roughness = 0.29
-			metallic = 0.34
-			glassy = true
 		"hotelTower":
 			albedo = "facade_hotel.jpg"
 			normal = "facade_hotel_normal.jpg"
@@ -958,20 +1029,27 @@ func _roof_material(pitched: bool) -> StandardMaterial3D:
 	)
 
 
-func _prop_material(material_name: String) -> StandardMaterial3D:
+func _prop_material(material_name: String) -> Material:
 	match material_name:
 		"FacadeMain":
 			return _material("prop_facade_main", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color.WHITE, 0.9)
 		"FacadeAccent":
 			return _material("prop_facade_accent", "user_travertine.jpg", "user_travertine_normal.jpg", Color.WHITE, 0.84)
 		"FacadeGlass":
-			var glass := _material("prop_facade_glass", "user_facade_blue_glass.jpg", "user_facade_blue_glass_normal.jpg", Color(0.78, 0.92, 1.05), 0.11, 0.08, Vector3(2.5, 5.0, 1.0))
-			glass.metallic_specular = 1.0
-			glass.emission_enabled = true
-			glass.emission = Color(1.0, 0.76, 0.48)
-			glass.emission_texture = glass.albedo_texture
-			_register_night_material(glass, 0.0, 0.1, 0.42)
-			return glass
+			# Storefronts use the transparent physical curtain-wall
+			# material instead of the old blue photographic sheets.
+			return _create_curtain_wall_material(
+				"prop_storefront_glass_physical",
+				false,
+				Color(0.014, 0.030, 0.038),
+				Color(0.036, 0.058, 0.066),
+				Color(0.260, 0.245, 0.205),
+				Color(0.100, 0.064, 0.036),
+				2.70,
+				1.45,
+				4.0,
+				0.74
+			)
 		"PropsGlass":
 			var panes := _material("prop_glass", "", "", Color(0.58, 0.82, 0.94, 0.58), 0.08, 0.35)
 			panes.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1119,22 +1197,24 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			hero_metal.metallic_specular = 0.90
 			return hero_metal
 		"TowerGlass":
-			# 0.2.11: Building Model No.4 uses real curtain-wall glass
-			# over a dark occupied core, never the baked-window facade
-			# texture. The slight blue tint keeps the mullions, floor
-			# spandrels and interior blind/lit panels readable in day.
-			var tower_glass := _material("tower_glass", "", "", Color(0.30, 0.52, 0.62, 0.54), 0.07, 0.10)
-			tower_glass.metallic_specular = 1.0
-			tower_glass.clearcoat_enabled = true
-			tower_glass.clearcoat = 1.0
-			tower_glass.clearcoat_roughness = 0.05
-			tower_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			tower_glass.emission_enabled = true
-			tower_glass.emission = Color(1.0, 0.72, 0.44)
-			_register_night_material(tower_glass, 0.0, 0.06, 0.26)
-			return tower_glass
+			# 0.2.14: Building Model No.4 keeps its Blender mullions,
+			# spandrels, fins and occupied core, but the uniform bright
+			# blue shell becomes dark smoked physical glass. Tenant,
+			# blind, roughness and reflection states vary by real bay.
+			return _create_curtain_wall_material(
+				"tower_glass_physical",
+				false,
+				Color(0.015, 0.032, 0.041),
+				Color(0.038, 0.062, 0.071),
+				Color(0.275, 0.258, 0.214),
+				Color(0.096, 0.061, 0.036),
+				3.45,
+				1.85,
+				2.0,
+				0.79
+			)
 		"TowerSpandrel":
-			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.20, 0.26), 0.28, 0.62, Vector3(0.35, 0.35, 0.35), true)
+			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.055, 0.060, 0.064), 0.38, 0.48, Vector3(0.35, 0.35, 0.35), true)
 			tower_spandrel.metallic_specular = 0.95
 			return tower_spandrel
 		"TowerStone":
@@ -1147,26 +1227,30 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			tower_trim.metallic_specular = 0.62
 			return tower_trim
 		"TowerMetal":
-			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.18, 0.22, 0.26), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.130, 0.140, 0.150), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
 			tower_metal.metallic_specular = 0.92
 			return tower_metal
 		"MainGlass":
-			# 0.2.13: Building Model No.5 is the sculptural flagship.
-			# Its capsule curtain wall is geometry over an occupied core;
-			# this clearcoat glass must stay texture-free so the twisting
-			# oval silhouette, spandrels and fins remain architectural.
-			var main_glass := _material("main_glass", "", "", Color(0.32, 0.56, 0.65, 0.52), 0.07, 0.12)
-			main_glass.metallic_specular = 1.0
-			main_glass.clearcoat_enabled = true
-			main_glass.clearcoat = 1.0
-			main_glass.clearcoat_roughness = 0.05
-			main_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			main_glass.emission_enabled = true
-			main_glass.emission = Color(1.0, 0.72, 0.44)
-			_register_night_material(main_glass, 0.0, 0.06, 0.26)
-			return main_glass
+			# 0.2.14 realism pass on Building Model No.5: the twisting
+			# capsule remains Blender geometry over an occupied core, but
+			# its shell is no longer one bright blue tint. The shader
+			# gives every 1.60 m bay and 3.42 m floor its own smoked,
+			# blind, warm-interior or mirror state, with panel tilt and
+			# vertical weathering over the real fins and mullions.
+			return _create_curtain_wall_material(
+				"main_glass_physical",
+				false,
+				Color(0.013, 0.029, 0.038),
+				Color(0.034, 0.056, 0.065),
+				Color(0.285, 0.264, 0.218),
+				Color(0.102, 0.064, 0.037),
+				3.42,
+				1.60,
+				5.0,
+				0.78
+			)
 		"MainSpandrel":
-			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.08, 0.16, 0.22), 0.30, 0.62, Vector3(0.35, 0.35, 0.35), true)
+			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.050, 0.052, 0.055), 0.40, 0.45, Vector3(0.35, 0.35, 0.35), true)
 			main_spandrel.metallic_specular = 0.95
 			return main_spandrel
 		"MainStone":
@@ -1178,7 +1262,7 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			main_trim.metallic_specular = 0.92
 			return main_trim
 		"MainMetal":
-			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.18, 0.22, 0.26), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.125, 0.135, 0.145), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
 			main_metal.metallic_specular = 0.92
 			return main_metal
 		"MainWater":
@@ -2998,7 +3082,7 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_glass_models"] = tower_transforms.size() if premium_glass_built else 0
 	_enhancement_stats["premium_glass_fixed_scale"] = premium_glass_built
 	_enhancement_stats["premium_glass_detail_pass"] = premium_glass_built
-	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
+	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass_physical") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
 	_enhancement_stats["premium_glass_site_pass"] = premium_glass_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
 
@@ -3545,7 +3629,7 @@ func _build_landmarks() -> void:
 				_enhancement_stats["premium_main_tower_built"] = main_tower_built
 				_enhancement_stats["premium_main_tower_fixed_scale"] = main_tower_built
 				_enhancement_stats["premium_main_tower_detail_pass"] = main_tower_built
-				_enhancement_stats["premium_main_tower_material_pass"] = main_tower_built and _materials.has("main_glass") and _materials.has("main_spandrel") and _materials.has("main_stone") and _materials.has("main_trim") and _materials.has("main_metal") and _materials.has("main_water")
+				_enhancement_stats["premium_main_tower_material_pass"] = main_tower_built and _materials.has("main_glass_physical") and _materials.has("main_spandrel") and _materials.has("main_stone") and _materials.has("main_trim") and _materials.has("main_metal") and _materials.has("main_water")
 				_enhancement_stats["premium_main_tower_site_pass"] = main_tower_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 				if not main_tower_built:
 					_add_box(root, Vector3(50.0, h, 42.0), pos + Vector3(0.0, h * 0.5, 0.0), glass)
@@ -4260,24 +4344,37 @@ func _build_reflection_probes() -> void:
 	var root := Node3D.new()
 	root.name = "ReflectionProbes"
 	add_child(root)
-	for centre in [
-		Vector3(720.0, 0.0, 0.0),
-		Vector3(680.0, 0.0, -300.0),
-		Vector3(720.0, 0.0, 330.0),
-		Vector3(940.0, 0.0, 0.0),
-		Vector3(1180.0, 0.0, 80.0),
-		Vector3(1340.0, 0.0, -250.0),
-	]:
+	# 0.2.14: the old six probes were only 110 m tall and captured at
+	# street height. The crown of the 148 m flagship was therefore
+	# outside every useful district cubemap and fell back to an almost
+	# uniform blue sky reflection. Two additional tall probes cover
+	# the flagship and the central No.4 cluster; their capture points
+	# stay outside the towers while their influence boxes cover them.
+	var probe_specs: Array[Dictionary] = [
+		{"centre": Vector3(720.0, 0.0, 0.0), "height": 72.0, "size": Vector3(320.0, 180.0, 320.0), "capture": 24.0, "tall": false},
+		{"centre": Vector3(680.0, 0.0, -300.0), "height": 56.0, "size": Vector3(320.0, 150.0, 320.0), "capture": 24.0, "tall": false},
+		{"centre": Vector3(720.0, 0.0, 330.0), "height": 56.0, "size": Vector3(320.0, 150.0, 320.0), "capture": 24.0, "tall": false},
+		{"centre": Vector3(940.0, 0.0, 0.0), "height": 44.0, "size": Vector3(320.0, 120.0, 320.0), "capture": 20.0, "tall": false},
+		{"centre": Vector3(1180.0, 0.0, 80.0), "height": 44.0, "size": Vector3(320.0, 120.0, 320.0), "capture": 20.0, "tall": false},
+		{"centre": Vector3(1340.0, 0.0, -250.0), "height": 50.0, "size": Vector3(320.0, 140.0, 320.0), "capture": 22.0, "tall": false},
+		{"centre": Vector3(712.0, 0.0, -118.0), "height": 86.0, "size": Vector3(320.0, 205.0, 320.0), "capture": 30.0, "tall": true},
+		{"centre": Vector3(762.0, 0.0, 188.0), "height": 58.0, "size": Vector3(320.0, 160.0, 320.0), "capture": 24.0, "tall": true},
+	]
+	var tall_probe_count := 0
+	for spec in probe_specs:
+		var centre: Vector3 = spec.get("centre", Vector3.ZERO)
+		var probe_height := float(spec.get("height", 24.0))
+		var capture_height := float(spec.get("capture", 12.0))
 		var probe := ReflectionProbe.new()
-		probe.name = "DistrictReflection"
-		probe.position = Vector3(centre.x, height_at(centre.x, centre.z) + 12.0, centre.z)
-		probe.size = Vector3(300.0, 110.0, 300.0)
+		probe.name = "TallDistrictReflection" if bool(spec.get("tall", false)) else "DistrictReflection"
+		probe.position = Vector3(centre.x, height_at(centre.x, centre.z) + probe_height, centre.z)
+		probe.size = spec.get("size", Vector3(320.0, 150.0, 320.0))
 		probe.blend_distance = 45.0
-		probe.origin_offset = Vector3(0.0, -4.0, 0.0)
+		probe.origin_offset = Vector3(0.0, capture_height - probe_height, 0.0)
 		probe.box_projection = true
 		probe.enable_shadows = false
-		probe.intensity = 1.12
-		probe.max_distance = 220.0
+		probe.intensity = 1.16 if bool(spec.get("tall", false)) else 1.12
+		probe.max_distance = 240.0
 		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
 		probe.update_mode = ReflectionProbe.UPDATE_ONCE
@@ -4286,8 +4383,11 @@ func _build_reflection_probes() -> void:
 		probe.cull_mask = (1 << 19) - 1
 		root.add_child(probe)
 		_reflection_probes.append(probe)
+		if bool(spec.get("tall", false)):
+			tall_probe_count += 1
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
-	_enhancement_stats["reflection_probe_max_distance"] = 220.0
+	_enhancement_stats["tall_reflection_probes"] = tall_probe_count
+	_enhancement_stats["reflection_probe_max_distance"] = 240.0
 
 
 func _build_benches() -> void:
