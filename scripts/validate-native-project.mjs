@@ -43,16 +43,18 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=17'), 'Native 0.2.14 must bump Android versionCode to 17');
-assert(preset.includes('version/name="0.2.14-native-alpha"'), 'Native version name must be 0.2.14-native-alpha');
+assert(preset.includes('version/code=18'), 'Native 0.2.15 must bump Android versionCode to 18');
+assert(preset.includes('version/name="0.2.15-native-alpha"'), 'Native version name must be 0.2.15-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
 const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}`;
-assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.14 must not load any traffic-car system');
-assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.14 must not return to photographic blue/gold facade sheets');
+assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.15 must not load any traffic-car system');
+assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.15 must not return to photographic blue/gold facade sheets');
+assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.15 curtain-wall shaders must not pay for a clearcoat lighting layer');
+assert(!curtainWallFacadeShader.includes('\n\tALPHA ='), 'Native 0.2.15 opaque curtain-wall facade must not write ALPHA');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
@@ -93,6 +95,13 @@ for (const marker of [
   'curtain_wall_panel_variation',
   'curtain_wall_weathering',
   'curtain_wall_neutral_glass',
+  'curtain_wall_calibrated_0215',
+  'curtain_wall_clearcoat_removed',
+  'curtain_wall_detail_fade_start_m',
+  'curtain_wall_detail_fade_end_m',
+  'building_visual_ranges_0215',
+  'model_parts_without_shadow_pass',
+  'traffic_signal_visual_range_m',
   'curtain_wall_interior_light_strength',
   'tall_reflection_probes',
   'main_glass_physical',
@@ -227,7 +236,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.14 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.15 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
