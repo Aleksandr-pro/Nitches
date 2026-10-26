@@ -1,37 +1,29 @@
 shader_type spatial;
-render_mode blend_mix, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_alpha_prepass, cull_back;
 
-// 0.2.14 curtain-wall realism pass.
-//
-// Building Models No.4/No.5 already have real mullions, fins, floor
-// slabs and occupied cores, but 0.2.13 shaded every glass surface with
-// one bright blue StandardMaterial. On the phone that erased the
-// geometry and made both towers read as a flat blue texture.
-//
-// This shader works in real metres in the merged model's own space.
-// Each architectural bay/floor receives a deterministic tenant state:
-// dark reflective glass, smoked glass, a lowered blind, or a warm/cool
-// occupied interior. Roughness, alpha, normal tilt and night emission
-// vary with that state, while subtle vertical weathering prevents the
-// large capsule shells from looking like printed plastic. MODEL_MATRIX
-// supplies a per-instance seed, so repeated No.4 towers do not share
-// the same lit/off pattern.
-
-uniform vec4 deep_glass_color : source_color = vec4(0.018, 0.037, 0.046, 1.0);
-uniform vec4 smoke_glass_color : source_color = vec4(0.045, 0.070, 0.078, 1.0);
-uniform vec4 blind_color : source_color = vec4(0.290, 0.270, 0.220, 1.0);
-uniform vec4 warm_interior_color : source_color = vec4(0.100, 0.065, 0.038, 1.0);
-uniform vec4 cool_interior_color : source_color = vec4(0.035, 0.055, 0.064, 1.0);
-uniform float floor_height_m : hint_range(1.0, 6.0) = 3.42;
-uniform float bay_width_m : hint_range(0.5, 4.0) = 1.65;
-uniform float base_alpha : hint_range(0.05, 1.0) = 0.80;
+// Native 0.2.15 calibrated physical curtain-wall glass. The 0.2.14 phone
+// screenshots proved that the first smoked calibration was much too dark:
+// neighbouring tenant zones became brown/black camouflage at Q50. This
+// calibration keeps the same real-bay logic, occupied-core depth and panel
+// tilt, but lifts the source into neutral blue-grey glass, compresses the
+// tonal steps and averages micro detail much earlier with distance. It also
+// removes the expensive clearcoat layer and one value-noise octave; polished
+// glass reflects through the ordinary specular/environment response.
+uniform vec4 deep_glass_color : source_color = vec4(0.045, 0.072, 0.090, 1.0);
+uniform vec4 smoke_glass_color : source_color = vec4(0.082, 0.118, 0.138, 1.0);
+uniform vec4 blind_color : source_color = vec4(0.310, 0.300, 0.265, 1.0);
+uniform vec4 cool_interior_color : source_color = vec4(0.055, 0.080, 0.095, 1.0);
+uniform vec4 warm_interior_color : source_color = vec4(0.120, 0.083, 0.052, 1.0);
+uniform float floor_height_m : hint_range(2.4, 5.0) = 3.42;
+uniform float bay_width_m : hint_range(0.9, 3.0) = 1.60;
+uniform float base_alpha : hint_range(0.45, 0.95) = 0.76;
 uniform float material_seed = 0.0;
-uniform float interior_light_strength : hint_range(0.0, 2.0) = 0.0;
-uniform float weathering_strength : hint_range(0.0, 1.0) = 0.55;
+uniform float interior_light_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float weathering_strength : hint_range(0.0, 1.0) = 0.32;
+uniform float detail_fade_start_m : hint_range(40.0, 240.0) = 90.0;
+uniform float detail_fade_end_m : hint_range(160.0, 700.0) = 300.0;
 
-varying vec3 local_metres;
-varying vec3 local_normal;
-varying vec3 world_pos;
+varying vec3 world_position;
 varying float instance_seed;
 
 float hash12(vec2 p) {
@@ -40,184 +32,134 @@ float hash12(vec2 p) {
 	return fract((p3.x + p3.y) * p3.z);
 }
 
-float hash13(vec3 p) {
-	p = fract(p * 0.1031);
-	p += dot(p, p.zyx + 31.32);
-	return fract((p.x + p.y) * p.z);
-}
-
-float vnoise(vec2 p) {
+float value_noise(vec2 p) {
 	vec2 i = floor(p);
 	vec2 f = fract(p);
 	vec2 u = f * f * (3.0 - 2.0 * f);
-	float a = hash12(i);
-	float b = hash12(i + vec2(1.0, 0.0));
-	float c = hash12(i + vec2(0.0, 1.0));
-	float d = hash12(i + vec2(1.0, 1.0));
-	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm2(vec2 p) {
-	return vnoise(p) * 0.68 + vnoise(p * 2.17 + 19.0) * 0.32;
+	return mix(
+		mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
+		mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x),
+		u.y
+	);
 }
 
 void vertex() {
-	vec3 basis_scale = vec3(
-		length(MODEL_MATRIX[0].xyz),
-		length(MODEL_MATRIX[1].xyz),
-		length(MODEL_MATRIX[2].xyz)
-	);
-	local_metres = VERTEX * basis_scale;
-	local_normal = NORMAL;
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	instance_seed = hash13(vec3(
-		floor(MODEL_MATRIX[3].x * 0.37),
-		floor(MODEL_MATRIX[3].z * 0.41),
-		material_seed * 17.0 + 3.0
-	)) * 91.0;
+	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef USE_INSTANCING
+	instance_seed = float(INSTANCE_ID) * 17.0;
+#else
+	instance_seed = 0.0;
+#endif
 }
 
 void fragment() {
-	vec3 n_local = normalize(local_normal);
-	float horizontal_m = local_metres.x;
-	float face_id = 23.0;
-	if (abs(n_local.x) >= abs(n_local.z)) {
-		horizontal_m = local_metres.z;
-		face_id = n_local.x > 0.0 ? 11.0 : 17.0;
-	} else {
-		face_id = n_local.z > 0.0 ? 23.0 : 29.0;
-	}
-	if (abs(n_local.y) > 0.72) {
-		horizontal_m = local_metres.x + local_metres.z;
-		face_id = 37.0;
-	}
+	vec3 world_normal = normalize(NORMAL);
+	float horizontal = abs(world_normal.x) >= abs(world_normal.z)
+		? (world_normal.x >= 0.0 ? -world_position.z : world_position.z)
+		: (world_normal.z >= 0.0 ? world_position.x : -world_position.x);
+	float face_seed = abs(world_normal.x) >= abs(world_normal.z)
+		? (world_normal.x >= 0.0 ? 113.0 : 211.0)
+		: (world_normal.z >= 0.0 ? 307.0 : 401.0);
 
-	vec2 facade_m = vec2(horizontal_m, local_metres.y);
-	vec2 facade_grid = vec2(
-		facade_m.x / max(bay_width_m, 0.05),
-		facade_m.y / max(floor_height_m, 0.05)
-	);
-	vec2 cell = floor(facade_grid);
-	vec2 cell_frac = fract(facade_grid);
-	float seed = material_seed * 131.0 + instance_seed + face_id;
+	vec2 cell = vec2(horizontal / max(bay_width_m, 0.1), world_position.y / max(floor_height_m, 0.1));
+	vec2 cell_id = floor(cell) + vec2(material_seed * 41.0 + face_seed, instance_seed);
+	vec2 cell_frac = fract(cell);
 
-	// Tenant zones span about three bays. The individual pane hash then
-	// breaks the zone just enough to avoid a repeating printed facade.
-	vec2 tenant_cell = vec2(floor(cell.x / 3.0), cell.y);
-	float tenant = hash13(vec3(tenant_cell, seed));
-	float tenant_b = hash13(vec3(tenant_cell + vec2(19.0, 7.0), seed + 5.0));
-	float pane = hash13(vec3(cell, seed + 11.0));
-	float pane_b = hash13(vec3(cell + vec2(31.0, 3.0), seed + 17.0));
-	float pane_c = hash13(vec3(cell + vec2(7.0, 43.0), seed + 23.0));
+	// Four-bay tenant groups share a broad state, but the tonal excursion is
+	// deliberately narrow: at normal driving distance the surface should read
+	// as one continuous sheet of glass with depth, not a checkerboard.
+	vec2 tenant_id = vec2(floor(cell.x / 4.0) + material_seed * 41.0 + face_seed, cell_id.y);
+	float tenant_hash = hash12(tenant_id * 1.73 + 9.1);
+	float tenant_tone = smoothstep(0.08, 0.92, tenant_hash);
+	float pane_hash = hash12(cell_id * 2.19 + 4.7);
+	float pane_b = hash12(cell_id * 3.11 + 12.3);
+	float pane_c = hash12(cell_id * 5.07 + 21.9);
 
-	vec3 surface_color = mix(
-		deep_glass_color.rgb,
-		smoke_glass_color.rgb,
-		smoothstep(0.08, 0.92, tenant)
-	);
-	float surface_roughness = mix(0.052, 0.155, tenant)
-		+ (pane - 0.5) * 0.045;
-	float surface_alpha = mix(base_alpha + 0.045, base_alpha - 0.035, tenant);
+	vec3 surface_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.30 + 0.40 * tenant_tone);
+	float surface_roughness = mix(0.080, 0.145, tenant_tone) + (pane_b - 0.5) * 0.022;
+	float surface_alpha = mix(base_alpha + 0.015, base_alpha - 0.010, tenant_tone);
 
-	float blind_zone = step(0.56, tenant) * (1.0 - step(0.83, tenant));
-	float blind_drop = mix(0.28, 0.74, tenant_b);
-	float blind_mask = blind_zone
-		* step(1.0 - blind_drop, cell_frac.y)
-		* step(0.16, pane);
-	vec3 blind_tint = blind_color.rgb * (0.80 + 0.34 * pane_b);
-	surface_color = mix(surface_color, blind_tint, blind_mask * 0.88);
-	surface_roughness = mix(surface_roughness, 0.34, blind_mask * 0.72);
-	surface_alpha = mix(surface_alpha, 0.91, blind_mask);
+	// Quiet occupier states. Blinds are now a minority detail; warm rooms are
+	// only a faint colour temperature change in daylight, becoming actual
+	// emission only through interior_light_strength at sunset/night.
+	float blind_zone = step(0.84, tenant_hash);
+	float blind_start = mix(0.58, 0.82, pane_b);
+	float slat = 0.88 + 0.12 * smoothstep(0.30, 0.70, fract(cell_frac.y * 18.0));
+	float blind_mask = blind_zone * step(blind_start, cell_frac.y);
+	surface_color = mix(surface_color, blind_color.rgb * slat, blind_mask * 0.58);
+	surface_roughness = mix(surface_roughness, 0.30, blind_mask * 0.45);
+	surface_alpha = mix(surface_alpha, 0.88, blind_mask * 0.42);
 
-	float warm_zone = step(0.86, tenant);
-	surface_color = mix(surface_color, warm_interior_color.rgb, warm_zone * 0.68);
-	surface_alpha = mix(surface_alpha, base_alpha - 0.13, warm_zone * 0.72);
+	float warm_zone = step(0.90, hash12(tenant_id * 2.47 + 31.7));
+	surface_color = mix(surface_color, warm_interior_color.rgb, warm_zone * (1.0 - blind_mask) * 0.46);
+	surface_alpha = mix(surface_alpha, base_alpha - 0.07, warm_zone * (1.0 - blind_mask) * 0.45);
 
-	float cool_open_pane = step(0.93, pane_b) * (1.0 - blind_mask);
-	surface_color = mix(
-		surface_color,
-		mix(cool_interior_color.rgb, warm_interior_color.rgb, step(0.62, pane_c)),
-		cool_open_pane * 0.62
-	);
-	surface_alpha = mix(surface_alpha, base_alpha - 0.18, cool_open_pane * 0.70);
-	surface_color *= 0.92 + 0.16 * pane_c;
+	float cool_open_zone = step(0.955, hash12(tenant_id * 3.73 + 47.9));
+	surface_color = mix(surface_color, cool_interior_color.rgb, cool_open_zone * (1.0 - blind_mask) * 0.40);
+	surface_alpha = mix(surface_alpha, base_alpha - 0.10, cool_open_zone * 0.42);
 
-	float camera_distance = distance(CAMERA_POSITION_WORLD, world_pos);
-	float detail_fade = 1.0 - smoothstep(85.0, 230.0, camera_distance);
-	float far_average = smoothstep(180.0, 460.0, camera_distance);
+	// A +/-3.5% pane tint is enough to break a CG sheet without producing
+	// the rectangular patchwork visible in the 0.2.14 phone captures.
+	surface_color *= 0.965 + 0.070 * pane_c;
 
-	// Broad tonal drift and rain/dust streaks. They follow the facade's
-	// vertical direction rather than a 2D image's fixed screen axes.
-	float broad_weather = fbm2(vec2(facade_m.x * 0.035, facade_m.y * 0.018) + seed * 0.01);
-	float vertical_streak = smoothstep(
-		0.76,
-		0.97,
-		vnoise(vec2(facade_m.x * 3.1, facade_m.y * 0.025) + seed * 0.03)
-	) * weathering_strength * mix(0.35, 1.0, detail_fade);
-	surface_color *= 0.94 + 0.10 * broad_weather;
-	surface_color = mix(
-		surface_color,
-		surface_color * vec3(1.05, 0.99, 0.89),
-		vertical_streak * 0.28
-	);
-	surface_roughness += (broad_weather - 0.5) * 0.045
-		+ vertical_streak * 0.085;
+	// One broad weather octave plus one elongated runoff octave. Both are
+	// kept below the glass/sky contrast and disappear into the far average.
+	float broad_weather = value_noise(vec2(horizontal * 0.055, world_position.y * 0.045) + material_seed * 7.0);
+	surface_color *= 0.975 + 0.045 * broad_weather * weathering_strength;
+	surface_roughness += (broad_weather - 0.5) * 0.020 * weathering_strength;
+	float runoff = value_noise(vec2(horizontal * 2.10, world_position.y * 0.028) + material_seed * 3.0);
+	float streak = smoothstep(0.82, 0.98, runoff) * weathering_strength;
+	surface_color = mix(surface_color, vec3(0.115, 0.120, 0.118), streak * 0.16);
+	surface_roughness += streak * 0.020;
 
-	// A very thin dark gasket/sill shadow at the actual floor and bay
-	// pitch reinforces the Blender mullions at street distance. It is
-	// derivative-faded so it cannot become one-pixel sparkle far away.
-	float edge_m = min(
-		min(cell_frac.x, 1.0 - cell_frac.x) * bay_width_m,
-		min(cell_frac.y, 1.0 - cell_frac.y) * floor_height_m
-	);
-	float edge_aa = max(fwidth(edge_m) * 1.35, 0.004);
-	float gasket = (1.0 - smoothstep(0.022, 0.022 + edge_aa, edge_m))
-		* detail_fade;
-	float sill_shadow = (1.0 - smoothstep(0.015, 0.16, cell_frac.y))
-		* detail_fade;
-	surface_color *= 1.0 - gasket * 0.42 - sill_shadow * 0.16;
-	surface_roughness += gasket * 0.20;
-	surface_alpha = mix(surface_alpha, 0.94, gasket * 0.72);
+	float distance_to_camera = length(world_position - CAMERA_POSITION_WORLD);
+	float panel_pixel_footprint = max(fwidth(cell.x), fwidth(cell.y));
+	float near_detail = (1.0 - smoothstep(detail_fade_start_m, detail_fade_end_m, distance_to_camera))
+		* (1.0 - smoothstep(0.18, 0.72, panel_pixel_footprint));
 
-	// Far LOD: retain the dark smoked read, but average the finest pane
-	// contrast before the phone's reduced 3D buffer turns it to noise.
-	vec3 far_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.46);
-	surface_color = mix(surface_color, far_color, far_average * 0.62);
-	surface_roughness = mix(surface_roughness, 0.135, far_average * 0.55);
-	surface_alpha = mix(surface_alpha, base_alpha + 0.02, far_average * 0.50);
+	// Narrow, shallow gasketing. The Blender mullions/spandrels carry the
+	// real panel rhythm; the shader no longer paints a second black frame.
+	float edge_distance = min(min(cell_frac.x, 1.0 - cell_frac.x), min(cell_frac.y, 1.0 - cell_frac.y));
+	float gasket = (1.0 - smoothstep(0.004, 0.018, edge_distance)) * near_detail;
+	surface_color = mix(surface_color, surface_color * 0.72 + vec3(0.010, 0.012, 0.014), gasket * 0.16);
+	surface_roughness += gasket * 0.070;
+	surface_alpha = mix(surface_alpha, 0.90, gasket * 0.40);
+	float lower_sill = step(cell_frac.y, 0.020) * near_detail;
+	surface_color = mix(surface_color, surface_color * 0.90, lower_sill * 0.05);
+	surface_alpha = mix(surface_alpha, 0.90, lower_sill * 0.08);
 
-	float view_fresnel = pow(
-		1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0),
-		3.0
-	);
-	surface_alpha = mix(surface_alpha, 0.94, view_fresnel * 0.48);
+	// Distance average: beyond roughly 300 m (and earlier when a complete
+	// bay is sub-pixel) the facade is a continuous neutral reflective skin.
+	float far_average = smoothstep(detail_fade_start_m, detail_fade_end_m, distance_to_camera);
+	far_average = max(far_average, smoothstep(0.30, 0.95, panel_pixel_footprint));
+	vec3 far_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.52);
+	surface_color = mix(surface_color, far_color, far_average * 0.76);
+	surface_roughness = mix(surface_roughness, 0.115, far_average * 0.62);
+	surface_alpha = mix(surface_alpha, base_alpha + 0.005, far_average * 0.72);
 
-	float wave = sin((cell_frac.x + pane * 0.37) * 6.28318)
-		* 0.012 * detail_fade;
-	vec2 panel_tilt = vec2(pane_b - 0.5, pane_c - 0.5)
-		* 0.105 * mix(0.35, 1.0, detail_fade);
-	vec3 panel_normal = normalize(vec3(panel_tilt.x + wave, panel_tilt.y, 1.0));
-	NORMAL_MAP = panel_normal * 0.5 + 0.5;
-	NORMAL_MAP_DEPTH = 0.62;
+	// Grazing views become more mirror-like and opaque; head-on views keep
+	// the occupied core/curtain depth behind the Blender glass shells.
+	vec3 view_dir = normalize(world_position - CAMERA_POSITION_WORLD);
+	float fresnel = pow(1.0 - clamp(abs(dot(-view_dir, world_normal)), 0.0, 1.0), 3.0);
+	surface_alpha = mix(surface_alpha, 0.88, fresnel * 0.28);
 
-	float lit_hash = hash13(vec3(cell + vec2(53.0, 29.0), seed + 41.0));
-	float lit_pane = step(0.70, lit_hash) * interior_light_strength;
-	vec3 lit_color = mix(
-		vec3(1.0, 0.62, 0.30),
-		vec3(0.72, 0.84, 1.0),
-		step(0.78, pane_c)
-	);
-	EMISSION = lit_color * lit_pane
-		* (0.42 + 0.72 * pane_b)
-		* (1.0 - gasket * 0.86)
-		* (1.0 - blind_mask * 0.42);
+	// Small independent pane tilts make neighbouring sky reflections step
+	// like installed low-iron units, without the funhouse warp in 0.2.14.
+	vec2 pane_tilt = (vec2(pane_hash, pane_b) - 0.5) * 0.045 * near_detail;
+	vec2 micro_wave = (vec2(
+		value_noise(cell * vec2(2.7, 1.4) + material_seed),
+		value_noise(cell * vec2(1.5, 3.1) + material_seed + 9.0)
+	) - 0.5) * 0.006 * near_detail;
+	vec2 normal_xy = clamp(pane_tilt + micro_wave, vec2(-0.055), vec2(0.055));
+	NORMAL_MAP = vec3(normal_xy * 0.5 + 0.5, 1.0);
+	NORMAL_MAP_DEPTH = 0.35;
 
 	ALBEDO = surface_color;
-	ALPHA = clamp(surface_alpha, 0.05, 0.97);
+	ROUGHNESS = clamp(surface_roughness, 0.045, 0.38);
 	METALLIC = 0.0;
-	ROUGHNESS = clamp(surface_roughness, 0.035, 0.48);
-	SPECULAR = 0.94;
-	CLEARCOAT = 0.72;
-	CLEARCOAT_ROUGHNESS = 0.075;
-	AO = clamp(1.0 - gasket * 0.22 - sill_shadow * 0.16, 0.62, 1.0);
+	SPECULAR = 0.62;
+	ALPHA = clamp(surface_alpha, 0.42, 0.93);
+
+	float lit_window = warm_zone * step(0.38, hash12(tenant_id * 4.91 + 63.1)) * (1.0 - blind_mask * 0.72);
+	EMISSION = vec3(1.0, 0.62, 0.32) * lit_window * interior_light_strength * 0.72;
 }

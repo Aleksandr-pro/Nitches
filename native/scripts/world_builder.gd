@@ -708,11 +708,13 @@ func _build_environment() -> void:
 	_sun.shadow_normal_bias = 1.65
 	_sun.shadow_blur = 1.15
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	# 0.2.4 mobile budget: two splits over 240 m. The player and nearby
-	# streets retain real shadows, while distant districts no longer force
-	# four large shadow submissions on a phone GPU.
-	_sun.directional_shadow_max_distance = 240.0
-	_enhancement_stats["shadow_max_distance"] = 240.0
+	# 0.2.15 phone budget: the 0.2.14 captures cost 84-119 ms CPU per frame
+	# with physics at only ~5 ms, so the render submission itself is the
+	# bottleneck. Two splits now cover 175 m: the player, junctions and the
+	# buildings that can actually shade the road keep real shadows, while
+	# far districts stop paying two extra shadow submissions.
+	_sun.directional_shadow_max_distance = 175.0
+	_enhancement_stats["shadow_max_distance"] = 175.0
 	_enhancement_stats["shadow_splits"] = 2
 	_sun.directional_shadow_split_1 = 0.12
 	_sun.directional_shadow_split_2 = 0.42
@@ -867,13 +869,15 @@ func _create_curtain_wall_material(
 	material.set_shader_parameter("smoke_glass_color", smoke_color)
 	material.set_shader_parameter("blind_color", blind_tint)
 	material.set_shader_parameter("warm_interior_color", warm_interior)
-	material.set_shader_parameter("cool_interior_color", Color(0.035, 0.055, 0.064))
+	material.set_shader_parameter("cool_interior_color", Color(0.055, 0.080, 0.095))
 	material.set_shader_parameter("floor_height_m", floor_height_m)
 	material.set_shader_parameter("bay_width_m", bay_width_m)
 	material.set_shader_parameter("base_alpha", base_alpha)
 	material.set_shader_parameter("material_seed", seed)
 	material.set_shader_parameter("interior_light_strength", 0.0)
-	material.set_shader_parameter("weathering_strength", 0.55)
+	material.set_shader_parameter("weathering_strength", 0.32)
+	material.set_shader_parameter("detail_fade_start_m", 90.0)
+	material.set_shader_parameter("detail_fade_end_m", 300.0)
 	_materials[key] = material
 	_curtain_glass_materials.append(material)
 	if opaque_facade:
@@ -884,6 +888,12 @@ func _create_curtain_wall_material(
 	_enhancement_stats["curtain_wall_panel_variation"] = true
 	_enhancement_stats["curtain_wall_weathering"] = true
 	_enhancement_stats["curtain_wall_neutral_glass"] = true
+	_enhancement_stats["curtain_wall_calibrated_0215"] = true
+	_enhancement_stats["curtain_wall_clearcoat_removed"] = true
+	_enhancement_stats["curtain_wall_detail_fade_start_m"] = 90.0
+	_enhancement_stats["curtain_wall_detail_fade_end_m"] = 300.0
+	_enhancement_stats["building_visual_ranges_0215"] = true
+	_enhancement_stats["traffic_signal_visual_range_m"] = 360.0
 	return material
 
 
@@ -930,10 +940,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_glass_tower_physical",
 			true,
-			Color(0.016, 0.034, 0.043),
-			Color(0.040, 0.064, 0.073),
-			Color(0.270, 0.255, 0.215),
-			Color(0.095, 0.060, 0.035),
+			Color(0.040, 0.064, 0.080),
+			Color(0.075, 0.108, 0.126),
+			Color(0.290, 0.280, 0.245),
+			Color(0.112, 0.080, 0.052),
 			3.30,
 			1.75,
 			7.0,
@@ -943,10 +953,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_bronze_tower_physical",
 			true,
-			Color(0.045, 0.032, 0.018),
-			Color(0.115, 0.078, 0.042),
-			Color(0.300, 0.240, 0.170),
-			Color(0.130, 0.080, 0.040),
+			Color(0.075, 0.055, 0.032),
+			Color(0.135, 0.099, 0.060),
+			Color(0.320, 0.270, 0.200),
+			Color(0.142, 0.098, 0.058),
 			3.30,
 			1.85,
 			9.0,
@@ -981,19 +991,35 @@ func _facade_material(facade: String, height: float) -> Material:
 		"userPlaster":
 			pass
 
+	# 0.2.15: do not multiply already-bright photographic stone/plaster by
+	# Color.WHITE. On the phone those towers clipped into featureless white
+	# slabs beside the (previously too dark) glass. These are exposure tints,
+	# not new colours: texture detail and district identity remain intact.
+	var facade_tint := Color(0.86, 0.83, 0.76)
+	match facade:
+		"hotelTower":
+			facade_tint = Color(0.82, 0.80, 0.75)
+		"marbleTower", "userMarble":
+			facade_tint = Color(0.78, 0.76, 0.72)
+		"sandTower":
+			facade_tint = Color(0.88, 0.82, 0.70)
+		"userWood":
+			facade_tint = Color(0.90, 0.82, 0.72)
+		"userStone":
+			facade_tint = Color(0.84, 0.80, 0.72)
 	var tier := 0 if height < 18.0 else (1 if height < 52.0 else 2)
 	var key := "facade_%s_%d" % [facade, tier]
 	var material := _material(
 		key,
 		albedo,
 		normal,
-		Color.WHITE,
+		facade_tint,
 		roughness,
 		metallic,
 		Vector3(0.052, 0.047 + float(tier) * 0.006, 0.052),
 		true
 	)
-	material.metallic_specular = 0.92 if glassy else 0.58
+	material.metallic_specular = 0.82 if glassy else 0.48
 	if glassy or facade == "hotelTower":
 		material.emission_enabled = true
 		material.emission = Color(1.0, 0.74, 0.45)
@@ -1041,14 +1067,14 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"prop_storefront_glass_physical",
 				false,
-				Color(0.014, 0.030, 0.038),
-				Color(0.036, 0.058, 0.066),
-				Color(0.260, 0.245, 0.205),
-				Color(0.100, 0.064, 0.036),
+				Color(0.038, 0.060, 0.075),
+				Color(0.070, 0.100, 0.116),
+				Color(0.280, 0.270, 0.235),
+				Color(0.110, 0.078, 0.050),
 				2.70,
 				1.45,
 				4.0,
-				0.74
+				0.68
 			)
 		"PropsGlass":
 			var panes := _material("prop_glass", "", "", Color(0.58, 0.82, 0.94, 0.58), 0.08, 0.35)
@@ -1105,7 +1131,7 @@ func _prop_material(material_name: String) -> Material:
 			_register_night_material(villa_glass, 0.0, 0.07, 0.30)
 			return villa_glass
 		"VillaInterior":
-			var villa_interior := _material("villa_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.075, 0.062, 0.052), 0.96, 0.0, Vector3(0.42, 0.42, 0.42), true)
+			var villa_interior := _material("villa_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.112, 0.096, 0.080), 0.96, 0.0, Vector3(0.42, 0.42, 0.42), true)
 			villa_interior.metallic_specular = 0.18
 			return villa_interior
 		"VillaCurtain":
@@ -1204,17 +1230,17 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"tower_glass_physical",
 				false,
-				Color(0.015, 0.032, 0.041),
-				Color(0.038, 0.062, 0.071),
-				Color(0.275, 0.258, 0.214),
-				Color(0.096, 0.061, 0.036),
+				Color(0.042, 0.068, 0.086),
+				Color(0.078, 0.112, 0.132),
+				Color(0.300, 0.290, 0.255),
+				Color(0.114, 0.080, 0.051),
 				3.45,
 				1.85,
 				2.0,
-				0.79
+				0.75
 			)
 		"TowerSpandrel":
-			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.055, 0.060, 0.064), 0.38, 0.48, Vector3(0.35, 0.35, 0.35), true)
+			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.270, 0.290, 0.310), 0.34, 0.72, Vector3(0.35, 0.35, 0.35), true)
 			tower_spandrel.metallic_specular = 0.95
 			return tower_spandrel
 		"TowerStone":
@@ -1227,7 +1253,7 @@ func _prop_material(material_name: String) -> Material:
 			tower_trim.metallic_specular = 0.62
 			return tower_trim
 		"TowerMetal":
-			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.130, 0.140, 0.150), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.200, 0.220, 0.240), 0.38, 0.78, Vector3(0.48, 0.48, 0.48), true)
 			tower_metal.metallic_specular = 0.92
 			return tower_metal
 		"MainGlass":
@@ -1240,17 +1266,17 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"main_glass_physical",
 				false,
-				Color(0.013, 0.029, 0.038),
-				Color(0.034, 0.056, 0.065),
-				Color(0.285, 0.264, 0.218),
-				Color(0.102, 0.064, 0.037),
+				Color(0.045, 0.072, 0.090),
+				Color(0.082, 0.118, 0.138),
+				Color(0.310, 0.300, 0.265),
+				Color(0.120, 0.083, 0.052),
 				3.42,
 				1.60,
 				5.0,
-				0.78
+				0.74
 			)
 		"MainSpandrel":
-			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.050, 0.052, 0.055), 0.40, 0.45, Vector3(0.35, 0.35, 0.35), true)
+			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.300, 0.315, 0.330), 0.30, 0.76, Vector3(0.35, 0.35, 0.35), true)
 			main_spandrel.metallic_specular = 0.95
 			return main_spandrel
 		"MainStone":
@@ -1262,7 +1288,7 @@ func _prop_material(material_name: String) -> Material:
 			main_trim.metallic_specular = 0.92
 			return main_trim
 		"MainMetal":
-			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.125, 0.135, 0.145), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.230, 0.240, 0.260), 0.36, 0.80, Vector3(0.48, 0.48, 0.48), true)
 			main_metal.metallic_specular = 0.92
 			return main_metal
 		"MainWater":
@@ -1559,7 +1585,9 @@ func _build_water_and_pools() -> void:
 	sea_mesh.subdivide_width = 128
 	sea_mesh.subdivide_depth = 176
 	var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
-	sea.custom_aabb = WORLD_AABB
+	# The sea plane only exists east of the shoreline; WORLD_AABB forced
+	# its 45k vertices through the vertex shader even when looking inland.
+	sea.custom_aabb = AABB(Vector3(-382.0, -2.0, -522.0), Vector3(764.0, 5.0, 1044.0))
 
 	var pools: Array = data.get("pools", [])
 	if pools.is_empty():
@@ -2760,28 +2788,45 @@ func _get_model_parts(path: String) -> Array:
 
 func _multimesh_visual_range(node_name: String) -> float:
 	var key := node_name.to_lower()
-	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
-		return 380.0
-	if key.contains("streetlamp") or key.contains("busshelter") or key.contains("guardrail"):
-		return 430.0
-	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
-		return 680.0
-	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
-		return 620.0
-	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
-		return 430.0
-	if key.contains("trafficsignal"):
-		return 560.0
-	if key.contains("pool"):
-		return 520.0
-	if key.contains("tree") or key.contains("palm"):
+	# 0.2.15 render-cost pass. SurfaceTool merging discards the imported
+	# mesh LODs, so distance range is currently the only safe triangle
+	# governor for repeated Blender buildings. Ranges are measured to a
+	# chunk AABB centre, hence the margins over the nominal object size:
+	# low villas/townhouses retire first, 28 m hero blocks next, and the
+	# 73 m skyline towers stay visible across the playable districts.
+	# The unique 148 m flagship is never range-hidden.
+	if key.contains("main148mtower"):
+		return 0.0
+	if key.contains("blendervillas") or key.contains("blendertownhouses"):
+		return 640.0
+	if key.contains("blenderherobuildings"):
 		return 780.0
+	if key.contains("blenderglasstowers"):
+		return 1050.0
+	if key.contains("trafficsignal"):
+		return 360.0
+	if key.contains("busshelter"):
+		return 320.0
+	if key.contains("streetlamp") or key.contains("guardrail"):
+		return 360.0
+	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
+		return 320.0
+	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
+		return 520.0
+	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
+		return 480.0
+	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
+		return 320.0
+	if key.contains("pool"):
+		return 460.0
+	if key.contains("tree") or key.contains("palm"):
+		return 620.0
 	if key.contains("bollard") or key.contains("planter") or key.contains("hedge") or key.contains("trashbin") or key.contains("roadsign") or key.contains("storefront") or key.contains("awning") or key.contains("balcony"):
-		return 430.0
+		return 340.0
 	if key.contains("beach"):
-		return 540.0
+		return 460.0
 	if key.contains("marina") or key.contains("rooftop") or key.contains("watertank"):
-		return 720.0
+		return 620.0
 	return 0.0
 
 
@@ -2865,13 +2910,29 @@ func _add_batched_model(parent: Node, path: String, transforms: Array, node_name
 	var built_any := false
 	for part_variant in parts:
 		var part: Dictionary = part_variant
+		var material_name := String(part.get("material_name", "Part"))
+		var material_key := material_name.to_lower()
+		# Transparent shells, emissive panes and interior infill sit inside
+		# or directly over a real opaque core/wall that already casts the
+		# building shadow. Sending those duplicate surfaces through both
+		# directional splits bought no visible shadow detail on the phone.
+		var casts_shadow := not (
+			material_key.contains("glass")
+			or material_key.contains("curtain")
+			or material_key.contains("interior")
+			or material_key.contains("glow")
+			or material_key.contains("solar")
+			or material_key.contains("water")
+		)
+		if not casts_shadow:
+			_enhancement_stats["model_parts_without_shadow_pass"] = int(_enhancement_stats.get("model_parts_without_shadow_pass", 0)) + 1
 		built_any = _add_multimesh(
 			model_root,
 			part.get("mesh") as Mesh,
 			part.get("material") as Material,
 			transforms,
-			"%s_%s" % [node_name, String(part.get("material_name", "Part"))],
-			true
+			"%s_%s" % [node_name, material_name],
+			casts_shadow
 		) or built_any
 	return built_any
 
@@ -3944,7 +4005,10 @@ func _build_vegetation() -> void:
 		for part_name in ["tree2_bark", "tree2_foliage"]:
 			if _plant_parts.has(part_name):
 				var part: Dictionary = _plant_parts[part_name]
-				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, tree_transforms, part_name)
+				# The oak canopy is the expensive half of every tree in
+				# both shadow splits. Trunks/branches keep a grounding
+				# shadow; canopy self-shading remains in the PBR material.
+				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, tree_transforms, part_name, part_name == "tree2_bark")
 
 		var bush_transforms: Dictionary = {
 			"bush_round_foliage": [],
@@ -4344,16 +4408,13 @@ func _build_reflection_probes() -> void:
 	var root := Node3D.new()
 	root.name = "ReflectionProbes"
 	add_child(root)
-	# 0.2.14: the old six probes were only 110 m tall and captured at
-	# street height. The crown of the 148 m flagship was therefore
-	# outside every useful district cubemap and fell back to an almost
-	# uniform blue sky reflection. Two additional tall probes cover
-	# the flagship and the central No.4 cluster; their capture points
-	# stay outside the towers while their influence boxes cover them.
+	# 0.2.15: keep the tall-probe coverage introduced for the 148 m
+	# flagship, but stop stacking a second standard probe underneath
+	# each tall one. Six district probes (two tall) cover the same
+	# shoreline/downtown/islands with fewer overlapping cubemap blends
+	# on every reflective fragment.
 	var probe_specs: Array[Dictionary] = [
-		{"centre": Vector3(720.0, 0.0, 0.0), "height": 72.0, "size": Vector3(320.0, 180.0, 320.0), "capture": 24.0, "tall": false},
 		{"centre": Vector3(680.0, 0.0, -300.0), "height": 56.0, "size": Vector3(320.0, 150.0, 320.0), "capture": 24.0, "tall": false},
-		{"centre": Vector3(720.0, 0.0, 330.0), "height": 56.0, "size": Vector3(320.0, 150.0, 320.0), "capture": 24.0, "tall": false},
 		{"centre": Vector3(940.0, 0.0, 0.0), "height": 44.0, "size": Vector3(320.0, 120.0, 320.0), "capture": 20.0, "tall": false},
 		{"centre": Vector3(1180.0, 0.0, 80.0), "height": 44.0, "size": Vector3(320.0, 120.0, 320.0), "capture": 20.0, "tall": false},
 		{"centre": Vector3(1340.0, 0.0, -250.0), "height": 50.0, "size": Vector3(320.0, 140.0, 320.0), "capture": 22.0, "tall": false},

@@ -89,7 +89,7 @@ func _configure_render_quality(initial: bool) -> void:
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
 		viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
 		if initial:
-			_render_scale = 0.72
+			_render_scale = 0.62
 		viewport.scaling_3d_scale = _render_scale
 	render_quality_state = {
 		"android": is_android,
@@ -97,8 +97,10 @@ func _configure_render_quality(initial: bool) -> void:
 		"msaa": int(viewport.msaa_3d),
 		"screen_space_aa": int(viewport.screen_space_aa),
 		"adaptive": is_android,
-		"evaluation_seconds": 3.0,
+		"evaluation_seconds": 2.5,
 		"hysteresis_votes": 2,
+		"min_scale": 0.42,
+		"max_scale": 0.80,
 	}
 
 
@@ -107,20 +109,20 @@ func _update_adaptive_render_quality(delta: float) -> void:
 		return
 	_render_quality_accumulated_time += delta
 	_render_quality_frames += 1
-	# A 3-second evaluation window plus a repeated-vote requirement avoids
-	# changing (and reallocating) the 3D render target every 1.5 seconds.
-	# Those changes could themselves be perceived as small tugs while the
-	# car was accelerating through varying scenery.
-	if _render_quality_accumulated_time < 3.0:
+	# A 2.5-second evaluation window plus a repeated-vote requirement
+	# avoids reallocating the 3D render target on every scenery change.
+	# The target band is a stable 30-50 FPS rather than chasing 60 on a
+	# phone that measured 8-12 FPS in the 0.2.14 city captures.
+	if _render_quality_accumulated_time < 2.5:
 		return
 	var measured_fps := float(_render_quality_frames) / maxf(_render_quality_accumulated_time, 0.001)
 	_render_quality_accumulated_time = 0.0
 	_render_quality_frames = 0
 
 	var desired_direction := 0
-	if measured_fps < 44.0:
+	if measured_fps < 30.0:
 		desired_direction = -1
-	elif measured_fps > 56.0:
+	elif measured_fps > 50.0:
 		desired_direction = 1
 	if desired_direction == 0:
 		_render_quality_vote_direction = 0
@@ -138,9 +140,10 @@ func _update_adaptive_render_quality(delta: float) -> void:
 	_render_quality_vote_count = 0
 	var previous_scale := _render_scale
 	if desired_direction < 0:
-		_render_scale = maxf(0.50, _render_scale - 0.04)
+		var step := 0.06 if measured_fps < 18.0 else 0.04
+		_render_scale = maxf(0.42, _render_scale - step)
 	else:
-		_render_scale = minf(0.86, _render_scale + 0.04)
+		_render_scale = minf(0.80, _render_scale + 0.04)
 	if not is_equal_approx(previous_scale, _render_scale):
 		_configure_render_quality(false)
 
@@ -149,9 +152,9 @@ func _create_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "GameCamera"
 	_camera.near = 0.12
-	# RichTown's playable diagonal is about 1.4 km; 1.8 km preserves the
-	# whole district/islands while tightening depth precision and culling.
-	_camera.far = 1800.0
+	# RichTown's playable diagonal is about 1.4 km; 1.5 km still covers
+	# corner-to-corner views while tightening depth precision and culling.
+	_camera.far = 1500.0
 	_camera.fov = 58.0
 	add_child(_camera)
 	_camera.make_current()
@@ -392,6 +395,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.13 Building Model No.5 premium 148 m main tower pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("curtain_wall_materials", 0)) < 5 or not bool(enhancement_stats.get("curtain_wall_shader", false)) or not bool(enhancement_stats.get("curtain_wall_opaque_shader", false)) or not bool(enhancement_stats.get("curtain_wall_panel_variation", false)) or not bool(enhancement_stats.get("curtain_wall_weathering", false)) or not bool(enhancement_stats.get("curtain_wall_neutral_glass", false)) or int(enhancement_stats.get("tall_reflection_probes", 0)) < 2:
 		failures.append("0.2.14 physical curtain-wall realism pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("curtain_wall_calibrated_0215", false)) or not bool(enhancement_stats.get("curtain_wall_clearcoat_removed", false)) or not bool(enhancement_stats.get("building_visual_ranges_0215", false)) or int(enhancement_stats.get("model_parts_without_shadow_pass", 0)) < 10 or float(enhancement_stats.get("curtain_wall_detail_fade_start_m", 9999.0)) > 90.0 or float(enhancement_stats.get("curtain_wall_detail_fade_end_m", 9999.0)) > 300.0 or float(enhancement_stats.get("traffic_signal_visual_range_m", 9999.0)) > 360.0:
+		failures.append("0.2.15 glass calibration/render-cost pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:
@@ -439,7 +444,7 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.7 Blender traffic-signal/intersection furniture is incomplete: %s" % str(enhancement_stats))
 
 	var traffic_stats := {"moving": 0, "parked": 0, "total": 0, "removed": true}
-	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 260.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:
+	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 180.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:
 		failures.append("mobile shadow/reflection ranges are not bounded: %s" % str(enhancement_stats))
 	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
 	if String(spawn_surface.get("kind", "")) != "asphalt":
