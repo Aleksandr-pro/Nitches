@@ -88,6 +88,11 @@ func _configure_render_quality(initial: bool) -> void:
 		# at display resolution because only the 3D buffer is scaled.
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
 		viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+		# 0.2.16: merged Blender parts and the plant pack now carry real
+		# generated LOD chains again. Six threshold pixels makes the
+		# phone use them at normal street viewing distances instead of
+		# reserving simplification for almost-subpixel geometry.
+		viewport.mesh_lod_threshold = 6.0
 		if initial:
 			_render_scale = 0.62
 		viewport.scaling_3d_scale = _render_scale
@@ -101,6 +106,7 @@ func _configure_render_quality(initial: bool) -> void:
 		"hysteresis_votes": 2,
 		"min_scale": 0.42,
 		"max_scale": 0.80,
+		"mesh_lod_threshold": viewport.mesh_lod_threshold,
 	}
 
 
@@ -397,6 +403,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.14 physical curtain-wall realism pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("curtain_wall_calibrated_0215", false)) or not bool(enhancement_stats.get("curtain_wall_clearcoat_removed", false)) or not bool(enhancement_stats.get("building_visual_ranges_0215", false)) or int(enhancement_stats.get("model_parts_without_shadow_pass", 0)) < 10 or float(enhancement_stats.get("curtain_wall_detail_fade_start_m", 9999.0)) > 90.0 or float(enhancement_stats.get("curtain_wall_detail_fade_end_m", 9999.0)) > 300.0 or float(enhancement_stats.get("traffic_signal_visual_range_m", 9999.0)) > 360.0:
 		failures.append("0.2.15 glass calibration/render-cost pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("curtain_wall_reflective_coating_0216", false)) or not bool(enhancement_stats.get("runtime_lods_0216", false)) or int(enhancement_stats.get("runtime_lod_meshes", 0)) < 20 or int(enhancement_stats.get("runtime_lod_levels", 0)) < 40 or float(enhancement_stats.get("runtime_lod_min_index_ratio", 1.0)) > 0.65 or not bool(enhancement_stats.get("batched_models_merged_0216", false)) or int(enhancement_stats.get("batched_model_paths_0216", 0)) < 8 or int(enhancement_stats.get("batched_model_instances_0216", 0)) < 200 or not bool(enhancement_stats.get("building_hlod_0216", false)) or int(enhancement_stats.get("building_far_proxy_models", 0)) < 40 or int(enhancement_stats.get("building_far_proxy_boxes", 0)) < 80 or not bool(enhancement_stats.get("vegetation_hlod_0216", false)) or int(enhancement_stats.get("vegetation_far_proxies", 0)) < 150 or float(enhancement_stats.get("traffic_signal_visual_range_m", 9999.0)) > 220.0:
+		failures.append("0.2.16 reflective-glass/HLOD/runtime-LOD pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:

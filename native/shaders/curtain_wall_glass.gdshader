@@ -1,19 +1,19 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_alpha_prepass, cull_back;
 
-// Native 0.2.15 calibrated physical curtain-wall glass. The 0.2.14 phone
-// screenshots proved that the first smoked calibration was much too dark:
-// neighbouring tenant zones became brown/black camouflage at Q50. This
-// calibration keeps the same real-bay logic, occupied-core depth and panel
-// tilt, but lifts the source into neutral blue-grey glass, compresses the
-// tonal steps and averages micro detail much earlier with distance. It also
-// removes the expensive clearcoat layer and one value-noise octave; polished
-// glass reflects through the ordinary specular/environment response.
-uniform vec4 deep_glass_color : source_color = vec4(0.045, 0.072, 0.090, 1.0);
-uniform vec4 smoke_glass_color : source_color = vec4(0.082, 0.118, 0.138, 1.0);
-uniform vec4 blind_color : source_color = vec4(0.310, 0.300, 0.265, 1.0);
-uniform vec4 cool_interior_color : source_color = vec4(0.055, 0.080, 0.095, 1.0);
-uniform vec4 warm_interior_color : source_color = vec4(0.120, 0.083, 0.052, 1.0);
+// Native 0.2.16 reflective-coated curtain-wall glass. The 0.2.15 phone
+// captures showed why albedo alone was insufficient: with METALLIC = 0
+// a head-on dielectric pane reflects only a few percent of the sky, so
+// even the lifted blue-grey calibration collapsed into navy-black slabs.
+// Solar-control coatings are therefore represented as a partial metal
+// reflection layer (high for mirror panes, low for blinds/interiors).
+// The real-bay tenant logic, occupied-core depth and distance average
+// remain; no photographic facade sheet or clearcoat layer is reintroduced.
+uniform vec4 deep_glass_color : source_color = vec4(0.105, 0.165, 0.205, 1.0);
+uniform vec4 smoke_glass_color : source_color = vec4(0.185, 0.255, 0.305, 1.0);
+uniform vec4 blind_color : source_color = vec4(0.360, 0.350, 0.315, 1.0);
+uniform vec4 cool_interior_color : source_color = vec4(0.100, 0.150, 0.180, 1.0);
+uniform vec4 warm_interior_color : source_color = vec4(0.170, 0.125, 0.085, 1.0);
 uniform float floor_height_m : hint_range(2.4, 5.0) = 3.42;
 uniform float bay_width_m : hint_range(0.9, 3.0) = 1.60;
 uniform float base_alpha : hint_range(0.45, 0.95) = 0.76;
@@ -78,6 +78,10 @@ void fragment() {
 	vec3 surface_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.30 + 0.40 * tenant_tone);
 	float surface_roughness = mix(0.080, 0.145, tenant_tone) + (pane_b - 0.5) * 0.022;
 	float surface_alpha = mix(base_alpha + 0.015, base_alpha - 0.010, tenant_tone);
+	// Reflective solar-control coating: enough metalness for the sky and
+	// district probes to define the pane at head-on angles, while the
+	// remaining dielectric fraction lets sun/core depth modulate it.
+	float surface_metallic = 0.62;
 
 	// Quiet occupier states. Blinds are now a minority detail; warm rooms are
 	// only a faint colour temperature change in daylight, becoming actual
@@ -89,14 +93,17 @@ void fragment() {
 	surface_color = mix(surface_color, blind_color.rgb * slat, blind_mask * 0.58);
 	surface_roughness = mix(surface_roughness, 0.30, blind_mask * 0.45);
 	surface_alpha = mix(surface_alpha, 0.88, blind_mask * 0.42);
+	surface_metallic = mix(surface_metallic, 0.08, blind_mask * 0.75);
 
 	float warm_zone = step(0.90, hash12(tenant_id * 2.47 + 31.7));
 	surface_color = mix(surface_color, warm_interior_color.rgb, warm_zone * (1.0 - blind_mask) * 0.46);
 	surface_alpha = mix(surface_alpha, base_alpha - 0.07, warm_zone * (1.0 - blind_mask) * 0.45);
+	surface_metallic = mix(surface_metallic, 0.22, warm_zone * (1.0 - blind_mask) * 0.55);
 
 	float cool_open_zone = step(0.955, hash12(tenant_id * 3.73 + 47.9));
 	surface_color = mix(surface_color, cool_interior_color.rgb, cool_open_zone * (1.0 - blind_mask) * 0.40);
 	surface_alpha = mix(surface_alpha, base_alpha - 0.10, cool_open_zone * 0.42);
+	surface_metallic = mix(surface_metallic, 0.30, cool_open_zone * (1.0 - blind_mask) * 0.50);
 
 	// A +/-3.5% pane tint is enough to break a CG sheet without producing
 	// the rectangular patchwork visible in the 0.2.14 phone captures.
@@ -124,6 +131,7 @@ void fragment() {
 	surface_color = mix(surface_color, surface_color * 0.72 + vec3(0.010, 0.012, 0.014), gasket * 0.16);
 	surface_roughness += gasket * 0.070;
 	surface_alpha = mix(surface_alpha, 0.90, gasket * 0.40);
+	surface_metallic = mix(surface_metallic, 0.25, gasket * 0.35);
 	float lower_sill = step(cell_frac.y, 0.020) * near_detail;
 	surface_color = mix(surface_color, surface_color * 0.90, lower_sill * 0.05);
 	surface_alpha = mix(surface_alpha, 0.90, lower_sill * 0.08);
@@ -136,6 +144,7 @@ void fragment() {
 	surface_color = mix(surface_color, far_color, far_average * 0.76);
 	surface_roughness = mix(surface_roughness, 0.115, far_average * 0.62);
 	surface_alpha = mix(surface_alpha, base_alpha + 0.005, far_average * 0.72);
+	surface_metallic = mix(surface_metallic, 0.58, far_average * 0.70);
 
 	// Grazing views become more mirror-like and opaque; head-on views keep
 	// the occupied core/curtain depth behind the Blender glass shells.
@@ -146,18 +155,21 @@ void fragment() {
 	// Small independent pane tilts make neighbouring sky reflections step
 	// like installed low-iron units, without the funhouse warp in 0.2.14.
 	vec2 pane_tilt = (vec2(pane_hash, pane_b) - 0.5) * 0.045 * near_detail;
-	vec2 micro_wave = (vec2(
-		value_noise(cell * vec2(2.7, 1.4) + material_seed),
-		value_noise(cell * vec2(1.5, 3.1) + material_seed + 9.0)
-	) - 0.5) * 0.006 * near_detail;
+	vec2 micro_wave = vec2(0.0);
+	if (near_detail > 0.01) {
+		micro_wave = (vec2(
+			value_noise(cell * vec2(2.7, 1.4) + material_seed),
+			value_noise(cell * vec2(1.5, 3.1) + material_seed + 9.0)
+		) - 0.5) * 0.006 * near_detail;
+	}
 	vec2 normal_xy = clamp(pane_tilt + micro_wave, vec2(-0.055), vec2(0.055));
 	NORMAL_MAP = vec3(normal_xy * 0.5 + 0.5, 1.0);
 	NORMAL_MAP_DEPTH = 0.35;
 
 	ALBEDO = surface_color;
 	ROUGHNESS = clamp(surface_roughness, 0.045, 0.38);
-	METALLIC = 0.0;
-	SPECULAR = 0.62;
+	METALLIC = clamp(surface_metallic, 0.0, 0.85);
+	SPECULAR = 0.72;
 	ALPHA = clamp(surface_alpha, 0.42, 0.93);
 
 	float lit_window = warm_zone * step(0.38, hash12(tenant_id * 4.91 + 63.1)) * (1.0 - blind_mask * 0.72);

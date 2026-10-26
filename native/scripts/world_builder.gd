@@ -57,6 +57,8 @@ var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
 var _road_segment_grid: Dictionary = {}
 var _multimesh_chunk_count := 0
+var _pending_batched_models: Dictionary = {}
+var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
 var _enhancement_stats: Dictionary = {}
@@ -112,6 +114,7 @@ func build_world() -> Dictionary:
 	_build_bus_shelters()
 	_build_benches()
 	_build_city_details()
+	_flush_batched_models()
 	_build_reflection_probes()
 	_build_world_bounds()
 	set_time_of_day("day")
@@ -869,7 +872,7 @@ func _create_curtain_wall_material(
 	material.set_shader_parameter("smoke_glass_color", smoke_color)
 	material.set_shader_parameter("blind_color", blind_tint)
 	material.set_shader_parameter("warm_interior_color", warm_interior)
-	material.set_shader_parameter("cool_interior_color", Color(0.055, 0.080, 0.095))
+	material.set_shader_parameter("cool_interior_color", Color(0.100, 0.150, 0.180))
 	material.set_shader_parameter("floor_height_m", floor_height_m)
 	material.set_shader_parameter("bay_width_m", bay_width_m)
 	material.set_shader_parameter("base_alpha", base_alpha)
@@ -889,11 +892,12 @@ func _create_curtain_wall_material(
 	_enhancement_stats["curtain_wall_weathering"] = true
 	_enhancement_stats["curtain_wall_neutral_glass"] = true
 	_enhancement_stats["curtain_wall_calibrated_0215"] = true
+	_enhancement_stats["curtain_wall_reflective_coating_0216"] = true
 	_enhancement_stats["curtain_wall_clearcoat_removed"] = true
 	_enhancement_stats["curtain_wall_detail_fade_start_m"] = 90.0
 	_enhancement_stats["curtain_wall_detail_fade_end_m"] = 300.0
 	_enhancement_stats["building_visual_ranges_0215"] = true
-	_enhancement_stats["traffic_signal_visual_range_m"] = 360.0
+	_enhancement_stats["traffic_signal_visual_range_m"] = 220.0
 	return material
 
 
@@ -940,10 +944,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_glass_tower_physical",
 			true,
-			Color(0.040, 0.064, 0.080),
-			Color(0.075, 0.108, 0.126),
-			Color(0.290, 0.280, 0.245),
-			Color(0.112, 0.080, 0.052),
+			Color(0.095, 0.150, 0.190),
+			Color(0.170, 0.235, 0.285),
+			Color(0.350, 0.340, 0.305),
+			Color(0.165, 0.122, 0.082),
 			3.30,
 			1.75,
 			7.0,
@@ -953,10 +957,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_bronze_tower_physical",
 			true,
-			Color(0.075, 0.055, 0.032),
-			Color(0.135, 0.099, 0.060),
-			Color(0.320, 0.270, 0.200),
-			Color(0.142, 0.098, 0.058),
+			Color(0.140, 0.105, 0.065),
+			Color(0.225, 0.170, 0.110),
+			Color(0.370, 0.320, 0.250),
+			Color(0.190, 0.140, 0.090),
 			3.30,
 			1.85,
 			9.0,
@@ -1067,14 +1071,14 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"prop_storefront_glass_physical",
 				false,
-				Color(0.038, 0.060, 0.075),
-				Color(0.070, 0.100, 0.116),
-				Color(0.280, 0.270, 0.235),
-				Color(0.110, 0.078, 0.050),
+				Color(0.090, 0.140, 0.175),
+				Color(0.160, 0.220, 0.265),
+				Color(0.340, 0.330, 0.295),
+				Color(0.160, 0.118, 0.080),
 				2.70,
 				1.45,
 				4.0,
-				0.68
+				0.66
 			)
 		"PropsGlass":
 			var panes := _material("prop_glass", "", "", Color(0.42, 0.65, 0.77, 0.50), 0.055, 0.12)
@@ -1234,14 +1238,14 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"tower_glass_physical",
 				false,
-				Color(0.042, 0.068, 0.086),
-				Color(0.078, 0.112, 0.132),
-				Color(0.300, 0.290, 0.255),
-				Color(0.114, 0.080, 0.051),
+				Color(0.100, 0.155, 0.195),
+				Color(0.175, 0.240, 0.290),
+				Color(0.350, 0.340, 0.305),
+				Color(0.165, 0.122, 0.082),
 				3.45,
 				1.85,
 				2.0,
-				0.75
+				0.72
 			)
 		"TowerSpandrel":
 			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.270, 0.290, 0.310), 0.34, 0.72, Vector3(0.35, 0.35, 0.35), true)
@@ -1270,14 +1274,14 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"main_glass_physical",
 				false,
-				Color(0.045, 0.072, 0.090),
-				Color(0.082, 0.118, 0.138),
-				Color(0.310, 0.300, 0.265),
-				Color(0.120, 0.083, 0.052),
+				Color(0.105, 0.165, 0.205),
+				Color(0.185, 0.255, 0.305),
+				Color(0.360, 0.350, 0.315),
+				Color(0.170, 0.125, 0.085),
 				3.42,
 				1.60,
 				5.0,
-				0.74
+				0.72
 			)
 		"MainSpandrel":
 			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.300, 0.315, 0.330), 0.30, 0.76, Vector3(0.35, 0.35, 0.35), true)
@@ -1547,8 +1551,8 @@ func get_water_visual_state() -> Dictionary:
 		"animated_waves": _sea_material != null and float(_sea_material.get_shader_parameter("wave_height")) > 0.0,
 		"depth_foam": _sea_material != null and float(_sea_material.get_shader_parameter("foam_strength")) > 0.0,
 		"reflection_strength": float(_sea_material.get_shader_parameter("reflection_strength")) if _sea_material != null else 0.0,
-		"sea_vertices_x": 129,
-		"sea_vertices_z": 177,
+		"sea_vertices_x": 97,
+		"sea_vertices_z": 133,
 		"pool_surfaces": _water_materials.size(),
 	}
 
@@ -1586,8 +1590,8 @@ func _build_water_and_pools() -> void:
 	sea_mesh.size = Vector2(760.0, 1040.0)
 	# The denser grid carries the low-frequency geometric swell smoothly;
 	# fine ripples/normals are evaluated per fragment in water_surface.gdshader.
-	sea_mesh.subdivide_width = 128
-	sea_mesh.subdivide_depth = 176
+	sea_mesh.subdivide_width = 96
+	sea_mesh.subdivide_depth = 132
 	var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
 	# The sea plane only exists east of the shoreline; WORLD_AABB forced
 	# its 45k vertices through the vertex shader even when looking inland.
@@ -2752,6 +2756,52 @@ func _collect_model_parts(node: Node, parent_transform: Transform3D, tools: Dict
 		_collect_model_parts(child, local_transform, tools)
 
 
+## SurfaceTool merging is necessary to turn thousands of Blender nodes
+## into one mesh per material, but it discards the LOD chain Godot
+## generated for the imported GLB. Rebuild that chain once per distinct
+## merged part with the engine's own meshoptimizer importer. If a
+## surface is non-indexed, too small, or a build lacks the simplifier,
+## the original mesh is returned unchanged.
+func _mesh_with_runtime_lods(mesh: Mesh, normal_merge_angle: float = 62.0) -> Mesh:
+	if mesh == null or mesh.get_surface_count() != 1:
+		return mesh
+	var arrays := mesh.surface_get_arrays(0)
+	if arrays.size() <= Mesh.ARRAY_INDEX:
+		return mesh
+	var index_variant: Variant = arrays[Mesh.ARRAY_INDEX]
+	var vertex_variant: Variant = arrays[Mesh.ARRAY_VERTEX]
+	var indices := PackedInt32Array()
+	var vertices := PackedVector3Array()
+	if index_variant is PackedInt32Array:
+		indices = index_variant
+	if vertex_variant is PackedVector3Array:
+		vertices = vertex_variant
+	var triangle_count := int(indices.size() / 3) if not indices.is_empty() else int(vertices.size() / 3)
+	if indices.is_empty() or triangle_count < 48:
+		return mesh
+
+	var importer := ImporterMesh.from_mesh(mesh)
+	if importer == null or importer.get_surface_count() != 1:
+		return mesh
+	importer.generate_lods(normal_merge_angle, 25.0, [])
+	var lod_count := importer.get_surface_lod_count(0)
+	if lod_count <= 0:
+		return mesh
+	var generated := importer.get_mesh()
+	if generated == null or generated.get_surface_count() != 1:
+		return mesh
+
+	var smallest_index_count := indices.size()
+	for lod_index in lod_count:
+		smallest_index_count = mini(smallest_index_count, importer.get_surface_lod_indices(0, lod_index).size())
+	_enhancement_stats["runtime_lod_meshes"] = int(_enhancement_stats.get("runtime_lod_meshes", 0)) + 1
+	_enhancement_stats["runtime_lod_levels"] = int(_enhancement_stats.get("runtime_lod_levels", 0)) + lod_count
+	var previous_ratio := float(_enhancement_stats.get("runtime_lod_min_index_ratio", 1.0))
+	_enhancement_stats["runtime_lod_min_index_ratio"] = minf(previous_ratio, float(smallest_index_count) / float(maxi(indices.size(), 1)))
+	_enhancement_stats["runtime_lods_0216"] = true
+	return generated
+
+
 func _get_model_parts(path: String) -> Array:
 	if _model_parts_cache.has(path):
 		return _model_parts_cache[path]
@@ -2779,7 +2829,12 @@ func _get_model_parts(path: String) -> Array:
 	for material_name_variant in tools.keys():
 		var material_name := String(material_name_variant)
 		var tool := tools[material_name] as SurfaceTool
-		var mesh := tool.commit()
+		# ImporterMesh LOD generation requires an indexed surface; the
+		# index also stops the vertex shader reprocessing every shared
+		# Blender box corner once per incident triangle.
+		tool.index()
+		var source_mesh := tool.commit()
+		var mesh := _mesh_with_runtime_lods(source_mesh, 62.0) if source_mesh != null else null
 		if mesh != null:
 			parts.append({
 				"mesh": mesh,
@@ -2792,65 +2847,78 @@ func _get_model_parts(path: String) -> Array:
 
 func _multimesh_visual_range(node_name: String) -> float:
 	var key := node_name.to_lower()
-	# 0.2.15 render-cost pass. SurfaceTool merging discards the imported
-	# mesh LODs, so distance range is currently the only safe triangle
-	# governor for repeated Blender buildings. Ranges are measured to a
-	# chunk AABB centre, hence the margins over the nominal object size:
-	# low villas/townhouses retire first, 28 m hero blocks next, and the
-	# 73 m skyline towers stay visible across the playable districts.
-	# The unique 148 m flagship is never range-hidden.
+	# 0.2.16 HLOD budgets. The 0.2.15 phone captures still submitted
+	# 867-1074 draw calls and 2.0-3.3M primitives at Q42, so these
+	# fallback ranges now describe the *detailed* layer only. Repeated
+	# Blender buildings and high-poly foliage receive explicit far
+	# proxies in their builders; small street furniture simply retires
+	# once it is only a few pixels high. The unique 148 m flagship is
+	# never range-hidden and relies on generated mesh LOD instead.
 	if key.contains("main148mtower"):
 		return 0.0
 	if key.contains("blendervillas") or key.contains("blendertownhouses"):
-		return 640.0
+		return 210.0
 	if key.contains("blenderherobuildings"):
-		return 780.0
+		return 260.0
 	if key.contains("blenderglasstowers"):
-		return 1050.0
-	if key.contains("trafficsignal"):
-		return 360.0
-	if key.contains("busshelter"):
-		return 320.0
-	if key.contains("streetlamp") or key.contains("guardrail"):
-		return 360.0
-	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
-		return 320.0
-	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
-		return 520.0
-	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
-		return 480.0
-	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
-		return 320.0
-	if key.contains("pool"):
-		return 460.0
-	if key.contains("tree") or key.contains("palm"):
-		return 620.0
-	if key.contains("bollard") or key.contains("planter") or key.contains("hedge") or key.contains("trashbin") or key.contains("roadsign") or key.contains("storefront") or key.contains("awning") or key.contains("balcony"):
 		return 340.0
-	if key.contains("beach"):
-		return 460.0
-	if key.contains("marina") or key.contains("rooftop") or key.contains("watertank"):
+	if key.contains("trafficsignal"):
+		return 220.0
+	if key.contains("busshelter"):
+		return 260.0
+	if key.contains("streetlamp") or key.contains("guardrail"):
+		return 240.0
+	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
+		return 180.0
+	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
+		return 380.0
+	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
+		return 360.0
+	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
+		return 220.0
+	if key.contains("pool"):
+		return 360.0
+	if key.contains("palm"):
 		return 620.0
+	if key.contains("tree"):
+		return 300.0
+	if key.contains("bollard") or key.contains("planter") or key.contains("hedge") or key.contains("trashbin") or key.contains("roadsign") or key.contains("storefront") or key.contains("awning") or key.contains("balcony"):
+		return 220.0
+	if key.contains("beach"):
+		return 360.0
+	if key.contains("marina"):
+		return 520.0
+	if key.contains("rooftop") or key.contains("watertank"):
+		return 300.0
 	return 0.0
 
 
-func _add_multimesh(parent: Node, mesh: Mesh, material: Material, transforms: Array, node_name: String, cast_shadow: bool = true) -> bool:
+func _add_multimesh(
+	parent: Node,
+	mesh: Mesh,
+	material: Material,
+	transforms: Array,
+	node_name: String,
+	cast_shadow: bool = true,
+	visibility_begin_m: float = -1.0,
+	visibility_end_m: float = -1.0,
+	chunk_size_m: float = MULTIMESH_CHUNK_SIZE_M
+) -> bool:
 	if mesh == null or transforms.is_empty():
 		return false
 
-	# 0.2.4 performance architecture: one MultiMesh for the whole city was
-	# given WORLD_AABB, so frustum culling could never reject it and every
-	# building/tree/lamp/marking batch was submitted every frame. Split the
-	# same batches into 220 m spatial chunks with tight merged AABBs. The
-	# world content and scales do not change; off-screen chunks simply stop
-	# consuming vertex/shadow work.
+	# Spatial chunks keep frustum/distance culling local. Detailed HLOD
+	# layers can request smaller cells so a whole 220 m block does not
+	# switch detail at once, while cheap far proxies use larger cells
+	# to keep their draw-call count down.
+	var effective_chunk_size_m := maxf(chunk_size_m, 40.0)
 	var grouped: Dictionary = {}
 	var mesh_aabb := mesh.get_aabb()
 	for transform_variant in transforms:
 		var transform_value := transform_variant as Transform3D
 		var cell := Vector2i(
-			floori((transform_value.origin.x - WORLD_AABB.position.x) / MULTIMESH_CHUNK_SIZE_M),
-			floori((transform_value.origin.z - WORLD_AABB.position.z) / MULTIMESH_CHUNK_SIZE_M)
+			floori((transform_value.origin.x - WORLD_AABB.position.x) / effective_chunk_size_m),
+			floori((transform_value.origin.z - WORLD_AABB.position.z) / effective_chunk_size_m)
 		)
 		if not grouped.has(cell):
 			grouped[cell] = []
@@ -2884,15 +2952,19 @@ func _add_multimesh(parent: Node, mesh: Mesh, material: Material, transforms: Ar
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else WORLD_AABB
-		var visual_range := _multimesh_visual_range(node_name)
-		if visual_range > 0.0:
-			instance.visibility_range_end = visual_range
+		var visual_begin := visibility_begin_m
+		var visual_end := visibility_end_m if visibility_end_m >= 0.0 else _multimesh_visual_range(node_name)
+		if visual_begin > 0.0:
+			instance.visibility_range_begin = visual_begin
+		if visual_end > 0.0:
+			instance.visibility_range_end = visual_end
+		if visual_begin > 0.0 or visual_end > 0.0:
 			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-			instance.lod_bias = 0.60
+			instance.lod_bias = 0.45
 		else:
-			# Buildings keep the skyline at city scale but still switch to
-			# imported mesh LODs somewhat earlier on the phone.
-			instance.lod_bias = 0.85
+			# Skyline geometry keeps generated/imported mesh LODs, but
+			# switches to them earlier than the desktop bias.
+			instance.lod_bias = 0.65
 		parent.add_child(instance)
 		_multimesh_chunk_count += 1
 		built_any = true
@@ -2902,43 +2974,216 @@ func _add_multimesh(parent: Node, mesh: Mesh, material: Material, transforms: Ar
 	return built_any
 
 
+func _canonical_batched_model_name(path: String, node_name: String) -> String:
+	if path.ends_with("villa.glb"):
+		return "BlenderVillas"
+	if path.ends_with("townhouse.glb"):
+		return "BlenderTownhouses"
+	if path.ends_with("hero_building.glb"):
+		return "BlenderHeroBuildings"
+	if path.ends_with("glass_tower.glb"):
+		return "BlenderGlassTowers"
+	if path.ends_with("main_tower.glb"):
+		return "Main148mTower"
+	if path.ends_with("street_lamp.glb"):
+		return "BlenderStreetLamps"
+	if path.ends_with("bus_shelter.glb"):
+		return "BlenderBusShelters"
+	return node_name.trim_prefix("Infill")
+
+
+## Queueing is a draw-call optimization: exported parcels and later
+## infill parcels use exactly the same GLB/mesh/material, but building
+## them immediately created duplicate MultiMesh chunks for every part
+## in every shared spatial cell. `_flush_batched_models()` submits one
+## combined transform list per model after all placements are known.
 func _add_batched_model(parent: Node, path: String, transforms: Array, node_name: String) -> bool:
 	if transforms.is_empty():
 		return false
 	var parts := _get_model_parts(path)
 	if parts.is_empty():
 		return false
-	var model_root := Node3D.new()
-	model_root.name = node_name
-	parent.add_child(model_root)
-	var built_any := false
-	for part_variant in parts:
-		var part: Dictionary = part_variant
-		var material_name := String(part.get("material_name", "Part"))
-		var material_key := material_name.to_lower()
-		# Transparent shells, emissive panes and interior infill sit inside
-		# or directly over a real opaque core/wall that already casts the
-		# building shadow. Sending those duplicate surfaces through both
-		# directional splits bought no visible shadow detail on the phone.
-		var casts_shadow := not (
-			material_key.contains("glass")
-			or material_key.contains("curtain")
-			or material_key.contains("interior")
-			or material_key.contains("glow")
-			or material_key.contains("solar")
-			or material_key.contains("water")
+	if not _pending_batched_models.has(path):
+		_pending_batched_models[path] = {
+			"parent": parent,
+			"node_name": _canonical_batched_model_name(path, node_name),
+			"transforms": [],
+		}
+	var entry: Dictionary = _pending_batched_models[path]
+	(entry.get("transforms", []) as Array).append_array(transforms)
+	_pending_batched_models[path] = entry
+	return true
+
+
+func _batched_model_base_range(path: String) -> float:
+	if path.ends_with("villa.glb") or path.ends_with("townhouse.glb"):
+		return 210.0
+	if path.ends_with("hero_building.glb"):
+		return 260.0
+	if path.ends_with("glass_tower.glb"):
+		return 340.0
+	return 0.0
+
+
+func _batched_model_detail_range(path: String, material_name: String) -> float:
+	if path.ends_with("main_tower.glb"):
+		return 0.0
+	var key := material_name.to_lower()
+	if path.contains("traffic_signal"):
+		if key.contains("redon") or key.contains("amberoff") or key.contains("greenoff") or key.contains("reflector") or key.contains("cable"):
+			return 150.0
+		return 220.0
+	if path.ends_with("street_lamp.glb"):
+		return 180.0 if key.contains("glow") else 240.0
+	if path.ends_with("bus_shelter.glb"):
+		return 200.0 if key.contains("glass") else 260.0
+
+	var base_range := _batched_model_base_range(path)
+	if base_range <= 0.0:
+		return 0.0
+	# Site dressing and emissive/solar accents are sub-pixel long before
+	# the architectural mass is. Retire them first, then curtains and
+	# window frames; wall/glass/spandrel cores keep the full HLOD range.
+	if key.contains("hedge") or key.contains("lawn") or key.contains("mulch") or key.contains("glow") or key.contains("solar"):
+		return minf(base_range, 150.0)
+	if key.contains("pavement") or key.contains("deck"):
+		return minf(base_range, 180.0)
+	if key.contains("curtain") or key.contains("interior"):
+		return base_range if path.ends_with("glass_tower.glb") else minf(base_range, 200.0)
+	if key.contains("windowframe"):
+		return base_range if path.ends_with("glass_tower.glb") else minf(base_range, 230.0)
+	return base_range
+
+
+func _batched_model_chunk_size(path: String) -> float:
+	if path.ends_with("main_tower.glb"):
+		return MULTIMESH_CHUNK_SIZE_M
+	if path.contains("traffic_signal"):
+		return 170.0
+	return 180.0
+
+
+## Far HLOD volumes preserve the real footprint/height and podium/shaft
+## split of each fixed-scale building after its detailed Blender parts
+## retire. They sit slightly inside the true envelope so the short
+## detailed/proxy overlap does not wrap the near model in a box.
+func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node_name: String) -> void:
+	var base_range := _batched_model_base_range(path)
+	if base_range <= 0.0 or transforms.is_empty():
+		return
+	var proxy_begin := maxf(base_range - 20.0, 0.0)
+	var proxy_end := 1050.0
+	var specs: Array[Dictionary] = []
+	if path.ends_with("villa.glb"):
+		specs = [
+			{"size": Vector3(18.60, 8.00, 14.70), "center": Vector3(0.0, 4.00, 0.05), "material": _prop_material("VillaPlaster"), "name": "Mass"},
+			{"size": Vector3(19.20, 0.50, 15.24), "center": Vector3(0.0, 8.42, 0.05), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("townhouse.glb"):
+		specs = [
+			{"size": Vector3(18.30, 9.20, 15.80), "center": Vector3(0.0, 4.60, 0.047), "material": _prop_material("TownPlaster"), "name": "Mass"},
+			{"size": Vector3(18.87, 1.40, 16.37), "center": Vector3(0.0, 10.15, 0.047), "material": _prop_material("TownRoof"), "name": "Roof"},
+		]
+	elif path.ends_with("hero_building.glb"):
+		proxy_end = 1250.0
+		specs = [
+			{"size": Vector3(32.40, 5.00, 24.60), "center": Vector3(0.0, 2.50, 0.0), "material": _prop_material("HeroStone"), "name": "Podium"},
+			{"size": Vector3(27.00, 23.56, 20.00), "center": Vector3(0.0, 16.78, 0.0), "material": _prop_material("HeroPlaster"), "name": "Shaft"},
+		]
+	elif path.ends_with("glass_tower.glb"):
+		proxy_end = 1500.0
+		specs = [
+			{"size": Vector3(34.00, 6.00, 34.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(25.00, 66.90, 25.00), "center": Vector3(0.0, 39.45, 0.0), "material": _facade_material("glassTower", 72.9), "name": "Shaft"},
+		]
+	if specs.is_empty():
+		return
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var proxy_boxes := 0
+	for spec in specs:
+		var size: Vector3 = spec.get("size", Vector3.ONE)
+		var centre: Vector3 = spec.get("center", Vector3.ZERO)
+		var local_transform := Transform3D(Basis.IDENTITY.scaled(size), centre)
+		var proxy_transforms: Array = []
+		for transform_variant in transforms:
+			proxy_transforms.append((transform_variant as Transform3D) * local_transform)
+		var built := _add_multimesh(
+			parent,
+			unit_box,
+			spec.get("material") as Material,
+			proxy_transforms,
+			"%sFarProxy_%s" % [node_name, String(spec.get("name", "Mass"))],
+			false,
+			proxy_begin,
+			proxy_end,
+			260.0
 		)
-		if not casts_shadow:
-			_enhancement_stats["model_parts_without_shadow_pass"] = int(_enhancement_stats.get("model_parts_without_shadow_pass", 0)) + 1
-		built_any = _add_multimesh(
-			model_root,
-			part.get("mesh") as Mesh,
-			part.get("material") as Material,
-			transforms,
-			"%s_%s" % [node_name, material_name],
-			casts_shadow
-		) or built_any
-	return built_any
+		if built:
+			proxy_boxes += transforms.size()
+	_enhancement_stats["building_far_proxy_models"] = int(_enhancement_stats.get("building_far_proxy_models", 0)) + transforms.size()
+	_enhancement_stats["building_far_proxy_boxes"] = int(_enhancement_stats.get("building_far_proxy_boxes", 0)) + proxy_boxes
+	_enhancement_stats["building_hlod_0216"] = true
+
+
+func _flush_batched_models() -> void:
+	if _pending_batched_models.is_empty():
+		return
+	var path_count := _pending_batched_models.size()
+	var instance_count := 0
+	for path_variant in _pending_batched_models.keys():
+		var path := String(path_variant)
+		var entry: Dictionary = _pending_batched_models[path]
+		var transforms: Array = entry.get("transforms", [])
+		if transforms.is_empty():
+			continue
+		var parts := _get_model_parts(path)
+		if parts.is_empty():
+			continue
+		var parent := entry.get("parent") as Node
+		if parent == null:
+			parent = self
+		var node_name := String(entry.get("node_name", "BatchedModel"))
+		var model_root := Node3D.new()
+		model_root.name = node_name
+		parent.add_child(model_root)
+		instance_count += transforms.size()
+		var built_any := false
+		for part_variant in parts:
+			var part: Dictionary = part_variant
+			var material_name := String(part.get("material_name", "Part"))
+			var material_key := material_name.to_lower()
+			# Transparent shells, emissive panes and interior infill sit
+			# inside or directly over a real opaque core/wall that
+			# already casts the building shadow.
+			var casts_shadow := not (
+				material_key.contains("glass")
+				or material_key.contains("curtain")
+				or material_key.contains("interior")
+				or material_key.contains("glow")
+				or material_key.contains("solar")
+				or material_key.contains("water")
+			)
+			if not casts_shadow:
+				_enhancement_stats["model_parts_without_shadow_pass"] = int(_enhancement_stats.get("model_parts_without_shadow_pass", 0)) + 1
+			built_any = _add_multimesh(
+				model_root,
+				part.get("mesh") as Mesh,
+				part.get("material") as Material,
+				transforms,
+				"%s_%s" % [node_name, material_name],
+				casts_shadow,
+				0.0,
+				_batched_model_detail_range(path, material_name),
+				_batched_model_chunk_size(path)
+			) or built_any
+		if built_any:
+			_add_building_far_proxy(model_root, path, transforms, node_name)
+	_enhancement_stats["batched_model_paths_0216"] = path_count
+	_enhancement_stats["batched_model_instances_0216"] = instance_count
+	_enhancement_stats["batched_models_merged_0216"] = true
+	_pending_batched_models.clear()
 
 
 func _centered_model_transform(position_value: Vector3, yaw: float, scale_value: Vector3, source_center: Vector3) -> Transform3D:
@@ -3859,6 +4104,11 @@ func _load_plant_parts() -> bool:
 					mat = mesh_instance.mesh.surface_get_material(0)
 				if mat != null and not String(mat.resource_name).is_empty():
 					material_name = String(mat.resource_name)
+				# The oak canopy alone is 7.8k triangles and every bush
+				# is 3.0-3.5k. Give these five source meshes an explicit
+				# aggressive LOD chain before they are instanced hundreds
+				# of times; the HLOD ellipsoids below take over farther out.
+				var lod_mesh := _mesh_with_runtime_lods(mesh_instance.mesh, 78.0)
 				var part_material: Material
 				if String(part_name).contains("foliage"):
 					# Drive foliage_wind: per-part AABB gives the shader a
@@ -3866,7 +4116,7 @@ func _load_plant_parts() -> bool:
 					# bend is deliberately small because tree MultiMeshes
 					# scale these parts by roughly 2.85 in world space.
 					part_material = _create_foliage_wind_material(
-						mesh_instance.mesh,
+						lod_mesh,
 						"foliage.jpg",
 						Color(0.62, 0.86, 0.52),
 						0.0,
@@ -3875,7 +4125,7 @@ func _load_plant_parts() -> bool:
 				else:
 					part_material = _prop_material(material_name)
 				_plant_parts[part_name] = {
-					"mesh": mesh_instance.mesh,
+					"mesh": lod_mesh,
 					"material": part_material,
 				}
 	root.free()
@@ -3925,6 +4175,45 @@ func _palm_leaf_material() -> Material:
 		true
 	)
 	return _palm_leaf_shader_material
+
+
+func _get_far_proxy_sphere_mesh() -> SphereMesh:
+	if _far_proxy_sphere_mesh != null:
+		return _far_proxy_sphere_mesh
+	_far_proxy_sphere_mesh = SphereMesh.new()
+	_far_proxy_sphere_mesh.radius = 1.0
+	_far_proxy_sphere_mesh.height = 2.0
+	_far_proxy_sphere_mesh.radial_segments = 10
+	_far_proxy_sphere_mesh.rings = 6
+	return _far_proxy_sphere_mesh
+
+
+## The plant-pack canopy/bushes are attractive up close but cost
+## 3.0-7.8k triangles per instance. Beyond the detailed HLOD range a
+## textured ellipsoid fitted to the exact source AABB preserves the
+## canopy mass and placement for roughly a hundred triangles.
+func _add_foliage_far_proxy(parent: Node, source_mesh: Mesh, transforms: Array, node_name: String, begin_m: float, end_m: float) -> void:
+	if source_mesh == null or transforms.is_empty():
+		return
+	var aabb := source_mesh.get_aabb()
+	var local_transform := Transform3D(Basis.IDENTITY.scaled(aabb.size * 0.5), aabb.get_center())
+	var proxy_transforms: Array = []
+	for transform_variant in transforms:
+		proxy_transforms.append((transform_variant as Transform3D) * local_transform)
+	var built := _add_multimesh(
+		parent,
+		_get_far_proxy_sphere_mesh(),
+		_prop_material("nh_foliage"),
+		proxy_transforms,
+		"%sFarProxy" % node_name,
+		false,
+		begin_m,
+		end_m,
+		260.0
+	)
+	if built:
+		_enhancement_stats["vegetation_far_proxies"] = int(_enhancement_stats.get("vegetation_far_proxies", 0)) + transforms.size()
+		_enhancement_stats["vegetation_hlod_0216"] = true
 
 
 func _build_vegetation() -> void:
@@ -4009,10 +4298,24 @@ func _build_vegetation() -> void:
 		for part_name in ["tree2_bark", "tree2_foliage"]:
 			if _plant_parts.has(part_name):
 				var part: Dictionary = _plant_parts[part_name]
-				# The oak canopy is the expensive half of every tree in
-				# both shadow splits. Trunks/branches keep a grounding
-				# shadow; canopy self-shading remains in the PBR material.
-				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, tree_transforms, part_name, part_name == "tree2_bark")
+				var source_mesh := part.get("mesh") as Mesh
+				# The 199-triangle trunk can stay visible much farther
+				# than the 7.8k canopy. Trunks keep a grounding shadow;
+				# the canopy HLOD ellipsoid takes over after 220 m.
+				var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+				_add_multimesh(
+					root,
+					source_mesh,
+					part.get("material") as Material,
+					tree_transforms,
+					part_name,
+					part_name == "tree2_bark",
+					0.0,
+					detail_end,
+					180.0
+				)
+				if part_name == "tree2_foliage":
+					_add_foliage_far_proxy(root, source_mesh, tree_transforms, part_name, 220.0, 650.0)
 
 		var bush_transforms: Dictionary = {
 			"bush_round_foliage": [],
@@ -4072,9 +4375,22 @@ func _build_vegetation() -> void:
 		for part_name in bush_transforms.keys():
 			if _plant_parts.has(part_name):
 				var part: Dictionary = _plant_parts[part_name]
-				# Small shrubs no longer spend a second high-poly pass in the
-				# directional shadow map; mature trees above still cast.
-				_add_multimesh(root, part.get("mesh") as Mesh, part.get("material") as Material, bush_transforms[part_name], String(part_name), false)
+				var source_mesh := part.get("mesh") as Mesh
+				var part_transforms: Array = bush_transforms[part_name]
+				# Detailed 3.0-3.5k shrubs are a near-field layer only;
+				# fitted ellipsoids preserve planting beds to 420 m.
+				_add_multimesh(
+					root,
+					source_mesh,
+					part.get("material") as Material,
+					part_transforms,
+					String(part_name),
+					false,
+					0.0,
+					180.0,
+					180.0
+				)
+				_add_foliage_far_proxy(root, source_mesh, part_transforms, String(part_name), 160.0, 420.0)
 
 	var trunk_mesh := CylinderMesh.new()
 	trunk_mesh.top_radius = 0.15
