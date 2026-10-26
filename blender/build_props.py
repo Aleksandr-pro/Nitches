@@ -20,9 +20,15 @@ Props:
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
   * glass_tower.glb   Building Model No.4: fixed-scale glass district tower
   * main_tower.glb    Building Model No.5: fixed-scale sculptural 148 m flagship tower
+  * palm_date.glb / palm_royal.glb
+                      botanically structured palms with curved segmented
+                      trunks, individual pinnate leaflets and crown detail
+  * grass_tuft.glb / flower_clump.glb / ornamental_shrub.glb
+                      geometric ground-cover models (no flat alpha cards)
 """
 import math
 import os
+import random
 import sys
 
 import bpy
@@ -133,6 +139,26 @@ def standard_mats():
     mat("SignalGreenOff", (0.005, 0.13, 0.045), roughness=0.2)
     mat("SignalReflector", (0.85, 0.62, 0.05), roughness=0.42)
     mat("SignalCable", (0.01, 0.01, 0.012), roughness=0.72)
+    # 0.2.17 vegetation is real merged geometry, not alpha-card fans.
+    # Semantic names let Godot assign bark/foliage/stem/flower PBR
+    # materials without turning every leaflet into a Blender object.
+    mat("PalmTrunk", (0.31, 0.21, 0.12), roughness=0.97)
+    mat("PalmCrown", (0.25, 0.20, 0.11), roughness=0.96)
+    mat("PalmCrownshaft", (0.20, 0.36, 0.15), roughness=0.78)
+    mat("PalmLeaf", (0.06, 0.26, 0.06), roughness=0.92)
+    mat("PalmLeafDry", (0.48, 0.34, 0.15), roughness=1.0)
+    mat("PalmRachis", (0.20, 0.24, 0.09), roughness=0.90)
+    mat("PalmFruit", (0.68, 0.27, 0.05), roughness=0.58)
+    mat("GrassBlade", (0.07, 0.29, 0.06), roughness=1.0)
+    mat("GrassBladeDry", (0.43, 0.37, 0.14), roughness=1.0)
+    mat("OrnamentalLeaf", (0.05, 0.24, 0.07), roughness=0.95)
+    mat("ShrubBranch", (0.17, 0.10, 0.05), roughness=1.0)
+    mat("ShrubBerry", (0.50, 0.07, 0.16), roughness=0.52)
+    mat("FlowerLeaf", (0.06, 0.26, 0.07), roughness=0.95)
+    mat("FlowerCoral", (0.80, 0.17, 0.11), roughness=0.72)
+    mat("FlowerWhite", (0.90, 0.83, 0.69), roughness=0.76)
+    mat("FlowerYellow", (0.87, 0.58, 0.07), roughness=0.70)
+    mat("FlowerCentre", (0.56, 0.27, 0.03), roughness=0.80)
 
 
 def finish(obj, material, bevel=0.0, smooth=False):
@@ -242,6 +268,259 @@ def tube_between(name, start, end, radius_start, radius_end, material, vertices=
         direction.normalized()
     )
     return finish(obj, material, smooth=True)
+
+
+class MeshBuilder:
+    """Small merged-mesh builder for botanical geometry.
+
+    Palms and ground cover need thousands of leaflets/blades.  Creating a
+    Blender object for every leaflet made the old sources slow and
+    difficult to inspect and produced enormous node lists.  This builder
+    accumulates indexed faces and per-loop UVs, then emits one object
+    per semantic material.
+    """
+
+    def __init__(self):
+        self.vertices = []
+        self.faces = []
+        self.loop_uvs = []
+
+    def add_vertex(self, point):
+        self.vertices.append((float(point.x), float(point.y), float(point.z)))
+        return len(self.vertices) - 1
+
+    def add_face(self, indices, uvs):
+        if len(indices) != len(uvs):
+            raise ValueError("MeshBuilder face/UV count mismatch")
+        self.faces.append(tuple(indices))
+        self.loop_uvs.extend((float(uv[0]), float(uv[1])) for uv in uvs)
+
+    def tri(self, a, b, c, uvs=((0.0, 0.0), (1.0, 0.0), (0.5, 1.0))):
+        self.add_face((a, b, c), uvs)
+
+    def quad(self, a, b, c, d, uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))):
+        self.add_face((a, b, c, d), uvs)
+
+    def build(self, name, material, smooth=True):
+        mesh = bpy.data.meshes.new(name + "_mesh")
+        mesh.from_pydata(self.vertices, [], self.faces)
+        mesh.update()
+        uv_layer = mesh.uv_layers.new(name="UVMap")
+        for index, uv_value in enumerate(self.loop_uvs):
+            if index < len(uv_layer.data):
+                uv_layer.data[index].uv = uv_value
+        if material is not None:
+            mesh.materials.append(material)
+        obj = bpy.data.objects.new(name, mesh)
+        bpy.context.collection.objects.link(obj)
+        if smooth:
+            for polygon in mesh.polygons:
+                polygon.use_smooth = True
+        return obj
+
+
+def _curve_frames(points):
+    frames = []
+    previous_normal = None
+    for index in range(len(points)):
+        before = points[max(index - 1, 0)]
+        after = points[min(index + 1, len(points) - 1)]
+        tangent = after - before
+        if tangent.length <= 0.00001:
+            tangent = Vector((0.0, 0.0, 1.0))
+        tangent.normalize()
+        if previous_normal is None:
+            reference = Vector((1.0, 0.0, 0.0)) if abs(tangent.x) < 0.85 else Vector((0.0, 1.0, 0.0))
+            normal = reference - tangent * reference.dot(tangent)
+        else:
+            normal = previous_normal - tangent * previous_normal.dot(tangent)
+            if normal.length <= 0.00001:
+                reference = Vector((1.0, 0.0, 0.0)) if abs(tangent.x) < 0.85 else Vector((0.0, 1.0, 0.0))
+                normal = reference - tangent * reference.dot(tangent)
+        if normal.length <= 0.00001:
+            normal = Vector((1.0, 0.0, 0.0))
+        normal.normalize()
+        binormal = tangent.cross(normal)
+        if binormal.length <= 0.00001:
+            binormal = Vector((0.0, 1.0, 0.0))
+        binormal.normalize()
+        frames.append((tangent, normal, binormal))
+        previous_normal = normal
+    return frames
+
+
+def builder_tube(builder, points, radii, sides=10, uv_u_repeat=1.0, uv_v_scale=1.0,
+                 radius_variation=None, cap_start=True, cap_end=True):
+    """Append a parallel-transport tube to a MeshBuilder."""
+    if len(points) < 2:
+        return []
+    frames = _curve_frames(points)
+    rings = []
+    distances = [0.0]
+    for index in range(1, len(points)):
+        distances.append(distances[-1] + (points[index] - points[index - 1]).length)
+    for point_index, point in enumerate(points):
+        _, normal, binormal = frames[point_index]
+        radius_value = radii[min(point_index, len(radii) - 1)]
+        if isinstance(radius_value, (tuple, list)):
+            radius_x, radius_y = float(radius_value[0]), float(radius_value[1])
+        else:
+            radius_x = radius_y = float(radius_value)
+        t = point_index / float(max(len(points) - 1, 1))
+        ring = []
+        for side_index in range(sides):
+            angle = math.tau * float(side_index) / float(sides)
+            variation = 1.0
+            if radius_variation is not None:
+                variation = float(radius_variation(point_index, angle, t))
+            offset = (normal * (math.cos(angle) * radius_x) +
+                      binormal * (math.sin(angle) * radius_y)) * variation
+            ring.append(builder.add_vertex(point + offset))
+        rings.append(ring)
+    for segment in range(len(points) - 1):
+        v0 = distances[segment] * uv_v_scale
+        v1 = distances[segment + 1] * uv_v_scale
+        for side_index in range(sides):
+            next_side = (side_index + 1) % sides
+            u0 = float(side_index) / float(sides) * uv_u_repeat
+            u1 = float(side_index + 1) / float(sides) * uv_u_repeat
+            builder.quad(
+                rings[segment][side_index], rings[segment][next_side],
+                rings[segment + 1][next_side], rings[segment + 1][side_index],
+                ((u0, v0), (u1, v0), (u1, v1), (u0, v1)),
+            )
+    if cap_start:
+        centre = builder.add_vertex(points[0])
+        for side_index in range(sides):
+            next_side = (side_index + 1) % sides
+            builder.tri(centre, rings[0][next_side], rings[0][side_index])
+    if cap_end:
+        centre = builder.add_vertex(points[-1])
+        for side_index in range(sides):
+            next_side = (side_index + 1) % sides
+            builder.tri(centre, rings[-1][side_index], rings[-1][next_side])
+    return rings
+
+
+def cubic_point(p0, p1, p2, p3, t):
+    mt = 1.0 - t
+    return (p0 * (mt * mt * mt) + p1 * (3.0 * mt * mt * t) +
+            p2 * (3.0 * mt * t * t) + p3 * (t * t * t))
+
+
+def cubic_tangent(p0, p1, p2, p3, t):
+    mt = 1.0 - t
+    tangent = ((p1 - p0) * (3.0 * mt * mt) + (p2 - p1) * (6.0 * mt * t) +
+               (p3 - p2) * (3.0 * t * t))
+    if tangent.length <= 0.00001:
+        return Vector((0.0, 0.0, 1.0))
+    return tangent.normalized()
+
+
+def cubic_points(p0, p1, p2, p3, count):
+    return [cubic_point(p0, p1, p2, p3, index / float(max(count - 1, 1))) for index in range(count)]
+
+
+def builder_folded_leaf(builder, centres, half_widths, width_hint,
+                        fold_ratio=0.34, uv_v_offset=0.0):
+    """Append a lengthwise-folded ribbon leaf/blade.
+
+    The last centre can use zero half-width to terminate in a real
+    pointed tip.  Three centre stations therefore make six triangles:
+    two folded quads plus the two tip triangles.
+    """
+    if len(centres) < 2 or len(centres) != len(half_widths):
+        return
+    rows = []
+    for index, centre in enumerate(centres):
+        before = centres[max(index - 1, 0)]
+        after = centres[min(index + 1, len(centres) - 1)]
+        tangent = after - before
+        if tangent.length <= 0.00001:
+            tangent = Vector((0.0, 0.0, 1.0))
+        tangent.normalize()
+        width_dir = width_hint - tangent * width_hint.dot(tangent)
+        if width_dir.length <= 0.00001:
+            width_dir = Vector((1.0, 0.0, 0.0)) - tangent * tangent.x
+        if width_dir.length <= 0.00001:
+            width_dir = Vector((0.0, 1.0, 0.0))
+        width_dir.normalize()
+        fold_dir = tangent.cross(width_dir)
+        if fold_dir.length <= 0.00001:
+            fold_dir = Vector((0.0, 0.0, 1.0))
+        fold_dir.normalize()
+        half_width = float(half_widths[index])
+        if half_width <= 0.0005:
+            rows.append((builder.add_vertex(centre),))
+        else:
+            rows.append((
+                builder.add_vertex(centre - width_dir * half_width),
+                builder.add_vertex(centre + fold_dir * half_width * fold_ratio),
+                builder.add_vertex(centre + width_dir * half_width),
+            ))
+    for index in range(len(rows) - 1):
+        current = rows[index]
+        following = rows[index + 1]
+        v0 = uv_v_offset + float(index) / float(len(rows) - 1)
+        v1 = uv_v_offset + float(index + 1) / float(len(rows) - 1)
+        if len(current) == 3 and len(following) == 3:
+            builder.quad(current[0], following[0], following[1], current[1],
+                         ((0.0, v0), (0.0, v1), (0.5, v1), (0.5, v0)))
+            builder.quad(current[1], following[1], following[2], current[2],
+                         ((0.5, v0), (0.5, v1), (1.0, v1), (1.0, v0)))
+        elif len(current) == 3 and len(following) == 1:
+            tip = following[0]
+            builder.tri(current[0], tip, current[1],
+                        ((0.0, v0), (0.5, v1), (0.5, v0)))
+            builder.tri(current[1], tip, current[2],
+                        ((0.5, v0), (0.5, v1), (1.0, v0)))
+        elif len(current) == 1 and len(following) == 3:
+            base = current[0]
+            builder.tri(base, following[0], following[1],
+                        ((0.5, v0), (0.0, v1), (0.5, v1)))
+            builder.tri(base, following[1], following[2],
+                        ((0.5, v0), (0.5, v1), (1.0, v1)))
+
+
+def builder_ellipsoid(builder, centre, radii, segments=6, yaw=0.0, pitch=0.0, rings=2):
+    """Append a low-segment ellipsoid; rings=1 gives a pointed berry."""
+    from mathutils import Euler
+    rotation = Euler((pitch, 0.0, yaw), "XYZ").to_matrix()
+    levels = [-0.5 * math.pi]
+    if rings == 1:
+        levels.append(0.0)
+    else:
+        levels.extend((-math.pi / 6.0, math.pi / 6.0))
+    levels.append(0.5 * math.pi)
+    vertex_rows = []
+    for phi in levels:
+        if abs(abs(phi) - math.pi * 0.5) < 0.0001:
+            local = Vector((0.0, 0.0, radii[2] * (1.0 if phi > 0.0 else -1.0)))
+            vertex_rows.append((builder.add_vertex(centre + rotation @ local),))
+        else:
+            row = []
+            for side_index in range(segments):
+                theta = math.tau * float(side_index) / float(segments)
+                local = Vector((
+                    radii[0] * math.cos(phi) * math.cos(theta),
+                    radii[1] * math.cos(phi) * math.sin(theta),
+                    radii[2] * math.sin(phi),
+                ))
+                row.append(builder.add_vertex(centre + rotation @ local))
+            vertex_rows.append(tuple(row))
+    for row_index in range(len(vertex_rows) - 1):
+        current = vertex_rows[row_index]
+        following = vertex_rows[row_index + 1]
+        if len(current) == 1 and len(following) > 1:
+            for side_index in range(segments):
+                builder.tri(current[0], following[side_index], following[(side_index + 1) % segments])
+        elif len(current) > 1 and len(following) == 1:
+            for side_index in range(segments):
+                builder.tri(current[side_index], following[0], current[(side_index + 1) % segments])
+        elif len(current) > 1 and len(following) > 1:
+            for side_index in range(segments):
+                next_side = (side_index + 1) % segments
+                builder.quad(current[side_index], current[next_side], following[next_side], following[side_index])
 
 
 def export(out_dir, filename):
@@ -2222,6 +2501,326 @@ def build_main_tower():
         box("main_rear_hedge", rear_planter_x, 19.05, 0.99, 1.95, 0.48, 0.32, hedge, bevel=0.045)
 
 # --------------------------------------------------------------------------- #
+# 0.2.17 botanical models.  These are deliberately geometric: palm fronds
+# have a curved rachis and individual folded leaflets, grass consists of
+# curved tapered blades, and flowers/shrubs have stems, branches, petals
+# and berries.  No flat 10-card palm crown remains in the native world.
+# --------------------------------------------------------------------------- #
+def _random_direction(rng, minimum_z=-0.2):
+    azimuth = rng.random() * math.tau
+    z = rng.uniform(minimum_z, 1.0)
+    xy = math.sqrt(max(0.0, 1.0 - z * z))
+    return Vector((math.cos(azimuth) * xy, math.sin(azimuth) * xy, z))
+
+
+def _palm_frond(builders, base, azimuth, length, elevation, droop, rng,
+                leaflet_pairs=17, leaflet_length=0.48, dry=False, spines=False):
+    outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+    side = Vector((-math.sin(azimuth), math.cos(azimuth), 0.0))
+    up = Vector((0.0, 0.0, 1.0))
+    initial = outward * math.cos(elevation) + up * math.sin(elevation)
+    p0 = base
+    p1 = base + initial * (length * 0.38)
+    p2 = base + outward * (length * 0.78) + up * (math.sin(elevation) * length * 0.62 - droop * length * 0.34)
+    p3 = base + outward * length + up * (math.sin(elevation) * length * 0.74 - droop * length)
+    points = cubic_points(p0, p1, p2, p3, 9)
+    radii = []
+    for index in range(len(points)):
+        t = index / float(len(points) - 1)
+        radii.append(0.050 * ((1.0 - t) ** 0.72) + 0.007)
+    builder_tube(builders["rachis"], points, radii, sides=4, uv_v_scale=0.45,
+                 cap_start=False, cap_end=True)
+
+    leaf_builder = builders["dry"] if dry else builders["leaf"]
+    for pair_index in range(leaflet_pairs):
+        pair_t = pair_index / float(max(leaflet_pairs - 1, 1))
+        t = 0.20 + 0.76 * pair_t
+        attachment = cubic_point(p0, p1, p2, p3, t)
+        tangent = cubic_tangent(p0, p1, p2, p3, t)
+        top = tangent.cross(side)
+        if top.length <= 0.00001:
+            top = up
+        top.normalize()
+        profile = math.sin(math.pi * (0.16 + 0.72 * pair_t))
+        for sign in (-1.0, 1.0):
+            local_attachment = attachment + tangent * (sign * 0.014)
+            this_length = leaflet_length * (0.52 + 0.58 * profile) * rng.uniform(0.88, 1.10)
+            if dry:
+                this_length *= 0.78
+            direction = (side * (sign * rng.uniform(0.66, 0.78)) +
+                         tangent * rng.uniform(0.42, 0.56) +
+                         top * (0.10 if dry else rng.uniform(0.24, 0.40)))
+            if direction.length <= 0.00001:
+                direction = side * sign
+            direction.normalize()
+            midpoint = local_attachment + direction * (this_length * 0.52) + up * (this_length * 0.030)
+            tip = (local_attachment + direction * this_length +
+                   tangent * (this_length * 0.045) -
+                   up * (this_length * rng.uniform(0.17, 0.31)))
+            builder_folded_leaf(
+                leaf_builder,
+                [local_attachment, midpoint, tip],
+                [0.010, 0.024 if not dry else 0.019, 0.0],
+                tangent,
+                fold_ratio=0.42,
+                uv_v_offset=rng.uniform(0.0, 0.35),
+            )
+    if spines:
+        spine_builder = builders["rachis"]
+        for spine_index in range(7):
+            t = 0.055 + 0.018 * float(spine_index)
+            attachment = cubic_point(p0, p1, p2, p3, t)
+            tangent = cubic_tangent(p0, p1, p2, p3, t)
+            for sign in (-1.0, 1.0):
+                direction = (side * sign + tangent * 0.18 - up * 0.10).normalized()
+                width_dir = tangent
+                left = spine_builder.add_vertex(attachment - width_dir * 0.006)
+                right = spine_builder.add_vertex(attachment + width_dir * 0.006)
+                tip = spine_builder.add_vertex(attachment + direction * rng.uniform(0.075, 0.115))
+                spine_builder.tri(left, right, tip)
+
+
+def _palm_fruit_cluster(builders, origin, azimuth, rng):
+    outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+    side = Vector((-math.sin(azimuth), math.cos(azimuth), 0.0))
+    up = Vector((0.0, 0.0, 1.0))
+    main_end = origin + outward * 0.34 - up * 0.42
+    builder_tube(builders["rachis"], [origin, origin + outward * 0.16 - up * 0.13, main_end],
+                 [0.026, 0.021, 0.015], sides=4, cap_start=False)
+    for branch_index in range(5):
+        spread = (float(branch_index) - 2.0) * 0.16
+        end = main_end + side * spread + outward * rng.uniform(0.02, 0.13) - up * rng.uniform(0.30, 0.46)
+        points = [main_end, (main_end + end) * 0.5 + outward * 0.035, end]
+        builder_tube(builders["rachis"], points, [0.010, 0.008, 0.005], sides=4,
+                     cap_start=False)
+        for fruit_index in range(7):
+            t = 0.20 + 0.76 * (fruit_index / 6.0)
+            centre = points[0].lerp(points[-1], t)
+            centre += side * rng.uniform(-0.018, 0.018) + outward * rng.uniform(-0.014, 0.020)
+            builder_ellipsoid(
+                builders["fruit"], centre,
+                (0.020, 0.019, 0.030), segments=5,
+                yaw=rng.random() * math.tau, pitch=rng.uniform(-0.25, 0.25), rings=1,
+            )
+
+
+def _build_palm_variant(name, species):
+    rng = random.Random(1701 if species == "date" else 1702)
+    builders = {key: MeshBuilder() for key in ("trunk", "crown", "leaf", "dry", "rachis", "fruit")}
+    is_date = species == "date"
+    trunk_height = 6.90 if is_date else 7.80
+    lean = 0.52 if is_date else 0.34
+    crown_length = 0.58 if is_date else 0.98
+    p0 = Vector((0.0, 0.0, 0.0))
+    p1 = Vector((lean * 0.07, lean * 0.02, trunk_height * 0.35))
+    p2 = Vector((lean * 0.42, lean * 0.10, trunk_height * 0.72))
+    p3 = Vector((lean, lean * 0.18, trunk_height))
+    trunk_points = cubic_points(p0, p1, p2, p3, 29)
+    trunk_radii = []
+    for index in range(len(trunk_points)):
+        t = index / float(len(trunk_points) - 1)
+        if t < 0.05:
+            radius = 0.345 - 0.70 * t
+        elif t < 0.55:
+            radius = 0.310 - 0.155 * ((t - 0.05) / 0.50)
+        elif t < 0.92:
+            radius = 0.233 - 0.100 * ((t - 0.55) / 0.37)
+        else:
+            radius = 0.196 + 0.20 * ((t - 0.92) / 0.08)
+        trunk_radii.append(radius * (1.0 if is_date else 0.92))
+
+    def trunk_variation(_index, angle, t):
+        height = t * trunk_height
+        if is_date:
+            boot_layer = math.floor(height / 0.34)
+            boot = max(0.0, math.sin(angle * 3.0 + boot_layer * 1.71))
+            rib = 0.5 + 0.5 * math.sin(angle * 9.0 + height * 2.15)
+            return 1.0 + 0.052 * boot * (1.0 - 0.28 * t) + 0.020 * rib
+        return 1.0 + 0.018 * math.sin(height * 21.0) + 0.006 * math.sin(angle * 10.0 + height)
+
+    builder_tube(builders["trunk"], trunk_points, trunk_radii, sides=13,
+                 uv_u_repeat=3.0, uv_v_scale=0.52, radius_variation=trunk_variation)
+    crown_base = trunk_points[-1]
+    crown_points = []
+    crown_radii = []
+    for index in range(6):
+        t = index / 5.0
+        crown_points.append(Vector((crown_base.x + 0.08 * t, crown_base.y + 0.015 * t,
+                                    crown_base.z - 0.08 + crown_length * t)))
+        crown_radii.append(0.295 - 0.105 * (t ** 1.25) if is_date else 0.275 - 0.090 * (t ** 1.15))
+
+    def crown_variation(_index, angle, _t):
+        return 1.0 + (0.030 * math.sin(angle * 15.0) if is_date else 0.008 * math.sin(angle * 9.0))
+
+    builder_tube(builders["crown"], crown_points, crown_radii, sides=13,
+                 uv_u_repeat=2.0, uv_v_scale=0.75, radius_variation=crown_variation,
+                 cap_start=False)
+    crown_centre = crown_points[-1] + Vector((0.0, 0.0, 0.06))
+    frond_count = 28 if is_date else 24
+    for frond_index in range(frond_count):
+        tier = frond_index / float(max(frond_count - 1, 1))
+        azimuth = frond_index * 2.399963 + rng.uniform(-0.055, 0.055)
+        outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+        base = crown_centre + outward * 0.10 + Vector((0.0, 0.0, -0.16 + 0.30 * (1.0 - tier)))
+        if tier < 0.18:
+            elevation = rng.uniform(0.82, 1.14)
+            length = (2.05 if is_date else 2.25) * rng.uniform(0.92, 1.05)
+            droop = rng.uniform(0.08, 0.18)
+        elif tier < 0.60:
+            elevation = rng.uniform(0.38, 0.78)
+            length = (3.65 if is_date else 3.55) * rng.uniform(0.94, 1.06)
+            droop = rng.uniform(0.28, 0.52)
+        else:
+            elevation = rng.uniform(0.02, 0.34)
+            length = (3.95 if is_date else 3.75) * rng.uniform(0.94, 1.05)
+            droop = rng.uniform(0.60, 0.94)
+        _palm_frond(builders, base, azimuth, length, elevation, droop, rng,
+                    leaflet_pairs=17 if is_date else 19,
+                    leaflet_length=0.48 if is_date else 0.54,
+                    spines=is_date)
+    if is_date:
+        for dry_index in range(7):
+            azimuth = dry_index * (math.tau / 7.0) + 0.33
+            outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+            base = crown_centre + outward * 0.09 - Vector((0.0, 0.0, 0.24))
+            _palm_frond(builders, base, azimuth, rng.uniform(2.0, 2.45),
+                        rng.uniform(-0.18, 0.02), rng.uniform(0.92, 1.12), rng,
+                        leaflet_pairs=10, leaflet_length=0.40, dry=True)
+        for azimuth in (0.55, 2.45):
+            outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+            _palm_fruit_cluster(builders, crown_centre + outward * 0.20 - Vector((0.0, 0.0, 0.28)), azimuth, rng)
+    material_names = {
+        "trunk": "PalmTrunk",
+        "crown": "PalmCrown" if is_date else "PalmCrownshaft",
+        "leaf": "PalmLeaf",
+        "dry": "PalmLeafDry",
+        "rachis": "PalmRachis",
+        "fruit": "PalmFruit",
+    }
+    for key, builder in builders.items():
+        if builder.faces:
+            builder.build("%s_%s" % (name, key), MATS[material_names[key]], smooth=True)
+
+
+def build_palm_date():
+    _build_palm_variant("palm_date", "date")
+
+
+def build_palm_royal():
+    _build_palm_variant("palm_royal", "royal")
+
+
+def build_grass_tuft():
+    rng = random.Random(1717)
+    builders = {"leaf": MeshBuilder(), "dry": MeshBuilder()}
+    for blade_index in range(54):
+        azimuth = rng.random() * math.tau
+        radius = 0.27 * math.sqrt(rng.random())
+        base = Vector((math.cos(azimuth) * radius, math.sin(azimuth) * radius, 0.008))
+        height = 0.18 + 0.34 * (rng.random() ** 0.72)
+        lean_angle = rng.random() * math.tau
+        lean = Vector((math.cos(lean_angle), math.sin(lean_angle), 0.0)) * rng.uniform(0.035, 0.145)
+        centres = [base, base + lean * 0.34 + Vector((0.0, 0.0, height * 0.48)),
+                   base + lean + Vector((0.0, 0.0, height))]
+        builder = builders["dry"] if blade_index % 9 == 0 else builders["leaf"]
+        builder_folded_leaf(builder, centres, [0.0125, 0.0085, 0.0],
+                            Vector((-lean.y, lean.x, 0.0)), fold_ratio=0.28,
+                            uv_v_offset=rng.uniform(0.0, 0.4))
+        if blade_index % 8 == 0:
+            builder_ellipsoid(builders["dry"], centres[-1] + Vector((0.0, 0.0, 0.018)),
+                              (0.008, 0.008, 0.036), segments=5,
+                              yaw=lean_angle, pitch=rng.uniform(-0.18, 0.18), rings=1)
+    builders["leaf"].build("grass_tuft_blades", MATS["GrassBlade"], smooth=True)
+    builders["dry"].build("grass_tuft_dry_blades", MATS["GrassBladeDry"], smooth=True)
+
+
+def build_flower_clump():
+    rng = random.Random(1731)
+    leaf_builder = MeshBuilder()
+    stem_builder = MeshBuilder()
+    centre_builder = MeshBuilder()
+    petal_builders = [MeshBuilder(), MeshBuilder(), MeshBuilder()]
+    for leaf_index in range(32):
+        azimuth = rng.random() * math.tau
+        direction = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+        base = direction * (0.05 * rng.random()) + Vector((0.0, 0.0, 0.018))
+        length = rng.uniform(0.16, 0.30)
+        centres = [base, base + direction * (length * 0.52) + Vector((0.0, 0.0, rng.uniform(0.018, 0.045))),
+                   base + direction * length + Vector((0.0, 0.0, rng.uniform(0.004, 0.025)))]
+        builder_folded_leaf(leaf_builder, centres, [0.010, 0.036, 0.0],
+                            Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.22)
+    for flower_index in range(15):
+        azimuth = rng.random() * math.tau
+        radius = 0.30 * math.sqrt(rng.random())
+        base = Vector((math.cos(azimuth) * radius * 0.45, math.sin(azimuth) * radius * 0.45, 0.015))
+        head = Vector((math.cos(azimuth) * radius, math.sin(azimuth) * radius, rng.uniform(0.25, 0.52)))
+        midpoint = base.lerp(head, 0.52) + Vector((rng.uniform(-0.025, 0.025), rng.uniform(-0.025, 0.025), 0.0))
+        builder_tube(stem_builder, [base, midpoint, head], [0.009, 0.007, 0.005], sides=4,
+                     cap_start=False)
+        builder_ellipsoid(centre_builder, head + Vector((0.0, 0.0, 0.010)),
+                          (0.019, 0.019, 0.014), segments=6, rings=2)
+        petal_builder = petal_builders[flower_index % len(petal_builders)]
+        for petal_index in range(6):
+            petal_angle = petal_index * math.tau / 6.0 + rng.uniform(-0.08, 0.08)
+            direction = Vector((math.cos(petal_angle), math.sin(petal_angle), 0.0))
+            centres = [head, head + direction * 0.038 + Vector((0.0, 0.0, 0.010)),
+                       head + direction * 0.080 + Vector((0.0, 0.0, 0.003))]
+            builder_folded_leaf(petal_builder, centres, [0.004, 0.018, 0.0],
+                                Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.16)
+    leaf_builder.build("flower_clump_leaves", MATS["FlowerLeaf"], smooth=True)
+    stem_builder.build("flower_clump_stems", MATS["FlowerLeaf"], smooth=True)
+    centre_builder.build("flower_clump_centres", MATS["FlowerCentre"], smooth=True)
+    for builder, material_name in zip(petal_builders, ("FlowerCoral", "FlowerWhite", "FlowerYellow")):
+        builder.build("flower_clump_%s" % material_name.lower(), MATS[material_name], smooth=True)
+
+
+def build_ornamental_shrub():
+    rng = random.Random(1753)
+    branch_builder = MeshBuilder()
+    leaf_builder = MeshBuilder()
+    berry_builder = MeshBuilder()
+    leaf_points = []
+    queue = []
+    for primary_index in range(5):
+        azimuth = primary_index * math.tau / 5.0 + 0.41
+        direction = Vector((math.cos(azimuth) * 0.48, math.sin(azimuth) * 0.48, 1.0)).normalized()
+        queue.append((Vector((0.0, 0.0, 0.025)), direction, rng.uniform(0.34, 0.46), 0.026, 0))
+    while queue:
+        start, direction, length, radius, depth = queue.pop(0)
+        bend = _random_direction(rng, 0.15) * 0.055
+        midpoint = start + direction * (length * 0.52) + bend
+        end = start + direction * length + bend * 0.45
+        end.z = max(end.z, 0.055)
+        builder_tube(branch_builder, [start, midpoint, end],
+                     [radius, radius * 0.74, radius * 0.46], sides=4, cap_start=False)
+        for t in (0.38, 0.66, 0.92):
+            leaf_points.append(start.lerp(end, t))
+        if depth < 2:
+            for _ in range(2):
+                child = direction + _random_direction(rng, -0.10) * rng.uniform(0.38, 0.62)
+                child.z = abs(child.z) + 0.22
+                queue.append((end, child.normalized(), length * rng.uniform(0.62, 0.78),
+                              radius * 0.62, depth + 1))
+    for point in leaf_points:
+        for _ in range(2):
+            direction = _random_direction(rng, -0.05)
+            length = rng.uniform(0.105, 0.205)
+            centres = [point, point + direction * (length * 0.52) + Vector((0.0, 0.0, 0.012)),
+                       point + direction * length]
+            width_hint = Vector((-direction.y, direction.x, 0.18))
+            builder_folded_leaf(leaf_builder, centres, [0.008, rng.uniform(0.024, 0.040), 0.0],
+                                width_hint, fold_ratio=0.30, uv_v_offset=rng.uniform(0.0, 0.45))
+        if rng.random() < 0.20:
+            berry_centre = point + _random_direction(rng, 0.0) * 0.055
+            builder_ellipsoid(berry_builder, berry_centre, (0.018, 0.018, 0.021),
+                              segments=5, rings=1)
+    branch_builder.build("ornamental_shrub_branches", MATS["ShrubBranch"], smooth=True)
+    leaf_builder.build("ornamental_shrub_leaves", MATS["OrnamentalLeaf"], smooth=True)
+    if berry_builder.faces:
+        berry_builder.build("ornamental_shrub_berries", MATS["ShrubBerry"], smooth=True)
+
+
+# --------------------------------------------------------------------------- #
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out_dir = argv[0] if argv else os.path.join(os.getcwd(), "props_out")
@@ -2237,6 +2836,11 @@ def main():
         (build_villa, "villa.glb"),
         (build_glass_tower, "glass_tower.glb"),
         (build_main_tower, "main_tower.glb"),
+        (build_palm_date, "palm_date.glb"),
+        (build_palm_royal, "palm_royal.glb"),
+        (build_grass_tuft, "grass_tuft.glb"),
+        (build_flower_clump, "flower_clump.glb"),
+        (build_ornamental_shrub, "ornamental_shrub.glb"),
     ):
         reset_scene()
         standard_mats()
