@@ -1,20 +1,25 @@
 shader_type spatial;
 render_mode cull_back;
 
-// Native 0.2.16 reflective-coated opaque curtain-wall facade.
-// This is the transparent reflective-coated algorithm without an ALPHA output. The 0.2.15 phone
-// captures showed why albedo alone was insufficient: with METALLIC = 0
-// a head-on dielectric pane reflects only a few percent of the sky, so
-// even the lifted blue-grey calibration collapsed into navy-black slabs.
-// Solar-control coatings are therefore represented as a partial metal
-// reflection layer (high for mirror panes, low for blinds/interiors).
-// The real-bay tenant logic, occupied-core depth and distance average
-// remain; no photographic facade sheet or clearcoat layer is reintroduced.
-uniform vec4 deep_glass_color : source_color = vec4(0.105, 0.165, 0.205, 1.0);
-uniform vec4 smoke_glass_color : source_color = vec4(0.185, 0.255, 0.305, 1.0);
-uniform vec4 blind_color : source_color = vec4(0.360, 0.350, 0.315, 1.0);
-uniform vec4 cool_interior_color : source_color = vec4(0.100, 0.150, 0.180, 1.0);
-uniform vec4 warm_interior_color : source_color = vec4(0.170, 0.125, 0.085, 1.0);
+// Native 0.2.17 environment-reflective opaque curtain-wall facade.
+// This is the transparent environment-reflective algorithm without an ALPHA output.  The
+// 0.2.16 phone result swung too far the other way: a 0.62 metallic
+// layer over a lifted blue-grey albedo left enough bright diffuse and
+// over-energised Mobile reflection-probe response for the 148 m tower
+// to read almost white.  Mirror panes are now dark, strongly tinted
+// and nearly metallic, with low roughness; Godot's PBR sky radiance
+// and district ReflectionProbes therefore supply the visible image,
+// while blinds/interiors remain much less metallic.  A small RADIANCE
+// tint keyed to the reflected ray keeps upward reflections sky-blue
+// and downward reflections grounded without replacing the real probes.
+uniform vec4 deep_glass_color : source_color = vec4(0.018, 0.052, 0.082, 1.0);
+uniform vec4 smoke_glass_color : source_color = vec4(0.052, 0.112, 0.158, 1.0);
+uniform vec4 blind_color : source_color = vec4(0.235, 0.225, 0.200, 1.0);
+uniform vec4 cool_interior_color : source_color = vec4(0.034, 0.068, 0.092, 1.0);
+uniform vec4 warm_interior_color : source_color = vec4(0.088, 0.061, 0.038, 1.0);
+uniform vec4 sky_reflection_color : source_color = vec4(0.30, 0.53, 0.86, 1.0);
+uniform vec4 ground_reflection_color : source_color = vec4(0.16, 0.155, 0.135, 1.0);
+uniform float environment_tint_strength : hint_range(0.0, 0.45) = 0.19;
 uniform float floor_height_m : hint_range(2.4, 5.0) = 3.42;
 uniform float bay_width_m : hint_range(0.9, 3.0) = 1.60;
 uniform float base_alpha : hint_range(0.45, 0.95) = 0.76;
@@ -76,13 +81,13 @@ void fragment() {
 	float pane_b = hash12(cell_id * 3.11 + 12.3);
 	float pane_c = hash12(cell_id * 5.07 + 21.9);
 
-	vec3 surface_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.30 + 0.40 * tenant_tone);
-	float surface_roughness = mix(0.080, 0.145, tenant_tone) + (pane_b - 0.5) * 0.022;
+	vec3 surface_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.28 + 0.42 * tenant_tone);
+	float surface_roughness = mix(0.042, 0.096, tenant_tone) + (pane_b - 0.5) * 0.016;
 	float surface_alpha = mix(base_alpha + 0.015, base_alpha - 0.010, tenant_tone);
-	// Reflective solar-control coating: enough metalness for the sky and
-	// district probes to define the pane at head-on angles, while the
-	// remaining dielectric fraction lets sun/core depth modulate it.
-	float surface_metallic = 0.62;
+	// Dark near-metallic reflectance is the key calibration: the sky
+	// and probes are multiplied by a blue-grey F0 instead of adding a
+	// large white diffuse lobe on top of them.
+	float surface_metallic = 0.92;
 
 	// Quiet occupier states. Blinds are now a minority detail; warm rooms are
 	// only a faint colour temperature change in daylight, becoming actual
@@ -94,17 +99,17 @@ void fragment() {
 	surface_color = mix(surface_color, blind_color.rgb * slat, blind_mask * 0.58);
 	surface_roughness = mix(surface_roughness, 0.30, blind_mask * 0.45);
 	surface_alpha = mix(surface_alpha, 0.88, blind_mask * 0.42);
-	surface_metallic = mix(surface_metallic, 0.08, blind_mask * 0.75);
+	surface_metallic = mix(surface_metallic, 0.10, blind_mask * 0.82);
 
 	float warm_zone = step(0.90, hash12(tenant_id * 2.47 + 31.7));
 	surface_color = mix(surface_color, warm_interior_color.rgb, warm_zone * (1.0 - blind_mask) * 0.46);
 	surface_alpha = mix(surface_alpha, base_alpha - 0.07, warm_zone * (1.0 - blind_mask) * 0.45);
-	surface_metallic = mix(surface_metallic, 0.22, warm_zone * (1.0 - blind_mask) * 0.55);
+	surface_metallic = mix(surface_metallic, 0.46, warm_zone * (1.0 - blind_mask) * 0.55);
 
 	float cool_open_zone = step(0.955, hash12(tenant_id * 3.73 + 47.9));
 	surface_color = mix(surface_color, cool_interior_color.rgb, cool_open_zone * (1.0 - blind_mask) * 0.40);
 	surface_alpha = mix(surface_alpha, base_alpha - 0.10, cool_open_zone * 0.42);
-	surface_metallic = mix(surface_metallic, 0.30, cool_open_zone * (1.0 - blind_mask) * 0.50);
+	surface_metallic = mix(surface_metallic, 0.58, cool_open_zone * (1.0 - blind_mask) * 0.50);
 
 	// A +/-3.5% pane tint is enough to break a CG sheet without producing
 	// the rectangular patchwork visible in the 0.2.14 phone captures.
@@ -132,7 +137,7 @@ void fragment() {
 	surface_color = mix(surface_color, surface_color * 0.72 + vec3(0.010, 0.012, 0.014), gasket * 0.16);
 	surface_roughness += gasket * 0.070;
 	surface_alpha = mix(surface_alpha, 0.90, gasket * 0.40);
-	surface_metallic = mix(surface_metallic, 0.25, gasket * 0.35);
+	surface_metallic = mix(surface_metallic, 0.38, gasket * 0.35);
 	float lower_sill = step(cell_frac.y, 0.020) * near_detail;
 	surface_color = mix(surface_color, surface_color * 0.90, lower_sill * 0.05);
 	surface_alpha = mix(surface_alpha, 0.90, lower_sill * 0.08);
@@ -143,19 +148,21 @@ void fragment() {
 	far_average = max(far_average, smoothstep(0.30, 0.95, panel_pixel_footprint));
 	vec3 far_color = mix(deep_glass_color.rgb, smoke_glass_color.rgb, 0.52);
 	surface_color = mix(surface_color, far_color, far_average * 0.76);
-	surface_roughness = mix(surface_roughness, 0.115, far_average * 0.62);
+	surface_roughness = mix(surface_roughness, 0.072, far_average * 0.62);
 	surface_alpha = mix(surface_alpha, base_alpha + 0.005, far_average * 0.72);
-	surface_metallic = mix(surface_metallic, 0.58, far_average * 0.70);
+	surface_metallic = mix(surface_metallic, 0.88, far_average * 0.70);
 
 	// Grazing views become more mirror-like and opaque; head-on views keep
 	// the occupied core/curtain depth behind the Blender glass shells.
 	vec3 view_dir = normalize(world_position - CAMERA_POSITION_WORLD);
 	float fresnel = pow(1.0 - clamp(abs(dot(-view_dir, world_normal)), 0.0, 1.0), 3.0);
-	surface_alpha = mix(surface_alpha, 0.88, fresnel * 0.28);
+	surface_alpha = mix(surface_alpha, 0.90, fresnel * 0.30);
+	surface_metallic = mix(surface_metallic, 0.96, fresnel * 0.38);
+	surface_roughness = mix(surface_roughness, 0.038, fresnel * 0.24);
 
 	// Small independent pane tilts make neighbouring sky reflections step
 	// like installed low-iron units, without the funhouse warp in 0.2.14.
-	vec2 pane_tilt = (vec2(pane_hash, pane_b) - 0.5) * 0.045 * near_detail;
+	vec2 pane_tilt = (vec2(pane_hash, pane_b) - 0.5) * 0.033 * near_detail;
 	vec2 micro_wave = vec2(0.0);
 	if (near_detail > 0.01) {
 		micro_wave = (vec2(
@@ -165,12 +172,22 @@ void fragment() {
 	}
 	vec2 normal_xy = clamp(pane_tilt + micro_wave, vec2(-0.055), vec2(0.055));
 	NORMAL_MAP = vec3(normal_xy * 0.5 + 0.5, 1.0);
-	NORMAL_MAP_DEPTH = 0.35;
+	NORMAL_MAP_DEPTH = 0.24;
+
+	// RADIANCE only tints the engine's actual environment/reflection
+	// radiance; it does not replace the sky or the box-projected
+	// district probes.  Upward reflected rays lean toward the current
+	// sky colour, downward rays toward streets/roofs, and the blend is
+	// deliberately below 20% so reflected buildings remain visible.
+	vec3 reflection_direction = reflect(view_dir, world_normal);
+	float reflected_sky_amount = smoothstep(-0.18, 0.58, reflection_direction.y);
+	vec3 environment_tint = mix(ground_reflection_color.rgb, sky_reflection_color.rgb, reflected_sky_amount);
+	RADIANCE = vec4(environment_tint, environment_tint_strength * (0.62 + 0.38 * far_average));
 
 	ALBEDO = surface_color;
-	ROUGHNESS = clamp(surface_roughness, 0.045, 0.38);
-	METALLIC = clamp(surface_metallic, 0.0, 0.85);
-	SPECULAR = 0.72;
+	ROUGHNESS = clamp(surface_roughness, 0.032, 0.38);
+	METALLIC = clamp(surface_metallic, 0.0, 0.96);
+	SPECULAR = 0.50;
 
 	float lit_window = warm_zone * step(0.38, hash12(tenant_id * 4.91 + 63.1)) * (1.0 - blind_mask * 0.72);
 	EMISSION = vec3(1.0, 0.62, 0.32) * lit_window * interior_light_strength * 0.72;

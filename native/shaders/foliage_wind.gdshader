@@ -25,6 +25,9 @@ uniform float plant_height = 2.0;
 uniform bool use_uv_mask = false;
 uniform float backlight_strength : hint_range(0.0, 1.5) = 0.38;
 
+varying float instance_variation;
+varying float height_gradient;
+
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
 	p3 += dot(p3, p3.yzx + 33.33);
@@ -34,8 +37,10 @@ float hash12(vec2 p) {
 void vertex() {
 	vec2 instance_offset = MODEL_MATRIX[3].xz;
 	float phase = hash12(instance_offset * 0.37) * 6.28318;
+	instance_variation = hash12(instance_offset * 0.37 + 7.31);
 	float height_mask = clamp((VERTEX.y - base_y) / max(plant_height, 0.001), 0.0, 1.0);
 	float mask = use_uv_mask ? clamp(UV.y, 0.0, 1.0) : height_mask;
+	height_gradient = mask;
 	mask = mask * mask;
 
 	vec2 travel = instance_offset * 0.055 - normalize(wind_dir) * TIME * wind_speed * 0.75;
@@ -55,9 +60,14 @@ void fragment() {
 	vec4 base = leaf_color;
 	if (use_texture) {
 		base = texture(leaf_texture, UV);
-		ALBEDO = base.rgb * leaf_tint.rgb;
+		ALBEDO = base.rgb * leaf_tint.rgb * (0.86 + 0.25 * instance_variation);
 	} else {
-		ALBEDO = leaf_color.rgb;
+		// Geometric grass/leaflets do not need an albedo card.  A root-
+		// to-tip gradient plus per-instance variation prevents merged
+		// blades from reading as one flat plastic colour.
+		ALBEDO = leaf_color.rgb * leaf_tint.rgb
+			* (0.66 + 0.58 * height_gradient)
+			* (0.82 + 0.36 * instance_variation);
 	}
 	ALPHA = base.a;
 	ALPHA_SCISSOR_THRESHOLD = alpha_scissor;
