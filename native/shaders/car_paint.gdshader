@@ -7,10 +7,10 @@ shader_type spatial;
 uniform vec4 base_color : source_color = vec4(0.55, 0.02, 0.03, 1.0);
 uniform vec4 flake_color : source_color = vec4(1.0, 0.82, 0.7, 1.0);
 uniform vec4 fresnel_color : source_color = vec4(0.95, 0.25, 0.1, 1.0);
-uniform float metallic_amount : hint_range(0.0, 1.0) = 0.85;
-uniform float roughness_amount : hint_range(0.0, 1.0) = 0.28;
+uniform float metallic_amount : hint_range(0.0, 1.0) = 0.68;
+uniform float roughness_amount : hint_range(0.0, 1.0) = 0.19;
 uniform float clearcoat_amount : hint_range(0.0, 1.0) = 1.0;
-uniform float clearcoat_rough : hint_range(0.0, 1.0) = 0.03;
+uniform float clearcoat_rough : hint_range(0.0, 1.0) = 0.075;
 uniform float flake_density = 180.0;
 uniform float flake_strength : hint_range(0.0, 2.0) = 0.5;
 uniform float fresnel_strength : hint_range(0.0, 1.0) = 0.25;
@@ -47,7 +47,9 @@ void fragment() {
 
 	METALLIC = metallic_amount;
 	ROUGHNESS = clamp(roughness_amount - is_flake * 0.07, 0.03, 1.0);
-	SPECULAR = 0.68;
+	// PBR specular irradiance is supplied by the current sky and the nearest
+	// local ReflectionProbe (Godot Mobile has no SSR pass).
+	SPECULAR = 0.88;
 	CLEARCOAT = clearcoat_amount;
 	CLEARCOAT_ROUGHNESS = clearcoat_rough;
 }

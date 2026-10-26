@@ -19,13 +19,13 @@ uniform vec2 focus_point = vec2(0.5, 0.52);
 
 group_uniforms look;
 uniform float sharpen : hint_range(0.0, 1.0) = 0.0;
-uniform float saturation : hint_range(0.0, 2.0) = 1.06;
-uniform float contrast : hint_range(0.5, 1.5) = 1.03;
-uniform vec3 shadow_tint : source_color = vec3(0.86, 0.95, 1.06);
-uniform vec3 highlight_tint : source_color = vec3(1.08, 1.0, 0.88);
-uniform float split_strength : hint_range(0.0, 1.0) = 0.45;
-uniform float vignette_strength : hint_range(0.0, 1.0) = 0.28;
-uniform float grain : hint_range(0.0, 0.1) = 0.012;
+uniform float saturation : hint_range(0.0, 2.0) = 1.0;
+uniform float contrast : hint_range(0.5, 1.5) = 1.06;
+uniform vec3 shadow_tint : source_color = vec3(0.95, 0.97, 1.0);
+uniform vec3 highlight_tint : source_color = vec3(1.02, 1.0, 0.96);
+uniform float split_strength : hint_range(0.0, 1.0) = 0.28;
+uniform float vignette_strength : hint_range(0.0, 1.0) = 0.22;
+uniform float grain : hint_range(0.0, 0.1) = 0.005;
 
 const int SAMPLES = 8;
 
@@ -101,19 +101,15 @@ void fragment() {
 		col += vec3(line * speed_lines * 0.35);
 	}
 
-	// Виньетка (усиливается со скоростью)
-	float vig = smoothstep(0.25, 0.75, length(uv - 0.5));
-	col *= 1.0 - vig * (vignette_strength + 0.25 * speed);
+	// Subtle lens falloff stays circular on landscape phone displays.
+	float vig = smoothstep(0.24, 0.78, length((uv - 0.5) * vec2(aspect, 1.0)));
+	col *= 1.0 - vig * (vignette_strength + 0.18 * speed);
 
 	// Плёночное зерно
 	float n = hash21(uv * VIEWPORT_SIZE + fract(TIME) * 100.0) - 0.5;
 	col += n * grain * (1.0 - clamp(luma, 0.0, 1.0) * 0.5);
 
-	// Native adaptation: the quad is hidden at parking speeds to save a
-	// full-screen mobile pass.  Fade the whole treatment in as speed rises
-	// so enabling that pass never produces a visible colour pop.
-	float grade_fade = smoothstep(0.015, 0.22, speed);
-	col = mix(base, col, grade_fade);
-
+	// Color grade, vignette and fine grain are intentionally always active;
+	// radial blur/CA/lines remain speed-gated above.
 	ALBEDO = max(col, vec3(0.0));
 }

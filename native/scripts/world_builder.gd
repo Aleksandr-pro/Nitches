@@ -973,8 +973,12 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			_register_night_material(glass, 0.0, 0.1, 0.42)
 			return glass
 		"PropsGlass":
-			var panes := _material("prop_glass", "", "", Color(0.58, 0.82, 0.94, 0.58), 0.08, 0.35)
+			var panes := _material("prop_glass", "", "", Color(0.42, 0.65, 0.77, 0.50), 0.055, 0.12)
 			panes.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			panes.metallic_specular = 1.0
+			panes.clearcoat_enabled = true
+			panes.clearcoat = 0.88
+			panes.clearcoat_roughness = 0.035
 			panes.emission_enabled = true
 			panes.emission = Color(1.0, 0.78, 0.52)
 			_register_night_material(panes, 0.0, 0.06, 0.24)
@@ -4271,13 +4275,16 @@ func _build_reflection_probes() -> void:
 		var probe := ReflectionProbe.new()
 		probe.name = "DistrictReflection"
 		probe.position = Vector3(centre.x, height_at(centre.x, centre.z) + 12.0, centre.z)
-		probe.size = Vector3(300.0, 110.0, 300.0)
-		probe.blend_distance = 45.0
+		# Box-projected local cubemaps give glossy paint and curtain-wall glass
+		# actual neighbourhood/sky reflections on Godot's Mobile renderer (SSR
+		# is unavailable there). A broad blend keeps transitions unobtrusive.
+		probe.size = Vector3(340.0, 130.0, 340.0)
+		probe.blend_distance = 58.0
 		probe.origin_offset = Vector3(0.0, -4.0, 0.0)
 		probe.box_projection = true
 		probe.enable_shadows = false
-		probe.intensity = 1.12
-		probe.max_distance = 220.0
+		probe.intensity = 1.24
+		probe.max_distance = 240.0
 		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
 		probe.update_mode = ReflectionProbe.UPDATE_ONCE
@@ -4287,7 +4294,9 @@ func _build_reflection_probes() -> void:
 		root.add_child(probe)
 		_reflection_probes.append(probe)
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
-	_enhancement_stats["reflection_probe_max_distance"] = 220.0
+	_enhancement_stats["reflection_probe_max_distance"] = 240.0
+	_enhancement_stats["reflection_probe_box_projection"] = true
+	_enhancement_stats["reflection_probe_intensity"] = 1.24
 
 
 func _build_benches() -> void:
