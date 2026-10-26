@@ -1,9 +1,9 @@
 class_name NativeHud
 extends CanvasLayer
 
-## Native Godot HUD: speed, district, nitro, performance data and
-## phone-friendly driving controls.  It talks to the vehicle through its
-## public GDScript API only.
+## Native Godot HUD: speed, district, live world coordinates, nitro,
+## performance data and phone-friendly driving controls. It talks to the
+## vehicle through its public GDScript API only.
 
 signal camera_requested
 signal time_requested
@@ -15,6 +15,7 @@ var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _minimap: NativeMinimap
 var _district_label: Label
+var _coordinates_label: Label
 var _objective_label: Label
 var _performance_label: Label
 var _speed_label: Label
@@ -58,6 +59,8 @@ func get_smoke_state() -> Dictionary:
 	var viewport_size := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2.ZERO
 	return {
 		"performance_text": _performance_label.text if _performance_label != null else "",
+		"coordinates_text": _coordinates_label.text if _coordinates_label != null else "",
+		"coordinates_rect": _coordinates_label.get_global_rect() if _coordinates_label != null else Rect2(),
 		"speed_text": _speed_label.text if _speed_label != null else "",
 		"minimap_counts": _minimap.get_feature_counts() if _minimap != null else {},
 		"speed_rect": _speed_panel.get_global_rect() if _speed_panel != null else Rect2(),
@@ -164,7 +167,7 @@ func _build_ui() -> void:
 	var info_panel := _make_panel(root)
 	info_panel.name = "InfoPanel"
 	info_panel.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
-	_set_offsets(info_panel, 14.0, 12.0, 348.0, 106.0)
+	_set_offsets(info_panel, 14.0, 12.0, 348.0, 132.0)
 	var info_box := VBoxContainer.new()
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_box.add_theme_constant_override("separation", 2)
@@ -172,6 +175,7 @@ func _build_ui() -> void:
 	var title := _make_label(info_box, "NITCHES HORIZON • NATIVE", 19, Color(1.0, 0.69, 0.18))
 	title.add_theme_font_size_override("font_size", 19)
 	_district_label = _make_label(info_box, "RICHTOWN", 23)
+	_coordinates_label = _make_label(info_box, "КООРДИНАТЫ  X —  •  Z —  •  Y —", 16, Color(0.62, 1.0, 0.78))
 	_objective_label = _make_label(info_box, "СВОБОДНАЯ ПОЕЗДКА • ТЕСТ ФИЗИКИ", 14, Color(0.78, 0.90, 1.0))
 
 	# Minimap, performance and small actions, top-right.
@@ -266,6 +270,21 @@ func _build_ui() -> void:
 func _update_static_labels() -> void:
 	if _objective_label != null:
 		_objective_label.text = "СВОБОДНАЯ ПОЕЗДКА • ТЕСТ ФИЗИКИ"
+	_update_coordinates_label()
+
+
+func _update_coordinates_label() -> void:
+	if _coordinates_label == null:
+		return
+	if _vehicle == null:
+		_coordinates_label.text = "КООРДИНАТЫ  X —  •  Z —  •  Y —"
+		return
+	var vehicle_position := _vehicle.global_position
+	_coordinates_label.text = "КООРДИНАТЫ  X %.1f  •  Z %.1f  •  Y %.1f" % [
+		vehicle_position.x,
+		vehicle_position.z,
+		vehicle_position.y,
+	]
 
 
 func _on_touch_button_down(action_name: String) -> void:
@@ -286,13 +305,15 @@ func _process(delta: float) -> void:
 	if _fast_timer < 0.083:
 		return
 	_fast_timer = 0.0
-	if _speed_label == null or _gear_label == null or _nitro_bar == null or _state_label == null:
+	if _speed_label == null or _gear_label == null or _nitro_bar == null or _state_label == null or _coordinates_label == null:
 		return
 	if _vehicle == null:
+		_update_coordinates_label()
 		if _performance_label != null:
 			_performance_label.text = "FPS %d  •  NO VEHICLE" % Engine.get_frames_per_second()
 		return
 
+	_update_coordinates_label()
 	_speed_label.text = str(int(round(_vehicle.get_absolute_speed_kmh())))
 	_gear_label.text = _vehicle.get_gear_label()
 	_nitro_bar.value = _vehicle.get_nitro_ratio() * 100.0

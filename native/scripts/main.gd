@@ -474,7 +474,13 @@ func _run_smoke_checks() -> void:
 	var performance_text := String(hud_state.get("performance_text", ""))
 	if performance_text.is_empty() or performance_text == "FPS —" or performance_text.contains("WORLD DATA ERROR"):
 		failures.append("HUD performance label did not update cleanly: %s" % performance_text)
+	var coordinates_text := String(hud_state.get("coordinates_text", ""))
+	if not coordinates_text.contains("КООРДИНАТЫ") or not coordinates_text.contains("X 760") or not coordinates_text.contains("Z 330") or not coordinates_text.contains("Y "):
+		failures.append("0.2.12 HUD live coordinates did not update at spawn: %s" % coordinates_text)
 	var viewport_size: Vector2 = hud_state.get("viewport_size", Vector2.ZERO)
+	var coordinates_rect: Rect2 = hud_state.get("coordinates_rect", Rect2())
+	if not _rect_is_on_screen(coordinates_rect, viewport_size):
+		failures.append("coordinates label is not fully on screen: rect=%s viewport=%s" % [str(coordinates_rect), str(viewport_size)])
 	var speed_rect: Rect2 = hud_state.get("speed_rect", Rect2())
 	var pedal_rect: Rect2 = hud_state.get("pedal_rect", Rect2())
 	if not _rect_is_on_screen(speed_rect, viewport_size):
