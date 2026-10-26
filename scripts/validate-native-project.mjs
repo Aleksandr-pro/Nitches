@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, syncScript, blenderScript] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -32,6 +32,7 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('shaders/curtain_wall_glass.gdshader'),
   readText('shaders/curtain_wall_facade.gdshader'),
   readText('shaders/concrete_surface.gdshader'),
+  readText('shaders/premium_stone_paving.gdshader'),
   readFile('scripts/sync-native-assets.mjs', 'utf8'),
   readFile('blender/build_props.py', 'utf8'),
 ]);
@@ -46,14 +47,14 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=20'), 'Native 0.2.17 must bump Android versionCode to 20');
-assert(preset.includes('version/name="0.2.17-native-alpha"'), 'Native version name must be 0.2.17-native-alpha');
+assert(preset.includes('version/code=21'), 'Native 0.2.18 must bump Android versionCode to 21');
+assert(preset.includes('version/name="0.2.18-native-alpha"'), 'Native version name must be 0.2.18-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
@@ -66,10 +67,14 @@ assert(!worldScript.includes('_get_palm_crown_mesh') && !worldScript.includes('_
 for (const marker of ['paver_id', 'gum_spots', 'macro_stain', 'world_position', 'pattern_scale']) {
   assert(concreteSurfaceShader.includes(marker), `Native 0.2.17 concrete shader marker is missing: ${marker}`);
 }
+for (const marker of ['stone_texture', 'fine_normal_texture', 'dominant_plane', 'district_variation', 'polished_wear', 'PremiumStone']) {
+  assert(premiumStonePavingShader.includes(marker) || worldScript.includes(marker), `Native 0.2.18 premium stone paving marker is missing: ${marker}`);
+}
 for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.glb', 'flower_clump.glb', 'ornamental_shrub.glb']) {
   assert(syncScript.includes(vegetationModel), `Native asset sync is missing ${vegetationModel}`);
   assert(worldScript.includes(`res://assets/vegetation/${vegetationModel}`), `Native world does not load ${vegetationModel}`);
 }
+assert(syncScript.includes('user_sand_beach_white.jpg'), 'Native asset sync is missing the 0.2.18 white-pebble texture');
 for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def build_grass_tuft():', 'def build_flower_clump():', 'def build_ornamental_shrub():']) {
   assert(blenderScript.includes(marker), `Blender vegetation builder is missing: ${marker}`);
 }
@@ -309,7 +314,28 @@ for (const marker of [
   'boulevard_lawn_islands',
   'WashingtoniaWhiteGravelBeds',
   'CafeWarmLight',
+  'BoulevardCafeGlassArcades',
   'premium_boulevard_promenade_m2',
+  'PremiumStonePavingShader',
+  'premium_stone_paving.gdshader',
+  'premium_stone_paving_shader_0218',
+  'boulevard_rebuild_0218',
+  'boulevard_granite_curbs',
+  'boulevard_premium_sidewalk_slabs',
+  'boulevard_fresh_markings',
+  'boulevard_arcades',
+  'boulevard_cafe_tables',
+  'boulevard_cafe_umbrellas',
+  'boulevard_drip_emitters',
+  'boulevard_royal_palms',
+  'boulevard_extra_royal_palms',
+  'boulevard_lawn_area_m2',
+  'boulevard_topiary',
+  'boulevard_ground_cover',
+  'PremiumPromenade_ScreenshotAxis',
+  'BoulevardGraniteCurbs',
+  'BoulevardPremiumSidewalkSlabs',
+  'BoulevardLooseWhitePebbles',
   'infill_buildings',
   'city_detail_props',
   'get_smoothing_state',
@@ -320,7 +346,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.17 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.18 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
