@@ -1446,7 +1446,7 @@ func _hash01(ix: int, iz: int) -> float:
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
 	var in_promenade := z >= -94.0 and z <= 48.0 and ((x >= 713.0 and x <= 744.0) or (x >= 776.0 and x <= 789.0))
-	if _in_zone(x, z, "rtPlaza") or in_promande:
+	if _in_zone(x, z, "rtPlaza") or in_promenade:
 		return "plaza"
 	if (_in_zone(x, z, "sea") or _in_zone(x, z, "marina")) and h < 0.5:
 		return "sand"
@@ -4500,7 +4500,7 @@ func _is_roadside_position_valid(candidate: Vector3) -> bool:
 	return String(get_surface_at(candidate).get("kind", "")) != "water"
 
 
-func _build_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: float, step_m: float = 2.0, lift_m: float = 0.035) -> ArrayMesh:
+func _make_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: float, step_m: float = 2.0, lift_m: float = 0.035) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var columns := maxi(1, ceili((max_x - min_x) / step_m))
