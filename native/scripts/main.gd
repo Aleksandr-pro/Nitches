@@ -386,6 +386,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.9 Building Model No.2 premium townhouse pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("premium_hero_models", 0)) < 8 or not bool(enhancement_stats.get("premium_hero_fixed_scale", false)) or not bool(enhancement_stats.get("premium_hero_detail_pass", false)) or not bool(enhancement_stats.get("premium_hero_material_pass", false)) or not bool(enhancement_stats.get("premium_hero_site_pass", false)):
 		failures.append("0.2.10 Building Model No.3 premium hero block pass is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("premium_glass_models", 0)) < 8 or not bool(enhancement_stats.get("premium_glass_fixed_scale", false)) or not bool(enhancement_stats.get("premium_glass_detail_pass", false)) or not bool(enhancement_stats.get("premium_glass_material_pass", false)) or not bool(enhancement_stats.get("premium_glass_site_pass", false)) or not bool(enhancement_stats.get("main_tower_legacy_separate", false)):
+		failures.append("0.2.11 Building Model No.4 premium glass tower pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:

@@ -1,6 +1,7 @@
 props_out/bus_shelter.glb: meshes=26 tris=816 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,PropsGlass,PropsWood
-props_out/glass_tower.glb: meshes=96 tris=2776 size=33.60x70.71x33.60m minY=0.00 mats=RoofDark,FacadeAccent,PropsGlass,PropsMetal,FacadeGlass,LampGlow
+props_out/glass_tower.glb: meshes=562 tris=12240 size=34.00x72.90x34.00m minY=0.00 mats=VillaGranite,TowerStone,TowerTrim,VillaInterior,TowerGlass,WindowFrame,TowerMetal,LampGlow,TowerSpandrel,VillaWood,PropsMetal,VillaPavement,RoofDark,VillaCurtain,VillaHedge,VillaLawn,VillaMulch
 props_out/hero_building.glb: meshes=1706 tris=30616 size=32.40x28.56x24.60m minY=0.00 mats=VillaGranite,HeroStone,HeroTrim,HeroPlaster,RoofDark,WindowFrame,VillaInterior,VillaCurtain,VillaGlass,LampGlow,HeroWood,VillaHedge,HeroMetal,VillaPavement,PropsMetal,SolarCell,VillaLawn,VillaMulch
+props_out/main_tower.glb: meshes=96 tris=2776 size=33.60x70.71x33.60m minY=0.00 mats=RoofDark,FacadeAccent,PropsGlass,PropsMetal,FacadeGlass,LampGlow
 props_out/street_lamp.glb: meshes=10 tris=560 size=0.48x6.63x4.90m minY=0.00 mats=PropsMetal,LampGlow
 props_out/townhouse.glb: meshes=972 tris=17024 size=18.87x11.05x16.37m minY=0.00 mats=VillaGranite,TownTrim,TownRoof,WindowFrame,TownStone,TownPlaster,TownGarage,VillaGlass,LampGlow,VillaPavement,VillaInterior,VillaCurtain,PropsMetal,VillaWood,TownDoor,VillaHedge,RoofDark,VillaDeck,VillaLawn,VillaMulch,TownDoorAccent,SolarCell
 props_out/traffic_signal_long.glb: meshes=92 tris=10916 size=8.05x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight

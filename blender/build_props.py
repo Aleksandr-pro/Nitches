@@ -18,7 +18,8 @@ Props:
   * hero_building.glb Building Model No.3: fixed-scale podium residential/hotel block
   * townhouse.glb     Building Model No.2: fixed-scale semi-detached townhouse pair
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
-  * glass_tower.glb   podium tower with finned glass curtain wall
+  * glass_tower.glb   Building Model No.4: fixed-scale glass district tower
+  * main_tower.glb    legacy 148 m landmark massing pending its own pass
 """
 import math
 import os
@@ -112,6 +113,11 @@ def standard_mats():
     mat("HeroTrim", (0.82, 0.78, 0.69), roughness=0.84)
     mat("HeroWood", (0.42, 0.25, 0.12), roughness=0.78)
     mat("HeroMetal", (0.16, 0.18, 0.20), roughness=0.46, metallic=0.55)
+    mat("TowerGlass", (0.10, 0.26, 0.34), roughness=0.08, metallic=0.15)
+    mat("TowerSpandrel", (0.05, 0.11, 0.16), roughness=0.28, metallic=0.55)
+    mat("TowerStone", (0.52, 0.49, 0.43), roughness=0.92, metallic=0.0)
+    mat("TowerTrim", (0.78, 0.76, 0.70), roughness=0.55, metallic=0.25)
+    mat("TowerMetal", (0.10, 0.12, 0.14), roughness=0.42, metallic=0.70)
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -1585,9 +1591,248 @@ def build_villa():
 
 
 # --------------------------------------------------------------------------- #
-# glass podium tower: 30 x 30 m podium footprint, 67 m with crown
+# Building Model No.4 — detailed fixed-scale glass district tower.
+# Planned envelope: 34.00 x 34.00 m, 72.90 m high. A two-storey stone
+# podium carries two set-back curtain-wall shaft tiers and a mechanical
+# crown; the runtime places the finished design at scale 1.0. The old
+# finned-glass proxy is preserved below only for the separate 148 m
+# landmark, whose own detailed pass remains a future building.
 # --------------------------------------------------------------------------- #
 def build_glass_tower():
+    glass = MATS["TowerGlass"]
+    spandrel = MATS["TowerSpandrel"]
+    stone = MATS["TowerStone"]
+    trim = MATS["TowerTrim"]
+    tower_metal = MATS["TowerMetal"]
+    core = MATS["VillaInterior"]
+    curtain = MATS["VillaCurtain"]
+    granite = MATS["VillaGranite"]
+    frame = MATS["WindowFrame"]
+    pavement = MATS["VillaPavement"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
+    mulch = MATS["VillaMulch"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+    glow = MATS["LampGlow"]
+    wood = MATS["VillaWood"]
+
+    def curtain_tier(half, z_bottom, z_top, floors, seed):
+        height = z_top - z_bottom
+        centre_z = (z_bottom + z_top) * 0.5
+        floor_h = height / float(floors)
+        box("tower_shaft_core", 0.0, 0.0, centre_z, half * 2.0 - 0.30, half * 2.0 - 0.30, height, core, bevel=0.035)
+        # Four continuous glass skins over a dark occupied core. Floor
+        # slabs, continuous mullions, feature fins and varied interior
+        # blind/lit panels give the curtain wall its scale without a
+        # separate deep window assembly for every office pane.
+        for axis in ("y", "x"):
+            for sign in (-1.0, 1.0):
+                if axis == "y":
+                    box("tower_curtain_glass", 0.0, sign * (half + 0.020), centre_z, half * 2.0, 0.080, height, glass)
+                else:
+                    box("tower_curtain_glass", sign * (half + 0.020), 0.0, centre_z, 0.080, half * 2.0, height, glass)
+                for offset_ratio in (-0.75, -0.50, -0.25, 0.0, 0.25, 0.50, 0.75):
+                    offset = offset_ratio * half
+                    if axis == "y":
+                        box("tower_curtain_mullion", offset, sign * (half + 0.085), centre_z, 0.110, 0.150, height, frame)
+                    else:
+                        box("tower_curtain_mullion", sign * (half + 0.085), offset, centre_z, 0.150, 0.110, height, frame)
+                for fin_ratio in (-0.50, 0.0, 0.50):
+                    fin_offset = fin_ratio * half
+                    if axis == "y":
+                        box("tower_feature_fin", fin_offset, sign * (half + 0.270), centre_z, 0.300, 0.500, height, tower_metal)
+                        if fin_ratio == 0.0:
+                            box("tower_feature_light", fin_offset, sign * (half + 0.535), centre_z, 0.075, 0.035, height * 0.94, glow)
+                    else:
+                        box("tower_feature_fin", sign * (half + 0.270), fin_offset, centre_z, 0.500, 0.300, height, tower_metal)
+                        if fin_ratio == 0.0:
+                            box("tower_feature_light", sign * (half + 0.535), fin_offset, centre_z, 0.035, 0.075, height * 0.94, glow)
+        for slab_index in range(floors + 1):
+            slab_z = z_bottom + slab_index * floor_h
+            box("tower_floor_spandrel", 0.0, 0.0, slab_z, half * 2.0 + 0.35, half * 2.0 + 0.35, 0.270, spandrel)
+        for corner_x in (-1.0, 1.0):
+            for corner_y in (-1.0, 1.0):
+                box("tower_corner_pier", corner_x * (half - 0.050), corner_y * (half - 0.050), centre_z, 0.850, 0.850, height, trim)
+        for floor_index in range(floors):
+            panel_z = z_bottom + (floor_index + 0.52) * floor_h
+            for face_index, (axis, sign) in enumerate((("y", -1.0), ("y", 1.0), ("x", -1.0), ("x", 1.0))):
+                pattern = (floor_index * 3 + face_index * 2 + seed) % 5
+                panel_specs = ((-0.46, 0.48), (0.34, 0.36)) if pattern in (0, 1) else ((-0.18, 0.72),)
+                for panel_ratio, panel_width_ratio in panel_specs:
+                    panel_offset = panel_ratio * half
+                    panel_width = panel_width_ratio * half
+                    panel_material = glow if pattern == 0 else (curtain if pattern in (1, 2) else spandrel)
+                    if axis == "y":
+                        box("tower_interior_panel", panel_offset, sign * (half - 0.085), panel_z, panel_width, 0.030, 1.12, panel_material)
+                    else:
+                        box("tower_interior_panel", sign * (half - 0.085), panel_offset, panel_z, 0.030, panel_width, 1.12, panel_material)
+
+    def podium_bay(face, offset):
+        sign = -1.0 if face in ("front", "left") else 1.0
+        if face in ("front", "back"):
+            box("tower_podium_bay_interior", offset, sign * 15.540, 3.15, 3.55, 0.040, 4.65, core)
+            box("tower_podium_bay_glass", offset, sign * 15.600, 3.15, 3.55, 0.060, 4.65, glass)
+            box("tower_podium_bay_mullion", offset, sign * 15.645, 3.15, 0.065, 0.055, 4.65, frame)
+            box("tower_podium_bay_transom", offset, sign * 15.645, 4.55, 3.55, 0.055, 0.065, frame)
+            box("tower_podium_bay_sill", offset, sign * 15.610, 0.78, 3.75, 0.18, 0.10, trim)
+        else:
+            box("tower_podium_bay_interior", sign * 15.540, offset, 3.15, 0.040, 3.55, 4.65, core)
+            box("tower_podium_bay_glass", sign * 15.600, offset, 3.15, 0.060, 3.55, 4.65, glass)
+            box("tower_podium_bay_mullion", sign * 15.645, offset, 3.15, 0.055, 0.065, 4.65, frame)
+            box("tower_podium_bay_transom", sign * 15.645, offset, 4.55, 0.055, 3.55, 0.065, frame)
+            box("tower_podium_bay_sill", sign * 15.610, offset, 0.78, 0.18, 3.75, 0.10, trim)
+
+    # Plaza parcel and two-storey stone podium.
+    box("tower_lot_plinth", 0.0, 0.0, 0.15, 34.00, 34.00, 0.30, granite, bevel=0.015)
+    box("tower_podium", 0.0, 0.0, 3.75, 31.00, 31.00, 6.90, stone, bevel=0.030)
+    box("tower_podium_cornice", 0.0, 0.0, 7.32, 31.70, 31.70, 0.28, trim)
+    box("tower_podium_base_front", 0.0, -15.57, 0.52, 31.20, 0.15, 0.45, granite)
+    box("tower_podium_base_rear", 0.0, 15.57, 0.52, 31.20, 0.15, 0.45, granite)
+    for base_side in (-1.0, 1.0):
+        box("tower_podium_base_side", base_side * 15.57, 0.0, 0.52, 0.15, 31.20, 0.45, granite)
+    for column_offset in (-13.0, -8.67, -4.33, 4.33, 8.67, 13.0):
+        box("tower_podium_column_front", column_offset, -15.62, 3.65, 0.95, 0.30, 5.70, trim)
+        box("tower_podium_column_rear", column_offset, 15.62, 3.65, 0.95, 0.30, 5.70, trim)
+        box("tower_podium_column_left", -15.62, column_offset, 3.65, 0.30, 0.95, 5.70, trim)
+        box("tower_podium_column_right", 15.62, column_offset, 3.65, 0.30, 0.95, 5.70, trim)
+    for bay_offset in (-10.83, -6.50, -2.17, 2.17, 6.50, 10.83):
+        podium_bay("front", bay_offset)
+        podium_bay("left", bay_offset)
+        podium_bay("right", bay_offset)
+    for bay_offset in (-10.83, -6.50, -2.17, 2.17):
+        podium_bay("back", bay_offset)
+    for strip_sign in (-1.0, 1.0):
+        box("tower_podium_clerestory", 0.0, strip_sign * 15.575, 6.35, 27.00, 0.060, 0.75, glass)
+        box("tower_podium_clerestory_side", strip_sign * 15.575, 0.0, 6.35, 0.060, 27.00, 0.75, glass)
+    box("tower_sign_band", 0.0, -15.700, 5.78, 10.20, 0.180, 0.78, tower_metal)
+    box("tower_sign_glow", 0.0, -15.800, 5.78, 9.55, 0.035, 0.28, glow)
+    for banner_side in (-1.0, 1.0):
+        box("tower_entry_banner", banner_side * 5.85, -15.720, 5.20, 0.78, 0.055, 2.15, spandrel)
+        box("tower_entry_banner_stripe", banner_side * 5.85, -15.755, 5.20, 0.14, 0.025, 1.85, glow)
+
+    # Main entrance: stone header, canopy on columns/tie rods, steps,
+    # ramp and paired lobby-door handles behind the podium glazing.
+    box("tower_entry_header", 0.0, -15.700, 5.12, 9.60, 0.35, 0.58, trim)
+    box("tower_entry_canopy", 0.0, -16.150, 4.66, 9.80, 1.35, 0.22, granite, bevel=0.020)
+    box("tower_entry_canopy_soffit", 0.0, -16.150, 4.52, 9.35, 1.18, 0.055, wood)
+    for column_side in (-1.0, 1.0):
+        column_x = column_side * 4.40
+        box("tower_entry_column_base", column_x, -16.55, 0.48, 0.38, 0.38, 0.36, granite)
+        cyl("tower_entry_column", column_x, -16.55, 2.50, 0.120, 3.95, tower_metal, vertices=14)
+        tube_between("tower_entry_tie_rod", (column_x, -16.55, 4.50), (column_x, -15.55, 5.55), 0.025, 0.025, tower_metal, vertices=8)
+        cyl("tower_lobby_door_handle", column_side * 0.35, -15.700, 1.55, 0.024, 0.92, metal, vertices=10)
+    for step_index, (step_y, step_top) in enumerate(((-15.85, 0.75), (-16.30, 0.60), (-16.72, 0.45))):
+        box("tower_entry_step", 0.0, step_y, (0.30 + step_top) / 2.0, 7.40 - step_index * 0.40, 0.48, step_top - 0.30, pavement)
+    box("tower_address_plaque", -4.95, -15.720, 1.75, 0.62, 0.060, 0.85, granite)
+    box("tower_address_inset", -4.95, -15.760, 1.75, 0.40, 0.025, 0.56, metal)
+
+    # Rear service door, loading dock and side parking-garage portal.
+    box("tower_service_portal", 8.70, 15.600, 2.05, 4.35, 0.18, 3.45, trim)
+    box("tower_service_door", 8.70, 15.680, 1.98, 3.85, 0.10, 3.10, tower_metal, bevel=0.010)
+    for seam_z in (1.10, 1.95, 2.80):
+        box("tower_service_door_seam", 8.70, 15.740, seam_z, 3.75, 0.025, 0.045, frame)
+    box("tower_loading_dock", 8.70, 16.15, 0.50, 5.40, 1.30, 0.42, pavement)
+    box("tower_service_canopy", 8.70, 16.05, 3.95, 5.20, 1.05, 0.15, granite)
+    box("tower_garage_portal", 15.600, 8.00, 2.00, 0.18, 5.00, 3.40, trim)
+    box("tower_garage_door", 15.680, 8.00, 1.95, 0.10, 4.45, 3.05, tower_metal, bevel=0.010)
+    for seam_y in (6.85, 8.00, 9.15):
+        box("tower_garage_door_seam", 15.740, seam_y, 1.95, 0.025, 0.045, 2.95, frame)
+    rbox("tower_garage_ramp", 16.25, 8.00, 0.38, 1.35, 5.30, 0.12, pavement, rotation=(0.0, 0.11, 0.0))
+    for bin_x in (-12.20, -10.00):
+        box("tower_waste_bin", bin_x, 16.15, 0.82, 1.85, 1.00, 1.08, dark, bevel=0.025)
+        box("tower_waste_bin_lid", bin_x, 16.15, 1.40, 1.92, 1.05, 0.09, tower_metal)
+
+    # Two shaft tiers and the setback between them.
+    curtain_tier(13.00, 7.35, 41.85, 10, 1)
+    box("tower_setback_slab", 0.0, 0.0, 42.05, 27.40, 27.40, 0.45, trim)
+    curtain_tier(11.00, 42.30, 66.45, 7, 3)
+
+    # Podium and setback roof terraces: glass rails, planters and plant.
+    for rail_sign in (-1.0, 1.0):
+        box("tower_podium_roof_rail", 0.0, rail_sign * 15.25, 7.82, 29.40, 0.055, 0.78, glass)
+        box("tower_podium_roof_rail_side", rail_sign * 15.25, 0.0, 7.82, 0.055, 29.40, 0.78, glass)
+        box("tower_podium_roof_toprail", 0.0, rail_sign * 15.25, 8.25, 29.55, 0.075, 0.065, frame)
+        box("tower_podium_roof_toprail_side", rail_sign * 15.25, 0.0, 8.25, 0.075, 29.55, 0.065, frame)
+        box("tower_setback_rail", 0.0, rail_sign * 13.35, 42.75, 25.80, 0.055, 0.78, glass)
+        box("tower_setback_rail_side", rail_sign * 13.35, 0.0, 42.75, 0.055, 25.80, 0.78, glass)
+        box("tower_setback_toprail", 0.0, rail_sign * 13.35, 43.18, 25.95, 0.075, 0.065, frame)
+        box("tower_setback_toprail_side", rail_sign * 13.35, 0.0, 43.18, 0.075, 25.95, 0.065, frame)
+    for planter_x in (-10.0, -5.0, 5.0, 10.0):
+        for planter_y in (-14.25, 14.25):
+            box("tower_podium_roof_planter", planter_x, planter_y, 7.62, 1.90, 0.72, 0.48, granite)
+            box("tower_podium_roof_hedge", planter_x, planter_y, 7.96, 1.66, 0.50, 0.30, hedge, bevel=0.040)
+        for planter_y in (-12.25, 12.25):
+            box("tower_setback_planter", planter_x, planter_y, 42.55, 1.75, 0.68, 0.45, granite)
+            box("tower_setback_hedge", planter_x, planter_y, 42.87, 1.52, 0.48, 0.28, hedge, bevel=0.038)
+    for hvac_x, hvac_y in ((-14.30, -8.00), (-14.30, 8.00), (14.30, -8.00), (14.30, 8.00)):
+        box("tower_podium_hvac", hvac_x, hvac_y, 7.78, 1.60, 1.45, 0.92, metal, bevel=0.018)
+        cyl("tower_podium_hvac_fan", hvac_x, hvac_y, 8.27, 0.32, 0.045, frame, vertices=16)
+    for post_x in (-7.0, 7.0):
+        for post_y in (-12.85, -11.55):
+            box("tower_setback_pergola_post", post_x, post_y, 43.35, 0.15, 0.15, 2.05, wood)
+    for beam_y in (-12.88, -11.52):
+        box("tower_setback_pergola_beam", 0.0, beam_y, 44.45, 15.20, 0.16, 0.17, wood)
+    for slat_index in range(8):
+        box("tower_setback_pergola_slat", -6.65 + slat_index * 1.90, -12.20, 44.60, 0.14, 1.58, 0.12, wood)
+
+    # Mechanical crown, corner fins, cooling towers, helipad and mast.
+    box("tower_crown_frame", 0.0, 0.0, 66.65, 19.40, 19.40, 0.40, trim)
+    box("tower_mechanical_penthouse", 0.0, 0.0, 68.65, 14.50, 14.50, 3.60, spandrel, bevel=0.020)
+    box("tower_mechanical_roof", 0.0, 0.0, 70.60, 15.30, 15.30, 0.30, trim)
+    for louvre_z in (67.85, 68.45, 69.05, 69.65):
+        box("tower_crown_louvre_front", 0.0, -7.30, louvre_z, 11.80, 0.10, 0.16, frame)
+        box("tower_crown_louvre_rear", 0.0, 7.30, louvre_z, 11.80, 0.10, 0.16, frame)
+        box("tower_crown_louvre_left", -7.30, 0.0, louvre_z, 0.10, 11.80, 0.16, frame)
+        box("tower_crown_louvre_right", 7.30, 0.0, louvre_z, 0.10, 11.80, 0.16, frame)
+    for fin_x in (-9.35, 9.35):
+        for fin_y in (-9.35, 9.35):
+            box("tower_crown_fin", fin_x, fin_y, 68.98, 0.55, 0.55, 5.15, tower_metal)
+            box("tower_crown_fin_light", fin_x, fin_y, 71.62, 0.34, 0.34, 0.14, glow)
+    for rail_sign in (-1.0, 1.0):
+        box("tower_crown_rail", 0.0, rail_sign * 9.45, 67.30, 18.20, 0.050, 0.72, glass)
+        box("tower_crown_rail_side", rail_sign * 9.45, 0.0, 67.30, 0.050, 18.20, 0.72, glass)
+    for tower_x, tower_y in ((8.45, -4.00), (-8.45, 4.00)):
+        cyl("tower_cooling_tower", tower_x, tower_y, 67.82, 0.86, 1.92, metal, vertices=18)
+        cyl("tower_cooling_fan", tower_x, tower_y, 68.82, 0.55, 0.06, frame, vertices=18)
+    cyl("tower_helipad", 0.0, 0.0, 70.82, 5.35, 0.12, dark, vertices=36)
+    cyl("tower_helipad_ring", 0.0, 0.0, 70.90, 4.35, 0.035, trim, vertices=36)
+    cyl("tower_helipad_centre", 0.0, 0.0, 70.925, 3.95, 0.030, dark, vertices=36)
+    for h_side in (-0.85, 0.85):
+        box("tower_helipad_h_leg", h_side, 0.0, 70.95, 0.45, 3.10, 0.035, glow)
+    box("tower_helipad_h_cross", 0.0, 0.0, 70.95, 2.10, 0.45, 0.035, glow)
+    cyl("tower_mast", 8.85, 8.85, 69.72, 0.075, 5.75, tower_metal, vertices=10)
+    box("tower_beacon", 8.85, 8.85, 72.75, 0.30, 0.30, 0.30, glow)
+
+    # Forecourt, lit bollards, benches and narrow landscape strips.
+    box("tower_forecourt_paving", 0.0, -16.15, 0.345, 24.00, 1.55, 0.07, pavement)
+    box("tower_dropoff_strip", 0.0, -16.88, 0.335, 18.00, 0.22, 0.05, granite)
+    box("tower_rear_paving", 0.0, 16.20, 0.345, 23.00, 1.45, 0.07, pavement)
+    for landscape_side in (-1.0, 1.0):
+        box("tower_side_lawn", landscape_side * 16.25, 0.0, 0.345, 1.30, 24.00, 0.06, lawn)
+        for hedge_y in (-9.0, -3.0, 3.0, 9.0):
+            if landscape_side > 0.0 and hedge_y == 9.0:
+                continue
+            box("tower_side_hedge", landscape_side * 16.25, hedge_y, 0.62, 0.82, 3.10, 0.48, hedge, bevel=0.055)
+    for planter_x in (-11.0, -7.0, 7.0, 11.0):
+        box("tower_front_planter", planter_x, -16.25, 0.58, 1.90, 0.80, 0.52, granite)
+        box("tower_front_planter_soil", planter_x, -16.25, 0.86, 1.72, 0.62, 0.045, mulch)
+        box("tower_front_planter_hedge", planter_x, -16.25, 1.02, 1.60, 0.52, 0.32, hedge, bevel=0.045)
+    for bollard_x in (-9.0, -6.0, -3.0, 3.0, 6.0, 9.0):
+        cyl("tower_front_bollard", bollard_x, -16.78, 0.68, 0.085, 0.76, tower_metal, vertices=12)
+        box("tower_front_bollard_light", bollard_x, -16.78, 1.08, 0.10, 0.10, 0.045, glow)
+    for bench_x in (-12.20, 12.20):
+        box("tower_front_bench", bench_x, -16.05, 0.58, 2.20, 0.50, 0.10, wood)
+        box("tower_front_bench_base", bench_x, -16.05, 0.42, 1.80, 0.36, 0.24, granite)
+    for rear_hedge_x in (-14.0, -4.5, 0.5, 13.5):
+        box("tower_rear_hedge", rear_hedge_x, 16.35, 0.60, 2.60, 0.55, 0.52, hedge, bevel=0.055)
+
+# --------------------------------------------------------------------------- #
+# Legacy 148 m landmark massing, preserved until its own detailed pass.
+# It is deliberately separate so Building Model No.4 is never stretched
+# vertically into the main tower; only the landmark transform scales it.
+# --------------------------------------------------------------------------- #
+def build_main_tower_legacy():
     accent = MATS["FacadeAccent"]
     glass = MATS["FacadeGlass"]
     pane = MATS["PropsGlass"]
@@ -1663,6 +1908,7 @@ def main():
         (build_townhouse, "townhouse.glb"),
         (build_villa, "villa.glb"),
         (build_glass_tower, "glass_tower.glb"),
+        (build_main_tower_legacy, "main_tower.glb"),
     ):
         reset_scene()
         standard_mats()

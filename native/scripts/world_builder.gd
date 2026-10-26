@@ -1114,6 +1114,38 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			var hero_metal := _material("hero_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.22, 0.26, 0.29), 0.46, 0.65, Vector3(0.50, 0.50, 0.50), true)
 			hero_metal.metallic_specular = 0.90
 			return hero_metal
+		"TowerGlass":
+			# 0.2.11: Building Model No.4 uses real curtain-wall glass
+			# over a dark occupied core, never the baked-window facade
+			# texture. The slight blue tint keeps the mullions, floor
+			# spandrels and interior blind/lit panels readable in day.
+			var tower_glass := _material("tower_glass", "", "", Color(0.30, 0.52, 0.62, 0.54), 0.07, 0.10)
+			tower_glass.metallic_specular = 1.0
+			tower_glass.clearcoat_enabled = true
+			tower_glass.clearcoat = 1.0
+			tower_glass.clearcoat_roughness = 0.05
+			tower_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			tower_glass.emission_enabled = true
+			tower_glass.emission = Color(1.0, 0.72, 0.44)
+			_register_night_material(tower_glass, 0.0, 0.06, 0.26)
+			return tower_glass
+		"TowerSpandrel":
+			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.20, 0.26), 0.28, 0.62, Vector3(0.35, 0.35, 0.35), true)
+			tower_spandrel.metallic_specular = 0.95
+			return tower_spandrel
+		"TowerStone":
+			var tower_stone := _material("tower_stone", "user_stone_tiles_beige.jpg", "", Color(0.68, 0.64, 0.57), 0.92, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			tower_stone.metallic_specular = 0.45
+			return tower_stone
+		"TowerTrim":
+			var tower_trim := _material("tower_trim", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.90, 0.87, 0.79), 0.62, 0.12, Vector3(0.26, 0.26, 0.26), true)
+			tower_trim.normal_scale = 0.85
+			tower_trim.metallic_specular = 0.62
+			return tower_trim
+		"TowerMetal":
+			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.18, 0.22, 0.26), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			tower_metal.metallic_specular = 0.92
+			return tower_metal
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -2813,13 +2845,20 @@ func _build_buildings() -> void:
 			))
 			_add_box_collider(position_value + Vector3(0.0, 4.42, 0.0), Vector3(19.20, 8.84, 15.24), yaw)
 		elif model == "glass_tower":
+			# Building Model No.4 is a finished district tower measuring
+			# exactly 34.00 x 34.00 m and 72.90 m high (GLB AABB centre
+			# x/z = 0.0 / 0.0). The old proxy was non-uniformly scaled
+			# 0.62-1.32x over these parcels; all eight fixed envelopes
+			# were re-audited against roads and neighbouring buildings
+			# with at least 6.9 m road clearance and no overlaps.
 			tower_items.append(building)
-			tower_transforms.append(make_transform(
+			tower_transforms.append(_centered_model_transform(
 				position_value,
 				yaw,
-				Vector3(w / 33.60, h / 70.71, d / 33.60)
+				Vector3.ONE,
+				Vector3.ZERO
 			))
-			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d), yaw)
+			_add_box_collider(position_value + Vector3(0.0, 36.45, 0.0), Vector3(34.00, 72.90, 34.00), yaw)
 		elif kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
 			# Building Model No.2 is likewise one finished architectural
 			# design: a semi-detached townhouse pair measuring exactly
@@ -2857,7 +2896,8 @@ func _build_buildings() -> void:
 	if not premium_villa_built:
 		for item in villa_items:
 			_add_generic_building(buildings_root, item)
-	if not _add_batched_model(buildings_root, "res://assets/buildings/glass_tower.glb", tower_transforms, "BlenderGlassTowers"):
+	var premium_glass_built := _add_batched_model(buildings_root, "res://assets/buildings/glass_tower.glb", tower_transforms, "BlenderGlassTowers")
+	if not premium_glass_built:
 		for item in tower_items:
 			_add_generic_building(buildings_root, item)
 	var premium_townhouse_built := _add_batched_model(buildings_root, "res://assets/buildings/townhouse.glb", townhouse_transforms, "BlenderTownhouses")
@@ -2894,6 +2934,16 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_hero_detail_pass"] = premium_hero_built
 	_enhancement_stats["premium_hero_material_pass"] = premium_hero_built and _materials.has("hero_plaster") and _materials.has("hero_stone") and _materials.has("hero_trim") and _materials.has("hero_wood") and _materials.has("hero_metal")
 	_enhancement_stats["premium_hero_site_pass"] = premium_hero_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
+	# The 0.2.11 smoke proves the same chain for Building Model No.4:
+	# the glass-tower GLB in the export must be the new fixed-scale
+	# curtain-wall tower with its Tower* materials resolved in Godot.
+	# The separate main-tower GLB remains the legacy 148 m landmark;
+	# No.4 is never stretched vertically to impersonate it.
+	_enhancement_stats["premium_glass_models"] = tower_transforms.size() if premium_glass_built else 0
+	_enhancement_stats["premium_glass_fixed_scale"] = premium_glass_built
+	_enhancement_stats["premium_glass_detail_pass"] = premium_glass_built
+	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
+	_enhancement_stats["premium_glass_site_pass"] = premium_glass_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
 
 
@@ -2985,6 +3035,41 @@ func _hero_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_
 		if clear:
 			return {"fits": true, "yaw": 0.0 if size.x > size.y else PI * 0.5, "rect": rect}
 	return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+
+
+## Building Model No.4 is a fixed 34.00 x 34.00 m design (72.90 m high,
+## GLB AABB centre x/z = 0.0 / 0.0). Tall infill parcels only receive it
+## when that complete plaza footprint clears roads, exported buildings,
+## terrain slope, every other infill parcel and every already-placed
+## fixed-scale model. Tighter tall parcels keep their authored generic
+## massing rather than squeezing the tower's podium and floor heights.
+func _glass_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
+	var centre := Vector2(_f(item, "x"), _f(item, "z"))
+	var size := Vector2(34.00, 34.00)
+	var rect := Rect2(centre - size * 0.5 - Vector2.ONE, size + Vector2(2.0, 2.0))
+	var heights: Array[float] = [height_at(centre.x, centre.y)]
+	for corner_offset_variant in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+		var corner_offset: Vector2 = corner_offset_variant
+		var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
+		var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
+		heights.append(height_at(corner_xz.x, corner_xz.y))
+		if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+			return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+	if heights.max() - heights.min() > 0.8:
+		return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+	for other_index in accepted.size():
+		if other_index == self_index:
+			continue
+		var other: Dictionary = accepted[other_index]
+		var other_size := Vector2(_f(other, "w", 18.0), _f(other, "d", 15.0))
+		var other_rect := Rect2(Vector2(_f(other, "x"), _f(other, "z")) - other_size * 0.5, other_size)
+		if rect.intersects(other_rect):
+			return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+	for placed_variant in placed_rects:
+		var placed_rect: Rect2 = placed_variant
+		if rect.intersects(placed_rect):
+			return {"fits": false, "yaw": 0.0, "rect": Rect2()}
+	return {"fits": true, "yaw": 0.0, "rect": rect}
 
 
 func _build_infill_buildings(parent: Node) -> void:
@@ -3169,12 +3254,17 @@ func _build_infill_buildings(parent: Node) -> void:
 		var hero_fit: Dictionary = {}
 		if h >= 15.0 and h < 34.0 and detail_roll < 0.72:
 			hero_fit = _hero_model_fit(item, item_index, accepted, fixed_model_placed_rects)
+		var glass_fit: Dictionary = {}
 		if h >= 34.0:
+			glass_fit = _glass_model_fit(item, item_index, accepted, fixed_model_placed_rects)
+		if bool(glass_fit.get("fits", false)):
 			model_kind = "glass"
-			infill_glass_transforms.append(make_transform(
+			fixed_model_placed_rects.append(glass_fit.get("rect", Rect2()))
+			infill_glass_transforms.append(_centered_model_transform(
 				base,
-				0.0,
-				Vector3(w / 33.60, h / 70.71, d / 33.60)
+				float(glass_fit.get("yaw", 0.0)),
+				Vector3.ONE,
+				Vector3.ZERO
 			))
 		elif bool(hero_fit.get("fits", false)):
 			model_kind = "hero"
@@ -3223,7 +3313,7 @@ func _build_infill_buildings(parent: Node) -> void:
 					Vector3(w + 0.55, 0.42, d + 0.55)
 				))
 			var unit_count := 0
-			if not uses_model or model_kind == "glass":
+			if not uses_model:
 				unit_count = 1 if detail_roll < 0.68 else 2
 			for unit_index in unit_count:
 				var local_x := (_hash01(item_index * 13 + unit_index * 7, item_index * 3 + 2) - 0.5) * maxf(w - 7.0, 1.0)
@@ -3233,13 +3323,15 @@ func _build_infill_buildings(parent: Node) -> void:
 					detail_roll * TAU,
 					Vector3(2.5, 1.05, 1.8)
 				))
-			if h > 24.0 and detail_roll > 0.62 and (not uses_model or model_kind == "glass"):
+			if h > 24.0 and detail_roll > 0.62 and not uses_model:
 				tank_transforms.append(make_transform(
 					base + Vector3(w * 0.24, h + 1.85, -d * 0.18),
 					0.0,
 					Vector3(3.4, 3.7, 3.4)
 				))
-		if model_kind == "hero":
+		if model_kind == "glass":
+			_add_box_collider(base + Vector3(0.0, 36.45, 0.0), Vector3(34.00, 72.90, 34.00), float(glass_fit.get("yaw", 0.0)))
+		elif model_kind == "hero":
 			_add_box_collider(base + Vector3(0.0, 14.279, 0.0), Vector3(32.40, 28.56, 24.60), float(hero_fit.get("yaw", 0.0)))
 		elif model_kind == "townhouse":
 			_add_box_collider(base + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), float(townhouse_fit.get("yaw", 0.0)))
@@ -3265,7 +3357,7 @@ func _build_infill_buildings(parent: Node) -> void:
 		var front_width := d if front_is_x_face else w
 		var front_yaw := PI * 0.5 if front_is_x_face else 0.0
 		var face_centre := base + outward * (half_extent + 0.07)
-		if h >= 6.5 and model_kind != "townhouse" and model_kind != "hero":
+		if h >= 6.5 and model_kind != "townhouse" and model_kind != "hero" and model_kind != "glass":
 			storefront_transforms.append(make_transform(
 				face_centre + Vector3(0.0, 1.45, 0.0),
 				front_yaw,
@@ -3281,7 +3373,7 @@ func _build_infill_buildings(parent: Node) -> void:
 				front_yaw,
 				Vector3(minf(front_width * 0.55, 11.0), 0.16, 1.35)
 			))
-		if h >= 12.0 and detail_roll < 0.72 and model_kind != "townhouse" and model_kind != "hero":
+		if h >= 12.0 and detail_roll < 0.72 and model_kind != "townhouse" and model_kind != "hero" and model_kind != "glass":
 			var lateral := Vector3(outward.z, 0.0, -outward.x)
 			var floor_y := 4.4
 			while floor_y < h - 1.4:
@@ -3386,8 +3478,15 @@ func _build_landmarks() -> void:
 		var r := _f(item, "r")
 		match kind:
 			"rt-tower":
-				var transform_value := make_transform(pos, 0.0, Vector3(38.0 / 30.0, h / 66.0, 38.0 / 30.0))
-				if not _add_batched_model(root, "res://assets/buildings/glass_tower.glb", [transform_value], "Main148mTower"):
+				# The 148 m landmark keeps its own legacy massing GLB
+				# until its dedicated detailed pass. Building Model
+				# No.4 must not be stretched 2.03x vertically here, and
+				# the denominators now match that legacy GLB's measured
+				# 33.60 x 70.71 m AABB instead of the old 30/66 m guess.
+				var transform_value := make_transform(pos, 0.0, Vector3(38.0 / 33.60, h / 70.71, 38.0 / 33.60))
+				var main_tower_built := _add_batched_model(root, "res://assets/buildings/main_tower.glb", [transform_value], "Main148mTower")
+				_enhancement_stats["main_tower_legacy_separate"] = main_tower_built
+				if not main_tower_built:
 					_add_box(root, Vector3(38.0, h, 38.0), pos + Vector3(0.0, h * 0.5, 0.0), glass)
 				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(38.0, h, 38.0))
 			"rt-arch":
