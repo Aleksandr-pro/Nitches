@@ -1146,6 +1146,44 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.18, 0.22, 0.26), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
 			tower_metal.metallic_specular = 0.92
 			return tower_metal
+		"MainGlass":
+			# 0.2.13: Building Model No.5 is the sculptural flagship.
+			# Its capsule curtain wall is geometry over an occupied core;
+			# this clearcoat glass must stay texture-free so the twisting
+			# oval silhouette, spandrels and fins remain architectural.
+			var main_glass := _material("main_glass", "", "", Color(0.32, 0.56, 0.65, 0.52), 0.07, 0.12)
+			main_glass.metallic_specular = 1.0
+			main_glass.clearcoat_enabled = true
+			main_glass.clearcoat = 1.0
+			main_glass.clearcoat_roughness = 0.05
+			main_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			main_glass.emission_enabled = true
+			main_glass.emission = Color(1.0, 0.72, 0.44)
+			_register_night_material(main_glass, 0.0, 0.06, 0.26)
+			return main_glass
+		"MainSpandrel":
+			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.08, 0.16, 0.22), 0.30, 0.62, Vector3(0.35, 0.35, 0.35), true)
+			main_spandrel.metallic_specular = 0.95
+			return main_spandrel
+		"MainStone":
+			var main_stone := _material("main_stone", "user_stone_tiles_beige.jpg", "", Color(0.74, 0.69, 0.61), 0.90, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			main_stone.metallic_specular = 0.48
+			return main_stone
+		"MainTrim":
+			var main_trim := _material("main_trim", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.80, 0.62, 0.34), 0.38, 0.55, Vector3(0.35, 0.35, 0.35), true)
+			main_trim.metallic_specular = 0.92
+			return main_trim
+		"MainMetal":
+			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.18, 0.22, 0.26), 0.42, 0.72, Vector3(0.48, 0.48, 0.48), true)
+			main_metal.metallic_specular = 0.92
+			return main_metal
+		"MainWater":
+			var main_water := _material("main_water", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.38, 0.68, 0.78), 0.08, 0.0, Vector3(0.45, 0.45, 0.45), true)
+			main_water.metallic_specular = 1.0
+			main_water.clearcoat_enabled = true
+			main_water.clearcoat = 1.0
+			main_water.clearcoat_roughness = 0.06
+			return main_water
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -2937,8 +2975,8 @@ func _build_buildings() -> void:
 	# The 0.2.11 smoke proves the same chain for Building Model No.4:
 	# the glass-tower GLB in the export must be the new fixed-scale
 	# curtain-wall tower with its Tower* materials resolved in Godot.
-	# The separate main-tower GLB remains the legacy 148 m landmark;
-	# No.4 is never stretched vertically to impersonate it.
+	# The separate main-tower GLB is Building Model No.5; No.4 is
+	# never stretched vertically to impersonate the 148 m flagship.
 	_enhancement_stats["premium_glass_models"] = tower_transforms.size() if premium_glass_built else 0
 	_enhancement_stats["premium_glass_fixed_scale"] = premium_glass_built
 	_enhancement_stats["premium_glass_detail_pass"] = premium_glass_built
@@ -3478,17 +3516,22 @@ func _build_landmarks() -> void:
 		var r := _f(item, "r")
 		match kind:
 			"rt-tower":
-				# The 148 m landmark keeps its own legacy massing GLB
-				# until its dedicated detailed pass. Building Model
-				# No.4 must not be stretched 2.03x vertically here, and
-				# the denominators now match that legacy GLB's measured
-				# 33.60 x 70.71 m AABB instead of the old 30/66 m guess.
-				var transform_value := make_transform(pos, 0.0, Vector3(38.0 / 33.60, h / 70.71, 38.0 / 33.60))
+				# Building Model No.5 is a finished flagship measuring
+				# exactly 50.00 x 42.00 m and 148.00 m high (GLB AABB
+				# centre x/z = 0.0 / 0.0). It is placed at scale 1.0:
+				# the old 70.71 m square proxy and its 2.09x vertical
+				# stretch are gone, so the podium doors, 3.42 m floors,
+				# oval taper, 30-degree twist and crown keep real sizes.
+				var transform_value := _centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)
 				var main_tower_built := _add_batched_model(root, "res://assets/buildings/main_tower.glb", [transform_value], "Main148mTower")
-				_enhancement_stats["main_tower_legacy_separate"] = main_tower_built
+				_enhancement_stats["premium_main_tower_built"] = main_tower_built
+				_enhancement_stats["premium_main_tower_fixed_scale"] = main_tower_built
+				_enhancement_stats["premium_main_tower_detail_pass"] = main_tower_built
+				_enhancement_stats["premium_main_tower_material_pass"] = main_tower_built and _materials.has("main_glass") and _materials.has("main_spandrel") and _materials.has("main_stone") and _materials.has("main_trim") and _materials.has("main_metal") and _materials.has("main_water")
+				_enhancement_stats["premium_main_tower_site_pass"] = main_tower_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 				if not main_tower_built:
-					_add_box(root, Vector3(38.0, h, 38.0), pos + Vector3(0.0, h * 0.5, 0.0), glass)
-				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(38.0, h, 38.0))
+					_add_box(root, Vector3(50.0, h, 42.0), pos + Vector3(0.0, h * 0.5, 0.0), glass)
+				_add_box_collider(pos + Vector3(0.0, 74.0, 0.0), Vector3(50.00, 148.00, 42.00))
 			"rt-arch":
 				for side in [-1.0, 1.0]:
 					var pillar_pos := pos + Vector3(19.0 * side, h * 0.5, 0.0)
