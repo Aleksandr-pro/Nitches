@@ -19,7 +19,7 @@ Props:
   * townhouse.glb     Building Model No.2: fixed-scale semi-detached townhouse pair
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
   * glass_tower.glb   Building Model No.4: fixed-scale glass district tower
-  * main_tower.glb    legacy 148 m landmark massing pending its own pass
+  * main_tower.glb    Building Model No.5: fixed-scale sculptural 148 m flagship tower
 """
 import math
 import os
@@ -118,6 +118,12 @@ def standard_mats():
     mat("TowerStone", (0.52, 0.49, 0.43), roughness=0.92, metallic=0.0)
     mat("TowerTrim", (0.78, 0.76, 0.70), roughness=0.55, metallic=0.25)
     mat("TowerMetal", (0.10, 0.12, 0.14), roughness=0.42, metallic=0.70)
+    mat("MainGlass", (0.09, 0.27, 0.34), roughness=0.07, metallic=0.18)
+    mat("MainSpandrel", (0.06, 0.10, 0.15), roughness=0.30, metallic=0.55)
+    mat("MainStone", (0.62, 0.58, 0.50), roughness=0.90, metallic=0.0)
+    mat("MainTrim", (0.78, 0.68, 0.48), roughness=0.38, metallic=0.45)
+    mat("MainMetal", (0.12, 0.14, 0.16), roughness=0.40, metallic=0.75)
+    mat("MainWater", (0.05, 0.28, 0.36), roughness=0.05, metallic=0.10)
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -1828,70 +1834,392 @@ def build_glass_tower():
         box("tower_rear_hedge", rear_hedge_x, 16.35, 0.60, 2.60, 0.55, 0.52, hedge, bevel=0.055)
 
 # --------------------------------------------------------------------------- #
-# Legacy 148 m landmark massing, preserved until its own detailed pass.
-# It is deliberately separate so Building Model No.4 is never stretched
-# vertically into the main tower; only the landmark transform scales it.
+# Building Model No.5 — detailed fixed-scale 148 m main tower.
+# Planned envelope: 50.00 x 42.00 m, exactly 148.00 m high. The old
+# square finned proxy scaled from the district-tower file is replaced by
+# an original tapered, gently twisting oval-blade shaft over a rotating
+# three-tier landscaped podium. Real floor slabs, capsule curtain-wall
+# segments, mullions, fins, sky gardens and an open crown carry the form;
+# no baked-window facade texture is used on the new flagship.
 # --------------------------------------------------------------------------- #
-def build_main_tower_legacy():
-    accent = MATS["FacadeAccent"]
-    glass = MATS["FacadeGlass"]
-    pane = MATS["PropsGlass"]
+def build_main_tower():
+    glass = MATS["MainGlass"]
+    spandrel = MATS["MainSpandrel"]
+    stone = MATS["MainStone"]
+    trim = MATS["MainTrim"]
+    main_metal = MATS["MainMetal"]
+    water = MATS["MainWater"]
+    core = MATS["VillaInterior"]
+    curtain = MATS["VillaCurtain"]
+    granite = MATS["VillaGranite"]
+    frame = MATS["WindowFrame"]
+    pavement = MATS["VillaPavement"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
+    mulch = MATS["VillaMulch"]
     metal = MATS["PropsMetal"]
     dark = MATS["RoofDark"]
+    glow = MATS["LampGlow"]
+    wood = MATS["VillaWood"]
 
-    box("plinth", 0, 0, 0.4, 30.0, 30.0, 0.8, dark, bevel=0.03)
-    box("podium", 0, 0, 3.2, 29.0, 29.0, 4.8, accent, bevel=0.05)
-    for sy in (-14.56, 14.56):
-        box("podium_glass", 0, sy, 2.4, 25.0, 0.08, 3.2, pane)
-        for x in (-9, -3, 3, 9):
-            box("podium_mullion", x, sy, 2.4, 0.12, 0.12, 3.2, metal)
-    for sx in (-14.56, 14.56):
-        box("podium_glass", sx, 0, 2.4, 0.08, 25.0, 3.2, pane)
+    def rotate_xy(cx, cy, lx, ly, yaw):
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        return (cx + c * lx - s * ly, cy + s * lx + c * ly)
 
-    # two shaft tiers with curtain-wall floor bands and vertical fins
-    box("shaft_low", 0, 0, 24.1, 25.0, 25.0, 37.0, glass, bevel=0.05)
-    box("shaft_high", 0, 0, 52.6, 20.5, 20.5, 20.0, glass, bevel=0.05)
-    for z in range(9, 43, 3):
-        box("floor_band", 0, 0, z, 25.25, 25.25, 0.17, metal)
-    for z in range(46, 62, 3):
-        box("floor_band", 0, 0, z, 20.75, 20.75, 0.17, metal)
-    for face in range(4):
-        for t in (-8.5, -4.25, 0, 4.25, 8.5):
-            if face == 0:
-                box("fin_low", t, -12.72, 24.1, 0.2, 0.42, 36.2, metal)
-                box("fin_high", t * 0.8, -10.47, 52.6, 0.18, 0.38, 19.2, metal)
-            elif face == 1:
-                box("fin_low", t, 12.72, 24.1, 0.2, 0.42, 36.2, metal)
-                box("fin_high", t * 0.8, 10.47, 52.6, 0.18, 0.38, 19.2, metal)
-            elif face == 2:
-                box("fin_low", -12.72, t, 24.1, 0.42, 0.2, 36.2, metal)
-                box("fin_high", -10.47, t * 0.8, 52.6, 0.38, 0.18, 19.2, metal)
-            else:
-                box("fin_low", 12.72, t, 24.1, 0.42, 0.2, 36.2, metal)
-                box("fin_high", 10.47, t * 0.8, 52.6, 0.38, 0.18, 19.2, metal)
+    def local_box(name, cx, cy, cz, lx, ly, dx, dy, dz, material, yaw=0.0, extra_yaw=0.0, bevel=0.0):
+        x, y = rotate_xy(cx, cy, lx, ly, yaw)
+        obj = box(name, x, y, cz, dx, dy, dz, material, bevel=bevel)
+        obj.rotation_euler = (0.0, 0.0, yaw + extra_yaw)
+        return obj
 
-    # setback terrace, crown, roof plant and helipad
-    box("setback_slab", 0, 0, 42.85, 26.2, 26.2, 0.45, accent)
-    box("crown_slab", 0, 0, 65.7, 22.2, 22.2, 0.55, metal, bevel=0.04)
-    for x in (-10.3, 10.3):
-        for y in (-10.3, 10.3):
-            box("crown_post", x, y, 64.2, 0.45, 0.45, 2.7, metal)
-    box("roof_plant", -4.5, 3.0, 66.65, 5.5, 3.6, 1.35, accent, bevel=0.03)
-    cyl("helipad", 4.6, -3.2, 66.05, 3.3, 0.16, dark, vertices=28)
-    cyl("helipad_ring", 4.6, -3.2, 66.15, 2.45, 0.05, metal, vertices=28)
-    cyl("mast", 0, 7.5, 68.2, 0.09, 4.5, metal, vertices=10)
-    box("beacon", 0, 7.5, 70.55, 0.32, 0.32, 0.32, MATS["LampGlow"])
+    def capsule_volume(name, cx, cy, cz, length, width, height, material, yaw=0.0, vertices=18):
+        straight = max(length - width, 0.20)
+        local_box(name + "_body", cx, cy, cz, 0.0, 0.0, straight, width, height, material, yaw=yaw)
+        for side in (-1.0, 1.0):
+            ex, ey = rotate_xy(cx, cy, side * straight * 0.5, 0.0, yaw)
+            cyl(name + "_cap", ex, ey, cz, width * 0.5, height, material, vertices=vertices)
 
-    # four entrance canopies and podium roof boxes
-    for sy, sign in ((-14.5, -1), (14.5, 1)):
-        box("canopy", 0, sy + sign * 1.15, 4.35, 8.0, 2.3, 0.2, metal, bevel=0.03)
-        for cx in (-3.6, 3.6):
-            cyl("canopy_col", cx, sy + sign * 2.05, 2.15, 0.08, 4.3, metal)
-    for sx, sign in ((-14.5, -1), (14.5, 1)):
-        box("canopy", sx + sign * 1.15, 0, 4.35, 2.3, 8.0, 0.2, metal, bevel=0.03)
-    for x, y in ((-9, 9), (8, -8), (10, 7)):
-        box("podium_ac", x, y, 6.05, 2.0, 1.3, 0.85, metal, bevel=0.02)
+    def shaft_profile(t):
+        # A smooth architectural taper: the oval blade loses roughly a
+        # third of its plan while turning 30 degrees and drifting in a
+        # shallow S-curve. Every real floor below samples this profile.
+        taper = t ** 0.88
+        length = 38.0 - 13.5 * taper
+        width = 24.0 - 8.5 * (t ** 0.92)
+        yaw = -0.21 + 0.53 * t
+        cx = -1.6 + 4.2 * t + 0.55 * math.sin(math.pi * t)
+        cy = 0.9 - 2.2 * t - 0.35 * math.sin(math.pi * t)
+        return (cx, cy, length, width, yaw)
 
+    def perimeter_mullions(cx, cy, length, width, yaw, z_center, height, long_offsets, material):
+        straight = max(length - width, 0.20)
+        for face_sign in (-1.0, 1.0):
+            for ratio in long_offsets:
+                local_box(
+                    "main_podium_mullion", cx, cy, z_center,
+                    ratio * straight, face_sign * (width * 0.5 + 0.055),
+                    0.10, 0.15, height, material, yaw=yaw,
+                )
+        for end_sign in (-1.0, 1.0):
+            cap_x = end_sign * straight * 0.5
+            base_angle = 0.0 if end_sign > 0.0 else math.pi
+            for angle_offset in (-0.95, -0.48, 0.0, 0.48, 0.95):
+                angle = base_angle + angle_offset
+                lx = cap_x + math.cos(angle) * (width * 0.5 + 0.055)
+                ly = math.sin(angle) * (width * 0.5 + 0.055)
+                local_box(
+                    "main_podium_arc_mullion", cx, cy, z_center,
+                    lx, ly, 0.15, 0.10, height, material,
+                    yaw=yaw, extra_yaw=angle,
+                )
+
+    # Rounded plaza parcel. The architectural site itself is an oval
+    # capsule rather than another square slab.
+    capsule_volume("main_site_plinth", 0.0, 0.0, 0.18, 50.00, 42.00, 0.36, granite, vertices=28)
+    capsule_volume("main_site_paving_inset", 0.0, 0.0, 0.385, 48.60, 40.60, 0.045, pavement, vertices=28)
+
+    # Three rotating podium terraces. Their yaws lead into the shaft's
+    # base angle, so the flagship grows out of the podium instead of
+    # sitting on an unrelated rectangular block.
+    podium_tiers = (
+        (46.00, 36.00, 0.36, 4.55, 0.00, 1.00, 4.00),
+        (43.00, 32.50, 2.40, 5.90, -0.10, 3.05, 5.35),
+        (40.50, 29.00, 4.20, 9.00, -0.21, 5.15, 7.75),
+    )
+    for tier_index, (length, width, z_bottom, z_top, yaw, glass_bottom, glass_top) in enumerate(podium_tiers):
+        z_center = (z_bottom + z_top) * 0.5
+        capsule_volume(
+            "main_podium_tier_%d" % tier_index, 0.0, 0.0, z_center,
+            length, width, z_top - z_bottom, stone, yaw=yaw, vertices=24,
+        )
+        glass_center = (glass_bottom + glass_top) * 0.5
+        glass_height = glass_top - glass_bottom
+        capsule_volume(
+            "main_podium_core_band_%d" % tier_index, 0.0, 0.0, glass_center,
+            length + 0.08, width + 0.08, glass_height, core, yaw=yaw, vertices=24,
+        )
+        capsule_volume(
+            "main_podium_glass_band_%d" % tier_index, 0.0, 0.0, glass_center,
+            length + 0.17, width + 0.17, glass_height, glass, yaw=yaw, vertices=24,
+        )
+        perimeter_mullions(
+            0.0, 0.0, length + 0.17, width + 0.17, yaw,
+            glass_center, glass_height,
+            (-0.44, -0.30, -0.15, 0.0, 0.15, 0.30, 0.44), frame,
+        )
+        capsule_volume(
+            "main_podium_cornice_%d" % tier_index, 0.0, 0.0, z_top + 0.06,
+            length + 0.70, width + 0.70, 0.24, trim, yaw=yaw, vertices=24,
+        )
+
+    # Landscaped podium roofs in the exposed corner/end rings.
+    for planter_x, planter_y in ((-19.0, -13.0), (19.0, -13.0), (-19.0, 13.0), (19.0, 13.0)):
+        box("main_podium_corner_planter", planter_x, planter_y, 4.86, 2.60, 1.15, 0.52, granite)
+        box("main_podium_corner_soil", planter_x, planter_y, 5.14, 2.38, 0.94, 0.045, mulch)
+        box("main_podium_corner_hedge", planter_x, planter_y, 5.34, 2.24, 0.82, 0.34, hedge, bevel=0.055)
+    for end_sign in (-1.0, 1.0):
+        local_box("main_mid_podium_planter", 0.0, 0.0, 6.22, end_sign * 18.1, 0.0, 2.45, 1.10, 0.50, granite, yaw=-0.10)
+        local_box("main_mid_podium_hedge", 0.0, 0.0, 6.58, end_sign * 18.1, 0.0, 2.15, 0.82, 0.32, hedge, yaw=-0.10, bevel=0.050)
+
+    # Grand south entrance on the flat central portion of the lower
+    # capsule: portal fins, lobby glass, blade canopy, rods and steps.
+    box("main_lobby_interior", 0.0, -18.10, 3.30, 8.80, 0.12, 5.30, core)
+    box("main_lobby_glass", 0.0, -18.20, 3.30, 8.80, 0.07, 5.30, glass)
+    for mullion_x in (-3.30, -1.10, 1.10, 3.30):
+        box("main_lobby_mullion", mullion_x, -18.265, 3.30, 0.09, 0.07, 5.30, frame)
+    box("main_lobby_transom", 0.0, -18.265, 4.72, 8.80, 0.07, 0.09, frame)
+    for portal_side in (-1.0, 1.0):
+        portal = box("main_entry_portal_fin", portal_side * 5.35, -18.05, 4.45, 0.82, 1.05, 8.10, trim, bevel=0.020)
+        portal.rotation_euler = (0.0, 0.0, portal_side * -0.10)
+        cyl("main_lobby_door_handle", portal_side * 0.38, -18.30, 1.55, 0.026, 1.00, metal, vertices=10)
+    box("main_entry_header", 0.0, -18.24, 6.18, 11.40, 0.34, 0.62, trim)
+    capsule_volume("main_entry_canopy", 0.0, -18.65, 5.78, 13.00, 3.20, 0.24, granite, vertices=18)
+    capsule_volume("main_entry_canopy_soffit", 0.0, -18.65, 5.63, 12.45, 2.75, 0.055, wood, vertices=18)
+    for column_side in (-1.0, 1.0):
+        column_x = column_side * 5.20
+        box("main_entry_column_base", column_x, -19.65, 0.58, 0.42, 0.42, 0.44, granite)
+        cyl("main_entry_column", column_x, -19.65, 3.10, 0.125, 4.95, main_metal, vertices=14)
+        tube_between("main_entry_tie_rod", (column_x, -19.65, 5.55), (column_side * 5.35, -18.05, 8.30), 0.026, 0.026, main_metal, vertices=8)
+    for step_y, step_top, step_width in ((-18.55, 0.80, 8.20), (-19.15, 0.62, 7.70), (-19.72, 0.47, 7.20)):
+        box("main_entry_step", 0.0, step_y, (0.36 + step_top) * 0.5, step_width, 0.58, step_top - 0.36, pavement)
+    box("main_sign_band", 0.0, -18.31, 6.78, 8.60, 0.16, 0.72, main_metal)
+    box("main_sign_glow", 0.0, -18.405, 6.78, 7.95, 0.035, 0.27, glow)
+    box("main_address_monolith", -7.65, -18.75, 1.18, 0.62, 0.48, 1.58, granite, bevel=0.020)
+    box("main_address_inset", -7.65, -19.015, 1.28, 0.38, 0.035, 0.92, metal)
+
+    # Rear service entrance and an angled garage portal on the east cap.
+    box("main_service_portal", 2.40, 18.10, 2.05, 4.60, 0.20, 3.35, trim)
+    box("main_service_door", 2.40, 18.20, 1.98, 4.05, 0.10, 3.00, main_metal, bevel=0.010)
+    for seam_z in (1.08, 1.94, 2.80):
+        box("main_service_door_seam", 2.40, 18.265, seam_z, 3.92, 0.025, 0.045, frame)
+    box("main_loading_dock", 2.40, 19.35, 0.58, 5.30, 2.05, 0.44, pavement)
+    box("main_service_canopy", 2.40, 19.05, 3.96, 5.30, 1.45, 0.16, granite)
+    garage_angle = 0.61
+    garage_cap_x = 5.0
+    for radius, dz, material, name in ((18.12, 3.30, trim, "main_garage_portal"), (18.22, 3.00, main_metal, "main_garage_door")):
+        gx = garage_cap_x + math.cos(garage_angle) * radius
+        gy = math.sin(garage_angle) * radius
+        local_box(name, 0.0, 0.0, 1.95, gx, gy, 4.85, 0.16, dz, material, extra_yaw=garage_angle + math.pi * 0.5)
+    for bin_x in (-5.80, -3.75):
+        box("main_waste_bin", bin_x, 18.65, 0.92, 1.75, 0.95, 1.08, dark, bevel=0.025)
+        box("main_waste_bin_lid", bin_x, 18.65, 1.50, 1.83, 1.00, 0.09, main_metal)
+
+    shaft_bottom = 9.00
+    floor_count = 40
+    floor_h = 3.42
+    shaft_top = shaft_bottom + floor_count * floor_h
+
+    # Real floor plates first: every boundary samples the smooth oval
+    # profile, with a champagne trim plate every five floors.
+    for boundary_index in range(floor_count + 1):
+        t = boundary_index / float(floor_count)
+        cx, cy, length, width, yaw = shaft_profile(t)
+        slab_z = shaft_bottom + boundary_index * floor_h
+        capsule_volume(
+            "main_floor_spandrel", cx, cy, slab_z,
+            length + 0.45, width + 0.45, 0.26, spandrel,
+            yaw=yaw, vertices=18,
+        )
+        if boundary_index % 5 == 0 and boundary_index not in (0, floor_count):
+            capsule_volume(
+                "main_five_floor_trim", cx, cy, slab_z + 0.20,
+                length + 0.82, width + 0.82, 0.11, trim,
+                yaw=yaw, vertices=18,
+            )
+
+    # Occupied core and glass skin are rebuilt for every floor so the
+    # taper/twist is actual geometry, not a texture or a single scaled box.
+    for floor_index in range(floor_count):
+        t = (floor_index + 0.5) / float(floor_count)
+        cx, cy, length, width, yaw = shaft_profile(t)
+        floor_center = shaft_bottom + (floor_index + 0.5) * floor_h
+        capsule_volume(
+            "main_shaft_core", cx, cy, floor_center,
+            length - 0.35, width - 0.35, floor_h, core,
+            yaw=yaw, vertices=18,
+        )
+        capsule_volume(
+            "main_shaft_glass", cx, cy, floor_center,
+            length, width, floor_h - 0.18, glass,
+            yaw=yaw, vertices=18,
+        )
+
+        straight = max(length - width, 0.20)
+        for face_index, face_sign in enumerate((-1.0, 1.0)):
+            pattern = (floor_index * 3 + face_index * 2 + 1) % 5
+            panel_specs = ((-0.30, 0.34), (0.28, 0.30)) if pattern in (0, 1) else ((-0.08, 0.62),)
+            for panel_ratio, panel_width_ratio in panel_specs:
+                panel_material = glow if pattern == 0 else (curtain if pattern in (1, 2) else spandrel)
+                local_box(
+                    "main_interior_panel", cx, cy, floor_center + 0.10,
+                    panel_ratio * straight, face_sign * (width * 0.5 - 0.095),
+                    panel_width_ratio * straight, 0.032, 1.10,
+                    panel_material, yaw=yaw,
+                )
+            # A stronger vertical blade at the centre of each long face.
+            local_box(
+                "main_long_face_fin", cx, cy, floor_center,
+                0.0, face_sign * (width * 0.5 + 0.24),
+                0.34, 0.52, floor_h, main_metal, yaw=yaw,
+            )
+        for end_sign in (-1.0, 1.0):
+            local_box(
+                "main_end_fin", cx, cy, floor_center,
+                end_sign * (length * 0.5 + 0.18), 0.0,
+                0.56, 0.34, floor_h, main_metal, yaw=yaw,
+            )
+            local_box(
+                "main_end_light", cx, cy, floor_center,
+                end_sign * (length * 0.5 + 0.49), 0.0,
+                0.10, 0.10, floor_h * 0.94, glow, yaw=yaw,
+            )
+            if floor_index % 3 == 0:
+                cap_x = end_sign * straight * 0.5
+                base_angle = 0.0 if end_sign > 0.0 else math.pi
+                angle = base_angle + (0.38 if (floor_index // 3) % 2 == 0 else -0.38)
+                lx = cap_x + math.cos(angle) * (width * 0.5 - 0.095)
+                ly = math.sin(angle) * (width * 0.5 - 0.095)
+                local_box(
+                    "main_curved_interior_panel", cx, cy, floor_center + 0.08,
+                    lx, ly, 2.05, 0.032, 1.02,
+                    curtain if floor_index % 6 == 0 else glow,
+                    yaw=yaw, extra_yaw=angle + math.pi * 0.5,
+                )
+
+    # Two-floor mullion segments follow the same sampled profile without
+    # turning every office bay into a separate full-height object.
+    for segment_index in range(floor_count // 2):
+        t = (segment_index + 0.5) / float(floor_count // 2)
+        cx, cy, length, width, yaw = shaft_profile(t)
+        segment_center = shaft_bottom + (segment_index + 0.5) * floor_h * 2.0
+        perimeter_mullions(
+            cx, cy, length, width, yaw, segment_center,
+            floor_h * 2.0 - 0.22,
+            (-0.44, -0.22, 0.0, 0.22, 0.44), frame,
+        )
+
+    # Two sky gardens interrupt the glass shaft with planted terraces.
+    for boundary_index in (13, 26):
+        t = boundary_index / float(floor_count)
+        cx, cy, length, width, yaw = shaft_profile(t)
+        terrace_z = shaft_bottom + boundary_index * floor_h
+        capsule_volume(
+            "main_sky_garden_slab", cx, cy, terrace_z,
+            length + 2.55, width + 2.55, 0.34, trim,
+            yaw=yaw, vertices=20,
+        )
+        straight = max(length - width, 0.20)
+        for face_sign in (-1.0, 1.0):
+            local_box(
+                "main_sky_garden_rail", cx, cy, terrace_z + 0.58,
+                0.0, face_sign * (width * 0.5 + 1.20),
+                straight + 1.65, 0.055, 0.76, glass, yaw=yaw,
+            )
+            for planter_ratio in (-0.32, 0.0, 0.32):
+                local_box(
+                    "main_sky_garden_planter", cx, cy, terrace_z + 0.38,
+                    planter_ratio * straight, face_sign * (width * 0.5 + 0.74),
+                    1.70, 0.55, 0.44, granite, yaw=yaw,
+                )
+                local_box(
+                    "main_sky_garden_hedge", cx, cy, terrace_z + 0.70,
+                    planter_ratio * straight, face_sign * (width * 0.5 + 0.74),
+                    1.48, 0.38, 0.28, hedge, yaw=yaw, bevel=0.040,
+                )
+        for end_sign in (-1.0, 1.0):
+            cap_x = end_sign * straight * 0.5
+            base_angle = 0.0 if end_sign > 0.0 else math.pi
+            for angle_offset in (-0.62, 0.0, 0.62):
+                angle = base_angle + angle_offset
+                rail_radius = width * 0.5 + 1.20
+                lx = cap_x + math.cos(angle) * rail_radius
+                ly = math.sin(angle) * rail_radius
+                local_box(
+                    "main_sky_garden_arc_rail", cx, cy, terrace_z + 0.58,
+                    lx, ly, 1.55, 0.055, 0.76, glass,
+                    yaw=yaw, extra_yaw=angle + math.pi * 0.5,
+                )
+
+    # Open crown: observation capsule, eight converging braces, end fins
+    # and a short spire. The beacon top is the exact 148.00 m datum.
+    top_cx, top_cy, top_length, top_width, top_yaw = shaft_profile(1.0)
+    capsule_volume(
+        "main_crown_slab", top_cx, top_cy, shaft_top + 0.16,
+        top_length + 2.05, top_width + 2.05, 0.34, trim,
+        yaw=top_yaw, vertices=20,
+    )
+    capsule_volume(
+        "main_crown_core", top_cx, top_cy, shaft_top + 0.95,
+        top_length - 3.90, top_width - 2.65, 1.55, spandrel,
+        yaw=top_yaw, vertices=20,
+    )
+    capsule_volume(
+        "main_crown_observation_glass", top_cx, top_cy, shaft_top + 1.00,
+        top_length - 3.55, top_width - 2.30, 0.92, glass,
+        yaw=top_yaw, vertices=20,
+    )
+    top_straight = max(top_length - top_width, 0.20)
+    crown_points = (
+        (-top_length * 0.5, 0.0),
+        (-top_straight * 0.5, -top_width * 0.5),
+        (0.0, -top_width * 0.5),
+        (top_straight * 0.5, -top_width * 0.5),
+        (top_length * 0.5, 0.0),
+        (top_straight * 0.5, top_width * 0.5),
+        (0.0, top_width * 0.5),
+        (-top_straight * 0.5, top_width * 0.5),
+    )
+    for lx, ly in crown_points:
+        start_x, start_y = rotate_xy(top_cx, top_cy, lx, ly, top_yaw)
+        end_x, end_y = rotate_xy(top_cx, top_cy, lx * 0.38, ly * 0.38, top_yaw)
+        tube_between(
+            "main_crown_brace",
+            (start_x, start_y, shaft_top + 0.30),
+            (end_x, end_y, shaft_top + 1.78),
+            0.16, 0.085, main_metal, vertices=10,
+        )
+        box("main_crown_brace_light", end_x, end_y, shaft_top + 1.84, 0.20, 0.20, 0.10, glow)
+    for end_sign in (-1.0, 1.0):
+        local_box(
+            "main_crown_end_fin", top_cx, top_cy, shaft_top + 1.05,
+            end_sign * (top_length * 0.5 + 0.28), 0.0,
+            0.52, 0.42, 1.95, main_metal, yaw=top_yaw,
+        )
+    capsule_volume(
+        "main_crown_ring", top_cx, top_cy, shaft_top + 1.82,
+        top_length * 0.52, top_width * 0.58, 0.20, trim,
+        yaw=top_yaw, vertices=20,
+    )
+    cyl("main_spire", top_cx, top_cy, 147.18, 0.085, 1.48, main_metal, vertices=10)
+    box("main_beacon", top_cx, top_cy, 147.96, 0.16, 0.16, 0.08, glow)
+
+    # Forecourt water mirrors, sculpture, flags, planters and lighting.
+    for water_side in (-1.0, 1.0):
+        water_x = water_side * 8.55
+        box("main_reflecting_pool_basin", water_x, -18.95, 0.43, 5.15, 1.25, 0.16, granite)
+        box("main_reflecting_pool", water_x, -18.95, 0.53, 4.88, 1.02, 0.045, water)
+        cyl("main_flag_pole", water_side * 12.35, -18.55, 3.45, 0.045, 6.30, metal, vertices=10)
+        box("main_flag_banner", water_side * 12.35 + (0.42 if water_side < 0.0 else -0.42), -18.55, 5.85, 0.78, 0.035, 1.45, spandrel)
+    cyl("main_sculpture_base", -17.00, -15.20, 0.78, 0.78, 0.82, granite, vertices=18)
+    sphere("main_forecourt_sculpture", -17.00, -15.20, 2.05, 2.05, 2.05, 2.35, trim)
+    for planter_x in (-13.0, 13.0):
+        box("main_front_planter", planter_x, -17.65, 0.64, 2.35, 0.80, 0.56, granite)
+        box("main_front_planter_soil", planter_x, -17.65, 0.94, 2.12, 0.60, 0.045, mulch)
+        box("main_front_planter_hedge", planter_x, -17.65, 1.11, 1.98, 0.50, 0.34, hedge, bevel=0.045)
+        bench_x = planter_x * 0.91
+        box("main_front_bench", bench_x, -18.72, 0.62, 2.25, 0.48, 0.10, wood)
+        box("main_front_bench_base", bench_x, -18.72, 0.46, 1.82, 0.34, 0.24, granite)
+    for bollard_x in (-10.0, -7.0, -4.0, 4.0, 7.0, 10.0):
+        cyl("main_front_bollard", bollard_x, -19.72, 0.72, 0.085, 0.72, main_metal, vertices=12)
+        box("main_front_bollard_light", bollard_x, -19.72, 1.10, 0.10, 0.10, 0.045, glow)
+    for lawn_side in (-1.0, 1.0):
+        box("main_side_lawn", lawn_side * 24.00, 0.0, 0.43, 1.20, 7.00, 0.055, lawn)
+        for hedge_y in (-2.40, 2.40):
+            box("main_side_hedge", lawn_side * 24.00, hedge_y, 0.68, 0.72, 2.20, 0.48, hedge, bevel=0.055)
+    for rear_planter_x in (-10.0, -5.0, 8.0, 11.0):
+        box("main_rear_planter", rear_planter_x, 19.05, 0.62, 2.25, 0.70, 0.52, granite)
+        box("main_rear_hedge", rear_planter_x, 19.05, 0.99, 1.95, 0.48, 0.32, hedge, bevel=0.045)
 
 # --------------------------------------------------------------------------- #
 def main():
@@ -1908,7 +2236,7 @@ def main():
         (build_townhouse, "townhouse.glb"),
         (build_villa, "villa.glb"),
         (build_glass_tower, "glass_tower.glb"),
-        (build_main_tower_legacy, "main_tower.glb"),
+        (build_main_tower, "main_tower.glb"),
     ):
         reset_scene()
         standard_mats()
