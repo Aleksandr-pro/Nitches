@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, syncScript, blenderScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -31,6 +31,9 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('shaders/foliage_wind.gdshader'),
   readText('shaders/curtain_wall_glass.gdshader'),
   readText('shaders/curtain_wall_facade.gdshader'),
+  readText('shaders/concrete_surface.gdshader'),
+  readFile('scripts/sync-native-assets.mjs', 'utf8'),
+  readFile('blender/build_props.py', 'utf8'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -43,19 +46,33 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=19'), 'Native 0.2.16 must bump Android versionCode to 19');
-assert(preset.includes('version/name="0.2.16-native-alpha"'), 'Native version name must be 0.2.16-native-alpha');
+assert(preset.includes('version/code=20'), 'Native 0.2.17 must bump Android versionCode to 20');
+assert(preset.includes('version/name="0.2.17-native-alpha"'), 'Native version name must be 0.2.17-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}`;
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
 assert(!curtainWallFacadeShader.includes('\n\tALPHA ='), 'Native 0.2.16 opaque curtain-wall facade must not write ALPHA');
 assert(curtainWallGlassShader.includes('surface_metallic') && curtainWallFacadeShader.includes('surface_metallic'), 'Native 0.2.16 curtain-wall shaders must use a reflective coating layer');
+for (const shader of [curtainWallGlassShader, curtainWallFacadeShader]) {
+  assert(shader.includes('RADIANCE =') && shader.includes('sky_reflection_color') && shader.includes('ground_reflection_color') && shader.includes('METALLIC = clamp(surface_metallic, 0.0, 0.96)') && shader.includes('SPECULAR = 0.50'), 'Native 0.2.17 curtain-wall shaders must keep dark near-metallic environment reflections');
+}
+assert(!worldScript.includes('_get_palm_crown_mesh') && !worldScript.includes('_palm_leaf_material') && !worldScript.includes('"PalmCrowns"') && !worldScript.includes('"PalmTrunks"'), 'Native 0.2.17 must not return to alpha-card palms');
+for (const marker of ['paver_id', 'gum_spots', 'macro_stain', 'world_position', 'pattern_scale']) {
+  assert(concreteSurfaceShader.includes(marker), `Native 0.2.17 concrete shader marker is missing: ${marker}`);
+}
+for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.glb', 'flower_clump.glb', 'ornamental_shrub.glb']) {
+  assert(syncScript.includes(vegetationModel), `Native asset sync is missing ${vegetationModel}`);
+  assert(worldScript.includes(`res://assets/vegetation/${vegetationModel}`), `Native world does not load ${vegetationModel}`);
+}
+for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def build_grass_tuft():', 'def build_flower_clump():', 'def build_ornamental_shrub():']) {
+  assert(blenderScript.includes(marker), `Blender vegetation builder is missing: ${marker}`);
+}
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
@@ -116,6 +133,36 @@ for (const marker of [
   'building_far_proxy_models',
   'vegetation_hlod_0216',
   'vegetation_far_proxies',
+  'curtain_wall_environment_reflection_0217',
+  'sky_radiance_size',
+  'reflection_probe_mobile_calibration_0217',
+  'ConcreteSurfaceShader',
+  'concrete_surface.gdshader',
+  'concrete_stochastic_0217',
+  'concrete_shader_materials',
+  'detailed_palms_0217',
+  'detailed_palms',
+  'date_palms',
+  'royal_palms',
+  'palm_date_triangles',
+  'palm_royal_triangles',
+  'palm_far_proxy_0217',
+  'palm_far_proxies',
+  'geometric_ground_cover_0217',
+  'grass_tufts',
+  'flower_clumps',
+  'ornamental_shrubs',
+  'ground_cover_total',
+  'grass_tuft_triangles',
+  'flower_clump_triangles',
+  'ornamental_shrub_triangles',
+  'PalmTrunk',
+  'PalmCrownshaft',
+  'PalmLeafDry',
+  'PalmFruit',
+  'GrassBladeDry',
+  'OrnamentalLeaf',
+  'FlowerCentre',
   'mesh_lod_threshold',
   'curtain_wall_clearcoat_removed',
   'curtain_wall_detail_fade_start_m',
@@ -266,7 +313,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.16 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.17 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
@@ -295,6 +342,11 @@ if (requireAssets) {
     'assets/props/traffic_signal_short.glb',
     'assets/props/traffic_signal_long.glb',
     'assets/vegetation/plants.glb',
+    'assets/vegetation/palm_date.glb',
+    'assets/vegetation/palm_royal.glb',
+    'assets/vegetation/grass_tuft.glb',
+    'assets/vegetation/flower_clump.glb',
+    'assets/vegetation/ornamental_shrub.glb',
     'assets/textures/user_asphalt_dashed.jpg',
     'assets/textures/user_asphalt_plain.jpg',
     'assets/textures/user_asphalt_plain_normal.jpg',

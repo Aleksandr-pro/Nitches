@@ -24,6 +24,11 @@ const modelCopies = [
   ['src/assets/models/props/traffic_signal_short.glb', 'props/traffic_signal_short.glb'],
   ['src/assets/models/props/traffic_signal_long.glb', 'props/traffic_signal_long.glb'],
   ['src/assets/models/plants.glb', 'vegetation/plants.glb'],
+  ['src/assets/models/props/palm_date.glb', 'vegetation/palm_date.glb'],
+  ['src/assets/models/props/palm_royal.glb', 'vegetation/palm_royal.glb'],
+  ['src/assets/models/props/grass_tuft.glb', 'vegetation/grass_tuft.glb'],
+  ['src/assets/models/props/flower_clump.glb', 'vegetation/flower_clump.glb'],
+  ['src/assets/models/props/ornamental_shrub.glb', 'vegetation/ornamental_shrub.glb'],
 ];
 
 const textureNames = [

@@ -14,6 +14,7 @@ const WaterSurfaceShader: Shader = preload("res://shaders/water_surface.gdshader
 const FoliageWindShader: Shader = preload("res://shaders/foliage_wind.gdshader")
 const CurtainWallGlassShader: Shader = preload("res://shaders/curtain_wall_glass.gdshader")
 const CurtainWallFacadeShader: Shader = preload("res://shaders/curtain_wall_facade.gdshader")
+const ConcreteSurfaceShader: Shader = preload("res://shaders/concrete_surface.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -39,7 +40,6 @@ var _road_mesh: ArrayMesh
 var _sidewalk_mesh: ArrayMesh
 var _asphalt_material: ShaderMaterial
 var _curtain_glass_materials: Array[ShaderMaterial] = []
-var _palm_leaf_shader_material: ShaderMaterial
 var _foliage_wind_materials: Array[ShaderMaterial] = []
 var _water_materials: Array[StandardMaterial3D] = []
 var _sea_material: ShaderMaterial
@@ -64,7 +64,6 @@ var _reflection_probes: Array[ReflectionProbe] = []
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
-var _palm_crown_mesh: ArrayMesh
 var _sail_mesh: ArrayMesh
 var _elapsed := 0.0
 
@@ -110,6 +109,7 @@ func build_world() -> Dictionary:
 	_build_buildings()
 	_build_landmarks()
 	_build_vegetation()
+	_build_ground_cover()
 	_build_street_lamps()
 	_build_bus_shelters()
 	_build_benches()
@@ -296,7 +296,7 @@ func _road_clearance_xz(point: Vector3) -> float:
 	return best_clearance
 
 
-func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float) -> bool:
+func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float, include_generated_buildings: bool = true) -> bool:
 	if _road_clearance_xz(point) < minimum_road_clearance:
 		return false
 	for building_variant in data.get("buildings", []):
@@ -304,6 +304,33 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 		var center := _item_position(building)
 		var local := Basis(Vector3.UP, -_f(building, "rotY")) * (point - center)
 		if absf(local.x) <= _f(building, "w", 20.0) * 0.5 + building_padding and absf(local.z) <= _f(building, "d", 16.0) * 0.5 + building_padding:
+			return false
+	# Infill buildings are generated before vegetation/city details,
+	# so random ground-cover and roadside props must respect those
+	# footprints too.  Fixed Blender replacements can be wider and
+	# yawed relative to their generic search envelope; use a safe
+	# square based on the largest true footprint dimension for them.
+	for building in (_infill_buildings if include_generated_buildings else []):
+		var centre := _item_position(building)
+		var footprint_w := _f(building, "w", 20.0)
+		var footprint_d := _f(building, "d", 16.0)
+		match String(building.get("model", "generic")):
+			"glass":
+				footprint_w = maxf(footprint_w, 34.0)
+				footprint_d = maxf(footprint_d, 34.0)
+			"hero":
+				footprint_w = maxf(footprint_w, 32.4)
+				footprint_d = maxf(footprint_d, 32.4)
+			"townhouse":
+				footprint_w = maxf(footprint_w, 18.87)
+				footprint_d = maxf(footprint_d, 18.87)
+		if absf(point.x - centre.x) <= footprint_w * 0.5 + building_padding and absf(point.z - centre.z) <= footprint_d * 0.5 + building_padding:
+			return false
+	for pool_variant in data.get("pools", []):
+		var pool: Dictionary = pool_variant
+		var centre := _item_position(pool)
+		var local := Basis(Vector3.UP, -_f(pool, "rotY")) * (point - centre)
+		if absf(local.x) <= (_f(pool, "w", 8.0) + 1.3) * 0.5 + building_padding and absf(local.z) <= (_f(pool, "d", 5.0) + 1.3) * 0.5 + building_padding:
 			return false
 	for landmark_variant in data.get("landmarks", []):
 		var landmark: Dictionary = landmark_variant
@@ -533,9 +560,20 @@ func set_time_of_day(mode: String) -> void:
 		curtain_light_strength = 0.12
 	elif mode == "night":
 		curtain_light_strength = 0.90
+	var curtain_sky_reflection := Color(0.30, 0.53, 0.86)
+	var curtain_ground_reflection := Color(0.16, 0.155, 0.135)
+	if mode == "sunset":
+		curtain_sky_reflection = Color(0.96, 0.46, 0.25)
+		curtain_ground_reflection = Color(0.20, 0.13, 0.10)
+	elif mode == "night":
+		curtain_sky_reflection = Color(0.025, 0.050, 0.120)
+		curtain_ground_reflection = Color(0.030, 0.032, 0.036)
 	for curtain_material in _curtain_glass_materials:
 		curtain_material.set_shader_parameter("interior_light_strength", curtain_light_strength)
+		curtain_material.set_shader_parameter("sky_reflection_color", curtain_sky_reflection)
+		curtain_material.set_shader_parameter("ground_reflection_color", curtain_ground_reflection)
 	_enhancement_stats["curtain_wall_interior_light_strength"] = curtain_light_strength
+	_enhancement_stats["curtain_wall_environment_reflection_0217"] = true
 
 	for entry in _night_materials:
 		var material := entry.get("material") as StandardMaterial3D
@@ -674,7 +712,11 @@ func _build_environment() -> void:
 	_sky = Sky.new()
 	_sky.sky_material = _procedural_sky_material
 	_sky.process_mode = Sky.PROCESS_MODE_AUTOMATIC
-	_sky.radiance_size = Sky.RADIANCE_SIZE_256 if OS.has_feature("android") else Sky.RADIANCE_SIZE_512
+	# 0.2.17: curtain-wall reflections are a primary visual feature.
+	# A 512 radiance cubemap is still a one-time static-sky cost, while
+	# 256 visibly smeared sky/cloud contrast across curved tower glass.
+	_sky.radiance_size = Sky.RADIANCE_SIZE_512
+	_enhancement_stats["sky_radiance_size"] = 512
 
 	_environment = Environment.new()
 	_environment.background_mode = Environment.BG_SKY
@@ -797,13 +839,54 @@ func _register_night_material(material: StandardMaterial3D, day: float, sunset: 
 	})
 
 
-func _terrain_material(kind: String) -> StandardMaterial3D:
+func _create_concrete_material(
+	key: String,
+	tint: Color,
+	roughness: float = 0.95,
+	pattern_scale: float = 1.0,
+	joint_strength: float = 0.92,
+	normal_strength: float = 0.62
+) -> ShaderMaterial:
+	if _materials.has(key):
+		return _materials[key] as ShaderMaterial
+	var material := ShaderMaterial.new()
+	material.resource_name = key
+	material.shader = ConcreteSurfaceShader
+	var slab := _texture("user_concrete_slabs.jpg")
+	var slab_normal := _texture("user_concrete_slabs_normal.jpg")
+	var fine := _texture("user_plaster_white.jpg")
+	if slab != null:
+		material.set_shader_parameter("slab_texture", slab)
+	if slab_normal != null:
+		material.set_shader_parameter("slab_normal_texture", slab_normal)
+	if fine != null:
+		material.set_shader_parameter("fine_texture", fine)
+	material.set_shader_parameter("use_textures", slab != null and slab_normal != null and fine != null)
+	material.set_shader_parameter("tint", tint)
+	material.set_shader_parameter("base_roughness", roughness)
+	material.set_shader_parameter("pattern_scale", pattern_scale)
+	material.set_shader_parameter("joint_strength", joint_strength)
+	material.set_shader_parameter("normal_strength", normal_strength)
+	_materials[key] = material
+	_enhancement_stats["concrete_stochastic_0217"] = true
+	_enhancement_stats["concrete_shader_materials"] = int(_enhancement_stats.get("concrete_shader_materials", 0)) + 1
+	return material
+
+
+func _terrain_material(kind: String) -> Material:
+	if kind == "concrete":
+		return _create_concrete_material(
+			"terrain_concrete_shader",
+			Color(0.58, 0.59, 0.58),
+			0.96,
+			1.0,
+			0.88,
+			0.54
+		)
 	var material: StandardMaterial3D
 	match kind:
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
-		"concrete":
-			material = _material("terrain_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.60, 0.61, 0.60), 0.94)
 		"plaza":
 			material = _material("terrain_premium_pavers", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.76, 0.72, 0.63), 0.78, 0.02, Vector3(0.34, 0.34, 0.34), true)
 			material.normal_scale = 0.62
@@ -811,7 +894,7 @@ func _terrain_material(kind: String) -> StandardMaterial3D:
 		"rock":
 			material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
-			material = _material("terrain_grass", "user_grass.jpg", "user_grass_normal.jpg", Color(0.58, 0.68, 0.42), 0.98)
+			material = _material("terrain_grass", "user_grass.jpg", "user_grass_normal.jpg", Color(0.54, 0.63, 0.38), 0.98)
 	# Земля строится процедурно. Правильный winding — основное исправление
 	# 0.2.2, а двусторонний материал — страховка: критичная поверхность не
 	# должна снова пропасть на телефоне и показать нижнюю половину неба.
@@ -878,7 +961,10 @@ func _create_curtain_wall_material(
 	material.set_shader_parameter("smoke_glass_color", smoke_color)
 	material.set_shader_parameter("blind_color", blind_tint)
 	material.set_shader_parameter("warm_interior_color", warm_interior)
-	material.set_shader_parameter("cool_interior_color", Color(0.100, 0.150, 0.180))
+	material.set_shader_parameter("cool_interior_color", Color(0.034, 0.068, 0.092))
+	material.set_shader_parameter("sky_reflection_color", Color(0.30, 0.53, 0.86))
+	material.set_shader_parameter("ground_reflection_color", Color(0.16, 0.155, 0.135))
+	material.set_shader_parameter("environment_tint_strength", 0.19)
 	material.set_shader_parameter("floor_height_m", floor_height_m)
 	material.set_shader_parameter("bay_width_m", bay_width_m)
 	material.set_shader_parameter("base_alpha", base_alpha)
@@ -899,6 +985,7 @@ func _create_curtain_wall_material(
 	_enhancement_stats["curtain_wall_neutral_glass"] = true
 	_enhancement_stats["curtain_wall_calibrated_0215"] = true
 	_enhancement_stats["curtain_wall_reflective_coating_0216"] = true
+	_enhancement_stats["curtain_wall_environment_reflection_0217"] = true
 	_enhancement_stats["curtain_wall_clearcoat_removed"] = true
 	_enhancement_stats["curtain_wall_detail_fade_start_m"] = 90.0
 	_enhancement_stats["curtain_wall_detail_fade_end_m"] = 300.0
@@ -950,10 +1037,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_glass_tower_physical",
 			true,
-			Color(0.095, 0.150, 0.190),
-			Color(0.170, 0.235, 0.285),
-			Color(0.350, 0.340, 0.305),
-			Color(0.165, 0.122, 0.082),
+			Color(0.018, 0.052, 0.082),
+			Color(0.052, 0.112, 0.158),
+			Color(0.235, 0.225, 0.200),
+			Color(0.088, 0.061, 0.038),
 			3.30,
 			1.75,
 			7.0,
@@ -963,10 +1050,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_bronze_tower_physical",
 			true,
-			Color(0.140, 0.105, 0.065),
-			Color(0.225, 0.170, 0.110),
-			Color(0.370, 0.320, 0.250),
-			Color(0.190, 0.140, 0.090),
+			Color(0.065, 0.043, 0.019),
+			Color(0.128, 0.085, 0.041),
+			Color(0.270, 0.225, 0.170),
+			Color(0.105, 0.073, 0.044),
 			3.30,
 			1.85,
 			9.0,
@@ -1077,10 +1164,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"prop_storefront_glass_physical",
 				false,
-				Color(0.090, 0.140, 0.175),
-				Color(0.160, 0.220, 0.265),
-				Color(0.340, 0.330, 0.295),
-				Color(0.160, 0.118, 0.080),
+				Color(0.018, 0.052, 0.082),
+				Color(0.052, 0.112, 0.158),
+				Color(0.235, 0.225, 0.200),
+				Color(0.088, 0.061, 0.038),
 				2.70,
 				1.45,
 				4.0,
@@ -1149,7 +1236,7 @@ func _prop_material(material_name: String) -> Material:
 			villa_interior.metallic_specular = 0.18
 			return villa_interior
 		"VillaCurtain":
-			var villa_curtain := _material("villa_curtain", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.72, 0.65, 0.54), 1.0, 0.0, Vector3(0.65, 0.65, 0.65), true)
+			var villa_curtain := _material("villa_curtain", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.43, 0.39, 0.33), 1.0, 0.0, Vector3(0.65, 0.65, 0.65), true)
 			villa_curtain.normal_scale = 0.45
 			villa_curtain.metallic_specular = 0.22
 			return villa_curtain
@@ -1244,17 +1331,17 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"tower_glass_physical",
 				false,
-				Color(0.100, 0.155, 0.195),
-				Color(0.175, 0.240, 0.290),
-				Color(0.350, 0.340, 0.305),
-				Color(0.165, 0.122, 0.082),
+				Color(0.018, 0.052, 0.082),
+				Color(0.052, 0.112, 0.158),
+				Color(0.235, 0.225, 0.200),
+				Color(0.088, 0.061, 0.038),
 				3.45,
 				1.85,
 				2.0,
 				0.72
 			)
 		"TowerSpandrel":
-			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.270, 0.290, 0.310), 0.34, 0.72, Vector3(0.35, 0.35, 0.35), true)
+			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
 			tower_spandrel.metallic_specular = 0.95
 			return tower_spandrel
 		"TowerStone":
@@ -1280,29 +1367,29 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"main_glass_physical",
 				false,
-				Color(0.105, 0.165, 0.205),
-				Color(0.185, 0.255, 0.305),
-				Color(0.360, 0.350, 0.315),
-				Color(0.170, 0.125, 0.085),
+				Color(0.020, 0.058, 0.090),
+				Color(0.058, 0.120, 0.168),
+				Color(0.240, 0.230, 0.205),
+				Color(0.092, 0.064, 0.040),
 				3.42,
 				1.60,
 				5.0,
 				0.72
 			)
 		"MainSpandrel":
-			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.300, 0.315, 0.330), 0.30, 0.76, Vector3(0.35, 0.35, 0.35), true)
+			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
 			main_spandrel.metallic_specular = 0.95
 			return main_spandrel
 		"MainStone":
-			var main_stone := _material("main_stone", "user_stone_tiles_beige.jpg", "", Color(0.74, 0.69, 0.61), 0.90, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			var main_stone := _material("main_stone", "user_stone_tiles_beige.jpg", "", Color(0.50, 0.46, 0.39), 0.90, 0.0, Vector3(0.18, 0.18, 0.18), true)
 			main_stone.metallic_specular = 0.48
 			return main_stone
 		"MainTrim":
-			var main_trim := _material("main_trim", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.80, 0.62, 0.34), 0.38, 0.55, Vector3(0.35, 0.35, 0.35), true)
+			var main_trim := _material("main_trim", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.46, 0.34, 0.18), 0.42, 0.60, Vector3(0.35, 0.35, 0.35), true)
 			main_trim.metallic_specular = 0.92
 			return main_trim
 		"MainMetal":
-			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.230, 0.240, 0.260), 0.36, 0.80, Vector3(0.48, 0.48, 0.48), true)
+			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.075, 0.090, 0.105), 0.42, 0.82, Vector3(0.48, 0.48, 0.48), true)
 			main_metal.metallic_specular = 0.92
 			return main_metal
 		"MainWater":
@@ -1327,7 +1414,7 @@ func _prop_material(material_name: String) -> Material:
 			_register_night_material(dark_glass, 0.0, 0.07, 0.30)
 			return dark_glass
 		"ConcreteLight":
-			return _material("prop_concrete_light", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.76, 0.77, 0.75), 0.95, 0.0, Vector3(0.20, 0.20, 0.20), true)
+			return _create_concrete_material("prop_concrete_light_shader", Color(0.68, 0.69, 0.67), 0.95, 0.82, 0.72, 0.50)
 		"RoofGravel":
 			return _material("prop_roof_gravel", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.42, 0.42, 0.43), 1.0, 0.0, Vector3(0.42, 0.42, 0.42), true)
 		"SolarCell":
@@ -1372,6 +1459,54 @@ func _prop_material(material_name: String) -> Material:
 			glow.emission = Color(1.0, 0.82, 0.50)
 			_register_night_material(glow, 0.18, 1.5, 4.2)
 			return glow
+		"PalmTrunk":
+			var palm_trunk := _material("palm_trunk", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.50, 0.38, 0.26), 1.0, 0.0, Vector3.ONE, false)
+			palm_trunk.normal_scale = 1.15
+			palm_trunk.metallic_specular = 0.18
+			return palm_trunk
+		"PalmCrown":
+			var palm_crown := _material("palm_crown_fibre", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.38, 0.28, 0.16), 1.0, 0.0, Vector3(1.4, 1.4, 1.4), false)
+			palm_crown.normal_scale = 1.25
+			palm_crown.metallic_specular = 0.16
+			return palm_crown
+		"PalmCrownshaft":
+			var crownshaft := _material("palm_crownshaft", "", "", Color(0.20, 0.36, 0.15), 0.74)
+			crownshaft.metallic_specular = 0.42
+			return crownshaft
+		"PalmRachis":
+			var rachis := _material("palm_rachis", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.34, 0.34, 0.18), 0.94, 0.0, Vector3(0.7, 0.7, 0.7), false)
+			rachis.normal_scale = 0.80
+			rachis.metallic_specular = 0.24
+			return rachis
+		"PalmFruit":
+			var dates := _material("palm_dates", "", "", Color(0.58, 0.22, 0.045), 0.50)
+			dates.metallic_specular = 0.58
+			return dates
+		"ShrubBranch":
+			return _material("shrub_branch", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.40, 0.29, 0.19), 1.0, 0.0, Vector3(0.8, 0.8, 0.8), false)
+		"ShrubBerry":
+			var berries := _material("shrub_berries", "", "", Color(0.50, 0.07, 0.16), 0.44)
+			berries.metallic_specular = 0.62
+			return berries
+		"FlowerCoral":
+			var coral := _material("flower_coral", "", "", Color(0.78, 0.17, 0.11), 0.74)
+			coral.cull_mode = BaseMaterial3D.CULL_DISABLED
+			coral.metallic_specular = 0.34
+			return coral
+		"FlowerWhite":
+			var white_flower := _material("flower_white", "", "", Color(0.84, 0.78, 0.65), 0.78)
+			white_flower.cull_mode = BaseMaterial3D.CULL_DISABLED
+			white_flower.metallic_specular = 0.34
+			return white_flower
+		"FlowerYellow":
+			var yellow_flower := _material("flower_yellow", "", "", Color(0.84, 0.55, 0.07), 0.72)
+			yellow_flower.cull_mode = BaseMaterial3D.CULL_DISABLED
+			yellow_flower.metallic_specular = 0.34
+			return yellow_flower
+		"FlowerCentre":
+			var flower_centre := _material("flower_centre", "", "", Color(0.52, 0.26, 0.035), 0.82)
+			flower_centre.metallic_specular = 0.30
+			return flower_centre
 		"nh_foliage":
 			var foliage := _material("plant_foliage", "foliage.jpg", "foliage_normal.jpg", Color(0.62, 0.86, 0.52), 1.0)
 			foliage.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1379,7 +1514,7 @@ func _prop_material(material_name: String) -> Material:
 		"nh_bark":
 			return _material("plant_bark", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.82, 0.72, 0.62), 1.0)
 		_:
-			return _material("prop_fallback", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.8, 0.8, 0.8), 0.9)
+			return _create_concrete_material("prop_fallback_shader", Color(0.70, 0.70, 0.69), 0.93, 0.78, 0.55, 0.45)
 
 
 func _mesh_instance(parent: Node, mesh: Mesh, material: Material, transform_value: Transform3D, node_name: String = "Mesh", cast_shadow: bool = true) -> MeshInstance3D:
@@ -1446,7 +1581,7 @@ func _hash01(ix: int, iz: int) -> float:
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
 	var in_promenade := z >= -94.0 and z <= 48.0 and ((x >= 713.0 and x <= 744.0) or (x >= 776.0 and x <= 789.0))
-	if _in_zone(x, z, "rtPlaza") or in_promande:
+	if _in_zone(x, z, "rtPlaza") or in_promenade:
 		return "plaza"
 	if (_in_zone(x, z, "sea") or _in_zone(x, z, "marina")) and h < 0.5:
 		return "sand"
@@ -1764,19 +1899,14 @@ func _build_roads() -> void:
 	roads_root.name = "Roads"
 	add_child(roads_root)
 
-	var sidewalk_material := _material(
-		"sidewalk",
-		"user_concrete_slabs.jpg",
-		"user_concrete_slabs_normal.jpg",
+	var sidewalk_material := _create_concrete_material(
+		"sidewalk_shader",
 		Color(0.52, 0.53, 0.52),
 		0.96,
-		0.0,
-		Vector3(0.16, 0.16, 0.16),
-		true
+		0.92,
+		1.0,
+		0.62
 	)
-	sidewalk_material.normal_scale = 0.9
-	sidewalk_material.metallic_specular = 0.28
-	sidewalk_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_sidewalk_mesh = _build_road_mesh(1.9, 0.050, 7.0)
 	if _sidewalk_mesh != null:
 		var sidewalks := _mesh_instance(roads_root, _sidewalk_mesh, sidewalk_material, Transform3D.IDENTITY, "Sidewalks", false)
@@ -1919,35 +2049,29 @@ func _build_road_edges(parent: Node) -> void:
 					curb_transforms.append(curb_transform)
 		road_index += 1
 
-	var slab_material := _material(
-		"sidewalk",
-		"user_concrete_slabs.jpg",
-		"user_concrete_slabs_normal.jpg",
+	var slab_material := _create_concrete_material(
+		"sidewalk_shader",
 		Color(0.52, 0.53, 0.52),
 		0.96,
-		0.0,
-		Vector3(0.16, 0.16, 0.16),
-		true
+		0.92,
+		1.0,
+		0.62
 	)
-	var curb_material := _material(
-		"road_curb",
-		"user_concrete_slabs.jpg",
-		"user_concrete_slabs_normal.jpg",
-		Color(0.36, 0.37, 0.36),
+	var curb_material := _create_concrete_material(
+		"road_curb_shader",
+		Color(0.37, 0.38, 0.37),
 		0.97,
-		0.0,
-		Vector3(0.30, 0.30, 0.30),
-		true
+		0.72,
+		0.55,
+		0.48
 	)
-	var painted_curb_material := _material(
-		"road_curb_painted",
-		"user_concrete_slabs.jpg",
-		"user_concrete_slabs_normal.jpg",
+	var painted_curb_material := _create_concrete_material(
+		"road_curb_painted_shader",
 		Color(0.72, 0.48, 0.08),
-		0.90,
-		0.0,
-		Vector3(0.30, 0.30, 0.30),
-		true
+		0.91,
+		0.72,
+		0.35,
+		0.40
 	)
 	var gutter_material := _material(
 		"road_gutter",
@@ -2810,6 +2934,45 @@ func _mesh_with_runtime_lods(mesh: Mesh, normal_merge_angle: float = 62.0) -> Me
 	return generated
 
 
+func _mesh_triangle_count(mesh: Mesh) -> int:
+	if mesh == null:
+		return 0
+	var total := 0
+	for surface_index in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(surface_index)
+		if arrays.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var indices: Variant = arrays[Mesh.ARRAY_INDEX] if arrays.size() > Mesh.ARRAY_INDEX else null
+		var vertices: Variant = arrays[Mesh.ARRAY_VERTEX]
+		if indices is PackedInt32Array:
+			total += int((indices as PackedInt32Array).size() / 3)
+		elif vertices is PackedVector3Array:
+			total += int((vertices as PackedVector3Array).size() / 3)
+	return total
+
+
+func _model_part_material(material_name: String, mesh: Mesh) -> Material:
+	match material_name:
+		"PalmLeaf":
+			return _create_foliage_wind_material(mesh, "foliage.jpg", Color(0.60, 0.88, 0.48), 0.0, 0.055, true)
+		"PalmLeafDry":
+			return _create_foliage_wind_material(mesh, "foliage.jpg", Color(0.96, 0.68, 0.32), 0.0, 0.034, true)
+		"GrassBlade":
+			var grass := _create_foliage_wind_material(mesh, "", Color.WHITE, 0.0, 0.028, true)
+			grass.set_shader_parameter("leaf_color", Color(0.095, 0.315, 0.065))
+			return grass
+		"GrassBladeDry":
+			var dry_grass := _create_foliage_wind_material(mesh, "", Color.WHITE, 0.0, 0.021, true)
+			dry_grass.set_shader_parameter("leaf_color", Color(0.42, 0.335, 0.105))
+			return dry_grass
+		"OrnamentalLeaf":
+			return _create_foliage_wind_material(mesh, "foliage.jpg", Color(0.54, 0.84, 0.46), 0.0, 0.012, true)
+		"FlowerLeaf":
+			return _create_foliage_wind_material(mesh, "foliage.jpg", Color(0.56, 0.86, 0.47), 0.0, 0.010, true)
+		_:
+			return _prop_material(material_name)
+
+
 func _get_model_parts(path: String) -> Array:
 	if _model_parts_cache.has(path):
 		return _model_parts_cache[path]
@@ -2834,6 +2997,9 @@ func _get_model_parts(path: String) -> Array:
 	_collect_model_parts(root, Transform3D.IDENTITY, tools)
 	root.free()
 
+	var is_vegetation_model := path.contains("/vegetation/")
+	var normal_merge_angle := 78.0 if is_vegetation_model else 62.0
+	var model_triangle_count := 0
 	for material_name_variant in tools.keys():
 		var material_name := String(material_name_variant)
 		var tool := tools[material_name] as SurfaceTool
@@ -2842,13 +3008,17 @@ func _get_model_parts(path: String) -> Array:
 		# Blender box corner once per incident triangle.
 		tool.index()
 		var source_mesh := tool.commit()
-		var mesh := _mesh_with_runtime_lods(source_mesh, 62.0) if source_mesh != null else null
+		model_triangle_count += _mesh_triangle_count(source_mesh)
+		var mesh := _mesh_with_runtime_lods(source_mesh, normal_merge_angle) if source_mesh != null else null
 		if mesh != null:
 			parts.append({
 				"mesh": mesh,
-				"material": _prop_material(material_name),
+				"material": _model_part_material(material_name, mesh) if is_vegetation_model else _prop_material(material_name),
 				"material_name": material_name,
 			})
+	if is_vegetation_model:
+		var triangle_key := "%s_triangles" % path.get_file().trim_suffix(".glb")
+		_enhancement_stats[triangle_key] = model_triangle_count
 	_model_parts_cache[path] = parts
 	return parts
 
@@ -2997,6 +3167,16 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
 		return "BlenderBusShelters"
+	if path.ends_with("palm_date.glb"):
+		return "BlenderDatePalms"
+	if path.ends_with("palm_royal.glb"):
+		return "BlenderRoyalPalms"
+	if path.ends_with("grass_tuft.glb"):
+		return "BlenderGrassTufts"
+	if path.ends_with("flower_clump.glb"):
+		return "BlenderFlowerClumps"
+	if path.ends_with("ornamental_shrub.glb"):
+		return "BlenderOrnamentalShrubs"
 	return node_name.trim_prefix("Infill")
 
 
@@ -3030,6 +3210,14 @@ func _batched_model_base_range(path: String) -> float:
 		return 260.0
 	if path.ends_with("glass_tower.glb"):
 		return 340.0
+	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
+		return 390.0
+	if path.ends_with("grass_tuft.glb"):
+		return 52.0
+	if path.ends_with("flower_clump.glb"):
+		return 72.0
+	if path.ends_with("ornamental_shrub.glb"):
+		return 105.0
 	return 0.0
 
 
@@ -3049,6 +3237,12 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 	var base_range := _batched_model_base_range(path)
 	if base_range <= 0.0:
 		return 0.0
+	if key.contains("fruit"):
+		return minf(base_range, 220.0)
+	if key.contains("leafdry"):
+		return minf(base_range, 320.0)
+	if key.contains("dry"):
+		return minf(base_range, 44.0)
 	# Site dressing and emissive/solar accents are sub-pixel long before
 	# the architectural mass is. Retire them first, then curtains and
 	# window frames; wall/glass/spandrel cores keep the full HLOD range.
@@ -3068,7 +3262,59 @@ func _batched_model_chunk_size(path: String) -> float:
 		return MULTIMESH_CHUNK_SIZE_M
 	if path.contains("traffic_signal"):
 		return 170.0
+	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
+		return 155.0
+	if path.ends_with("grass_tuft.glb"):
+		return 42.0
+	if path.ends_with("flower_clump.glb"):
+		return 55.0
+	if path.ends_with("ornamental_shrub.glb"):
+		return 70.0
 	return 180.0
+
+
+func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_name: String) -> void:
+	if transforms.is_empty() or not (path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb")):
+		return
+	var is_date := path.ends_with("palm_date.glb")
+	var crown_height := 7.46 if is_date else 8.76
+	var crown_centre := Vector3(0.60, crown_height, -0.11) if is_date else Vector3(0.42, crown_height, -0.08)
+
+	var trunk := CylinderMesh.new()
+	trunk.bottom_radius = 0.32
+	trunk.top_radius = 0.20
+	trunk.height = crown_height
+	trunk.radial_segments = 10
+	trunk.rings = 1
+	var trunk_local := Transform3D(Basis.IDENTITY, Vector3(crown_centre.x * 0.45, crown_height * 0.5, crown_centre.z * 0.45))
+	var trunk_transforms: Array = []
+	for transform_variant in transforms:
+		trunk_transforms.append((transform_variant as Transform3D) * trunk_local)
+	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 370.0, 1100.0, 260.0)
+
+	var crown := SphereMesh.new()
+	crown.radius = 0.5
+	crown.height = 1.0
+	crown.radial_segments = 14
+	crown.rings = 7
+	var crown_size := Vector3(7.2, 2.55, 7.2) if is_date else Vector3(6.8, 2.75, 6.8)
+	var crown_local := Transform3D(Basis.IDENTITY.scaled(crown_size), crown_centre + Vector3(0.0, 0.28, 0.0))
+	var crown_transforms: Array = []
+	for transform_variant in transforms:
+		crown_transforms.append((transform_variant as Transform3D) * crown_local)
+	_add_multimesh(
+		parent,
+		crown,
+		_create_foliage_wind_material(crown, "foliage.jpg", Color(0.55, 0.82, 0.44), 0.0, 0.012, true),
+		crown_transforms,
+		"%sFarProxyCrown" % node_name,
+		false,
+		370.0,
+		1100.0,
+		260.0
+	)
+	_enhancement_stats["palm_far_proxy_0217"] = true
+	_enhancement_stats["palm_far_proxies"] = int(_enhancement_stats.get("palm_far_proxies", 0)) + transforms.size()
 
 
 ## Far HLOD volumes preserve the real footprint/height and podium/shaft
@@ -3172,6 +3418,8 @@ func _flush_batched_models() -> void:
 				or material_key.contains("glow")
 				or material_key.contains("solar")
 				or material_key.contains("water")
+				or material_key.contains("leaf")
+				or material_key.contains("grass")
 			)
 			if not casts_shadow:
 				_enhancement_stats["model_parts_without_shadow_pass"] = int(_enhancement_stats.get("model_parts_without_shadow_pass", 0)) + 1
@@ -3188,6 +3436,7 @@ func _flush_batched_models() -> void:
 			) or built_any
 		if built_any:
 			_add_building_far_proxy(model_root, path, transforms, node_name)
+			_add_palm_far_proxy(model_root, path, transforms, node_name)
 	_enhancement_stats["batched_model_paths_0216"] = path_count
 	_enhancement_stats["batched_model_instances_0216"] = instance_count
 	_enhancement_stats["batched_models_merged_0216"] = true
@@ -3424,7 +3673,7 @@ func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, pl
 			var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
 			var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
 			heights.append(height_at(corner_xz.x, corner_xz.y))
-			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0, false):
 				clear = false
 				break
 		if clear and heights.max() - heights.min() > 1.1:
@@ -3469,7 +3718,7 @@ func _hero_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_
 			var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
 			var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
 			heights.append(height_at(corner_xz.x, corner_xz.y))
-			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0, false):
 				clear = false
 				break
 		if clear and heights.max() - heights.min() > 1.1:
@@ -3511,7 +3760,7 @@ func _glass_model_fit(item: Dictionary, self_index: int, accepted: Array, placed
 		var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
 		var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
 		heights.append(height_at(corner_xz.x, corner_xz.y))
-		if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+		if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0, false):
 			return {"fits": false, "yaw": 0.0, "rect": Rect2()}
 	if heights.max() - heights.min() > 0.8:
 		return {"fits": false, "yaw": 0.0, "rect": Rect2()}
@@ -4140,51 +4389,6 @@ func _load_plant_parts() -> bool:
 	return not _plant_parts.is_empty()
 
 
-func _get_palm_crown_mesh() -> ArrayMesh:
-	if _palm_crown_mesh != null:
-		return _palm_crown_mesh
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in 10:
-		var angle := TAU * float(i) / 10.0
-		var basis := Basis(Vector3.UP, angle)
-		var local_points: Array[Vector3] = [
-			Vector3(-0.34, 0.0, 0.0),
-			Vector3(0.34, 0.0, 0.0),
-			Vector3(0.18, -0.82, 3.25),
-			Vector3(-0.18, -0.82, 3.25),
-		]
-		var points: Array[Vector3] = []
-		for point_value in local_points:
-			points.append(basis * point_value)
-		var uvs: Array[Vector2] = [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
-		for index in [0, 1, 2, 0, 2, 3]:
-			tool.set_uv(uvs[index])
-			tool.add_vertex(points[index])
-	tool.index()
-	tool.generate_normals()
-	tool.generate_tangents()
-	_palm_crown_mesh = tool.commit()
-	return _palm_crown_mesh
-
-
-func _palm_leaf_material() -> Material:
-	if _palm_leaf_shader_material != null:
-		return _palm_leaf_shader_material
-	# Palm fronds droop below their local origin, so a height mask would
-	# clamp to zero. Their UV.y already runs base -> tip and is the correct
-	# wind mask for this custom crown mesh.
-	_palm_leaf_shader_material = _create_foliage_wind_material(
-		_get_palm_crown_mesh(),
-		"user_palm_leaf.png",
-		Color(0.72, 0.96, 0.62),
-		0.32,
-		0.11,
-		true
-	)
-	return _palm_leaf_shader_material
-
-
 func _get_far_proxy_sphere_mesh() -> SphereMesh:
 	if _far_proxy_sphere_mesh != null:
 		return _far_proxy_sphere_mesh
@@ -4400,11 +4604,6 @@ func _build_vegetation() -> void:
 				)
 				_add_foliage_far_proxy(root, source_mesh, part_transforms, String(part_name), 160.0, 420.0)
 
-	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.15
-	trunk_mesh.bottom_radius = 0.29
-	trunk_mesh.height = 5.8
-	trunk_mesh.radial_segments = 10
 	var palms: Array = data.get("palms", []).duplicate()
 	var extra_palm_count := 0
 	var beach_palm_index := 0
@@ -4423,17 +4622,165 @@ func _build_vegetation() -> void:
 		beach_palm_index += 1
 	_enhancement_stats["extra_palms"] = extra_palm_count
 
-	var trunk_transforms: Array[Transform3D] = []
-	var crown_transforms: Array[Transform3D] = []
-	for palm_variant in palms:
-		var palm: Dictionary = palm_variant
-		var scale_value := _f(palm, "s", 1.0)
-		var base := _item_position(palm)
-		trunk_transforms.append(make_transform(base + Vector3(0.0, 2.9 * scale_value, 0.0), _f(palm, "rotY"), Vector3.ONE * scale_value))
-		crown_transforms.append(make_transform(base + Vector3(0.0, 5.72 * scale_value, 0.0), _f(palm, "rotY") * 1.7, Vector3.ONE * scale_value))
-		_add_cylinder_collider(base + Vector3(0.0, 2.5, 0.0), 0.30, 5.2)
-	_add_multimesh(root, trunk_mesh, _prop_material("nh_bark"), trunk_transforms, "PalmTrunks")
-	_add_multimesh(root, _get_palm_crown_mesh(), _palm_leaf_material(), crown_transforms, "PalmCrowns", false)
+	# 0.2.17: replace the old cylinder + ten flat alpha-card fronds with
+	# two fixed-metre Blender species.  The GLBs already contain curved
+	# segmented trunks, individual V-folded leaflets, petiole/rachis
+	# tubes, a fibrous crown (and date clusters/skirt on the date palm).
+	# Normalising the 8.8 m / 10.2 m source heights to the exported
+	# street-palm envelope preserves the master-plan positions without
+	# shrinking RichTown or the player car.
+	var date_palm_transforms: Array[Transform3D] = []
+	var royal_palm_transforms: Array[Transform3D] = []
+	for palm_index in palms.size():
+		var palm: Dictionary = palms[palm_index]
+		var exported_scale := clampf(_f(palm, "s", 1.0), 0.82, 1.30)
+		var base := _item_position(palm, -0.03)
+		var variation := _hash01(palm_index * 17 + 41, palm_index * 29 + 7)
+		var use_royal := false
+		if base.x >= 620.0 and base.x <= 720.0 and base.z >= -180.0 and base.z <= 120.0:
+			use_royal = palm_index % 3 != 0
+		elif base.x >= 720.0 and base.x <= 805.0:
+			use_royal = palm_index % 2 == 0
+		elif base.x < 260.0:
+			use_royal = palm_index % 4 == 0
+		else:
+			use_royal = variation > 0.82
+		var species_scale := 0.76 if use_royal else 0.78
+		var uniform_scale := exported_scale * species_scale
+		var width_scale := uniform_scale * (0.94 + variation * 0.12)
+		var height_scale := uniform_scale * (0.94 + _hash01(palm_index * 31 + 5, palm_index * 13 + 53) * 0.12)
+		var palm_transform := make_transform(base, _f(palm, "rotY") + variation * 0.37, Vector3(width_scale, height_scale, width_scale))
+		if use_royal:
+			royal_palm_transforms.append(palm_transform)
+		else:
+			date_palm_transforms.append(palm_transform)
+		_add_cylinder_collider(base + Vector3(0.0, 3.0 * exported_scale, 0.0), 0.34, 6.2 * exported_scale)
+	var date_palms_built := _add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_palm_transforms, "BlenderDatePalms")
+	var royal_palms_built := _add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_palm_transforms, "BlenderRoyalPalms")
+	_enhancement_stats["detailed_palms_0217"] = date_palms_built or royal_palms_built
+	_enhancement_stats["date_palms"] = date_palm_transforms.size() if date_palms_built else 0
+	_enhancement_stats["royal_palms"] = royal_palm_transforms.size() if royal_palms_built else 0
+	_enhancement_stats["detailed_palms"] = int(_enhancement_stats.get("date_palms", 0)) + int(_enhancement_stats.get("royal_palms", 0))
+
+
+func _is_soft_ground_cover_surface(candidate: Vector3, allow_sand: bool = false) -> bool:
+	if candidate.y < 1.02:
+		return false
+	if _in_zone(candidate.x, candidate.z, "sea") or _in_zone(candidate.x, candidate.z, "marina"):
+		return false
+	var slope := maxf(
+		absf(height_at(candidate.x + 1.2, candidate.z) - candidate.y),
+		absf(height_at(candidate.x, candidate.z + 1.2) - candidate.y)
+	) / 1.2
+	if slope > 0.42:
+		return false
+	var kind := String(get_surface_at(candidate).get("kind", ""))
+	if kind == "grass":
+		return true
+	return allow_sand and kind == "sand"
+
+
+func _build_ground_cover() -> void:
+	var root := Node3D.new()
+	root.name = "DetailedGroundCover"
+	add_child(root)
+
+	# Desired counts are caps per district, not unconditional spawn
+	# quotas.  Every candidate still has to land on actual grass (or
+	# dune sand for grass/shrubs), above water, on a gentle slope and
+	# clear of carriageways/buildings/landmarks.  That keeps flowers
+	# out of asphalt and intersections while filling the previously
+	# flat green terrain rectangles with real geometry.
+	var patches: Array[Dictionary] = [
+		{"rect": Rect2(690.0, 235.0, 150.0, 190.0), "grass": 620, "flowers": 125, "shrubs": 34},
+		{"rect": Rect2(585.0, -115.0, 165.0, 180.0), "grass": 520, "flowers": 150, "shrubs": 36},
+		{"rect": Rect2(590.0, -270.0, 215.0, 205.0), "grass": 520, "flowers": 105, "shrubs": 34},
+		{"rect": Rect2(700.0, -445.0, 125.0, 890.0), "grass": 720, "flowers": 140, "shrubs": 44},
+		{"rect": Rect2(520.0, -445.0, 100.0, 890.0), "grass": 620, "flowers": 115, "shrubs": 42},
+		{"rect": Rect2(865.0, -455.0, 145.0, 910.0), "grass": 620, "flowers": 100, "shrubs": 40},
+		{"rect": Rect2(1000.0, -455.0, 480.0, 910.0), "grass": 760, "flowers": 90, "shrubs": 50},
+		{"rect": Rect2(810.0, 120.0, 220.0, 280.0), "grass": 420, "flowers": 75, "shrubs": 30},
+	]
+	var species_specs: Array[Dictionary] = [
+		{
+			"key": "grass",
+			"stat": "grass_tufts",
+			"allow_sand": true,
+			"building_padding": 0.8,
+			"road_clearance": 2.35,
+			"min_scale": 0.85,
+			"max_scale": 1.55,
+		},
+		{
+			"key": "flowers",
+			"stat": "flower_clumps",
+			"allow_sand": false,
+			"building_padding": 0.9,
+			"road_clearance": 2.45,
+			"min_scale": 0.80,
+			"max_scale": 1.35,
+		},
+		{
+			"key": "shrubs",
+			"stat": "ornamental_shrubs",
+			"allow_sand": true,
+			"building_padding": 1.6,
+			"road_clearance": 2.85,
+			"min_scale": 0.80,
+			"max_scale": 1.50,
+		},
+	]
+	var transforms_by_species: Dictionary = {"grass": [], "flowers": [], "shrubs": []}
+
+	for species_index in species_specs.size():
+		var species: Dictionary = species_specs[species_index]
+		var species_key := String(species.get("key", "grass"))
+		var target_transforms: Array = transforms_by_species[species_key]
+		for patch_index in patches.size():
+			var patch: Dictionary = patches[patch_index]
+			var rect: Rect2 = patch.get("rect", Rect2())
+			var desired := int(patch.get(species_key, 0))
+			var accepted := 0
+			for attempt in desired * 12:
+				if accepted >= desired:
+					break
+				var seed_base := patch_index * 100000 + species_index * 1000000 + attempt
+				var candidate := Vector3(
+					rect.position.x + _hash01(seed_base * 3 + 11, seed_base * 5 + 71) * rect.size.x,
+					0.0,
+					rect.position.y + _hash01(seed_base * 7 + 31, seed_base * 11 + 97) * rect.size.y
+				)
+				candidate.y = height_at(candidate.x, candidate.z) + 0.006
+				if not _is_soft_ground_cover_surface(candidate, bool(species.get("allow_sand", false))):
+					continue
+				if not _is_position_clear(
+					candidate,
+					float(species.get("building_padding", 1.0)),
+					float(species.get("road_clearance", 2.4))
+				):
+					continue
+				var width_variation := _hash01(seed_base * 13 + 17, seed_base * 17 + 43)
+				var height_variation := _hash01(seed_base * 19 + 23, seed_base * 23 + 59)
+				var min_scale := float(species.get("min_scale", 0.8))
+				var max_scale := float(species.get("max_scale", 1.4))
+				var width_scale := lerpf(min_scale, max_scale, width_variation)
+				var height_scale := lerpf(min_scale, max_scale, height_variation)
+				target_transforms.append(make_transform(
+					candidate,
+					_hash01(seed_base * 29 + 3, seed_base * 31 + 13) * TAU,
+					Vector3(width_scale, height_scale, width_scale)
+				))
+				accepted += 1
+		transforms_by_species[species_key] = target_transforms
+
+	var grass_built := _add_batched_model(root, "res://assets/vegetation/grass_tuft.glb", transforms_by_species["grass"], "BlenderGrassTufts")
+	var flowers_built := _add_batched_model(root, "res://assets/vegetation/flower_clump.glb", transforms_by_species["flowers"], "BlenderFlowerClumps")
+	var shrubs_built := _add_batched_model(root, "res://assets/vegetation/ornamental_shrub.glb", transforms_by_species["shrubs"], "BlenderOrnamentalShrubs")
+	_enhancement_stats["geometric_ground_cover_0217"] = grass_built or flowers_built or shrubs_built
+	_enhancement_stats["grass_tufts"] = (transforms_by_species["grass"] as Array).size() if grass_built else 0
+	_enhancement_stats["flower_clumps"] = (transforms_by_species["flowers"] as Array).size() if flowers_built else 0
+	_enhancement_stats["ornamental_shrubs"] = (transforms_by_species["shrubs"] as Array).size() if shrubs_built else 0
+	_enhancement_stats["ground_cover_total"] = int(_enhancement_stats.get("grass_tufts", 0)) + int(_enhancement_stats.get("flower_clumps", 0)) + int(_enhancement_stats.get("ornamental_shrubs", 0))
 
 
 func _build_street_lamps() -> void:
@@ -4500,7 +4847,7 @@ func _is_roadside_position_valid(candidate: Vector3) -> bool:
 	return String(get_surface_at(candidate).get("kind", "")) != "water"
 
 
-func _build_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: float, step_m: float = 2.0, lift_m: float = 0.035) -> ArrayMesh:
+func _make_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: float, step_m: float = 2.0, lift_m: float = 0.035) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var columns := maxi(1, ceili((max_x - min_x) / step_m))
@@ -5002,9 +5349,11 @@ func _build_reflection_probes() -> void:
 		probe.origin_offset = Vector3(0.0, capture_height - probe_height, 0.0)
 		probe.box_projection = true
 		probe.enable_shadows = false
-		# Slightly lifted reflection energy makes car clearcoat and curtain-wall
-		# windows read their local cubemap, while the tall probes stay balanced.
-		probe.intensity = 1.24
+		# 0.2.17: Godot's Mobile probe path applies extra radiance
+		# energy relative to Forward+.  At 1.24 the near-metallic
+		# main-tower panes clipped toward white; 0.62 keeps the same
+		# box-projected district image under the dark tinted F0.
+		probe.intensity = 0.62
 		probe.max_distance = 240.0
 		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
@@ -5020,7 +5369,8 @@ func _build_reflection_probes() -> void:
 	_enhancement_stats["tall_reflection_probes"] = tall_probe_count
 	_enhancement_stats["reflection_probe_max_distance"] = 240.0
 	_enhancement_stats["reflection_probe_box_projection"] = true
-	_enhancement_stats["reflection_probe_intensity"] = 1.24
+	_enhancement_stats["reflection_probe_intensity"] = 0.62
+	_enhancement_stats["reflection_probe_mobile_calibration_0217"] = true
 
 
 func _build_benches() -> void:
