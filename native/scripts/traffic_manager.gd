@@ -13,6 +13,8 @@ extends Node3D
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
 const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
 const WHEEL_RADIUS := 0.3378
+const MOVING_VISUAL_RANGE_M := 360.0
+const PARKED_VISUAL_RANGE_M := 300.0
 const CAR_COLORS: Array[Color] = [
 	Color(0.72, 0.74, 0.76),
 	Color(0.08, 0.09, 0.11),
@@ -40,6 +42,7 @@ var _paint_materials: Dictionary = {}
 var _glass_material: StandardMaterial3D
 var _tyre_material: StandardMaterial3D
 var _chrome_material: StandardMaterial3D
+var _visual_range_instances := 0
 
 
 func initialize(world: NativeWorldBuilder, player: NativeVehicle) -> void:
@@ -60,12 +63,26 @@ func initialize(world: NativeWorldBuilder, player: NativeVehicle) -> void:
 
 
 func get_stats() -> Dictionary:
+	var within_visual_range := 0
+	if _player != null:
+		for entry in _moving_cars:
+			var moving_body := entry.get("body") as Node3D
+			if moving_body != null and moving_body.global_position.distance_squared_to(_player.global_position) <= MOVING_VISUAL_RANGE_M * MOVING_VISUAL_RANGE_M:
+				within_visual_range += 1
+		for entry in _parked_cars:
+			var parked_body := entry.get("body") as Node3D
+			if parked_body != null and parked_body.global_position.distance_squared_to(_player.global_position) <= PARKED_VISUAL_RANGE_M * PARKED_VISUAL_RANGE_M:
+				within_visual_range += 1
 	return {
 		"routes": _routes.size(),
 		"moving": _moving_cars.size(),
 		"parked": _parked_cars.size(),
 		"total": _moving_cars.size() + _parked_cars.size(),
 		"paint_materials": _paint_materials.size(),
+		"visual_range_moving": MOVING_VISUAL_RANGE_M,
+		"visual_range_parked": PARKED_VISUAL_RANGE_M,
+		"visual_range_instances": _visual_range_instances,
+		"within_visual_range": within_visual_range,
 	}
 
 
@@ -304,6 +321,11 @@ func _create_car(index: int, parked: bool) -> Dictionary:
 	var color := CAR_COLORS[index % CAR_COLORS.size()]
 	_apply_model_materials(model, color, parked)
 	_add_contact_shadow(body)
+	# The phone screenshot exposed the cost of drawing all 34 full-detail
+	# Mustangs (plus the player) across the whole 1 km map. Collision and
+	# traffic logic still exist everywhere, but only nearby car geometry is
+	# submitted to the camera/shadow passes.
+	_set_visual_range(body, PARKED_VISUAL_RANGE_M if parked else MOVING_VISUAL_RANGE_M)
 
 	var lights: Array = []
 	if not parked:
@@ -325,6 +347,17 @@ func _create_car(index: int, parked: bool) -> Dictionary:
 		"wheels": _collect_wheels(model),
 		"lights": lights,
 	}
+
+
+func _set_visual_range(node: Node, range_m: float) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		geometry.visibility_range_begin = 0.0
+		geometry.visibility_range_end = range_m
+		geometry.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		_visual_range_instances += 1
+	for child in node.get_children():
+		_set_visual_range(child, range_m)
 
 
 func _place_moving_car(entry: Dictionary) -> void:

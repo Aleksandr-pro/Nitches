@@ -42,8 +42,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=5'), 'Native 0.2.2 must bump Android versionCode to 5');
-assert(preset.includes('version/name="0.2.2-native-alpha"'), 'Native version name must be 0.2.2-native-alpha');
+assert(preset.includes('version/code=6'), 'Native 0.2.3 must bump Android versionCode to 6');
+assert(preset.includes('version/name="0.2.3-native-alpha"'), 'Native version name must be 0.2.3-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -83,8 +83,12 @@ for (const marker of [
   'lane_dashes',
   'BACKLIGHT',
   'ALPHA_SCISSOR_THRESHOLD',
+  'MOVING_VISUAL_RANGE_M',
+  'visibility_range_end',
+  'shadow_max_distance',
+  'reflection_probe_max_distance',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.2 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.3 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
