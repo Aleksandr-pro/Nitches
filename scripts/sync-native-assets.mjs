@@ -30,6 +30,8 @@ const textureNames = [
   'rock.jpg', 'rock_normal.jpg',
   'user_asphalt_dashed.jpg', 'user_asphalt_dashed_normal.jpg',
   'user_asphalt_plain.jpg', 'user_asphalt_plain_normal.jpg',
+  'asphalt_city.jpg',
+  'user_asphalt_pothole.jpg', 'user_asphalt_pothole_normal.jpg',
   'sidewalk.jpg',
   'user_water_turquoise.jpg', 'user_water_turquoise_normal.jpg',
   'user_pool_mosaic.jpg', 'user_pool_mosaic_normal.jpg',
