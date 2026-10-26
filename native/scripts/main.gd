@@ -279,6 +279,14 @@ func _run_smoke_checks() -> void:
 	if not bool(drive_base_state.get("car_paint_shader", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
 		failures.append("ArcadeCar/car-paint Drive base is not active: %s" % str(drive_base_state))
 
+	var road_visual_state := _world.get_road_visual_state()
+	if not bool(road_visual_state.get("asphalt_shader", false)) or not bool(road_visual_state.get("asphalt_textures", false)) or not bool(road_visual_state.get("ground_winding_godot_cw", false)) or not bool(road_visual_state.get("road_mesh_ready", false)):
+		failures.append("road/terrain visual state would be culled or untextured: %s" % str(road_visual_state))
+	if int(road_visual_state.get("foliage_wind_materials", 0)) < 3:
+		failures.append("foliage wind Drive base is incomplete: %s" % str(road_visual_state))
+	if int(enhancement_stats.get("road_edge_lines", 0)) < 1500 or int(enhancement_stats.get("lane_dashes", 0)) < 800:
+		failures.append("continuous road paint is incomplete: %s" % str(enhancement_stats))
+
 	var traffic_stats := _traffic.get_stats()
 	if int(traffic_stats.get("moving", 0)) < 12 or int(traffic_stats.get("parked", 0)) < 16:
 		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
@@ -334,7 +342,7 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s road_visual=%s" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
@@ -349,6 +357,7 @@ func _run_smoke_checks() -> void:
 			str(dynamic_world_state),
 			str(speed_post_state),
 			str(drive_base_state),
+			str(road_visual_state),
 		])
 	_finish_smoke(failures)
 
