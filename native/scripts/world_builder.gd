@@ -632,7 +632,10 @@ func _build_environment() -> void:
 	_sun.shadow_normal_bias = 1.65
 	_sun.shadow_blur = 1.15
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	_sun.directional_shadow_max_distance = 520.0
+	# 360 m keeps readable shadows around the car and nearby streets while
+	# avoiding the 520 m shadow submission seen in the 6 FPS phone capture.
+	_sun.directional_shadow_max_distance = 360.0
+	_enhancement_stats["shadow_max_distance"] = 360.0
 	_sun.directional_shadow_split_1 = 0.055
 	_sun.directional_shadow_split_2 = 0.16
 	_sun.directional_shadow_split_3 = 0.42
@@ -2178,7 +2181,7 @@ func _build_reflection_probes() -> void:
 		probe.box_projection = true
 		probe.enable_shadows = false
 		probe.intensity = 1.12
-		probe.max_distance = 450.0
+		probe.max_distance = 320.0
 		probe.mesh_lod_threshold = 0.35
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
 		probe.update_mode = ReflectionProbe.UPDATE_ONCE
@@ -2188,6 +2191,7 @@ func _build_reflection_probes() -> void:
 		root.add_child(probe)
 		_reflection_probes.append(probe)
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
+	_enhancement_stats["reflection_probe_max_distance"] = 320.0
 
 
 func _build_benches() -> void:

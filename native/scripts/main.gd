@@ -73,7 +73,9 @@ func _create_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "GameCamera"
 	_camera.near = 0.12
-	_camera.far = 2800.0
+	# RichTown's playable diagonal is about 1.4 km; 1.8 km preserves the
+	# whole district/islands while tightening depth precision and culling.
+	_camera.far = 1800.0
 	_camera.fov = 58.0
 	add_child(_camera)
 	_camera.make_current()
@@ -292,6 +294,10 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
 	if int(traffic_stats.get("paint_materials", 0)) < 5:
 		failures.append("traffic car-paint shader materials are incomplete: %s" % str(traffic_stats))
+	if float(traffic_stats.get("visual_range_moving", 0.0)) < 300.0 or float(traffic_stats.get("visual_range_moving", 9999.0)) > 420.0 or int(traffic_stats.get("visual_range_instances", 0)) < 34:
+		failures.append("traffic distance culling is not active: %s" % str(traffic_stats))
+	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 400.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 360.0:
+		failures.append("mobile shadow/reflection ranges are not bounded: %s" % str(enhancement_stats))
 	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
 	if String(spawn_surface.get("kind", "")) != "asphalt":
 		failures.append("spawn surface is not asphalt: %s" % str(spawn_surface))
