@@ -10,6 +10,7 @@ extends Node3D
 const WORLD_DATA_PATH := "res://data/richtown_native.json"
 const DynamicWorldScript := preload("res://scripts/dynamic_world.gd")
 const WetAsphaltShader: Shader = preload("res://shaders/wet_asphalt.gdshader")
+const WaterSurfaceShader: Shader = preload("res://shaders/water_surface.gdshader")
 const FoliageWindShader: Shader = preload("res://shaders/foliage_wind.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
@@ -38,6 +39,7 @@ var _asphalt_material: ShaderMaterial
 var _palm_leaf_shader_material: ShaderMaterial
 var _foliage_wind_materials: Array[ShaderMaterial] = []
 var _water_materials: Array[StandardMaterial3D] = []
+var _sea_material: ShaderMaterial
 var _night_materials: Array[Dictionary] = []
 var _collision_root: StaticBody3D
 var _sun: DirectionalLight3D
@@ -64,6 +66,8 @@ var _elapsed := 0.0
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	if _sea_material != null:
+		_sea_material.set_shader_parameter("wave_time", _elapsed)
 	for i in _water_materials.size():
 		var material := _water_materials[i]
 		var speed := 0.018 if i == 0 else 0.026
@@ -1408,22 +1412,31 @@ func _build_terrain() -> void:
 	_collision_root.add_child(collision)
 
 
-func _water_material() -> StandardMaterial3D:
-	var material := _material(
-		"water_sea",
-		"user_water_turquoise.jpg",
-		"user_water_turquoise_normal.jpg",
-		Color(0.20, 0.72, 0.86, 0.80),
-		0.055,
-		0.0,
-		Vector3(90.0, 120.0, 1.0)
-	)
-	material.normal_scale = 1.22
-	material.metallic_specular = 1.0
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	if not _water_materials.has(material):
-		_water_materials.append(material)
-	return material
+func _water_material() -> ShaderMaterial:
+	if _sea_material != null:
+		return _sea_material
+	_sea_material = ShaderMaterial.new()
+	_sea_material.resource_name = "sea_surface_pbr"
+	_sea_material.shader = WaterSurfaceShader
+	_sea_material.set_shader_parameter("wave_time", _elapsed)
+	_sea_material.set_shader_parameter("wave_height", 0.62)
+	_sea_material.set_shader_parameter("wind_direction", Vector2(0.82, 0.57))
+	_sea_material.set_shader_parameter("foam_strength", 0.66)
+	_sea_material.set_shader_parameter("normal_strength", 0.78)
+	_sea_material.set_shader_parameter("reflection_strength", 0.82)
+	return _sea_material
+
+
+func get_water_visual_state() -> Dictionary:
+	return {
+		"sea_shader": _sea_material != null and _sea_material.shader == WaterSurfaceShader,
+		"animated_waves": _sea_material != null and float(_sea_material.get_shader_parameter("wave_height")) > 0.0,
+		"depth_foam": _sea_material != null and float(_sea_material.get_shader_parameter("foam_strength")) > 0.0,
+		"reflection_strength": float(_sea_material.get_shader_parameter("reflection_strength")) if _sea_material != null else 0.0,
+		"sea_vertices_x": 129,
+		"sea_vertices_z": 177,
+		"pool_surfaces": _water_materials.size(),
+	}
 
 
 func _pool_material() -> StandardMaterial3D:
@@ -1431,17 +1444,20 @@ func _pool_material() -> StandardMaterial3D:
 		"water_pool",
 		"user_pool_mosaic.jpg",
 		"user_pool_mosaic_normal.jpg",
-		Color(0.46, 0.90, 1.0, 0.92),
-		0.11,
+		Color(0.22, 0.60, 0.68, 0.96),
+		0.075,
 		0.0,
 		Vector3(2.0, 2.0, 1.0)
 	)
-	material.normal_scale = 0.92
-	material.metallic_specular = 0.92
+	material.normal_scale = 0.48
+	material.metallic_specular = 0.98
+	material.clearcoat_enabled = true
+	material.clearcoat = 0.85
+	material.clearcoat_roughness = 0.045
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.emission_enabled = true
-	material.emission = Color(0.25, 0.72, 0.88)
-	_register_night_material(material, 0.0, 0.08, 0.34)
+	material.emission = Color(0.025, 0.085, 0.10)
+	_register_night_material(material, 0.0, 0.025, 0.10)
 	if not _water_materials.has(material):
 		_water_materials.append(material)
 	return material
@@ -1454,8 +1470,10 @@ func _build_water_and_pools() -> void:
 
 	var sea_mesh := PlaneMesh.new()
 	sea_mesh.size = Vector2(760.0, 1040.0)
-	sea_mesh.subdivide_width = 24
-	sea_mesh.subdivide_depth = 24
+	# The denser grid carries the low-frequency geometric swell smoothly;
+	# fine ripples/normals are evaluated per fragment in water_surface.gdshader.
+	sea_mesh.subdivide_width = 128
+	sea_mesh.subdivide_depth = 176
 	var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
 	sea.custom_aabb = WORLD_AABB
 
