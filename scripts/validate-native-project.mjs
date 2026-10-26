@@ -92,6 +92,7 @@ for (const marker of [
   '_configure_render_quality',
   'Viewport.SCALING_3D_MODE_BILINEAR',
   'Viewport.MSAA_DISABLED',
+  'Viewport.SCREEN_SPACE_AA_FXAA',
   'lod_bias',
   'SHADOW_PARALLEL_2_SPLITS',
 ]) {

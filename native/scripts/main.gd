@@ -83,7 +83,7 @@ func _configure_render_quality(initial: bool) -> void:
 		# edges softer but preserves far more GPU time; the sharp UI remains
 		# at display resolution because only the 3D buffer is scaled.
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
-		viewport.use_fxaa = true
+		viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
 		if initial:
 			_render_scale = 0.68
 		viewport.scaling_3d_scale = _render_scale
@@ -91,7 +91,7 @@ func _configure_render_quality(initial: bool) -> void:
 		"android": is_android,
 		"scale": _render_scale,
 		"msaa": int(viewport.msaa_3d),
-		"fxaa": viewport.use_fxaa,
+		"screen_space_aa": int(viewport.screen_space_aa),
 		"adaptive": is_android,
 	}
 
