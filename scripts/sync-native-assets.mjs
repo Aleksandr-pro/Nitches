@@ -23,6 +23,7 @@ const modelCopies = [
   ['src/assets/models/props/bus_shelter.glb', 'props/bus_shelter.glb'],
   ['src/assets/models/props/traffic_signal_short.glb', 'props/traffic_signal_short.glb'],
   ['src/assets/models/props/traffic_signal_long.glb', 'props/traffic_signal_long.glb'],
+  ['src/assets/models/props/dubai_premium_cafe.glb', 'props/dubai_premium_cafe.glb'],
   ['src/assets/models/plants.glb', 'vegetation/plants.glb'],
   ['src/assets/models/props/palm_date.glb', 'vegetation/palm_date.glb'],
   ['src/assets/models/props/palm_royal.glb', 'vegetation/palm_royal.glb'],

@@ -1188,6 +1188,52 @@ func _prop_material(material_name: String) -> Material:
 			return _material("prop_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.72, 0.76, 0.80), 0.38, 0.78)
 		"PropsWood":
 			return _material("prop_wood", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color.WHITE, 0.86)
+		"CafeTravertine":
+			var cafe_travertine := _material("dubai_cafe_travertine", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.90, 0.84, 0.72), 0.76, 0.0, Vector3(0.22, 0.22, 0.22), true)
+			cafe_travertine.normal_scale = 0.92
+			cafe_travertine.metallic_specular = 0.48
+			return cafe_travertine
+		"CafeLimestone":
+			return _material("dubai_cafe_limestone", "user_stone_tiles_beige.jpg", "", Color(0.90, 0.84, 0.73), 0.88, 0.0, Vector3(0.24, 0.24, 0.24), true)
+		"CafeBronze":
+			var cafe_bronze := _material("dubai_cafe_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.74, 0.48, 0.25), 0.34, 0.78, Vector3(0.40, 0.40, 0.40), true)
+			cafe_bronze.metallic_specular = 0.92
+			return cafe_bronze
+		"CafeSteel":
+			var cafe_steel := _material("dubai_cafe_steel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.46, 0.54, 0.56), 0.38, 0.78, Vector3(0.44, 0.44, 0.44), true)
+			cafe_steel.metallic_specular = 0.92
+			return cafe_steel
+		"CafeGlass":
+			var cafe_glass := _material("dubai_cafe_glass", "", "", Color(0.30, 0.53, 0.62, 0.40), 0.055, 0.15)
+			cafe_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			cafe_glass.metallic_specular = 1.0
+			cafe_glass.clearcoat_enabled = true
+			cafe_glass.clearcoat = 0.92
+			cafe_glass.clearcoat_roughness = 0.035
+			cafe_glass.emission_enabled = true
+			cafe_glass.emission = Color(0.20, 0.34, 0.39)
+			_register_night_material(cafe_glass, 0.0, 0.08, 0.32)
+			return cafe_glass
+		"CafeOak":
+			return _material("dubai_cafe_oak", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.82, 0.63, 0.42), 0.78, 0.0, Vector3(0.32, 0.32, 0.32), true)
+		"CafeWarmLight":
+			var cafe_warm_light := _material("dubai_cafe_warm_light", "", "", Color(1.0, 0.67, 0.32), 0.34, 0.0)
+			cafe_warm_light.emission_enabled = true
+			cafe_warm_light.emission = Color(0.78, 0.34, 0.09)
+			_register_night_material(cafe_warm_light, 0.0, 0.08, 0.54)
+			return cafe_warm_light
+		"CafeCream":
+			return _material("dubai_cafe_cream", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.93, 0.88, 0.77), 0.70, 0.0, Vector3(0.36, 0.36, 0.36), true)
+		"CafeCounter":
+			var cafe_counter := _material("dubai_cafe_counter", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.30, 0.32, 0.32), 0.30, 0.12, Vector3(0.34, 0.34, 0.34), true)
+			cafe_counter.metallic_specular = 0.76
+			return cafe_counter
+		"CafeGreen":
+			var cafe_green := _material("dubai_cafe_greenery", "foliage.jpg", "foliage_normal.jpg", Color(0.58, 0.76, 0.45), 0.96, 0.0, Vector3(0.72, 0.72, 0.72), true)
+			cafe_green.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return cafe_green
+		"CafeCeramic":
+			return _material("dubai_cafe_ceramic", "user_stone_tiles_beige.jpg", "", Color(0.86, 0.76, 0.61), 0.46, 0.08, Vector3(0.22, 0.22, 0.22), true)
 		"VillaPlaster":
 			# 0.2.8: Building Model No.1 gets world-scale materials. The
 			# 0.2.7 shared plaster was stretched over each whole cube UV,
@@ -3212,6 +3258,8 @@ func _batched_model_base_range(path: String) -> float:
 		return 340.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
 		return 390.0
+	if path.ends_with("dubai_premium_cafe.glb"):
+		return 220.0
 	if path.ends_with("grass_tuft.glb"):
 		return 52.0
 	if path.ends_with("flower_clump.glb"):
@@ -4979,108 +5027,37 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	_add_multimesh(parent, ring_mesh, granite, ring_transforms, "WashingtoniaGraniteRings", false)
 	_add_multimesh(parent, drip_ring_mesh, irrigation_material, drip_transforms, "WashingtoniaDripIrrigation", false)
 
-	# Three compact glass-and-metal cafe pavilions with attached umbrella
-	# terraces. All repetitions are MultiMesh batches to keep draw calls low.
-	var glass := _material("boulevard_cafe_glass", "", "", Color(0.36, 0.59, 0.66, 0.40), 0.055, 0.10)
-	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass.metallic_specular = 1.0
-	glass.clearcoat_enabled = true
-	glass.clearcoat = 0.92
-	glass.clearcoat_roughness = 0.035
-	var canopy_material := _material("boulevard_cafe_canopy", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.88, 0.84, 0.74), 0.64, 0.02)
-	var counter_material := _material("boulevard_cafe_counter", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.39, 0.43, 0.44), 0.34, 0.20)
-	var warm_sign := _material("boulevard_cafe_sign", "", "", Color(0.95, 0.53, 0.16), 0.34, 0.05)
-	warm_sign.emission_enabled = true
-	warm_sign.emission = Color(0.42, 0.12, 0.025)
-	var table_material := _material("boulevard_cafe_table", "user_stone_tiles_beige.jpg", "", Color(0.86, 0.82, 0.73), 0.48, 0.03)
-	var chair_material := _material("boulevard_cafe_chair", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.24, 0.30, 0.32), 0.36, 0.54)
-	var umbrella_material := _material("boulevard_cafe_umbrella", "", "", Color(0.88, 0.84, 0.73), 0.78)
-	var accent_umbrella := _material("boulevard_cafe_umbrella_teal", "", "", Color(0.10, 0.42, 0.42), 0.76)
-	var glass_wall_transforms: Array[Transform3D] = []
-	var canopy_transforms: Array[Transform3D] = []
-	var frame_transforms: Array[Transform3D] = []
-	var counter_transforms: Array[Transform3D] = []
-	var sign_transforms: Array[Transform3D] = []
-	var table_top_transforms: Array[Transform3D] = []
-	var table_leg_transforms: Array[Transform3D] = []
-	var chair_seat_transforms: Array[Transform3D] = []
-	var chair_back_transforms: Array[Transform3D] = []
-	var chair_leg_transforms: Array[Transform3D] = []
-	var umbrella_pole_transforms: Array[Transform3D] = []
-	var umbrella_canopy_transforms: Array[Transform3D] = []
-	var accent_canopy_transforms: Array[Transform3D] = []
-	var cafe_locations := [Vector2(718.0, -67.0), Vector2(718.0, -20.0), Vector2(718.0, 27.0)]
-	for cafe_index in cafe_locations.size():
-		var location: Vector2 = cafe_locations[cafe_index]
-		var base := Vector3(location.x, height_at(location.x, location.y), location.y)
-		# Glass walls on the back and two ends; the boulevard-facing side is open.
-		glass_wall_transforms.append(make_transform(base + Vector3(-2.85, 1.34, 0.0), 0.0, Vector3(0.08, 2.55, 5.9)))
-		glass_wall_transforms.append(make_transform(base + Vector3(0.0, 1.34, -2.92), 0.0, Vector3(5.7, 2.55, 0.08)))
-		glass_wall_transforms.append(make_transform(base + Vector3(0.0, 1.34, 2.92), 0.0, Vector3(5.7, 2.55, 0.08)))
-		canopy_transforms.append(make_transform(base + Vector3(0.0, 2.77, 0.0), 0.0, Vector3(6.5, 0.20, 6.6)))
-		counter_transforms.append(make_transform(base + Vector3(-1.05, 0.58, 0.0), 0.0, Vector3(2.7, 0.95, 4.7)))
-		sign_transforms.append(make_transform(base + Vector3(0.0, 2.43, 0.0), 0.0, Vector3(3.5, 0.20, 0.10)))
-		for post_x in [-2.95, 2.95]:
-			for post_z in [-2.95, 2.95]:
-				frame_transforms.append(make_transform(base + Vector3(post_x, 1.42, post_z), 0.0, Vector3(0.10, 2.84, 0.10)))
-		for table_z_offset in [-2.2, 2.2]:
-			var table_center := base + Vector3(8.0, 0.0, table_z_offset)
-			table_top_transforms.append(make_transform(table_center + Vector3(0.0, 0.82, 0.0), 0.0, Vector3(1.38, 0.10, 1.38)))
-			table_leg_transforms.append(make_transform(table_center + Vector3(0.0, 0.43, 0.0), 0.0, Vector3(0.35, 0.76, 0.35)))
-			umbrella_pole_transforms.append(make_transform(table_center + Vector3(0.0, 2.05, 0.0), 0.0, Vector3.ONE))
-			var canopy_transform := make_transform(table_center + Vector3(0.0, 3.20, 0.0), 0.0, Vector3.ONE)
-			if (cafe_index + int(table_z_offset > 0.0)) % 2 == 0:
-				umbrella_canopy_transforms.append(canopy_transform)
-			else:
-				accent_canopy_transforms.append(canopy_transform)
-			for chair_index in 4:
-				var angle := TAU * float(chair_index) / 4.0
-				var outward := Vector3(cos(angle), 0.0, sin(angle))
-				var chair_center := table_center + outward * 1.18
-				var chair_yaw := atan2(-outward.x, -outward.z)
-				chair_seat_transforms.append(make_transform(chair_center + Vector3(0.0, 0.48, 0.0), chair_yaw, Vector3(0.48, 0.10, 0.48)))
-				chair_back_transforms.append(make_transform(chair_center + outward * 0.20 + Vector3(0.0, 0.77, 0.0), chair_yaw, Vector3(0.48, 0.55, 0.09)))
-				chair_leg_transforms.append(make_transform(chair_center + Vector3(-0.16, 0.23, -0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
-				chair_leg_transforms.append(make_transform(chair_center + Vector3(0.16, 0.23, -0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
-				chair_leg_transforms.append(make_transform(chair_center + Vector3(-0.16, 0.23, 0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
-				chair_leg_transforms.append(make_transform(chair_center + Vector3(0.16, 0.23, 0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
-
-	var unit_box := BoxMesh.new()
-	unit_box.size = Vector3.ONE
-	var cafe_pole_mesh := CylinderMesh.new()
-	cafe_pole_mesh.top_radius = 0.035
-	cafe_pole_mesh.bottom_radius = 0.045
-	cafe_pole_mesh.height = 2.15
-	cafe_pole_mesh.radial_segments = 10
-	var cafe_umbrella_mesh := CylinderMesh.new()
-	cafe_umbrella_mesh.top_radius = 0.06
-	cafe_umbrella_mesh.bottom_radius = 1.42
-	cafe_umbrella_mesh.height = 0.30
-	cafe_umbrella_mesh.radial_segments = 16
-	var cafe_table_mesh := CylinderMesh.new()
-	cafe_table_mesh.top_radius = 0.69
-	cafe_table_mesh.bottom_radius = 0.69
-	cafe_table_mesh.height = 0.10
-	cafe_table_mesh.radial_segments = 20
-	var cafe_leg_mesh := CylinderMesh.new()
-	cafe_leg_mesh.top_radius = 0.06
-	cafe_leg_mesh.bottom_radius = 0.10
-	cafe_leg_mesh.height = 0.76
-	cafe_leg_mesh.radial_segments = 10
-	_add_multimesh(parent, unit_box, glass, glass_wall_transforms, "BoulevardCafeGlassArcades", false)
-	_add_multimesh(parent, unit_box, canopy_material, canopy_transforms, "BoulevardCafeCanopies", false)
-	_add_multimesh(parent, unit_box, chair_material, frame_transforms, "BoulevardCafeHighTechFrames", false)
-	_add_multimesh(parent, unit_box, counter_material, counter_transforms, "BoulevardCafeCounters", false)
-	_add_multimesh(parent, unit_box, warm_sign, sign_transforms, "BoulevardCafeLightboxSigns", false)
-	_add_multimesh(parent, cafe_table_mesh, table_material, table_top_transforms, "BoulevardCafeTables", false)
-	_add_multimesh(parent, cafe_leg_mesh, chair_material, table_leg_transforms, "BoulevardCafeTablePedestals", false)
-	_add_multimesh(parent, unit_box, chair_material, chair_seat_transforms, "BoulevardCafeChairSeats", false)
-	_add_multimesh(parent, unit_box, chair_material, chair_back_transforms, "BoulevardCafeChairBacks", false)
-	_add_multimesh(parent, cafe_leg_mesh, chair_material, chair_leg_transforms, "BoulevardCafeChairLegs", false)
-	_add_multimesh(parent, cafe_pole_mesh, chair_material, umbrella_pole_transforms, "BoulevardCafeUmbrellaPoles", false)
-	_add_multimesh(parent, cafe_umbrella_mesh, umbrella_material, umbrella_canopy_transforms, "BoulevardCafeUmbrellasIvory", false)
-	_add_multimesh(parent, cafe_umbrella_mesh, accent_umbrella, accent_canopy_transforms, "BoulevardCafeUmbrellasTeal", false)
-	_enhancement_stats["boulevard_cafes"] = cafe_locations.size()
+	# Reusable, detailed Dubai-inspired GLB asset. Local +X faces the
+	# boulevard; its ground-centred origin keeps placement easy to reuse.
+	var cafe_locations: Array[Vector2] = [
+		Vector2(718.0, -67.0),
+		Vector2(718.0, -20.0),
+		Vector2(718.0, 27.0),
+	]
+	var cafe_transforms: Array[Transform3D] = []
+	for location in cafe_locations:
+		var cafe_position := Vector3(
+			location.x,
+			height_at(location.x, location.y) + 0.055,
+			location.y
+		)
+		cafe_transforms.append(make_transform(cafe_position))
+		# Interior shell collider; terrace furniture stays decorative.
+		_add_box_collider(
+			cafe_position + Vector3(-2.1, 1.9, 0.0),
+			Vector3(6.55, 3.6, 7.6)
+		)
+	var cafe_model_path := "res://assets/props/dubai_premium_cafe.glb"
+	var cafe_model_parts := _get_model_parts(cafe_model_path)
+	var cafes_built := _add_batched_model(
+		parent,
+		cafe_model_path,
+		cafe_transforms,
+		"DubaiPremiumCafes"
+	)
+	_enhancement_stats["boulevard_cafes"] = cafe_locations.size() if cafes_built else 0
+	_enhancement_stats["dubai_premium_cafe_model"] = cafes_built
+	_enhancement_stats["dubai_premium_cafe_model_parts"] = cafe_model_parts.size()
 	_enhancement_stats["boulevard_palm_planters"] = pebble_transforms.size()
 	_enhancement_stats["boulevard_lawn_islands"] = lawn_transforms.size()
 	_enhancement_stats["premium_boulevard_promenade_m2"] = (31.0 + 13.0) * 142.0

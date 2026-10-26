@@ -13,6 +13,7 @@ on:
       - 'native/**'
       - 'scripts/export-native-world.mjs'
       - 'scripts/sync-native-assets.mjs'
+      - 'scripts/generate_dubai_premium_cafe.py'
       - 'scripts/validate-native-project.mjs'
       - 'scripts/check-lfs-assets.mjs'
       - 'src/world/realWorld.js'
