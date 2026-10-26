@@ -11,6 +11,7 @@ extends Node3D
 ## the cost of dozens of full RigidBody3D vehicle simulations.
 
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
+const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
 const WHEEL_RADIUS := 0.3378
 const CAR_COLORS: Array[Color] = [
 	Color(0.72, 0.74, 0.76),
@@ -35,6 +36,7 @@ var _rng := RandomNumberGenerator.new()
 var _headlights_enabled := false
 var _contact_shadow_texture: Texture2D
 var _contact_shadow_material: StandardMaterial3D
+var _paint_materials: Dictionary = {}
 var _glass_material: StandardMaterial3D
 var _tyre_material: StandardMaterial3D
 var _chrome_material: StandardMaterial3D
@@ -63,6 +65,7 @@ func get_stats() -> Dictionary:
 		"moving": _moving_cars.size(),
 		"parked": _parked_cars.size(),
 		"total": _moving_cars.size() + _parked_cars.size(),
+		"paint_materials": _paint_materials.size(),
 	}
 
 
@@ -375,15 +378,24 @@ func _route_gap(from_distance: float, to_distance: float, route_length: float, d
 	return fposmod(from_distance - to_distance, route_length)
 
 
-func _paint_material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.metallic = 0.18
-	material.roughness = 0.34
-	material.metallic_specular = 0.72
-	material.clearcoat_enabled = true
-	material.clearcoat = 1.0
-	material.clearcoat_roughness = 0.06
+func _paint_material(color: Color) -> ShaderMaterial:
+	# The same Drive metallic-flake clearcoat paint as the player car,
+	# cached by colour so the whole fleet shares a handful of materials.
+	if _paint_materials.has(color):
+		return _paint_materials[color] as ShaderMaterial
+	var material := ShaderMaterial.new()
+	material.shader = CAR_PAINT_SHADER
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("flake_color", color.lerp(Color(1.0, 0.86, 0.72), 0.52))
+	material.set_shader_parameter("fresnel_color", color.lerp(Color(0.95, 0.42, 0.16), 0.24))
+	material.set_shader_parameter("metallic_amount", 0.80)
+	material.set_shader_parameter("roughness_amount", 0.31)
+	material.set_shader_parameter("clearcoat_amount", 1.0)
+	material.set_shader_parameter("clearcoat_rough", 0.045)
+	material.set_shader_parameter("flake_density", 165.0)
+	material.set_shader_parameter("flake_strength", 0.42)
+	material.set_shader_parameter("fresnel_strength", 0.20)
+	_paint_materials[color] = material
 	return material
 
 

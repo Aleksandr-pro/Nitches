@@ -8,6 +8,7 @@ extends Node3D
 ## exactly the same placement data.
 
 const WORLD_DATA_PATH := "res://data/richtown_native.json"
+const DynamicWorldScript := preload("res://scripts/dynamic_world.gd")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -31,6 +32,8 @@ var _environment: Environment
 var _sky: Sky
 var _procedural_sky_material: ProceduralSkyMaterial
 var _panorama_sky_material: PanoramaSkyMaterial
+var _physical_sky_material: PhysicalSkyMaterial
+var _dynamic_world: NativeDynamicWorld
 var _road_segment_starts: Array[Vector3] = []
 var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
@@ -107,6 +110,12 @@ func has_world_data() -> bool:
 
 func get_enhancement_stats() -> Dictionary:
 	return _enhancement_stats.duplicate(true)
+
+
+func get_dynamic_world_state() -> Dictionary:
+	if _dynamic_world == null:
+		return {"presets": 0, "mode": time_of_day, "preset": "", "physical_sky": false}
+	return _dynamic_world.get_smoke_state()
 
 
 func _build_road_surface_index() -> void:
@@ -301,6 +310,10 @@ func _apply_sky_mode(mode: String) -> void:
 		_panorama_sky_material.panorama = panorama
 		_panorama_sky_material.energy_multiplier = panorama_energy
 		_sky.sky_material = _panorama_sky_material
+	elif _physical_sky_material != null:
+		# DynamicWorld fallback: физическое небо лучше простого градиента,
+		# если панорама вдруг не попала в экспорт.
+		_sky.sky_material = _physical_sky_material
 	else:
 		_sky.sky_material = _procedural_sky_material
 
@@ -351,6 +364,14 @@ func set_time_of_day(mode: String) -> void:
 			_environment.fog_density = 0.00045
 			_environment.fog_sun_scatter = 0.28
 			_environment.fog_aerial_perspective = 0.38
+
+	# DynamicWorld из Drive-базы доводит ACES/bloom/цветокор и плотность
+	# тумана по своим пресетам (CLEAR_DAY днём, GOLDEN_HOUR на закате),
+	# не заменяя панорамы неба и не трогая ночные материалы RichTown.
+	if _dynamic_world != null:
+		_dynamic_world.apply_mode(mode, _environment, _sun)
+		_enhancement_stats["dynamic_world_presets"] = _dynamic_world.get_preset_count()
+		_enhancement_stats["dynamic_world_preset"] = _dynamic_world.get_current_preset_name()
 
 	for entry in _night_materials:
 		var material := entry.get("material") as StandardMaterial3D
@@ -471,6 +492,12 @@ func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> vo
 
 
 func _build_environment() -> void:
+	_dynamic_world = DynamicWorldScript.new() as NativeDynamicWorld
+	_dynamic_world.name = "DynamicWorld"
+	add_child(_dynamic_world)
+	_physical_sky_material = _dynamic_world.get_physical_sky_material()
+	_enhancement_stats["dynamic_world_presets"] = _dynamic_world.get_preset_count()
+
 	_procedural_sky_material = ProceduralSkyMaterial.new()
 	_procedural_sky_material.sky_curve = 0.12
 	_procedural_sky_material.ground_curve = 0.08
@@ -1899,6 +1926,9 @@ func _build_reflection_probes() -> void:
 		probe.mesh_lod_threshold = 0.35
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
 		probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		# Слои 1-19: слой 20 зарезервирован под камеру SpeedPost и не должен
+		# попадать в захват отражений.
+		probe.cull_mask = (1 << 19) - 1
 		root.add_child(probe)
 		_reflection_probes.append(probe)
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()

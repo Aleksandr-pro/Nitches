@@ -11,6 +11,7 @@ extends RigidBody3D
 signal reset_requested
 
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
+const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
 const WHEEL_RADIUS := 0.3378
 
 const SUSPENSION_REST_LENGTH := 0.72
@@ -52,6 +53,7 @@ var _wheel_visuals: Array[Dictionary] = []
 var _visual_root: Node3D
 var _world: NativeWorldBuilder
 var _headlights: Array[SpotLight3D] = []
+var _paint_materials: Dictionary = {}
 var _headlight_materials: Array[StandardMaterial3D] = []
 var _tail_light_materials: Array[StandardMaterial3D] = []
 var _smoke_emitters: Array[GPUParticles3D] = []
@@ -228,15 +230,24 @@ func _count_mesh_instances(node: Node) -> int:
 	return count
 
 
-func _paint_material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.metallic = 0.18
-	material.roughness = 0.34
-	material.metallic_specular = 0.78
-	material.clearcoat_enabled = true
-	material.clearcoat = 1.0
-	material.clearcoat_roughness = 0.055
+func _paint_material(color: Color) -> ShaderMaterial:
+	# Drive car_paint.gdshader: metallic flakes + clearcoat + Fresnel tint.
+	# It replaces the flat StandardMaterial3D paint only on Paint surfaces.
+	if _paint_materials.has(color):
+		return _paint_materials[color] as ShaderMaterial
+	var material := ShaderMaterial.new()
+	material.shader = CAR_PAINT_SHADER
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("flake_color", color.lerp(Color(1.0, 0.86, 0.72), 0.58))
+	material.set_shader_parameter("fresnel_color", color.lerp(Color(1.0, 0.28, 0.08), 0.32))
+	material.set_shader_parameter("metallic_amount", 0.82)
+	material.set_shader_parameter("roughness_amount", 0.29)
+	material.set_shader_parameter("clearcoat_amount", 1.0)
+	material.set_shader_parameter("clearcoat_rough", 0.035)
+	material.set_shader_parameter("flake_density", 180.0)
+	material.set_shader_parameter("flake_strength", 0.5)
+	material.set_shader_parameter("fresnel_strength", 0.24)
+	_paint_materials[color] = material
 	return material
 
 
@@ -626,11 +637,12 @@ func _physics_process(delta: float) -> void:
 	_forward_speed = linear_velocity.dot(-global_transform.basis.z)
 	_lateral_speed = linear_velocity.dot(global_transform.basis.x)
 
-	var speed_factor := clampf(absf(_forward_speed) / 55.0, 0.0, 1.0)
-	var max_steer := lerpf(0.54, 0.15, speed_factor)
+	# Drive ArcadeCar steering curve: quadratic speed falloff and an
+	# exponential approach are much smoother for digital touch buttons than
+	# the old linear move_toward() snap.
+	var max_steer := NativeArcadeCarAssist.steering_limit(_forward_speed)
 	var steering_target := -steering_input * max_steer
-	var steering_rate := 5.2 if absf(steering_input) > 0.03 else 6.5
-	steering_angle = move_toward(steering_angle, steering_target, steering_rate * delta)
+	steering_angle = NativeArcadeCarAssist.smooth_steering(steering_angle, steering_target, delta)
 	_steering_visual_angle = steering_angle
 
 	if boost_active:
@@ -884,7 +896,11 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		lateral_force = clampf(lateral_force, -peak_force * grip_factor, peak_force * grip_factor)
 		var available_longitudinal := sqrt(maxf(peak_force * peak_force - lateral_force * lateral_force, 0.0))
 		longitudinal_force = clampf(longitudinal_force, -available_longitudinal, available_longitudinal)
-		apply_force(right * lateral_force + forward * longitudinal_force, relative_position)
+		# Drive ArcadeCar roll_reduction: tyre forces are applied closer to
+		# the centre-of-mass height. Suspension above still acts at the real
+		# contact, but lateral/longitudinal forces rock the body less.
+		var tyre_force_point := NativeArcadeCarAssist.roll_reduced_force_point(relative_position, ground_normal)
+		apply_force(right * lateral_force + forward * longitudinal_force, tyre_force_point)
 
 	if grounded_wheel_count > 0:
 		var mu_total := 0.0
@@ -1122,3 +1138,10 @@ func get_gear_label() -> String:
 
 func get_rpm_ratio() -> float:
 	return clampf((_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
+
+
+func get_drive_base_state() -> Dictionary:
+	var state := NativeArcadeCarAssist.get_smoke_state()
+	state["car_paint_shader"] = CAR_PAINT_SHADER != null
+	state["paint_materials"] = _paint_materials.size()
+	return state

@@ -1,0 +1,37 @@
+name: Keep alpha signing cache warm
+
+# The native alpha signing key lives in a private Actions cache until the
+# repository gets production ANDROID_KEYSTORE_* secrets. GitHub evicts caches
+# that have not been accessed for over 7 days, so once a week this tiny job
+# touches the canonical default-branch cache. It never prints or uploads the
+# keystore.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  touch-signing-cache:
+    name: Touch alpha signing cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore alpha signing cache
+        id: signing-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.config/nitches-signing
+          key: nitches-android-signing-v1
+          fail-on-cache-miss: false
+
+      - name: Report cache state without exposing the key
+        run: |
+          if [ "${{ steps.signing-cache.outputs.cache-hit }}" = "true" ]; then
+            echo "::notice title=Alpha signing cache::hit"
+          else
+            echo "::warning title=Alpha signing cache::miss - the next default-branch native build will create a new alpha signing key"
+          fi
