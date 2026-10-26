@@ -16,6 +16,7 @@ const modelCopies = [
   ['public/assets/models/cars/mustang/mustang.glb', 'vehicles/mustang.glb', 'mustang'],
   ['src/assets/models/props/villa.glb', 'buildings/villa.glb'],
   ['src/assets/models/props/glass_tower.glb', 'buildings/glass_tower.glb'],
+  ['src/assets/models/props/main_tower.glb', 'buildings/main_tower.glb'],
   ['src/assets/models/props/hero_building.glb', 'buildings/hero_building.glb'],
   ['src/assets/models/props/townhouse.glb', 'buildings/townhouse.glb'],
   ['src/assets/models/props/street_lamp.glb', 'props/street_lamp.glb'],

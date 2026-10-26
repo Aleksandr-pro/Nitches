@@ -41,15 +41,15 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=13'), 'Native 0.2.10 must bump Android versionCode to 13');
-assert(preset.includes('version/name="0.2.10-native-alpha"'), 'Native version name must be 0.2.10-native-alpha');
+assert(preset.includes('version/code=14'), 'Native 0.2.11 must bump Android versionCode to 14');
+assert(preset.includes('version/name="0.2.11-native-alpha"'), 'Native version name must be 0.2.11-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
 const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}`;
-assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.10 must not load any traffic-car system');
+assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.11 must not load any traffic-car system');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
@@ -130,6 +130,19 @@ for (const marker of [
   'HeroMetal',
   '_hero_model_fit',
   '_hero_exported_position',
+  'premium_glass_models',
+  'premium_glass_fixed_scale',
+  'premium_glass_detail_pass',
+  'premium_glass_material_pass',
+  'premium_glass_site_pass',
+  'main_tower_legacy_separate',
+  'TowerGlass',
+  'TowerSpandrel',
+  'TowerStone',
+  'TowerTrim',
+  'TowerMetal',
+  '_glass_model_fit',
+  'main_tower.glb',
   'VillaPlaster',
   'VillaStone',
   'VillaLimestone',
@@ -174,7 +187,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.10 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.11 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
@@ -195,6 +208,7 @@ if (requireAssets) {
     'assets/vehicles/mustang.glb',
     'assets/buildings/villa.glb',
     'assets/buildings/glass_tower.glb',
+    'assets/buildings/main_tower.glb',
     'assets/buildings/hero_building.glb',
     'assets/buildings/townhouse.glb',
     'assets/props/street_lamp.glb',
