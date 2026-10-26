@@ -9,6 +9,8 @@ extends Node3D
 
 const WORLD_DATA_PATH := "res://data/richtown_native.json"
 const DynamicWorldScript := preload("res://scripts/dynamic_world.gd")
+const WetAsphaltShader: Shader = preload("res://shaders/wet_asphalt.gdshader")
+const FoliageWindShader: Shader = preload("res://shaders/foliage_wind.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -24,6 +26,12 @@ var _textures: Dictionary = {}
 var _materials: Dictionary = {}
 var _model_parts_cache: Dictionary = {}
 var _plant_parts: Dictionary = {}
+var _terrain_meshes: Dictionary = {}
+var _road_mesh: ArrayMesh
+var _sidewalk_mesh: ArrayMesh
+var _asphalt_material: ShaderMaterial
+var _palm_leaf_shader_material: ShaderMaterial
+var _foliage_wind_materials: Array[ShaderMaterial] = []
 var _water_materials: Array[StandardMaterial3D] = []
 var _night_materials: Array[Dictionary] = []
 var _collision_root: StaticBody3D
@@ -116,6 +124,72 @@ func get_dynamic_world_state() -> Dictionary:
 	if _dynamic_world == null:
 		return {"presets": 0, "mode": time_of_day, "preset": "", "physical_sky": false}
 	return _dynamic_world.get_smoke_state()
+
+
+func _mesh_winding_cross_y(mesh: Mesh) -> float:
+	# Godot treats clockwise triangles as front-facing. For an upward XZ
+	# surface this means (b-a) x (c-a) must point DOWN (negative Y), even
+	# though the shading normal points up. The 0.2.1 phone screenshot proved
+	# why this matters: the previous positive-Y winding made the renderer
+	# cull the whole terrain/road from above and showed the sky panorama's
+	# lower hemisphere instead of the ground.
+	if mesh == null or mesh.get_surface_count() == 0:
+		return 0.0
+	var arrays := mesh.surface_get_arrays(0)
+	if arrays.size() <= Mesh.ARRAY_VERTEX:
+		return 0.0
+	var vertices := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	if vertices.size() < 3:
+		return 0.0
+	var indices := PackedInt32Array()
+	if arrays.size() > Mesh.ARRAY_INDEX and arrays[Mesh.ARRAY_INDEX] != null:
+		indices = arrays[Mesh.ARRAY_INDEX] as PackedInt32Array
+	var triangle_count := int(indices.size() / 3) if not indices.is_empty() else int(vertices.size() / 3)
+	var sampled := mini(triangle_count, 32)
+	var total := 0.0
+	var valid := 0
+	for triangle in sampled:
+		var ia := triangle * 3
+		var ib := triangle * 3 + 1
+		var ic := triangle * 3 + 2
+		if not indices.is_empty():
+			ia = indices[ia]
+			ib = indices[ib]
+			ic = indices[ic]
+		if ia < 0 or ib < 0 or ic < 0 or ia >= vertices.size() or ib >= vertices.size() or ic >= vertices.size():
+			continue
+		var a := vertices[ia]
+		var cross_y := (vertices[ib] - a).cross(vertices[ic] - a).y
+		if absf(cross_y) > 0.0001:
+			total += cross_y
+			valid += 1
+	return total / float(valid) if valid > 0 else 0.0
+
+
+func get_road_visual_state() -> Dictionary:
+	var asphalt_textures := false
+	var asphalt_wetness := -1.0
+	if _asphalt_material != null:
+		asphalt_textures = bool(_asphalt_material.get_shader_parameter("use_textures"))
+		asphalt_wetness = float(_asphalt_material.get_shader_parameter("wetness"))
+	var terrain_cross_y := 0.0
+	for kind in ["concrete", "grass", "sand", "rock"]:
+		var candidate := _mesh_winding_cross_y(_terrain_meshes.get(kind) as Mesh)
+		if absf(candidate) > 0.0001:
+			terrain_cross_y = candidate
+			break
+	var road_cross_y := _mesh_winding_cross_y(_road_mesh)
+	return {
+		"asphalt_shader": _asphalt_material != null and _asphalt_material.shader == WetAsphaltShader,
+		"asphalt_textures": asphalt_textures,
+		"asphalt_wetness": asphalt_wetness,
+		"terrain_cross_y": terrain_cross_y,
+		"road_cross_y": road_cross_y,
+		"ground_winding_godot_cw": terrain_cross_y < 0.0 and road_cross_y < 0.0,
+		"terrain_meshes": _terrain_meshes.size(),
+		"road_mesh_ready": _road_mesh != null,
+		"foliage_wind_materials": _foliage_wind_materials.size(),
+	}
 
 
 func _build_road_surface_index() -> void:
@@ -373,6 +447,15 @@ func set_time_of_day(mode: String) -> void:
 		_enhancement_stats["dynamic_world_presets"] = _dynamic_world.get_preset_count()
 		_enhancement_stats["dynamic_world_preset"] = _dynamic_world.get_current_preset_name()
 
+	if _asphalt_material != null:
+		var wetness := 0.12
+		if mode == "sunset":
+			wetness = 0.20
+		elif mode == "night":
+			wetness = 0.18
+		_asphalt_material.set_shader_parameter("wetness", wetness)
+		_enhancement_stats["asphalt_wetness"] = wetness
+
 	for entry in _night_materials:
 		var material := entry.get("material") as StandardMaterial3D
 		if material == null:
@@ -627,15 +710,86 @@ func _register_night_material(material: StandardMaterial3D, day: float, sunset: 
 
 
 func _terrain_material(kind: String) -> StandardMaterial3D:
+	var material: StandardMaterial3D
 	match kind:
 		"sand":
-			return _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(1.03, 0.96, 0.82), 0.98)
+			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"concrete":
-			return _material("terrain_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.86, 0.87, 0.86), 0.94)
+			material = _material("terrain_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.60, 0.61, 0.60), 0.94)
 		"rock":
-			return _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.82, 0.80, 0.76), 1.0)
+			material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
-			return _material("terrain_grass", "user_grass.jpg", "user_grass_normal.jpg", Color(0.92, 1.0, 0.82), 0.98)
+			material = _material("terrain_grass", "user_grass.jpg", "user_grass_normal.jpg", Color(0.58, 0.68, 0.42), 0.98)
+	# Земля строится процедурно. Правильный winding — основное исправление
+	# 0.2.2, а двусторонний материал — страховка: критичная поверхность не
+	# должна снова пропасть на телефоне и показать нижнюю половину неба.
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.metallic_specular = 0.28
+	return material
+
+
+func _create_asphalt_material() -> ShaderMaterial:
+	if _asphalt_material != null:
+		return _asphalt_material
+	var material := ShaderMaterial.new()
+	material.resource_name = "richtown_wet_asphalt"
+	material.shader = WetAsphaltShader
+	var albedo := _texture("user_asphalt_plain.jpg")
+	var normal := _texture("user_asphalt_plain_normal.jpg")
+	var has_textures := albedo != null and normal != null
+	if albedo != null:
+		material.set_shader_parameter("albedo_tex", albedo)
+	if normal != null:
+		material.set_shader_parameter("normal_tex", normal)
+	material.set_shader_parameter("use_textures", has_textures)
+	material.set_shader_parameter("asphalt_color", Color(0.030, 0.032, 0.036))
+	material.set_shader_parameter("texture_brightness", 0.58)
+	material.set_shader_parameter("tex_scale", 0.14)
+	material.set_shader_parameter("wetness", 0.12)
+	material.set_shader_parameter("puddle_amount", 0.22)
+	material.set_shader_parameter("dry_roughness", 0.94)
+	material.set_shader_parameter("wet_roughness", 0.48)
+	material.set_shader_parameter("puddle_roughness", 0.16)
+	material.set_shader_parameter("bump_strength", 0.55)
+	_asphalt_material = material
+	_enhancement_stats["asphalt_shader"] = true
+	_enhancement_stats["asphalt_textures"] = has_textures
+	_enhancement_stats["asphalt_wetness"] = 0.12
+	return material
+
+
+func _create_foliage_wind_material(
+	mesh: Mesh,
+	texture_file: String,
+	tint: Color,
+	alpha_scissor_value: float,
+	bend_strength: float,
+	use_uv_mask_value: bool = false
+) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.resource_name = "richtown_foliage_wind"
+	material.shader = FoliageWindShader
+	var texture := _texture(texture_file)
+	if texture != null:
+		material.set_shader_parameter("leaf_texture", texture)
+	material.set_shader_parameter("use_texture", texture != null)
+	material.set_shader_parameter("leaf_color", Color(0.16, 0.38, 0.10))
+	material.set_shader_parameter("leaf_tint", tint)
+	material.set_shader_parameter("alpha_scissor", alpha_scissor_value)
+	material.set_shader_parameter("wind_dir", Vector2(1.0, 0.35))
+	material.set_shader_parameter("wind_speed", 1.15)
+	material.set_shader_parameter("bend_strength", bend_strength)
+	material.set_shader_parameter("flutter_strength", bend_strength * 0.34)
+	material.set_shader_parameter("gust_strength", 0.42)
+	material.set_shader_parameter("use_uv_mask", use_uv_mask_value)
+	material.set_shader_parameter("backlight_strength", 0.38)
+	var aabb := mesh.get_aabb() if mesh != null else AABB(Vector3.ZERO, Vector3(1.0, 2.0, 1.0))
+	material.set_shader_parameter("base_y", aabb.position.y)
+	material.set_shader_parameter("plant_height", maxf(aabb.size.y, 0.05))
+	_foliage_wind_materials.append(material)
+	_enhancement_stats["foliage_wind"] = true
+	_enhancement_stats["foliage_wind_materials"] = _foliage_wind_materials.size()
+	return material
 
 
 func _facade_material(facade: String, height: float) -> StandardMaterial3D:
@@ -885,12 +1039,18 @@ func _build_terrain() -> void:
 			var slope := maxf(abs(p10.y - p00.y), abs(p01.y - p00.y)) / step
 			var kind := _terrain_class(center.x, center.z, center.y, slope, ix, iz)
 			var tool := tools[kind] as SurfaceTool
-			for vertex in [p00, p11, p10, p00, p01, p11]:
+			# Godot front faces are clockwise as seen from the camera side.
+			# For a ground plane viewed from above, the geometric cross
+			# product therefore points down. The reversed pre-0.2.2 order
+			# was back-face culled on the phone, leaving only sky below the
+			# horizon. Keep this order paired with get_road_visual_state().
+			for vertex in [p00, p10, p11, p00, p11, p01]:
 				_terrain_vertex(tool, vertex)
 
 	var terrain_root := Node3D.new()
 	terrain_root.name = "Terrain"
 	add_child(terrain_root)
+	_terrain_meshes.clear()
 	for kind in tools.keys():
 		var tool := tools[kind] as SurfaceTool
 		tool.index()
@@ -898,7 +1058,11 @@ func _build_terrain() -> void:
 		tool.generate_tangents()
 		var mesh := tool.commit()
 		if mesh != null:
-			_mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s" % String(kind), false)
+			_terrain_meshes[String(kind)] = mesh
+			var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s" % String(kind), false)
+			instance.custom_aabb = WORLD_AABB
+	_enhancement_stats["terrain_meshes"] = _terrain_meshes.size()
+	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false)) if _road_mesh != null else false
 
 	var heights: Array = _terrain.get("heights", [])
 	var map_data := PackedFloat32Array()
@@ -1036,12 +1200,15 @@ func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float) -
 			var r1 := right_points[i + 1]
 			var v0 := distances[i] / uv_distance
 			var v1 := distances[i + 1] / uv_distance
+			# Same Godot clockwise-front-face rule as the terrain: viewed
+			# from above these triangles are front-facing, while their
+			# explicit shading normals remain Vector3.UP.
 			_road_vertex(tool, l0, Vector2(0.0, v0))
-			_road_vertex(tool, r1, Vector2(1.0, v1))
 			_road_vertex(tool, l1, Vector2(0.0, v1))
-			_road_vertex(tool, l0, Vector2(0.0, v0))
-			_road_vertex(tool, r0, Vector2(1.0, v0))
 			_road_vertex(tool, r1, Vector2(1.0, v1))
+			_road_vertex(tool, l0, Vector2(0.0, v0))
+			_road_vertex(tool, r1, Vector2(1.0, v1))
+			_road_vertex(tool, r0, Vector2(1.0, v0))
 	tool.index()
 	tool.generate_tangents()
 	return tool.commit()
@@ -1052,20 +1219,32 @@ func _build_roads() -> void:
 	roads_root.name = "Roads"
 	add_child(roads_root)
 
-	var sidewalk_material := _material("sidewalk", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.78, 0.79, 0.78), 0.96)
+	var sidewalk_material := _material(
+		"sidewalk",
+		"user_concrete_slabs.jpg",
+		"user_concrete_slabs_normal.jpg",
+		Color(0.52, 0.53, 0.52),
+		0.96,
+		0.0,
+		Vector3(2.4, 2.4, 1.0)
+	)
 	sidewalk_material.normal_scale = 0.9
-	var sidewalk_mesh := _build_road_mesh(1.9, 0.035, 7.0)
-	if sidewalk_mesh != null:
-		var sidewalks := _mesh_instance(roads_root, sidewalk_mesh, sidewalk_material, Transform3D.IDENTITY, "Sidewalks", false)
+	sidewalk_material.metallic_specular = 0.28
+	sidewalk_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_sidewalk_mesh = _build_road_mesh(1.9, 0.050, 7.0)
+	if _sidewalk_mesh != null:
+		var sidewalks := _mesh_instance(roads_root, _sidewalk_mesh, sidewalk_material, Transform3D.IDENTITY, "Sidewalks", false)
 		sidewalks.custom_aabb = WORLD_AABB
 
-	var asphalt_material := _material("asphalt", "user_asphalt_dashed.jpg", "user_asphalt_dashed_normal.jpg", Color(0.74, 0.76, 0.78), 0.68, 0.0)
-	asphalt_material.normal_scale = 1.14
-	asphalt_material.metallic_specular = 0.42
-	var road_mesh := _build_road_mesh(0.0, 0.075, 18.0)
-	if road_mesh != null:
-		var roads := _mesh_instance(roads_root, road_mesh, asphalt_material, Transform3D.IDENTITY, "Asphalt", false)
+	# Plain (not dashed) user asphalt feeds the adapted Drive wet_asphalt
+	# shader. Lane paint is real geometry below, so it no longer depends on
+	# a baked centre line stretched across roads of different widths.
+	var asphalt_material := _create_asphalt_material()
+	_road_mesh = _build_road_mesh(0.0, 0.095, 18.0)
+	if _road_mesh != null:
+		var roads := _mesh_instance(roads_root, _road_mesh, asphalt_material, Transform3D.IDENTITY, "Asphalt", false)
 		roads.custom_aabb = WORLD_AABB
+	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false))
 
 	_build_road_markings(roads_root)
 	_build_bridge_guardrails(roads_root)
@@ -1073,6 +1252,51 @@ func _build_roads() -> void:
 
 func _build_road_markings(parent: Node) -> void:
 	var stripe_transforms: Array[Transform3D] = []
+	var edge_transforms: Array[Transform3D] = []
+	var dash_transforms: Array[Transform3D] = []
+
+	# Continuous edge paint and lane dashes follow every exported road, not
+	# just the main intersections. They are thin boxes in two MultiMeshes, so
+	# the whole city gains readable carriageways for only two draw calls.
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
+		var width := _f(road, "widthM", 10.0)
+		var half_width := width * 0.5
+		var lane_offsets: Array[float] = [0.0]
+		if width >= 17.0:
+			lane_offsets = [-width * 0.25, 0.0, width * 0.25]
+		for i in range(samples.size() - 1):
+			var a := _sample_point(samples[i])
+			var b := _sample_point(samples[i + 1])
+			var segment := b - a
+			segment.y = 0.0
+			var length := segment.length()
+			if length < 0.45:
+				continue
+			var direction := segment / length
+			var side := Vector3(-direction.z, 0.0, direction.x)
+			var yaw := atan2(direction.x, direction.z)
+			var midpoint := (a + b) * 0.5
+			var paint_y := midpoint.y + 0.138
+			for edge_side in [-1.0, 1.0]:
+				var edge_center: Vector3 = midpoint + side * float(edge_side) * maxf(half_width - 0.42, 0.6)
+				edge_transforms.append(make_transform(
+					Vector3(edge_center.x, paint_y, edge_center.z),
+					yaw,
+					Vector3(0.16, 0.034, length + 0.05)
+				))
+			var dash_length := minf(3.0, length * 0.52)
+			for lane_offset in lane_offsets:
+				var dash_center: Vector3 = midpoint + side * lane_offset
+				dash_transforms.append(make_transform(
+					Vector3(dash_center.x, paint_y + 0.004, dash_center.z),
+					yaw,
+					Vector3(0.17, 0.036, dash_length)
+				))
+
 	var vertical_roads := [
 		{"x": 560.0, "width": 11.0},
 		{"x": 760.0, "width": 22.0},
@@ -1094,11 +1318,11 @@ func _build_road_markings(parent: Node) -> void:
 				var start_x := center_x - float(stripe_count - 1) * 0.54
 				for i in stripe_count:
 					var x := start_x + float(i) * 1.08
-					var y := height_at(x, crossing_z) + 0.165
+					var y := height_at(x, crossing_z) + 0.140
 					stripe_transforms.append(make_transform(Vector3(x, y, crossing_z), 0.0, Vector3(0.58, 0.028, 3.15)))
 				var stop_z: float = crossing_z + float(side) * 2.15
 				stripe_transforms.append(make_transform(
-					Vector3(center_x + width * 0.25, height_at(center_x, stop_z) + 0.165, stop_z),
+					Vector3(center_x + width * 0.25, height_at(center_x, stop_z) + 0.140, stop_z),
 					0.0,
 					Vector3(width * 0.48, 0.028, 0.42)
 				))
@@ -1110,21 +1334,27 @@ func _build_road_markings(parent: Node) -> void:
 				var start_z := center_z - float(stripe_count_h - 1) * 0.54
 				for i in stripe_count_h:
 					var z := start_z + float(i) * 1.08
-					var y := height_at(crossing_x, z) + 0.165
+					var y := height_at(crossing_x, z) + 0.140
 					stripe_transforms.append(make_transform(Vector3(crossing_x, y, z), 0.0, Vector3(3.15, 0.028, 0.58)))
 				var stop_x: float = crossing_x + float(side) * 2.15
 				stripe_transforms.append(make_transform(
-					Vector3(stop_x, height_at(stop_x, center_z) + 0.165, center_z - cross_width * 0.25),
+					Vector3(stop_x, height_at(stop_x, center_z) + 0.140, center_z - cross_width * 0.25),
 					0.0,
 					Vector3(0.42, 0.028, cross_width * 0.48)
 				))
 
 	var paint := _material("road_paint", "", "", Color(0.88, 0.90, 0.88), 0.74)
+	paint.metallic_specular = 0.30
 	var stripe_mesh := BoxMesh.new()
 	stripe_mesh.size = Vector3.ONE
 	stripe_mesh.material = paint
 	_add_multimesh(parent, stripe_mesh, paint, stripe_transforms, "CrosswalksAndStopLines", false)
-	_enhancement_stats["road_markings"] = stripe_transforms.size()
+	_add_multimesh(parent, stripe_mesh, paint, edge_transforms, "RoadEdgeLines", false)
+	_add_multimesh(parent, stripe_mesh, paint, dash_transforms, "RoadLaneDashes", false)
+	_enhancement_stats["crosswalk_markings"] = stripe_transforms.size()
+	_enhancement_stats["road_edge_lines"] = edge_transforms.size()
+	_enhancement_stats["lane_dashes"] = dash_transforms.size()
+	_enhancement_stats["road_markings"] = stripe_transforms.size() + edge_transforms.size() + dash_transforms.size()
 
 
 func _build_bridge_guardrails(parent: Node) -> void:
@@ -1445,12 +1675,14 @@ func _get_sail_mesh() -> ArrayMesh:
 	var a2 := Vector3(-0.5, 0.0, back)
 	var b2 := Vector3(0.5, 0.0, back)
 	var c2 := Vector3(0.30, 1.0, back)
+	# Clockwise-as-seen-from-outside winding for Godot front faces; the
+	# intuitive outward-cross order made this prism hollow from outside.
 	var vertices: Array[Vector3] = [
-		a, b, c,
-		b2, a2, c2,
-		a, a2, b2, a, b2, b,
-		b, b2, c2, b, c2, c,
-		c, c2, a2, c, a2, a,
+		a, c, b,
+		b2, c2, a2,
+		a, b2, a2, a, b, b2,
+		b, c2, b2, b, c, c2,
+		c, a2, c2, c, a, a2,
 	]
 	for vertex in vertices:
 		tool.set_uv(Vector2(vertex.x + 0.5, vertex.y))
@@ -1647,9 +1879,24 @@ func _load_plant_parts() -> bool:
 					mat = mesh_instance.mesh.surface_get_material(0)
 				if mat != null and not String(mat.resource_name).is_empty():
 					material_name = String(mat.resource_name)
+				var part_material: Material
+				if String(part_name).contains("foliage"):
+					# Drive foliage_wind: per-part AABB gives the shader a
+					# truthful sway mask for each source mesh. The local
+					# bend is deliberately small because tree MultiMeshes
+					# scale these parts by roughly 2.85 in world space.
+					part_material = _create_foliage_wind_material(
+						mesh_instance.mesh,
+						"foliage.jpg",
+						Color(0.62, 0.86, 0.52),
+						0.0,
+						0.030
+					)
+				else:
+					part_material = _prop_material(material_name)
 				_plant_parts[part_name] = {
 					"mesh": mesh_instance.mesh,
-					"material": _prop_material(material_name),
+					"material": part_material,
 				}
 	root.free()
 	return not _plant_parts.is_empty()
@@ -1683,12 +1930,21 @@ func _get_palm_crown_mesh() -> ArrayMesh:
 	return _palm_crown_mesh
 
 
-func _palm_leaf_material() -> StandardMaterial3D:
-	var material := _material("palm_leaf", "user_palm_leaf.png", "", Color(0.72, 0.96, 0.62), 1.0)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	material.alpha_scissor_threshold = 0.32
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	return material
+func _palm_leaf_material() -> Material:
+	if _palm_leaf_shader_material != null:
+		return _palm_leaf_shader_material
+	# Palm fronds droop below their local origin, so a height mask would
+	# clamp to zero. Their UV.y already runs base -> tip and is the correct
+	# wind mask for this custom crown mesh.
+	_palm_leaf_shader_material = _create_foliage_wind_material(
+		_get_palm_crown_mesh(),
+		"user_palm_leaf.png",
+		Color(0.72, 0.96, 0.62),
+		0.32,
+		0.11,
+		true
+	)
+	return _palm_leaf_shader_material
 
 
 func _build_vegetation() -> void:
