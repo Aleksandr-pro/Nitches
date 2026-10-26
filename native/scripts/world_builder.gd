@@ -1282,7 +1282,7 @@ func _build_road_markings(parent: Node) -> void:
 			var midpoint := (a + b) * 0.5
 			var paint_y := midpoint.y + 0.138
 			for edge_side in [-1.0, 1.0]:
-				var edge_center := midpoint + side * edge_side * maxf(half_width - 0.42, 0.6)
+				var edge_center: Vector3 = midpoint + side * float(edge_side) * maxf(half_width - 0.42, 0.6)
 				edge_transforms.append(make_transform(
 					Vector3(edge_center.x, paint_y, edge_center.z),
 					yaw,
@@ -1290,7 +1290,7 @@ func _build_road_markings(parent: Node) -> void:
 				))
 			var dash_length := minf(3.0, length * 0.52)
 			for lane_offset in lane_offsets:
-				var dash_center := midpoint + side * lane_offset
+				var dash_center: Vector3 = midpoint + side * lane_offset
 				dash_transforms.append(make_transform(
 					Vector3(dash_center.x, paint_y + 0.004, dash_center.z),
 					yaw,
