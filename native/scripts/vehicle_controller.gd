@@ -252,10 +252,13 @@ func _paint_material(color: Color) -> ShaderMaterial:
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("flake_color", color.lerp(Color(1.0, 0.86, 0.72), 0.58))
 	material.set_shader_parameter("fresnel_color", color.lerp(Color(1.0, 0.28, 0.08), 0.32))
-	material.set_shader_parameter("metallic_amount", 0.82)
-	material.set_shader_parameter("roughness_amount", 0.29)
+	# Automotive basecoat plus polished clear: slightly less metallic and
+	# considerably smoother than the old uniform/plasticky finish. Probe/sky
+	# specular carries the environment reflection in Godot's Mobile renderer.
+	material.set_shader_parameter("metallic_amount", 0.68)
+	material.set_shader_parameter("roughness_amount", 0.19)
 	material.set_shader_parameter("clearcoat_amount", 1.0)
-	material.set_shader_parameter("clearcoat_rough", 0.035)
+	material.set_shader_parameter("clearcoat_rough", 0.075)
 	material.set_shader_parameter("flake_density", 180.0)
 	material.set_shader_parameter("flake_strength", 0.5)
 	material.set_shader_parameter("fresnel_strength", 0.24)
@@ -282,11 +285,14 @@ func _apply_model_materials(node: Node) -> void:
 					mesh_instance.set_surface_override_material(surface_index, _paint_material(Color(0.94, 0.36, 0.05)))
 				elif lower_name.contains("glass") or lower_name.contains("window"):
 					var glass := StandardMaterial3D.new()
-					glass.albedo_color = Color(0.035, 0.075, 0.11, 0.78)
+					glass.albedo_color = Color(0.025, 0.055, 0.078, 0.70)
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					glass.metallic = 0.05
-					glass.roughness = 0.05
+					glass.metallic = 0.08
+					glass.roughness = 0.055
 					glass.metallic_specular = 1.0
+					glass.clearcoat_enabled = true
+					glass.clearcoat = 0.92
+					glass.clearcoat_roughness = 0.035
 					mesh_instance.set_surface_override_material(surface_index, glass)
 				elif lower_name.contains("tyre") or lower_name.contains("tire") or lower_name.contains("rubber"):
 					var tyre := StandardMaterial3D.new()
@@ -1238,6 +1244,19 @@ func get_smoothing_state() -> Dictionary:
 
 func get_drive_base_state() -> Dictionary:
 	var state := NativeArcadeCarAssist.get_smoke_state()
+	var paint_reflections_ready := false
+	var paint_roughness := 1.0
+	var paint_clearcoat := 0.0
+	for paint_variant in _paint_materials.values():
+		var paint := paint_variant as ShaderMaterial
+		if paint == null or paint.shader != CAR_PAINT_SHADER:
+			continue
+		paint_roughness = minf(paint_roughness, float(paint.get_shader_parameter("roughness_amount")))
+		paint_clearcoat = maxf(paint_clearcoat, float(paint.get_shader_parameter("clearcoat_amount")))
+		paint_reflections_ready = paint_roughness <= 0.24 and paint_clearcoat >= 0.9 and float(paint.get_shader_parameter("metallic_amount")) > 0.5
 	state["car_paint_shader"] = CAR_PAINT_SHADER != null
 	state["paint_materials"] = _paint_materials.size()
+	state["paint_reflections_ready"] = paint_reflections_ready
+	state["paint_roughness"] = paint_roughness
+	state["paint_clearcoat"] = paint_clearcoat
 	return state
