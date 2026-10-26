@@ -379,6 +379,11 @@ func _run_smoke_checks() -> void:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:
 		failures.append("road markings are incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("premium_boulevard_paving", false)) or int(enhancement_stats.get("boulevard_cafes", 0)) < 3 or int(enhancement_stats.get("boulevard_palm_planters", 0)) < 10 or int(enhancement_stats.get("boulevard_lawn_islands", 0)) < 8:
+		failures.append("premium RichTown boulevard paving/cafes/landscaping are incomplete: %s" % str(enhancement_stats))
+	var promenade_surface := _world.get_surface_at(Vector3(738.0, 4.0, 23.0))
+	if String(promenade_surface.get("kind", "")) != "plaza":
+		failures.append("spawn-side RichTown promenade is not classified as premium stone: %s" % str(promenade_surface))
 	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:

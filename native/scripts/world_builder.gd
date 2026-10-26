@@ -191,7 +191,7 @@ func get_road_visual_state() -> Dictionary:
 		asphalt_wear_texture = bool(_asphalt_material.get_shader_parameter("use_wear_texture"))
 		asphalt_wetness = float(_asphalt_material.get_shader_parameter("wetness"))
 	var terrain_cross_y := 0.0
-	for kind in ["concrete", "grass", "sand", "rock"]:
+	for kind in ["concrete", "plaza", "grass", "sand", "rock"]:
 		var candidate := _mesh_winding_cross_y(_terrain_meshes.get(kind) as Mesh)
 		if absf(candidate) > 0.0001:
 			terrain_cross_y = candidate
@@ -342,6 +342,8 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 			return {"kind": "rock", "label": "КАМЕНЬ", "mu": 0.74, "rolling_resistance": 0.052}
 		"concrete":
 			return {"kind": "concrete", "label": "БЕТОН", "mu": 0.89, "rolling_resistance": 0.024}
+		"plaza":
+			return {"kind": "plaza", "label": "КАМЕНЬ", "mu": 0.86, "rolling_resistance": 0.026}
 		_:
 			return {"kind": "grass", "label": "ГРУНТ", "mu": 0.62, "rolling_resistance": 0.078}
 
@@ -799,6 +801,10 @@ func _terrain_material(kind: String) -> StandardMaterial3D:
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"concrete":
 			material = _material("terrain_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.60, 0.61, 0.60), 0.94)
+		"plaza":
+			material = _material("terrain_premium_pavers", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.76, 0.72, 0.63), 0.78, 0.02, Vector3(0.34, 0.34, 0.34), true)
+			material.normal_scale = 0.62
+			material.metallic_specular = 0.42
 		"rock":
 			material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
@@ -1435,8 +1441,9 @@ func _hash01(ix: int, iz: int) -> float:
 
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
-	if _in_zone(x, z, "rtPlaza"):
-		return "concrete"
+	var in_promenade := z >= -94.0 and z <= 48.0 and ((x >= 713.0 and x <= 744.0) or (x >= 776.0 and x <= 789.0))
+	if _in_zone(x, z, "rtPlaza") or in_promande:
+		return "plaza"
 	if (_in_zone(x, z, "sea") or _in_zone(x, z, "marina")) and h < 0.5:
 		return "sand"
 	if _in_zone(x, z, "beach") and h < 3.45:
@@ -1465,7 +1472,7 @@ func _build_terrain() -> void:
 	var step := _f(_terrain, "stepM", 10.0)
 
 	var tools: Dictionary = {}
-	for kind in ["grass", "sand", "concrete", "rock"]:
+	for kind in ["grass", "sand", "concrete", "plaza", "rock"]:
 		var tool := SurfaceTool.new()
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 		tools[kind] = tool
@@ -1507,6 +1514,7 @@ func _build_terrain() -> void:
 			var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s" % String(kind), false)
 			instance.custom_aabb = WORLD_AABB
 	_enhancement_stats["terrain_meshes"] = _terrain_meshes.size()
+	_enhancement_stats["premium_boulevard_paving"] = _terrain_meshes.has("plaza")
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false)) if _road_mesh != null else false
 
 	var heights: Array = _terrain.get("heights", [])
@@ -4176,10 +4184,250 @@ func _is_roadside_position_valid(candidate: Vector3) -> bool:
 	return String(get_surface_at(candidate).get("kind", "")) != "water"
 
 
+func _build_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: float, step_m: float = 2.0, lift_m: float = 0.035) -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var columns := maxi(1, ceili((max_x - min_x) / step_m))
+	var rows := maxi(1, ceili((max_z - min_z) / step_m))
+	for iz in rows:
+		for ix in columns:
+			var x0 := min_x + float(ix) * step_m
+			var x1 := minf(min_x + float(ix + 1) * step_m, max_x)
+			var z0 := min_z + float(iz) * step_m
+			var z1 := minf(min_z + float(iz + 1) * step_m, max_z)
+			var p00 := Vector3(x0, height_at(x0, z0) + lift_m, z0)
+			var p10 := Vector3(x1, height_at(x1, z0) + lift_m, z0)
+			var p11 := Vector3(x1, height_at(x1, z1) + lift_m, z1)
+			var p01 := Vector3(x0, height_at(x0, z1) + lift_m, z1)
+			for vertex in [p00, p10, p11, p00, p11, p01]:
+				_terrain_vertex(tool, vertex)
+	tool.index()
+	tool.generate_normals()
+	tool.generate_tangents()
+	return tool.commit()
+
+
+func _build_premium_boulevard_details(parent: Node) -> void:
+	# The main four-lane RichTown Boulevard already has the road mesh, lane
+	# paint and curb system. Replace the adjacent monotonous slab field around
+	# the screenshot location with a broad premium promenade and cafe arcades.
+	var pavers := _material(
+		"boulevard_premium_pavers",
+		"user_travertine.jpg",
+		"user_travertine_normal.jpg",
+		Color(0.78, 0.75, 0.68),
+		0.78,
+		0.02,
+		Vector3(0.34, 0.34, 0.34),
+		true
+	)
+	pavers.normal_scale = 0.58
+	pavers.metallic_specular = 0.42
+	pavers.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var west_walk := _make_paving_patch_mesh(713.0, 744.0, -94.0, 48.0, 2.0, 0.045)
+	var east_walk := _make_paving_patch_mesh(776.0, 789.0, -94.0, 48.0, 2.0, 0.045)
+	if west_walk != null:
+		_mesh_instance(parent, west_walk, pavers, Transform3D.IDENTITY, "PremiumPromenade_West", false)
+	if east_walk != null:
+		_mesh_instance(parent, east_walk, pavers, Transform3D.IDENTITY, "PremiumPromenade_East", false)
+
+	var granite := _material("boulevard_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.66, 0.68, 0.69), 0.34, 0.12, Vector3(0.35, 0.35, 0.35), true)
+	granite.normal_scale = 0.52
+	var curb_mesh := BoxMesh.new()
+	curb_mesh.size = Vector3.ONE
+	var promenade_curb_transforms: Array[Transform3D] = []
+	for z in range(-92, 47, 2):
+		for curb_x in [713.2, 743.8, 776.2, 788.8]:
+			var center_z := float(z) + 1.0
+			# Keep the two sidewalk shelter pads clear; the original shelter
+			# models continue to use their exported locations and footprints.
+			if (is_equal_approx(curb_x, 743.8) and absf(center_z - 16.0) < 4.0) or (is_equal_approx(curb_x, 776.2) and absf(center_z + 90.0) < 4.0):
+				continue
+			var y := height_at(curb_x, center_z) + 0.08
+			promenade_curb_transforms.append(make_transform(Vector3(curb_x, y, center_z), 0.0, Vector3(0.22, 0.16, 2.05)))
+	_add_multimesh(parent, curb_mesh, granite, promenade_curb_transforms, "PremiumGraniteEdging", false)
+
+	# Formal lawn beds, clipped hedges and topiary break the paving into
+	# comfortable walking rooms without narrowing the carriageway.
+	var lawn := _material("boulevard_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.60, 0.76, 0.43), 0.96)
+	var hedge := _material("boulevard_topiary", "foliage.jpg", "foliage_normal.jpg", Color(0.24, 0.47, 0.23), 0.92)
+	hedge.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var sphere_hedge_mesh := SphereMesh.new()
+	sphere_hedge_mesh.radius = 0.55
+	sphere_hedge_mesh.height = 1.12
+	sphere_hedge_mesh.radial_segments = 18
+	sphere_hedge_mesh.rings = 10
+	var lawn_mesh := BoxMesh.new()
+	lawn_mesh.size = Vector3.ONE
+	var planter_mesh := BoxMesh.new()
+	planter_mesh.size = Vector3.ONE
+	var lawn_transforms: Array[Transform3D] = []
+	var planter_transforms: Array[Transform3D] = []
+	var ball_topiary_transforms: Array[Transform3D] = []
+	var hedge_block_transforms: Array[Transform3D] = []
+	for side_x in [717.5, 784.5]:
+		for z in [-82.0, -39.0, 4.0, 43.0]:
+			var center := Vector3(float(side_x), 0.0, float(z))
+			center.y = height_at(center.x, center.z)
+			planter_transforms.append(make_transform(center + Vector3(0.0, 0.13, 0.0), 0.0, Vector3(3.8, 0.26, 8.2)))
+			lawn_transforms.append(make_transform(center + Vector3(0.0, 0.29, 0.0), 0.0, Vector3(3.35, 0.08, 7.75)))
+			if int(round(z / 30.0)) % 2 == 0:
+				ball_topiary_transforms.append(make_transform(center + Vector3(0.0, 0.93, 0.0), 0.0, Vector3.ONE))
+			else:
+				hedge_block_transforms.append(make_transform(center + Vector3(0.0, 0.77, 0.0), 0.0, Vector3(2.6, 0.86, 0.92)))
+	_add_multimesh(parent, planter_mesh, granite, planter_transforms, "BoulevardRaisedPlanters", false)
+	_add_multimesh(parent, lawn_mesh, lawn, lawn_transforms, "BoulevardLawnIslands", false)
+	_add_multimesh(parent, sphere_hedge_mesh, hedge, ball_topiary_transforms, "BoulevardRoundTopiary", false)
+	_add_multimesh(parent, lawn_mesh, hedge, hedge_block_transforms, "BoulevardClippedHedges", false)
+
+	# The Washingtonia row is already laid out on both sides of this avenue.
+	# Give each trunk a white-pebble bed, granite ring and a visible drip line.
+	var pebble_material := _material("boulevard_white_pebbles", "user_stone_tiles_beige.jpg", "", Color(0.96, 0.95, 0.91), 0.94, 0.0, Vector3(0.72, 0.72, 0.72), true)
+	var irrigation_material := _material("boulevard_irrigation", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.12, 0.12), 0.74, 0.0)
+	var pebble_disk := CylinderMesh.new()
+	pebble_disk.top_radius = 1.0
+	pebble_disk.bottom_radius = 1.0
+	pebble_disk.height = 0.08
+	pebble_disk.radial_segments = 24
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.86
+	ring_mesh.outer_radius = 1.0
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	var drip_ring_mesh := TorusMesh.new()
+	drip_ring_mesh.inner_radius = 0.50
+	drip_ring_mesh.outer_radius = 0.59
+	drip_ring_mesh.rings = 16
+	drip_ring_mesh.ring_segments = 6
+	var pebble_transforms: Array[Transform3D] = []
+	var ring_transforms: Array[Transform3D] = []
+	var drip_transforms: Array[Transform3D] = []
+	for palm_variant in data.get("palms", []):
+		var palm: Dictionary = palm_variant
+		var palm_x := _f(palm, "x")
+		var palm_z := _f(palm, "z")
+		if palm_z < -98.0 or palm_z > 67.0 or minf(absf(palm_x - 745.5), absf(palm_x - 774.5)) > 1.0:
+			continue
+		var ground_y := height_at(palm_x, palm_z)
+		pebble_transforms.append(make_transform(Vector3(palm_x, ground_y + 0.07, palm_z), 0.0, Vector3(1.58, 1.0, 1.58)))
+		ring_transforms.append(make_transform(Vector3(palm_x, ground_y + 0.14, palm_z), 0.0, Vector3(1.58, 1.0, 1.58)))
+		drip_transforms.append(make_transform(Vector3(palm_x, ground_y + 0.12, palm_z), 0.0, Vector3(1.10, 1.0, 1.10)))
+	_add_multimesh(parent, pebble_disk, pebble_material, pebble_transforms, "WashingtoniaWhiteGravelBeds", false)
+	_add_multimesh(parent, ring_mesh, granite, ring_transforms, "WashingtoniaGraniteRings", false)
+	_add_multimesh(parent, drip_ring_mesh, irrigation_material, drip_transforms, "WashingtoniaDripIrrigation", false)
+
+	# Three compact glass-and-metal cafe pavilions with attached umbrella
+	# terraces. All repetitions are MultiMesh batches to keep draw calls low.
+	var glass := _material("boulevard_cafe_glass", "", "", Color(0.36, 0.59, 0.66, 0.40), 0.055, 0.10)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.metallic_specular = 1.0
+	glass.clearcoat_enabled = true
+	glass.clearcoat = 0.92
+	glass.clearcoat_roughness = 0.035
+	var canopy_material := _material("boulevard_cafe_canopy", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.88, 0.84, 0.74), 0.64, 0.02)
+	var counter_material := _material("boulevard_cafe_counter", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.39, 0.43, 0.44), 0.34, 0.20)
+	var warm_sign := _material("boulevard_cafe_sign", "", "", Color(0.95, 0.53, 0.16), 0.34, 0.05)
+	warm_sign.emission_enabled = true
+	warm_sign.emission = Color(0.42, 0.12, 0.025)
+	var table_material := _material("boulevard_cafe_table", "user_stone_tiles_beige.jpg", "", Color(0.86, 0.82, 0.73), 0.48, 0.03)
+	var chair_material := _material("boulevard_cafe_chair", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.24, 0.30, 0.32), 0.36, 0.54)
+	var umbrella_material := _material("boulevard_cafe_umbrella", "", "", Color(0.88, 0.84, 0.73), 0.78)
+	var accent_umbrella := _material("boulevard_cafe_umbrella_teal", "", "", Color(0.10, 0.42, 0.42), 0.76)
+	var glass_wall_transforms: Array[Transform3D] = []
+	var canopy_transforms: Array[Transform3D] = []
+	var frame_transforms: Array[Transform3D] = []
+	var counter_transforms: Array[Transform3D] = []
+	var sign_transforms: Array[Transform3D] = []
+	var table_top_transforms: Array[Transform3D] = []
+	var table_leg_transforms: Array[Transform3D] = []
+	var chair_seat_transforms: Array[Transform3D] = []
+	var chair_back_transforms: Array[Transform3D] = []
+	var chair_leg_transforms: Array[Transform3D] = []
+	var umbrella_pole_transforms: Array[Transform3D] = []
+	var umbrella_canopy_transforms: Array[Transform3D] = []
+	var accent_canopy_transforms: Array[Transform3D] = []
+	var cafe_locations := [Vector2(718.0, -67.0), Vector2(718.0, -20.0), Vector2(718.0, 27.0)]
+	for cafe_index in cafe_locations.size():
+		var location: Vector2 = cafe_locations[cafe_index]
+		var base := Vector3(location.x, height_at(location.x, location.y), location.y)
+		# Glass walls on the back and two ends; the boulevard-facing side is open.
+		glass_wall_transforms.append(make_transform(base + Vector3(-2.85, 1.34, 0.0), 0.0, Vector3(0.08, 2.55, 5.9)))
+		glass_wall_transforms.append(make_transform(base + Vector3(0.0, 1.34, -2.92), 0.0, Vector3(5.7, 2.55, 0.08)))
+		glass_wall_transforms.append(make_transform(base + Vector3(0.0, 1.34, 2.92), 0.0, Vector3(5.7, 2.55, 0.08)))
+		canopy_transforms.append(make_transform(base + Vector3(0.0, 2.77, 0.0), 0.0, Vector3(6.5, 0.20, 6.6)))
+		counter_transforms.append(make_transform(base + Vector3(-1.05, 0.58, 0.0), 0.0, Vector3(2.7, 0.95, 4.7)))
+		sign_transforms.append(make_transform(base + Vector3(0.0, 2.43, 0.0), 0.0, Vector3(3.5, 0.20, 0.10)))
+		for post_x in [-2.95, 2.95]:
+			for post_z in [-2.95, 2.95]:
+				frame_transforms.append(make_transform(base + Vector3(post_x, 1.42, post_z), 0.0, Vector3(0.10, 2.84, 0.10)))
+		for table_z_offset in [-2.2, 2.2]:
+			var table_center := base + Vector3(8.0, 0.0, table_z_offset)
+			table_top_transforms.append(make_transform(table_center + Vector3(0.0, 0.82, 0.0), 0.0, Vector3(1.38, 0.10, 1.38)))
+			table_leg_transforms.append(make_transform(table_center + Vector3(0.0, 0.43, 0.0), 0.0, Vector3(0.35, 0.76, 0.35)))
+			umbrella_pole_transforms.append(make_transform(table_center + Vector3(0.0, 2.05, 0.0), 0.0, Vector3.ONE))
+			var canopy_transform := make_transform(table_center + Vector3(0.0, 3.20, 0.0), 0.0, Vector3.ONE)
+			if (cafe_index + int(table_z_offset > 0.0)) % 2 == 0:
+				umbrella_canopy_transforms.append(canopy_transform)
+			else:
+				accent_canopy_transforms.append(canopy_transform)
+			for chair_index in 4:
+				var angle := TAU * float(chair_index) / 4.0
+				var outward := Vector3(cos(angle), 0.0, sin(angle))
+				var chair_center := table_center + outward * 1.18
+				var chair_yaw := atan2(-outward.x, -outward.z)
+				chair_seat_transforms.append(make_transform(chair_center + Vector3(0.0, 0.48, 0.0), chair_yaw, Vector3(0.48, 0.10, 0.48)))
+				chair_back_transforms.append(make_transform(chair_center + outward * 0.20 + Vector3(0.0, 0.77, 0.0), chair_yaw, Vector3(0.48, 0.55, 0.09)))
+				chair_leg_transforms.append(make_transform(chair_center + Vector3(-0.16, 0.23, -0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
+				chair_leg_transforms.append(make_transform(chair_center + Vector3(0.16, 0.23, -0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
+				chair_leg_transforms.append(make_transform(chair_center + Vector3(-0.16, 0.23, 0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
+				chair_leg_transforms.append(make_transform(chair_center + Vector3(0.16, 0.23, 0.16), chair_yaw, Vector3(0.30, 0.46, 0.30)))
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var cafe_pole_mesh := CylinderMesh.new()
+	cafe_pole_mesh.top_radius = 0.035
+	cafe_pole_mesh.bottom_radius = 0.045
+	cafe_pole_mesh.height = 2.15
+	cafe_pole_mesh.radial_segments = 10
+	var cafe_umbrella_mesh := CylinderMesh.new()
+	cafe_umbrella_mesh.top_radius = 0.06
+	cafe_umbrella_mesh.bottom_radius = 1.42
+	cafe_umbrella_mesh.height = 0.30
+	cafe_umbrella_mesh.radial_segments = 16
+	var cafe_table_mesh := CylinderMesh.new()
+	cafe_table_mesh.top_radius = 0.69
+	cafe_table_mesh.bottom_radius = 0.69
+	cafe_table_mesh.height = 0.10
+	cafe_table_mesh.radial_segments = 20
+	var cafe_leg_mesh := CylinderMesh.new()
+	cafe_leg_mesh.top_radius = 0.06
+	cafe_leg_mesh.bottom_radius = 0.10
+	cafe_leg_mesh.height = 0.76
+	cafe_leg_mesh.radial_segments = 10
+	_add_multimesh(parent, unit_box, glass, glass_wall_transforms, "BoulevardCafeGlassArcades", false)
+	_add_multimesh(parent, unit_box, canopy_material, canopy_transforms, "BoulevardCafeCanopies", false)
+	_add_multimesh(parent, unit_box, chair_material, frame_transforms, "BoulevardCafeHighTechFrames", false)
+	_add_multimesh(parent, unit_box, counter_material, counter_transforms, "BoulevardCafeCounters", false)
+	_add_multimesh(parent, unit_box, warm_sign, sign_transforms, "BoulevardCafeLightboxSigns", false)
+	_add_multimesh(parent, cafe_table_mesh, table_material, table_top_transforms, "BoulevardCafeTables", false)
+	_add_multimesh(parent, cafe_leg_mesh, chair_material, table_leg_transforms, "BoulevardCafeTablePedestals", false)
+	_add_multimesh(parent, unit_box, chair_material, chair_seat_transforms, "BoulevardCafeChairSeats", false)
+	_add_multimesh(parent, unit_box, chair_material, chair_back_transforms, "BoulevardCafeChairBacks", false)
+	_add_multimesh(parent, cafe_leg_mesh, chair_material, chair_leg_transforms, "BoulevardCafeChairLegs", false)
+	_add_multimesh(parent, cafe_pole_mesh, chair_material, umbrella_pole_transforms, "BoulevardCafeUmbrellaPoles", false)
+	_add_multimesh(parent, cafe_umbrella_mesh, umbrella_material, umbrella_canopy_transforms, "BoulevardCafeUmbrellasIvory", false)
+	_add_multimesh(parent, cafe_umbrella_mesh, accent_umbrella, accent_canopy_transforms, "BoulevardCafeUmbrellasTeal", false)
+	_enhancement_stats["boulevard_cafes"] = cafe_locations.size()
+	_enhancement_stats["boulevard_palm_planters"] = pebble_transforms.size()
+	_enhancement_stats["boulevard_lawn_islands"] = lawn_transforms.size()
+	_enhancement_stats["premium_boulevard_promenade_m2"] = (31.0 + 13.0) * 142.0
+
+
 func _build_city_details() -> void:
 	var root := Node3D.new()
 	root.name = "CityDetails"
 	add_child(root)
+	_build_premium_boulevard_details(root)
 
 	var unit_box := BoxMesh.new()
 	unit_box.size = Vector3.ONE
