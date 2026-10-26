@@ -1900,11 +1900,16 @@ func _build_road_markings(parent: Node) -> void:
 		dash_total += (dash_groups[group] as Array).size()
 		arrow_total += (arrow_groups[group] as Array).size()
 		parking_total += (parking_groups[group] as Array).size()
-		_add_multimesh(parent, stripe_mesh, white_paints[group], stripe_groups[group], "CrosswalksAndStopLines_W%d" % group, false)
-		_add_multimesh(parent, stripe_mesh, white_paints[group], edge_groups[group], "RoadEdgeLines_W%d" % group, false)
-		_add_multimesh(parent, stripe_mesh, white_paints[group], dash_groups[group], "RoadLaneDashes_W%d" % group, false)
-		_add_multimesh(parent, stripe_mesh, white_paints[group], arrow_groups[group], "LaneArrows_W%d" % group, false)
-		_add_multimesh(parent, stripe_mesh, white_paints[group], parking_groups[group], "ParkingBayMarkings_W%d" % group, false)
+		# One batch per paint shade, not one per marking category: all
+		# five categories share the same unit box and material, so this
+		# preserves the worn look without multiplying draw submissions.
+		var combined_white: Array = []
+		combined_white.append_array(stripe_groups[group])
+		combined_white.append_array(edge_groups[group])
+		combined_white.append_array(dash_groups[group])
+		combined_white.append_array(arrow_groups[group])
+		combined_white.append_array(parking_groups[group])
+		_add_multimesh(parent, stripe_mesh, white_paints[group], combined_white, "CrosswalkRoadEdgeLanePaint_W%d" % group, false)
 	for group in 2:
 		center_total += (center_groups[group] as Array).size()
 		_add_multimesh(parent, stripe_mesh, yellow_paints[group], center_groups[group], "RoadCenterLines_Y%d" % group, false)
