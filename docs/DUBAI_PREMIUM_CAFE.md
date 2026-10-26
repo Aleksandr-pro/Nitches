@@ -4,13 +4,13 @@
 
 - Source asset: `src/assets/models/props/dubai_premium_cafe.glb`
 - Native runtime copy: `res://assets/props/dubai_premium_cafe.glb`
-- Reproducible generator: `scripts/generate_dubai_premium_cafe.py` (Python 3 with `numpy` and `trimesh`; `python3 scripts/generate_dubai_premium_cafe.py` rebuilds the source GLB)
+- Reproducible generator: `scripts/generate_dubai_premium_cafe.py` (Python 3 with `numpy`, `trimesh` and `Pillow`; `python3 scripts/generate_dubai_premium_cafe.py` rebuilds the source GLB and linen maps)
 - Native asset staging: `node scripts/sync-native-assets.mjs`
 - GLB check: `node scripts/validate-glb-loader.mjs --generic src/assets/models/props/dubai_premium_cafe.glb`
 
-The GLB is a self-contained, 11-part, approximately 8,000-triangle model. Its ground-centred origin is at `(0, 0, 0)`; local `Y` is up and the public entrance/terrace face local `+X`. The measured local bounds are approximately `11.42 × 4.41 × 9.02 m` (`X × Y × Z`). It is designed to be instanced at real-world scale (`Vector3.ONE`) without rescaling.
+The GLB is a self-contained, 12-part, approximately 12,500-triangle model. Its ground-centred origin is at `(0, 0, 0)`; local `Y` is up and the public entrance/terrace face local `+X`. The measured local bounds are approximately `11.42 × 4.41 × 8.66 m` (`X × Y × Z`). It is designed to be instanced at real-world scale (`Vector3.ONE`) without rescaling.
 
-The model uses named material groups (`CafeTravertine`, `CafeLimestone`, `CafeBronze`, `CafeSteel`, `CafeGlass`, `CafeOak`, `CafeWarmLight`, `CafeCream`, `CafeCounter`, `CafeGreen`, `CafeCeramic`). `NativeWorldBuilder._prop_material()` maps those names to the project's PBR materials, so the runtime GLB does not depend on external texture files.
+The model uses named material groups (`CafeTravertine`, `CafeLimestone`, `CafeBronze`, `CafeSteel`, `CafeGlass`, `CafeOak`, `CafeWarmLight`, `CafeCream`, `CafeFabric`, `CafeCounter`, `CafeGreen`, `CafeCeramic`). It embeds its own UV-mapped albedo and normal maps for travertine, limestone, brushed metal, wood, granite, marble, foliage and woven linen. Native Godot also maps these names to the project's shared PBR textures; the generated linen maps are included in native asset sync.
 
 ## Current RichTown placement
 

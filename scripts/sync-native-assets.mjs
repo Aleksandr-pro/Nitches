@@ -66,6 +66,7 @@ const textureNames = [
   'foliage.jpg', 'foliage_normal.jpg',
   'user_palm_leaf.png',
   'user_sky_day.jpg', 'user_sky_sunset.jpg', 'user_sky_night.jpg',
+  'cafe_linen.jpg', 'cafe_linen_normal.png',
 ];
 
 async function readHeader(file, length = 64) {

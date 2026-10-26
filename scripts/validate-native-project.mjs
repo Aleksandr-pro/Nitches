@@ -309,6 +309,8 @@ for (const marker of [
   'boulevard_lawn_islands',
   'WashingtoniaWhiteGravelBeds',
   'CafeWarmLight',
+  'CafeFabric',
+  'cafe_linen_normal.png',
   'premium_boulevard_promenade_m2',
   'infill_buildings',
   'city_detail_props',
@@ -374,6 +376,8 @@ if (requireAssets) {
     'assets/textures/user_sky_day.jpg',
     'assets/textures/user_sky_sunset.jpg',
     'assets/textures/user_sky_night.jpg',
+    'assets/textures/cafe_linen.jpg',
+    'assets/textures/cafe_linen_normal.png',
   ];
   for (const relative of required) {
     const file = path.join(root, relative);

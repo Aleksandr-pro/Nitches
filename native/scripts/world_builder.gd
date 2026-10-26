@@ -1233,7 +1233,9 @@ func _prop_material(material_name: String) -> Material:
 			cafe_green.cull_mode = BaseMaterial3D.CULL_DISABLED
 			return cafe_green
 		"CafeCeramic":
-			return _material("dubai_cafe_ceramic", "user_stone_tiles_beige.jpg", "", Color(0.86, 0.76, 0.61), 0.46, 0.08, Vector3(0.22, 0.22, 0.22), true)
+			return _material("dubai_cafe_ceramic", "user_marble_tiles.jpg", "user_marble_tiles_normal.jpg", Color(0.94, 0.89, 0.79), 0.36, 0.08, Vector3(0.22, 0.22, 0.22), true)
+		"CafeFabric":
+			return _material("dubai_cafe_linen", "cafe_linen.jpg", "cafe_linen_normal.png", Color(0.98, 0.94, 0.86), 0.92, 0.0, Vector3(8.0, 8.0, 8.0), true)
 		"VillaPlaster":
 			# 0.2.8: Building Model No.1 gets world-scale materials. The
 			# 0.2.7 shared plaster was stretched over each whole cube UV,
