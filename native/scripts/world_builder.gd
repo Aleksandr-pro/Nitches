@@ -979,6 +979,80 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			return _material("prop_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.72, 0.76, 0.80), 0.38, 0.78)
 		"PropsWood":
 			return _material("prop_wood", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color.WHITE, 0.86)
+		"VillaPlaster":
+			# 0.2.8: Building Model No.1 gets world-scale materials. The
+			# 0.2.7 shared plaster was stretched over each whole cube UV,
+			# so its photographic micro-cracks almost disappeared on the
+			# phone. World triplanar mapping keeps the same real-metre
+			# grain on every elevation and at every fixed-scale placement.
+			var villa_plaster := _material("villa_plaster", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.88, 0.82, 0.72), 0.94, 0.0, Vector3(0.17, 0.17, 0.17), true)
+			villa_plaster.normal_scale = 1.35
+			villa_plaster.metallic_specular = 0.35
+			return villa_plaster
+		"VillaStone":
+			var villa_stone := _material("villa_stone", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.92, 0.86, 0.76), 0.84, 0.0, Vector3(0.20, 0.20, 0.20), true)
+			villa_stone.normal_scale = 1.20
+			villa_stone.metallic_specular = 0.55
+			return villa_stone
+		"VillaLimestone":
+			var villa_limestone := _material("villa_limestone", "user_stone_tiles_beige.jpg", "", Color(0.88, 0.80, 0.68), 0.92, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			villa_limestone.metallic_specular = 0.42
+			return villa_limestone
+		"VillaGranite":
+			var villa_granite := _material("villa_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.72, 0.74, 0.78), 0.50, 0.04, Vector3(0.24, 0.24, 0.24), true)
+			villa_granite.normal_scale = 1.10
+			villa_granite.metallic_specular = 0.90
+			villa_granite.clearcoat_enabled = true
+			villa_granite.clearcoat = 0.35
+			villa_granite.clearcoat_roughness = 0.30
+			return villa_granite
+		"VillaWood":
+			var villa_wood := _material("villa_wood", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.88, 0.74, 0.58), 0.78, 0.0, Vector3(0.32, 0.32, 0.32), true)
+			villa_wood.normal_scale = 1.15
+			villa_wood.metallic_specular = 0.45
+			return villa_wood
+		"VillaGlass":
+			var villa_glass := _material("villa_glass", "", "", Color(0.34, 0.55, 0.64, 0.58), 0.08, 0.0)
+			villa_glass.metallic_specular = 1.0
+			villa_glass.clearcoat_enabled = true
+			villa_glass.clearcoat = 1.0
+			villa_glass.clearcoat_roughness = 0.06
+			villa_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			villa_glass.emission_enabled = true
+			villa_glass.emission = Color(1.0, 0.72, 0.44)
+			_register_night_material(villa_glass, 0.0, 0.07, 0.30)
+			return villa_glass
+		"VillaInterior":
+			var villa_interior := _material("villa_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.075, 0.062, 0.052), 0.96, 0.0, Vector3(0.42, 0.42, 0.42), true)
+			villa_interior.metallic_specular = 0.18
+			return villa_interior
+		"VillaCurtain":
+			var villa_curtain := _material("villa_curtain", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.72, 0.65, 0.54), 1.0, 0.0, Vector3(0.65, 0.65, 0.65), true)
+			villa_curtain.normal_scale = 0.45
+			villa_curtain.metallic_specular = 0.22
+			return villa_curtain
+		"VillaPavement":
+			var villa_pavement := _material("villa_pavement", "user_stone_tiles_beige.jpg", "", Color(0.82, 0.78, 0.70), 0.90, 0.0, Vector3(0.34, 0.34, 0.34), true)
+			villa_pavement.metallic_specular = 0.45
+			return villa_pavement
+		"VillaDeck":
+			var villa_deck := _material("villa_deck", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.42, 0.25), 0.86, 0.0, Vector3(0.42, 0.42, 0.42), true)
+			villa_deck.normal_scale = 1.0
+			villa_deck.metallic_specular = 0.38
+			return villa_deck
+		"VillaMulch":
+			var villa_mulch := _material("villa_mulch", "user_mulch_soil.jpg", "", Color(0.86, 0.78, 0.70), 1.0, 0.0, Vector3(0.65, 0.65, 0.65), true)
+			villa_mulch.metallic_specular = 0.20
+			return villa_mulch
+		"VillaLawn":
+			var villa_lawn := _material("villa_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.70, 0.78, 0.58), 1.0, 0.0, Vector3(0.48, 0.48, 0.48), true)
+			villa_lawn.normal_scale = 0.90
+			villa_lawn.metallic_specular = 0.22
+			return villa_lawn
+		"VillaHedge":
+			var villa_hedge := _material("villa_hedge", "hedge.jpg", "", Color(0.72, 0.84, 0.62), 1.0, 0.0, Vector3(0.90, 0.90, 0.90), true)
+			villa_hedge.metallic_specular = 0.25
+			return villa_hedge
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -2685,6 +2759,12 @@ func _build_buildings() -> void:
 	_enhancement_stats["hero_building_models"] = hero_transforms.size()
 	_enhancement_stats["premium_villa_models"] = villa_transforms.size() if premium_villa_built else 0
 	_enhancement_stats["premium_villa_fixed_scale"] = premium_villa_built
+	# The 0.2.8 smoke must prove that the new GLB's dedicated semantic
+	# materials actually reached Godot materials, not merely that an
+	# older villa file happened to load under the same path.
+	_enhancement_stats["premium_villa_detail_pass"] = premium_villa_built
+	_enhancement_stats["premium_villa_material_pass"] = premium_villa_built and _materials.has("villa_plaster") and _materials.has("villa_stone") and _materials.has("villa_granite") and _materials.has("villa_glass") and _materials.has("villa_interior")
+	_enhancement_stats["premium_villa_site_pass"] = premium_villa_built and _materials.has("villa_pavement") and _materials.has("villa_mulch") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
 
 
