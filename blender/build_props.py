@@ -536,7 +536,7 @@ def build_hero():
 
 # --------------------------------------------------------------------------- #
 # Building Model No.2 — detailed semi-detached townhouse pair.
-# Fixed real-metre envelope: 18.80 x 16.20 m, 11.05 m high. Two mirrored
+# Fixed real-metre envelope: 18.87 x 16.37 m, 11.05 m high. Two mirrored
 # 9.4 m homes share a party wall; the runtime places the complete design
 # at scale 1.0 rather than stretching one small house over every parcel.
 # --------------------------------------------------------------------------- #
