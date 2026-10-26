@@ -1077,8 +1077,12 @@ func _prop_material(material_name: String) -> Material:
 				0.68
 			)
 		"PropsGlass":
-			var panes := _material("prop_glass", "", "", Color(0.58, 0.82, 0.94, 0.58), 0.08, 0.35)
+			var panes := _material("prop_glass", "", "", Color(0.42, 0.65, 0.77, 0.50), 0.055, 0.12)
 			panes.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			panes.metallic_specular = 1.0
+			panes.clearcoat_enabled = true
+			panes.clearcoat = 0.88
+			panes.clearcoat_roughness = 0.035
 			panes.emission_enabled = true
 			panes.emission = Color(1.0, 0.78, 0.52)
 			_register_night_material(panes, 0.0, 0.06, 0.24)
@@ -4430,11 +4434,13 @@ func _build_reflection_probes() -> void:
 		probe.name = "TallDistrictReflection" if bool(spec.get("tall", false)) else "DistrictReflection"
 		probe.position = Vector3(centre.x, height_at(centre.x, centre.z) + probe_height, centre.z)
 		probe.size = spec.get("size", Vector3(320.0, 150.0, 320.0))
-		probe.blend_distance = 45.0
+		probe.blend_distance = 52.0
 		probe.origin_offset = Vector3(0.0, capture_height - probe_height, 0.0)
 		probe.box_projection = true
 		probe.enable_shadows = false
-		probe.intensity = 1.16 if bool(spec.get("tall", false)) else 1.12
+		# Slightly lifted reflection energy makes car clearcoat and curtain-wall
+		# windows read their local cubemap, while the tall probes stay balanced.
+		probe.intensity = 1.24
 		probe.max_distance = 240.0
 		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
@@ -4449,6 +4455,8 @@ func _build_reflection_probes() -> void:
 	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
 	_enhancement_stats["tall_reflection_probes"] = tall_probe_count
 	_enhancement_stats["reflection_probe_max_distance"] = 240.0
+	_enhancement_stats["reflection_probe_box_projection"] = true
+	_enhancement_stats["reflection_probe_intensity"] = 1.24
 
 
 func _build_benches() -> void:

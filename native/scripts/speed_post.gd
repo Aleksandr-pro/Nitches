@@ -3,15 +3,12 @@ extends MeshInstance3D
 
 ## Drive-база «Для godot»: полноэкранный speed post-эффект.
 ##
-## Исходный speed_post.gd зависел от класса ArcadeCar и всегда держал
-## полноэкранный проход включённым.  Эта версия получает только нормализованную
-## скорость из NativeVehicle через main.gd, поэтому её можно безопасно
-## использовать с текущей физикой, а на малой скорости квад полностью
-## выключается ради мобильного FPS.
+## Исходный speed_post.gd зависел от класса ArcadeCar. Эта версия получает
+## нормализованную скорость NativeVehicle: лёгкий цветовой grade/vignette/grain
+## работает постоянно, а blur/chromatic aberration включаются только в движении.
 
 const SPEED_SHADER: Shader = preload("res://shaders/speed_post.gdshader")
 const SMOOTHING := 4.0
-const VISIBLE_EPSILON := 0.015
 
 var _material: ShaderMaterial
 var _target_ratio := 0.0
@@ -43,8 +40,17 @@ func _ready() -> void:
 	# полноэкранным квадом.
 	_material.render_priority = -128
 	_material.set_shader_parameter("speed", 0.0)
+	_material.set_shader_parameter("saturation", 1.0)
+	_material.set_shader_parameter("contrast", 1.06)
+	_material.set_shader_parameter("shadow_tint", Vector3(0.95, 0.97, 1.0))
+	_material.set_shader_parameter("highlight_tint", Vector3(1.02, 1.0, 0.96))
+	_material.set_shader_parameter("split_strength", 0.28)
+	_material.set_shader_parameter("vignette_strength", 0.22)
+	_material.set_shader_parameter("grain", 0.005)
 	material_override = _material
-	visible = false
+	# Always-on subtle color grade/vignette/grain; only the extra speed samples
+	# in the fragment shader scale with _amount.
+	visible = true
 
 
 func set_speed_ratio(value: float) -> void:
@@ -52,15 +58,14 @@ func set_speed_ratio(value: float) -> void:
 
 
 func _process(delta: float) -> void:
-	# A screen-texture post pass at parking-lot speeds looks almost static
-	# but still costs a fullscreen read/write. On Android, enable it only
-	# after roughly 75 km/h; desktop keeps the original low-speed ramp.
+	# Preserve the inexpensive one-sample grade at all speeds. On Android the
+	# additional radial blur/CA/line treatment starts only above ~75 km/h.
 	var effective_target := _target_ratio
 	if OS.has_feature("android") and _target_ratio < 0.35:
 		effective_target = 0.0
 	var weight := 1.0 - exp(-SMOOTHING * maxf(delta, 0.0))
 	_amount = lerpf(_amount, effective_target, weight)
-	visible = _amount > VISIBLE_EPSILON or effective_target > VISIBLE_EPSILON
+	visible = true
 	if _material != null:
 		_material.set_shader_parameter("speed", _amount)
 
@@ -71,4 +76,7 @@ func get_smoke_state() -> Dictionary:
 		"amount": _amount,
 		"target": _target_ratio,
 		"visible": visible,
+		"cinematic_grade": _material != null and _material.shader != null,
+		"always_on_vignette": _material != null and float(_material.get_shader_parameter("vignette_strength")) > 0.0,
+		"film_grain": _material != null and float(_material.get_shader_parameter("grain")) > 0.0,
 	}

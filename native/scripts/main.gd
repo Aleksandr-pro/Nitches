@@ -375,8 +375,8 @@ func _run_smoke_checks() -> void:
 		failures.append("landmark stats are incomplete")
 
 	var enhancement_stats := _world.get_enhancement_stats()
-	if int(enhancement_stats.get("reflection_probes", 0)) < 6:
-		failures.append("reflection probes are incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("reflection_probes", 0)) < 6 or not bool(enhancement_stats.get("reflection_probe_box_projection", false)) or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) < 1.1:
+		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:
 		failures.append("road markings are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
@@ -409,12 +409,14 @@ func _run_smoke_checks() -> void:
 	var dynamic_world_state := _world.get_dynamic_world_state()
 	if int(dynamic_world_state.get("presets", 0)) < 5 or String(dynamic_world_state.get("preset", "")) != "clear_day" or not bool(dynamic_world_state.get("physical_sky", false)):
 		failures.append("DynamicWorld Drive base is not active: %s" % str(dynamic_world_state))
+	if not bool(dynamic_world_state.get("bloom_enabled", false)) or float(dynamic_world_state.get("cinematic_contrast", 0.0)) < 1.05 or float(dynamic_world_state.get("cinematic_brightness", 1.0)) >= 1.0:
+		failures.append("cinematic bloom/color grade is not active: %s" % str(dynamic_world_state))
 	var speed_post_state := _speed_post.get_smoke_state()
-	if not bool(speed_post_state.get("ready", false)):
-		failures.append("SpeedPost Drive base is not ready: %s" % str(speed_post_state))
+	if not bool(speed_post_state.get("ready", false)) or not bool(speed_post_state.get("cinematic_grade", false)) or not bool(speed_post_state.get("always_on_vignette", false)) or not bool(speed_post_state.get("film_grain", false)):
+		failures.append("SpeedPost cinematic grade/vignette/grain is incomplete: %s" % str(speed_post_state))
 	var drive_base_state := _vehicle.get_drive_base_state()
-	if not bool(drive_base_state.get("car_paint_shader", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
-		failures.append("ArcadeCar/car-paint Drive base is not active: %s" % str(drive_base_state))
+	if not bool(drive_base_state.get("car_paint_shader", false)) or not bool(drive_base_state.get("paint_reflections_ready", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
+		failures.append("ArcadeCar reflective paint Drive base is not active: %s" % str(drive_base_state))
 	var smoothing_state := _vehicle.get_smoothing_state()
 	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
 		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))

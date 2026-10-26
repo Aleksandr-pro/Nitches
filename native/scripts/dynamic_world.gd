@@ -21,7 +21,7 @@ const PRESETS := {
 	},
 	Preset.CLEAR_DAY: {
 		"time": 12.5, "turbidity": 4.0, "mie": 0.004, "fog": 0.0007,
-		"fog_color": Color(0.70, 0.80, 0.95), "sat": 1.08, "contrast": 1.05,
+		"fog_color": Color(0.70, 0.80, 0.95), "sat": 1.02, "contrast": 1.08,
 		"glow": 0.5, "exposure": 1.0, "sun_scale": 1.0, "ambient": 1.0,
 	},
 	Preset.AUTUMN_MORNING: {
@@ -46,8 +46,8 @@ const PRESETS := {
 # буквально 0.0022 на закате почти полностью съел бы силуэт города.
 const FOG_SCALE := 0.42
 const NIGHT_GRADE := {
-	"sat": 1.02,
-	"contrast": 1.06,
+	"sat": 1.0,
+	"contrast": 1.08,
 	"glow": 1.18,
 	"exposure": 0.92,
 	"fog": 0.00085,
@@ -56,6 +56,10 @@ const NIGHT_GRADE := {
 var _physical_sky_material: PhysicalSkyMaterial
 var _current_mode := "day"
 var _current_preset: Preset = Preset.CLEAR_DAY
+var _last_bloom_enabled := false
+var _last_adjustment_brightness := 1.0
+var _last_adjustment_contrast := 1.0
+var _last_adjustment_saturation := 1.0
 
 
 func get_physical_sky_material() -> PhysicalSkyMaterial:
@@ -121,23 +125,30 @@ func apply_mode(mode: String, environment: Environment, sun: DirectionalLight3D)
 	# тёмной. Используем мобильно-безопасный предел 1.8.
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_white = 1.8
-	environment.tonemap_exposure = float(grade.get("exposure", 1.0)) * (1.04 if mode == "day" else (1.08 if mode == "sunset" else 1.0))
-	# Glow is a multi-pass fullscreen effect. On the tested Android phone it
-	# is disabled in the 0.2.4 performance mode; emissive windows/lamps and
-	# ACES/fog remain, but the GPU no longer pays for bloom every frame.
-	environment.glow_enabled = not OS.has_feature("android")
+	var is_mobile := OS.has_feature("android")
+	environment.tonemap_exposure = float(grade.get("exposure", 1.0)) * (0.99 if mode == "day" else (1.02 if mode == "sunset" else 1.0))
+	# Restrained bloom catches emissive lamps and HDR sun glints on paint/glass.
+	# Keep only the tighter blur levels on mobile to preserve the phone budget.
+	environment.glow_enabled = true
 	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
-	environment.glow_strength = 0.95
-	environment.glow_bloom = 0.04
-	environment.glow_hdr_threshold = 1.0
-	# CLEAR_DAY в исходнике даёт glow=0.5; для дневного RichTown это слишком
-	# глушит окна/воду, поэтому дневной floor выше, а закат/ночь — по пресету.
-	environment.glow_intensity = maxf(float(grade.get("glow", 0.8)), 0.78 if mode == "day" else 0.0)
+	environment.glow_strength = 0.72 if is_mobile else 0.92
+	environment.glow_bloom = 0.035 if is_mobile else 0.05
+	environment.glow_hdr_threshold = 1.08
+	environment.set_glow_level(1, 0.28 if is_mobile else 0.36)
+	environment.set_glow_level(2, 0.12 if is_mobile else 0.52)
+	environment.set_glow_level(3, 0.035 if is_mobile else 0.28)
+	environment.glow_intensity = maxf(float(grade.get("glow", 0.8)), 0.42 if mode == "day" else 0.0)
 
+	# The grade is neutral-warm rather than the old boosted blue/orange look:
+	# slightly lower shadow exposure, restrained saturation and a firmer toe.
 	environment.adjustment_enabled = true
-	environment.adjustment_brightness = 1.02
-	environment.adjustment_saturation = float(grade.get("sat", 1.05))
-	environment.adjustment_contrast = float(grade.get("contrast", 1.05))
+	environment.adjustment_brightness = 0.985
+	environment.adjustment_saturation = float(grade.get("sat", 1.02))
+	environment.adjustment_contrast = float(grade.get("contrast", 1.08))
+	_last_bloom_enabled = environment.glow_enabled
+	_last_adjustment_brightness = environment.adjustment_brightness
+	_last_adjustment_contrast = environment.adjustment_contrast
+	_last_adjustment_saturation = environment.adjustment_saturation
 
 	environment.fog_enabled = true
 	environment.fog_sky_affect = 0.25
@@ -152,4 +163,8 @@ func get_smoke_state() -> Dictionary:
 		"mode": _current_mode,
 		"preset": get_current_preset_name(),
 		"physical_sky": get_physical_sky_material() != null,
+		"bloom_enabled": _last_bloom_enabled,
+		"cinematic_brightness": _last_adjustment_brightness,
+		"cinematic_contrast": _last_adjustment_contrast,
+		"cinematic_saturation": _last_adjustment_saturation,
 	}
