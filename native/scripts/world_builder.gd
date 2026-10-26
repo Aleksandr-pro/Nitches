@@ -3064,7 +3064,7 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_glass_models"] = tower_transforms.size() if premium_glass_built else 0
 	_enhancement_stats["premium_glass_fixed_scale"] = premium_glass_built
 	_enhancement_stats["premium_glass_detail_pass"] = premium_glass_built
-	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
+	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass_physical") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
 	_enhancement_stats["premium_glass_site_pass"] = premium_glass_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
 
@@ -3611,7 +3611,7 @@ func _build_landmarks() -> void:
 				_enhancement_stats["premium_main_tower_built"] = main_tower_built
 				_enhancement_stats["premium_main_tower_fixed_scale"] = main_tower_built
 				_enhancement_stats["premium_main_tower_detail_pass"] = main_tower_built
-				_enhancement_stats["premium_main_tower_material_pass"] = main_tower_built and _materials.has("main_glass") and _materials.has("main_spandrel") and _materials.has("main_stone") and _materials.has("main_trim") and _materials.has("main_metal") and _materials.has("main_water")
+				_enhancement_stats["premium_main_tower_material_pass"] = main_tower_built and _materials.has("main_glass_physical") and _materials.has("main_spandrel") and _materials.has("main_stone") and _materials.has("main_trim") and _materials.has("main_metal") and _materials.has("main_water")
 				_enhancement_stats["premium_main_tower_site_pass"] = main_tower_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 				if not main_tower_built:
 					_add_box(root, Vector3(50.0, h, 42.0), pos + Vector3(0.0, h * 0.5, 0.0), glass)
