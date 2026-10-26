@@ -52,9 +52,15 @@ func set_speed_ratio(value: float) -> void:
 
 
 func _process(delta: float) -> void:
+	# A screen-texture post pass at parking-lot speeds looks almost static
+	# but still costs a fullscreen read/write. On Android, enable it only
+	# after roughly 75 km/h; desktop keeps the original low-speed ramp.
+	var effective_target := _target_ratio
+	if OS.has_feature("android") and _target_ratio < 0.35:
+		effective_target = 0.0
 	var weight := 1.0 - exp(-SMOOTHING * maxf(delta, 0.0))
-	_amount = lerpf(_amount, _target_ratio, weight)
-	visible = _amount > VISIBLE_EPSILON or _target_ratio > VISIBLE_EPSILON
+	_amount = lerpf(_amount, effective_target, weight)
+	visible = _amount > VISIBLE_EPSILON or effective_target > VISIBLE_EPSILON
 	if _material != null:
 		_material.set_shader_parameter("speed", _amount)
 

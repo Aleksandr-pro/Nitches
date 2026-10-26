@@ -13,8 +13,8 @@ extends Node3D
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
 const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
 const WHEEL_RADIUS := 0.3378
-const MOVING_VISUAL_RANGE_M := 360.0
-const PARKED_VISUAL_RANGE_M := 300.0
+const MOVING_VISUAL_RANGE_M := 210.0
+const PARKED_VISUAL_RANGE_M := 170.0
 const CAR_COLORS: Array[Color] = [
 	Color(0.72, 0.74, 0.76),
 	Color(0.08, 0.09, 0.11),
@@ -91,7 +91,9 @@ func set_headlights_enabled(enabled: bool) -> void:
 	if not enabled:
 		for entry in _moving_cars:
 			for light_variant in entry.get("lights", []):
-				(light_variant as SpotLight3D).light_energy = 0.0
+				var light := light_variant as SpotLight3D
+				light.light_energy = 0.0
+				light.visible = false
 
 
 func _physics_process(delta: float) -> void:
@@ -152,7 +154,12 @@ func _physics_process(delta: float) -> void:
 		if _headlights_enabled and car_position.distance_squared_to(_player.global_position) < 95.0 * 95.0:
 			light_energy = 2.8
 		for light_variant in entry.get("lights", []):
-			(light_variant as SpotLight3D).light_energy = light_energy
+			var headlight := light_variant as SpotLight3D
+			headlight.light_energy = light_energy
+			# Invisible lights are not merely black lights: the renderer can
+			# skip them entirely during the day instead of carrying 32
+			# positional lights through culling for every object.
+			headlight.visible = light_energy > 0.01
 
 
 func _build_routes() -> void:
@@ -325,7 +332,7 @@ func _create_car(index: int, parked: bool) -> Dictionary:
 	# Mustangs (plus the player) across the whole 1 km map. Collision and
 	# traffic logic still exist everywhere, but only nearby car geometry is
 	# submitted to the camera/shadow passes.
-	_set_visual_range(body, PARKED_VISUAL_RANGE_M if parked else MOVING_VISUAL_RANGE_M)
+	_set_visual_range(body, PARKED_VISUAL_RANGE_M if parked else MOVING_VISUAL_RANGE_M, 0.35 if parked else 0.55)
 
 	var lights: Array = []
 	if not parked:
@@ -339,6 +346,7 @@ func _create_car(index: int, parked: bool) -> Dictionary:
 			light.spot_angle = 26.0
 			light.spot_attenuation = 1.25
 			light.shadow_enabled = false
+			light.visible = false
 			body.add_child(light)
 			lights.append(light)
 
@@ -349,15 +357,18 @@ func _create_car(index: int, parked: bool) -> Dictionary:
 	}
 
 
-func _set_visual_range(node: Node, range_m: float) -> void:
+func _set_visual_range(node: Node, range_m: float, lod_bias_value: float) -> void:
 	if node is GeometryInstance3D:
 		var geometry := node as GeometryInstance3D
 		geometry.visibility_range_begin = 0.0
 		geometry.visibility_range_end = range_m
 		geometry.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		# GeometryInstance3D.lod_bias < 1 brings imported-mesh LODs in
+		# sooner; it is intentionally not raised here.
+		geometry.lod_bias = lod_bias_value
 		_visual_range_instances += 1
 	for child in node.get_children():
-		_set_visual_range(child, range_m)
+		_set_visual_range(child, range_m, lod_bias_value)
 
 
 func _place_moving_car(entry: Dictionary) -> void:
@@ -462,7 +473,10 @@ func _shared_material(kind: String) -> StandardMaterial3D:
 func _apply_model_materials(node: Node, color: Color, parked: bool) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
-		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# Traffic already has a blob contact shadow. Removing 34 high-poly
+		# Mustangs from the directional shadow pass is a major mobile win;
+		# the player's own car keeps its real-time shadow.
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if mesh_instance.mesh != null:
 			var paint := _paint_material(color)
 			var accent := _paint_material(color.lerp(Color(0.05, 0.05, 0.06), 0.55))

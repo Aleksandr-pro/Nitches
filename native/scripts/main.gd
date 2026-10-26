@@ -28,6 +28,10 @@ var _time_index := 0
 var _smoke_mode := false
 var _smoke_frames := 0
 var _smoke_completed := false
+var render_quality_state := {}
+var _render_scale := 1.0
+var _render_quality_accumulated_time := 0.0
+var _render_quality_frames := 0
 
 
 func _ready() -> void:
@@ -35,6 +39,7 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	if OS.has_feature("android"):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	_configure_render_quality(true)
 
 	_world = WorldBuilderScript.new() as NativeWorldBuilder
 	_world.name = "NativeWorld"
@@ -67,6 +72,49 @@ func _ready() -> void:
 	_apply_time_mode()
 	_update_camera(0.0, true)
 	print("[native] Nitches Horizon Godot alpha is ready")
+
+
+func _configure_render_quality(initial: bool) -> void:
+	var viewport := get_viewport()
+	var is_android := OS.has_feature("android")
+	if is_android:
+		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		# MSAA at full 3D cost does not make sense below 30 FPS. FXAA leaves
+		# edges softer but preserves far more GPU time; the sharp UI remains
+		# at display resolution because only the 3D buffer is scaled.
+		viewport.msaa_3d = Viewport.MSAA_DISABLED
+		viewport.use_fxaa = true
+		if initial:
+			_render_scale = 0.68
+		viewport.scaling_3d_scale = _render_scale
+	render_quality_state = {
+		"android": is_android,
+		"scale": _render_scale,
+		"msaa": int(viewport.msaa_3d),
+		"fxaa": viewport.use_fxaa,
+		"adaptive": is_android,
+	}
+
+
+func _update_adaptive_render_quality(delta: float) -> void:
+	if not OS.has_feature("android") or delta <= 0.0:
+		return
+	_render_quality_accumulated_time += delta
+	_render_quality_frames += 1
+	if _render_quality_accumulated_time < 1.5:
+		return
+	var measured_fps := float(_render_quality_frames) / maxf(_render_quality_accumulated_time, 0.001)
+	_render_quality_accumulated_time = 0.0
+	_render_quality_frames = 0
+	var previous_scale := _render_scale
+	if measured_fps < 30.0:
+		_render_scale = maxf(0.50, _render_scale - 0.08)
+	elif measured_fps < 42.0:
+		_render_scale = maxf(0.50, _render_scale - 0.03)
+	elif measured_fps > 55.0:
+		_render_scale = minf(0.82, _render_scale + 0.04)
+	if not is_equal_approx(previous_scale, _render_scale):
+		_configure_render_quality(false)
 
 
 func _create_camera() -> void:
@@ -130,6 +178,7 @@ func _reset_vehicle_to_road() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_adaptive_render_quality(delta)
 	if _camera != null and not _camera.is_current():
 		_camera.make_current()
 	_update_camera(delta, _snap_camera)
@@ -286,6 +335,10 @@ func _run_smoke_checks() -> void:
 		failures.append("road/terrain visual state would be culled or untextured: %s" % str(road_visual_state))
 	if int(road_visual_state.get("foliage_wind_materials", 0)) < 3:
 		failures.append("foliage wind Drive base is incomplete: %s" % str(road_visual_state))
+	if int(road_visual_state.get("multimesh_chunks", 0)) < 40 or float(road_visual_state.get("multimesh_chunk_size_m", 9999.0)) > 260.0 or int(road_visual_state.get("road_grid_cells", 0)) < 40:
+		failures.append("0.2.4 spatial chunking/road grid is incomplete: %s" % str(road_visual_state))
+	if render_quality_state.is_empty():
+		failures.append("adaptive render quality state is missing")
 	if int(enhancement_stats.get("road_edge_lines", 0)) < 1500 or int(enhancement_stats.get("lane_dashes", 0)) < 800:
 		failures.append("continuous road paint is incomplete: %s" % str(enhancement_stats))
 
@@ -294,9 +347,9 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
 	if int(traffic_stats.get("paint_materials", 0)) < 5:
 		failures.append("traffic car-paint shader materials are incomplete: %s" % str(traffic_stats))
-	if float(traffic_stats.get("visual_range_moving", 0.0)) < 300.0 or float(traffic_stats.get("visual_range_moving", 9999.0)) > 420.0 or int(traffic_stats.get("visual_range_instances", 0)) < 34:
+	if float(traffic_stats.get("visual_range_moving", 0.0)) < 180.0 or float(traffic_stats.get("visual_range_moving", 9999.0)) > 240.0 or int(traffic_stats.get("visual_range_instances", 0)) < 34:
 		failures.append("traffic distance culling is not active: %s" % str(traffic_stats))
-	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 400.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 360.0:
+	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 260.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:
 		failures.append("mobile shadow/reflection ranges are not bounded: %s" % str(enhancement_stats))
 	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
 	if String(spawn_surface.get("kind", "")) != "asphalt":
@@ -348,7 +401,7 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s road_visual=%s" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s road_visual=%s render_quality=%s" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
@@ -364,6 +417,7 @@ func _run_smoke_checks() -> void:
 			str(speed_post_state),
 			str(drive_base_state),
 			str(road_visual_state),
+			str(render_quality_state),
 		])
 	_finish_smoke(failures)
 

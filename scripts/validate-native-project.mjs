@@ -35,15 +35,15 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
 assert(project.includes('renderer/rendering_method="mobile"'), 'Godot Mobile renderer is not selected');
 assert(project.includes('textures/default_filters/anisotropic_filtering_level=4'), '4x anisotropic filtering is not enabled');
-assert(project.includes('lights_and_shadows/directional_shadow/size.mobile=4096'), '4096px mobile directional shadows are not enabled');
+assert(project.includes('lights_and_shadows/directional_shadow/size.mobile=2048'), '2048px mobile directional shadows are not enabled');
 assert(mainScene.includes('res://scripts/main.gd'), 'main scene is not wired to main.gd');
 
 assert(preset.includes('platform="Android"'), 'Android export preset is missing');
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=6'), 'Native 0.2.3 must bump Android versionCode to 6');
-assert(preset.includes('version/name="0.2.3-native-alpha"'), 'Native version name must be 0.2.3-native-alpha');
+assert(preset.includes('version/code=7'), 'Native 0.2.4 must bump Android versionCode to 7');
+assert(preset.includes('version/name="0.2.4-native-alpha"'), 'Native version name must be 0.2.4-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -87,8 +87,15 @@ for (const marker of [
   'visibility_range_end',
   'shadow_max_distance',
   'reflection_probe_max_distance',
+  'MULTIMESH_CHUNK_SIZE_M',
+  'ROAD_GRID_CELL_M',
+  '_configure_render_quality',
+  'Viewport.SCALING_3D_MODE_BILINEAR',
+  'Viewport.MSAA_DISABLED',
+  'lod_bias',
+  'SHADOW_PARALLEL_2_SPLITS',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.3 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.4 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);

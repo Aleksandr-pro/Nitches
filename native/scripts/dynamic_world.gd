@@ -122,7 +122,10 @@ func apply_mode(mode: String, environment: Environment, sun: DirectionalLight3D)
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_white = 1.8
 	environment.tonemap_exposure = float(grade.get("exposure", 1.0)) * (1.04 if mode == "day" else (1.08 if mode == "sunset" else 1.0))
-	environment.glow_enabled = true
+	# Glow is a multi-pass fullscreen effect. On the tested Android phone it
+	# is disabled in the 0.2.4 performance mode; emissive windows/lamps and
+	# ACES/fog remain, but the GPU no longer pays for bloom every frame.
+	environment.glow_enabled = not OS.has_feature("android")
 	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	environment.glow_strength = 0.95
 	environment.glow_bloom = 0.04
