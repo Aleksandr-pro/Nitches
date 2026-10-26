@@ -21,7 +21,7 @@ HTML/JavaScript внутри APK.
 - существующие GLB, JPG/PNG и normal maps импортируются без повторной
   покупки или загрузки ассетов.
 
-## Что уже есть в Native Alpha 0.2.0
+## Что уже есть в Native Alpha 0.2.1
 
 - `native/project.godot` — настоящий Godot-проект, Mobile renderer, Jolt;
 - `native/scenes/main.tscn` — главная сцена;
@@ -58,6 +58,19 @@ HTML/JavaScript внутри APK.
 - три камеры: chase, hood и top. Chase-камера 0.2.0 ближе, ниже и с более
   узким FOV: автомобиль крупнее в кадре без нарушения реальных метров;
   добавлен raycast против прохождения камеры сквозь здания.
+- Drive-база из папки «Для godot» (0.2.1), адаптированная к RichTown:
+  - `car_paint.gdshader` — металлическая краска с блёстками и clearcoat на
+    кузове игрока и всего трафика;
+  - `speed_post.gd`/`speed_post.gdshader` — радиальный blur, хроматическая
+    аберрация, линии скорости и виньетка на игровой камере; на малой
+    скорости полноэкранный проход выключен ради мобильного FPS;
+  - `dynamic_world.gd` — пресеты CLEAR_DAY/GOLDEN_HOUR для ACES, bloom,
+    цветокора и тумана поверх существующих панорам неба, плюс
+    PhysicalSkyMaterial как запасное небо;
+  - из `arcade_car.gd` перенесены `roll_reduction` для сил шин и
+    квадратичная кривая руля. Сама физика NativeVehicle не понижена до
+    упрощённого ArcadeCar: raycast-подвеска, круг трения, Pacejka,
+    трансмиссия и поверхности 0.2.0 сохранены.
 
 ## Данные и ассеты
 
@@ -96,7 +109,12 @@ node scripts/validate-native-project.mjs --require-assets
 Godot 4.7.2 и export templates из GitHub Releases, настраивает Android SDK,
 подписывает APK ключом из секретов (или одноразовым ключом раннера, если
 секретов нет), проверяет подпись и наличие `lib/arm64-v8a/libgodot_android.so`
-и загружает артефакт `NitchesHorizonNative-apk`.
+и загружает артефакт `NitchesHorizonNative-apk`. С 0.2.1 workflow также
+публикует режим подписи, SHA-256 сертификата, package/versionCode, minSdk и
+ABI в annotations и job summary: если Android отказывается обновлять игру
+поверх старой версии, по этим данным сразу видно, совпадает ли подпись. При
+одноразовом ключе каждая сборка подписана новым сертификатом, и Android
+требует сначала удалить предыдущую версию.
 
 Перед APK workflow запускает строгий `--native-smoke`: данные мира не пустые,
 Mustang стоит на колёсах у спавна и находится в frustum текущей камеры,

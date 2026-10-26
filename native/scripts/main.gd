@@ -8,6 +8,7 @@ extends Node3D
 const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const TrafficScript := preload("res://scripts/traffic_manager.gd")
+const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -20,6 +21,7 @@ var _vehicle: NativeVehicle
 var _traffic: NativeTrafficManager
 var _hud: NativeHud
 var _camera: Camera3D
+var _speed_post: NativeSpeedPost
 var _camera_mode := CAMERA_CHASE
 var _snap_camera := true
 var _time_index := 0
@@ -76,6 +78,11 @@ func _create_camera() -> void:
 	add_child(_camera)
 	_camera.make_current()
 	_camera.current = true
+
+	# Drive SpeedPost: fullscreen quad lives under the camera exactly as
+	# Godot's advanced post-processing pattern prescribes.
+	_speed_post = SpeedPostScript.new() as NativeSpeedPost
+	_camera.add_child(_speed_post)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -142,6 +149,14 @@ func _update_camera(delta: float, snap: bool) -> void:
 	# chase camera now sits closer/lower with a narrower lens.
 	var desired_fov := 58.0 + speed_ratio * 14.0 + (5.0 if _vehicle.is_boosting() else 0.0)
 	_camera.fov = lerpf(_camera.fov, desired_fov, 1.0 if snap else clampf(delta * 4.5, 0.0, 1.0))
+
+	if _speed_post != null:
+		var post_ratio := 0.0
+		if _camera_mode != CAMERA_TOP:
+			post_ratio = clampf(speed_kmh / 215.0, 0.0, 1.0)
+			if _vehicle.is_boosting():
+				post_ratio = clampf(post_ratio * 1.12 + 0.05, 0.0, 1.0)
+		_speed_post.set_speed_ratio(post_ratio)
 
 	match _camera_mode:
 		CAMERA_HOOD:
@@ -221,6 +236,8 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic node is missing")
 	if _camera == null:
 		failures.append("camera node is missing")
+	if _speed_post == null:
+		failures.append("speed post node is missing")
 	if _hud == null:
 		failures.append("HUD node is missing")
 	if not failures.is_empty():
@@ -252,9 +269,21 @@ func _run_smoke_checks() -> void:
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
 
+	var dynamic_world_state := _world.get_dynamic_world_state()
+	if int(dynamic_world_state.get("presets", 0)) < 5 or String(dynamic_world_state.get("preset", "")) != "clear_day" or not bool(dynamic_world_state.get("physical_sky", false)):
+		failures.append("DynamicWorld Drive base is not active: %s" % str(dynamic_world_state))
+	var speed_post_state := _speed_post.get_smoke_state()
+	if not bool(speed_post_state.get("ready", false)):
+		failures.append("SpeedPost Drive base is not ready: %s" % str(speed_post_state))
+	var drive_base_state := _vehicle.get_drive_base_state()
+	if not bool(drive_base_state.get("car_paint_shader", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
+		failures.append("ArcadeCar/car-paint Drive base is not active: %s" % str(drive_base_state))
+
 	var traffic_stats := _traffic.get_stats()
 	if int(traffic_stats.get("moving", 0)) < 12 or int(traffic_stats.get("parked", 0)) < 16:
 		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
+	if int(traffic_stats.get("paint_materials", 0)) < 5:
+		failures.append("traffic car-paint shader materials are incomplete: %s" % str(traffic_stats))
 	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
 	if String(spawn_surface.get("kind", "")) != "asphalt":
 		failures.append("spawn surface is not asphalt: %s" % str(spawn_surface))
@@ -305,7 +334,7 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
@@ -317,6 +346,9 @@ func _run_smoke_checks() -> void:
 			str(spawn_surface),
 			_vehicle.get_gear_label(),
 			_vehicle.get_engine_rpm(),
+			str(dynamic_world_state),
+			str(speed_post_state),
+			str(drive_base_state),
 		])
 	_finish_smoke(failures)
 

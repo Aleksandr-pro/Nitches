@@ -168,10 +168,12 @@ jobs:
           set -euo pipefail
           KS="$RUNNER_TEMP/nitches-native-release.jks"
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+            SIGNING_MODE="persistent-secret"
             echo "Using the persistent Android signing key from repository secrets"
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
             KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
           else
+            SIGNING_MODE="one-time-ci-key"
             echo "Signing secrets are absent; generating a one-time CI key"
             KS_PASS="$(openssl rand -base64 24)"
             keytool -genkeypair -keystore "$KS" -alias nitches \
@@ -180,6 +182,8 @@ jobs:
               -dname "CN=Nitches Horizon, O=ProfitNiche"
           fi
           echo "::add-mask::$KS_PASS"
+          echo "APK_SIGNING_MODE=$SIGNING_MODE" >> "$GITHUB_ENV"
+          echo "::notice title=APK signing mode::$SIGNING_MODE"
           {
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=nitches"
@@ -276,7 +280,22 @@ jobs:
         run: |
           set -euo pipefail
           BT="$ANDROID_SDK_ROOT/build-tools/35.0.0"
-          "$BT/apksigner" verify --verbose "$APK_PATH"
+          "$BT/apksigner" verify --verbose --print-certs "$APK_PATH" | tee "$RUNNER_TEMP/apksigner.txt"
+          CERT_SHA256="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/apksigner.txt" | head -n 1)"
+          "$BT/aapt2" dump badging "$APK_PATH" | tee "$RUNNER_TEMP/apk-badging.txt"
+          PACKAGE_LINE="$(grep -m1 '^package:' "$RUNNER_TEMP/apk-badging.txt" || true)"
+          SDK_LINE="$(grep -m1 '^sdkVersion:' "$RUNNER_TEMP/apk-badging.txt" || true)"
+          NATIVE_CODE_LINE="$(grep -m1 '^native-code:' "$RUNNER_TEMP/apk-badging.txt" || true)"
+          echo "::notice title=APK install metadata::mode=${APK_SIGNING_MODE:-unknown} cert_sha256=$CERT_SHA256 $PACKAGE_LINE $SDK_LINE $NATIVE_CODE_LINE"
+          {
+            echo "## Native APK install metadata"
+            echo ""
+            echo "- Signing mode: ${APK_SIGNING_MODE:-unknown}"
+            echo "- Signer certificate SHA-256: $CERT_SHA256"
+            echo "- $PACKAGE_LINE"
+            echo "- $SDK_LINE"
+            echo "- $NATIVE_CODE_LINE"
+          } >> "$GITHUB_STEP_SUMMARY"
           unzip -l "$APK_PATH" | tee "$RUNNER_TEMP/apk-contents.txt"
           grep -F "lib/arm64-v8a/libgodot_android.so" "$RUNNER_TEMP/apk-contents.txt"
           grep -F "assets/data/richtown_native.json" "$RUNNER_TEMP/apk-contents.txt"
