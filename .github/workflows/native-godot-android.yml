@@ -1,3 +1,6 @@
+# Native Godot Android build. The signing diagnostics in this workflow are
+# deliberate: Android only updates an installed app when the certificate
+# matches, so every run publishes its signing mode and certificate digest.
 name: Build Native Godot Android APK
 
 on:
