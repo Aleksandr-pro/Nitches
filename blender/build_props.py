@@ -15,7 +15,7 @@ Props:
   * street_lamp.glb   tapered pole with two swept arms
   * traffic_signal_short.glb / traffic_signal_long.glb
                       detailed mast-arm signals, static red aspect only
-  * hero_building.glb five-storey residential block with balconies
+  * hero_building.glb Building Model No.3: fixed-scale podium residential/hotel block
   * townhouse.glb     Building Model No.2: fixed-scale semi-detached townhouse pair
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
   * glass_tower.glb   podium tower with finned glass curtain wall
@@ -105,6 +105,13 @@ def standard_mats():
     mat("TownGarage", (0.18, 0.22, 0.22), roughness=0.55, metallic=0.25)
     mat("TownDoor", (0.28, 0.12, 0.07), roughness=0.72)
     mat("TownDoorAccent", (0.08, 0.25, 0.28), roughness=0.50)
+    # Building Model No.3 uses a stone-podium / warm-plaster tower /
+    # timber-screen palette distinct from both earlier premium models.
+    mat("HeroPlaster", (0.83, 0.78, 0.68), roughness=0.92)
+    mat("HeroStone", (0.48, 0.44, 0.38), roughness=0.92)
+    mat("HeroTrim", (0.82, 0.78, 0.69), roughness=0.84)
+    mat("HeroWood", (0.42, 0.25, 0.12), roughness=0.78)
+    mat("HeroMetal", (0.16, 0.18, 0.20), roughness=0.46, metallic=0.55)
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -470,68 +477,293 @@ def build_traffic_signal_long():
 
 
 # --------------------------------------------------------------------------- #
-# hero residential block: 24 x 14 m footprint, 17 m, five floors
+# Building Model No.3 — detailed fixed-scale mid-rise residential/hotel block.
+# Planned envelope: 32.40 x 24.60 m, about 28.8 m high. A two-storey
+# stone podium carries six residential floors and a set-back penthouse;
+# the runtime places the finished design at scale 1.0 and only reuses it
+# on infill parcels where the real footprint physically fits.
 # --------------------------------------------------------------------------- #
 def build_hero():
-    main = MATS["FacadeMain"]
-    accent = MATS["FacadeAccent"]
-    glass = MATS["PropsGlass"]
+    plaster = MATS["HeroPlaster"]
+    stone = MATS["HeroStone"]
+    trim = MATS["HeroTrim"]
+    wood = MATS["HeroWood"]
+    hero_metal = MATS["HeroMetal"]
+    granite = MATS["VillaGranite"]
+    glass = MATS["VillaGlass"]
+    interior = MATS["VillaInterior"]
+    curtain = MATS["VillaCurtain"]
+    frame = MATS["WindowFrame"]
+    pavement = MATS["VillaPavement"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
+    mulch = MATS["VillaMulch"]
     metal = MATS["PropsMetal"]
     dark = MATS["RoofDark"]
+    solar = MATS["SolarCell"]
+    glow = MATS["LampGlow"]
 
-    W, D = 24.0, 14.0
-    floor_h, floors = 3.1, 5
-    top = 1.1 + floors * floor_h  # plinth + floors = 16.6
+    def face_window(cx, cy, cz, width, height, face):
+        sign = -1.0 if face in ("front", "left") else 1.0
+        variant = int(abs(cx * 3.7 + cy * 5.3 + cz * 6.9)) % 4
+        if face in ("front", "back"):
+            box("hero_window_reveal", cx, cy + sign * 0.015, cz, width + 0.28, 0.075, height + 0.28, trim)
+            box("hero_window_interior", cx, cy + sign * 0.032, cz, width - 0.02, 0.034, height - 0.02, interior)
+            if variant == 0:
+                for side in (-1.0, 1.0):
+                    box("hero_window_curtain", cx + side * (width / 2.0 - 0.15), cy + sign * 0.052, cz, 0.20, 0.028, height - 0.12, curtain)
+            elif variant == 1:
+                blind_h = height * 0.38
+                box("hero_window_blind", cx, cy + sign * 0.054, cz + height / 2.0 - blind_h / 2.0 - 0.03, width - 0.10, 0.028, blind_h, curtain)
+                box("hero_window_blind_rail", cx, cy + sign * 0.058, cz + height / 2.0 - blind_h - 0.04, width - 0.08, 0.032, 0.038, frame)
+            elif variant == 2:
+                box("hero_window_light", cx - width * 0.16, cy + sign * 0.055, cz + height * 0.30, width * 0.36, 0.022, 0.034, glow)
+            box("hero_window_frame", cx, cy + sign * 0.024, cz, width + 0.15, 0.135, height + 0.15, frame)
+            box("hero_window_glass", cx, cy + sign * 0.078, cz, width, 0.038, height, glass)
+            divisions = max(1, int(width // 1.15))
+            for division in range(1, divisions):
+                mx = cx - width / 2.0 + width * division / divisions
+                box("hero_window_mullion", mx, cy + sign * 0.090, cz, 0.046, 0.046, height, frame)
+            box("hero_window_transom", cx, cy + sign * 0.090, cz + height * 0.24, width, 0.046, 0.046, frame)
+            box("hero_window_sill", cx, cy + sign * 0.090, cz - height / 2.0 - 0.070, width + 0.34, 0.25, 0.085, trim)
+        else:
+            box("hero_window_reveal", cx + sign * 0.015, cy, cz, 0.075, width + 0.28, height + 0.28, trim)
+            box("hero_window_interior", cx + sign * 0.032, cy, cz, 0.034, width - 0.02, height - 0.02, interior)
+            if variant == 0:
+                for side in (-1.0, 1.0):
+                    box("hero_window_curtain", cx + sign * 0.052, cy + side * (width / 2.0 - 0.15), cz, 0.028, 0.20, height - 0.12, curtain)
+            elif variant == 1:
+                blind_h = height * 0.38
+                box("hero_window_blind", cx + sign * 0.054, cy, cz + height / 2.0 - blind_h / 2.0 - 0.03, 0.028, width - 0.10, blind_h, curtain)
+                box("hero_window_blind_rail", cx + sign * 0.058, cy, cz + height / 2.0 - blind_h - 0.04, 0.032, width - 0.08, 0.038, frame)
+            elif variant == 2:
+                box("hero_window_light", cx + sign * 0.055, cy - width * 0.16, cz + height * 0.30, 0.022, width * 0.36, 0.034, glow)
+            box("hero_window_frame", cx + sign * 0.024, cy, cz, 0.135, width + 0.15, height + 0.15, frame)
+            box("hero_window_glass", cx + sign * 0.078, cy, cz, 0.038, width, height, glass)
+            divisions = max(1, int(width // 1.15))
+            for division in range(1, divisions):
+                my = cy - width / 2.0 + width * division / divisions
+                box("hero_window_mullion", cx + sign * 0.090, my, cz, 0.046, 0.046, height, frame)
+            box("hero_window_transom", cx + sign * 0.090, cy, cz + height * 0.24, 0.046, width, 0.046, frame)
+            box("hero_window_sill", cx + sign * 0.090, cy, cz - height / 2.0 - 0.070, 0.25, width + 0.34, 0.085, trim)
 
-    box("plinth", 0, 0, 0.55, W + 0.4, D + 0.4, 1.1, accent, bevel=0.03)
-    box("body", 0, 0, 1.1 + (top - 1.1) / 2, W, D, top - 1.1, main, bevel=0.05)
-    box("cornice", 0, 0, top + 0.22, W + 0.5, D + 0.5, 0.44, accent, bevel=0.03)
-    # parapet ring + roof furniture
-    for sy in (-(D / 2 - 0.15), D / 2 - 0.15):
-        box("parapet", 0, sy, top + 0.75, W - 0.3, 0.25, 0.65, main)
-    for sx in (-(W / 2 - 0.15), W / 2 - 0.15):
-        box("parapet", sx, 0, top + 0.75, 0.25, D - 0.3, 0.65, main)
-    box("roof_slab", 0, 0, top + 0.46, W - 0.6, D - 0.6, 0.08, dark)
-    for i, (ax, ay) in enumerate(((-7, 3), (2, -3.5), (8, 2.5))):
-        box(f"roof_ac_{i}", ax, ay, top + 0.95, 1.8, 1.1, 0.9, metal, bevel=0.03)
-    cyl("roof_tank", -3.5, -3, top + 1.15, 0.85, 1.3, metal, vertices=18)
-    box("lift_house", 5.5, -1, top + 1.1, 3.2, 2.6, 1.3, accent, bevel=0.03)
+    def balcony(cx, face_y, sign, floor_z, screen_side):
+        slab_y = face_y + sign * 0.85
+        rail_y = face_y + sign * 1.62
+        box("hero_balcony_slab", cx, slab_y, floor_z + 0.12, 4.90, 1.72, 0.18, trim)
+        box("hero_balcony_soffit", cx, slab_y, floor_z + 0.015, 4.78, 1.60, 0.045, wood)
+        box("hero_balcony_glass_rail", cx, rail_y, floor_z + 0.72, 4.72, 0.055, 0.82, glass)
+        box("hero_balcony_top_rail", cx, rail_y, floor_z + 1.16, 4.86, 0.075, 0.065, frame)
+        for post_offset in (-2.32, 0.0, 2.32):
+            box("hero_balcony_post", cx + post_offset, rail_y, floor_z + 0.68, 0.042, 0.05, 0.96, frame)
+        for side in (-1.0, 1.0):
+            box("hero_balcony_side_rail", cx + side * 2.40, slab_y, floor_z + 1.16, 0.06, 1.62, 0.06, frame)
+        box("hero_balcony_screen", cx + screen_side * 2.34, slab_y, floor_z + 1.02, 0.075, 1.56, 1.72, wood)
+        planter_x = cx - screen_side * 1.78
+        box("hero_balcony_planter", planter_x, rail_y - sign * 0.16, floor_z + 0.34, 1.05, 0.28, 0.28, granite)
+        box("hero_balcony_hedge", planter_x, rail_y - sign * 0.16, floor_z + 0.56, 0.94, 0.20, 0.24, hedge, bevel=0.035)
 
-    def window_row(face_y, sign, count_x, span, ry=False):
-        for f in range(floors):
-            z = 1.1 + f * floor_h + 1.75
-            for i in range(count_x):
-                t = -span / 2 + span * (i + 0.5) / count_x
-                if ry:  # short faces: window plane in YZ
-                    box("win_frame", face_y + sign * 0.02, t, z, 0.07, 1.7, 1.8, metal)
-                    box("win_glass", face_y + sign * 0.06, t, z, 0.05, 1.5, 1.6, glass)
-                else:
-                    box("win_frame", t, face_y + sign * 0.02, z, 1.7, 0.07, 1.8, metal)
-                    box("win_glass", t, face_y + sign * 0.06, z, 1.5, 0.05, 1.6, glass)
+    # Urban parcel, two-storey stone podium and set-back residential tower.
+    box("hero_lot_plinth", 0.0, 0.0, 0.15, 32.40, 24.60, 0.30, granite, bevel=0.015)
+    box("hero_podium", 0.0, 0.0, 3.00, 30.00, 20.40, 5.40, stone, bevel=0.025)
+    box("hero_podium_cornice", 0.0, 0.0, 5.82, 30.55, 20.95, 0.24, trim)
+    box("hero_tower", 0.0, 0.20, 15.30, 28.00, 18.40, 19.20, plaster, bevel=0.035)
+    for pier_side in (-1.0, 1.0):
+        box("hero_tower_end_pier", pier_side * 12.90, 0.20, 15.40, 3.40, 19.00, 19.60, stone, bevel=0.018)
+        box("hero_penthouse_pier", pier_side * 10.20, 0.50, 26.55, 1.40, 15.00, 2.90, stone)
+    box("hero_tower_cornice", 0.0, 0.20, 25.05, 29.00, 19.40, 0.35, trim)
+    box("hero_tower_roof", 0.0, 0.20, 25.02, 27.40, 17.80, 0.18, dark)
+    box("hero_penthouse", 0.0, 0.50, 26.55, 21.60, 14.60, 2.80, plaster, bevel=0.020)
+    box("hero_penthouse_roof", 0.0, 0.50, 28.05, 22.60, 15.60, 0.30, trim)
 
-    window_row(D / 2, 1, 6, W - 3)
-    window_row(-D / 2, -1, 6, W - 3)
-    window_row(W / 2, 1, 3, D - 3, ry=True)
-    window_row(-W / 2, -1, 3, D - 3, ry=True)
+    # Dark granite base and stone piers articulate the podium street wall.
+    box("hero_podium_base_front", 0.0, -10.27, 0.85, 30.20, 0.15, 1.10, granite)
+    box("hero_podium_base_rear", 0.0, 10.27, 0.85, 30.20, 0.15, 1.10, granite)
+    for base_side in (-1.0, 1.0):
+        box("hero_podium_base_side", base_side * 15.07, 0.0, 0.85, 0.15, 20.60, 1.10, granite)
+    for pier_x in (-13.5, -9.0, -4.5, 4.5, 9.0, 13.5):
+        box("hero_podium_front_pier", pier_x, -10.29, 2.95, 1.00, 0.34, 4.90, trim)
+        box("hero_podium_rear_pier", pier_x, 10.29, 2.95, 1.00, 0.34, 4.90, trim)
 
-    # balconies on both long faces, floors 2..5, three bays
-    for sy, sign in ((D / 2, 1), (-D / 2, -1)):
-        for f in range(1, floors):
-            z = 1.1 + f * floor_h
-            for bx in (-7.5, 0, 7.5):
-                cy = sy + sign * 0.55
-                box("balc_slab", bx, cy, z + 0.06, 2.6, 1.1, 0.12, accent)
-                box("balc_glass", bx, sy + sign * 1.05, z + 0.42, 2.6, 0.05, 0.6, glass)
-                box("balc_rail", bx, sy + sign * 1.05, z + 0.75, 2.6, 0.07, 0.06, metal)
-                box("balc_door", bx, sy + sign * 0.05, z + 1.15, 1.1, 0.06, 2.2, glass)
+    # Floor bands, central fins and panel seams keep the long elevations
+    # from reading as one flat textured slab at street distance.
+    for band_index in range(7):
+        band_z = 5.75 + band_index * 3.20
+        if band_z > 24.95:
+            continue
+        box("hero_floor_band_front", 0.0, -9.13, band_z, 28.35, 0.28, 0.22, trim)
+        box("hero_floor_band_rear", 0.0, 9.53, band_z, 28.35, 0.28, 0.22, trim)
+        for band_side in (-1.0, 1.0):
+            box("hero_floor_band_side", band_side * 14.68, 0.20, band_z, 0.18, 19.10, 0.22, trim)
+    for fin_x in (-3.90, 3.90):
+        box("hero_front_fin", fin_x, -9.23, 15.30, 0.55, 0.46, 19.20, stone)
+        box("hero_rear_fin", fin_x, 9.63, 15.30, 0.55, 0.46, 19.20, stone)
+    for seam_x in (-9.75, -3.25, 3.25, 9.75):
+        box("hero_facade_seam_front", seam_x, -9.025, 15.30, 0.070, 0.045, 19.00, frame)
+        box("hero_facade_seam_rear", seam_x, 9.425, 15.30, 0.070, 0.045, 19.00, frame)
 
-    # entrance canopies both faces
-    for sy, sign in ((D / 2, 1), (-D / 2, -1)):
-        box("canopy", 0, sy + sign * 1.05, 3.25, 5.2, 2.1, 0.16, metal, bevel=0.03)
-        for cx in (-2.3, 2.3):
-            cyl("canopy_col", cx, sy + sign * 1.85, 1.6, 0.07, 3.2, metal)
-        box("door", 0, sy + sign * 0.05, 1.55, 2.4, 0.08, 2.5, glass)
-        box("door_frame", 0, sy + sign * 0.02, 1.6, 2.7, 0.06, 2.7, metal)
+    # Six residential floors: deep windows, balcony doors and real
+    # projecting balconies with glass rails, timber screens and planters.
+    for floor_index in range(6):
+        floor_z = 5.70 + floor_index * 3.20
+        window_z = floor_z + 1.72
+        door_z = floor_z + 1.42
+        for face_y, pier_face_y, face_name, sign in ((-9.00, -9.30, "front", -1.0), (9.40, 9.70, "back", 1.0)):
+            for bay_x in (-12.90, 12.90):
+                face_window(bay_x, pier_face_y, window_z, 1.80, 1.72, face_name)
+            for bay_x in (-6.50, 6.50):
+                face_window(bay_x, face_y, door_z, 2.35, 2.28, face_name)
+            face_window(0.0, face_y, door_z, 3.05, 2.28, face_name)
+            for balcony_index, bay_x in enumerate((-6.50, 0.0, 6.50)):
+                screen_side = 1.0 if (floor_index + balcony_index) % 2 == 0 else -1.0
+                balcony(bay_x, face_y, sign, floor_z, screen_side)
+        for side_sign, side_name in ((-1.0, "left"), (1.0, "right")):
+            for bay_y in (-5.80, 0.20, 6.20):
+                face_window(side_sign * 14.60, bay_y, window_z, 1.90, 1.72, side_name)
+
+    # Penthouse glazing on all four sides.
+    for bay_x in (-7.0, 0.0, 7.0):
+        face_window(bay_x, -6.80, 26.62, 3.00, 1.90, "front")
+        face_window(bay_x, 7.80, 26.62, 3.00, 1.90, "back")
+    for side_sign, side_name in ((-1.0, "left"), (1.0, "right")):
+        for bay_y in (-2.0, 3.0):
+            face_window(side_sign * 10.90, bay_y, 26.62, 2.20, 1.90, side_name)
+
+    # Street-level lobby and retail. The lobby is a recessed interior
+    # volume behind a stone portal, not a glass sticker on the podium.
+    box("hero_lobby_interior", 0.0, -10.02, 2.45, 5.60, 0.48, 4.20, interior)
+    for portal_side in (-1.0, 1.0):
+        box("hero_lobby_portal_column", portal_side * 2.88, -10.34, 2.55, 0.55, 0.30, 4.55, trim)
+    box("hero_lobby_portal_header", 0.0, -10.34, 4.92, 6.30, 0.30, 0.55, trim)
+    face_window(0.0, -10.20, 2.40, 4.45, 3.75, "front")
+    for shop_x in (-11.25, -6.75, 6.75, 11.25):
+        face_window(shop_x, -10.20, 2.20, 3.20, 3.20, "front")
+        face_window(shop_x, -10.20, 4.95, 2.55, 0.88, "front")
+        rbox("hero_shop_awning", shop_x, -10.78, 4.08, 3.45, 1.12, 0.08, wood, rotation=(-0.16, 0.0, 0.0), bevel=0.010)
+        tube_between("hero_awning_rod_l", (shop_x - 1.45, -11.28, 4.16), (shop_x - 1.45, -10.25, 4.85), 0.022, 0.022, hero_metal, vertices=8)
+        tube_between("hero_awning_rod_r", (shop_x + 1.45, -11.28, 4.16), (shop_x + 1.45, -10.25, 4.85), 0.022, 0.022, hero_metal, vertices=8)
+    for side_sign, side_name in ((-1.0, "left"), (1.0, "right")):
+        for shop_y in (-6.0, 0.0, 6.0):
+            face_window(side_sign * 15.00, shop_y, 2.75, 2.65, 2.55, side_name)
+
+    # Entrance canopy on columns and tie rods, steps, ramp, blade sign.
+    box("hero_entry_canopy", 0.0, -11.15, 4.58, 7.20, 2.00, 0.22, granite, bevel=0.020)
+    box("hero_entry_canopy_soffit", 0.0, -11.15, 4.44, 6.80, 1.80, 0.055, wood)
+    for column_side in (-1.0, 1.0):
+        column_x = column_side * 3.20
+        box("hero_entry_column_base", column_x, -11.85, 0.48, 0.36, 0.36, 0.36, granite)
+        cyl("hero_entry_column", column_x, -11.85, 2.42, 0.115, 3.85, hero_metal, vertices=14)
+        tube_between("hero_entry_tie_rod", (column_x, -11.85, 4.42), (column_x, -10.24, 5.35), 0.025, 0.025, hero_metal, vertices=8)
+        box("hero_entry_lantern_body", column_side * 2.72, -10.42, 3.55, 0.17, 0.11, 0.34, frame)
+        box("hero_entry_lantern", column_side * 2.72, -10.49, 3.55, 0.10, 0.035, 0.22, glow)
+    for step_index, (step_y, step_top) in enumerate(((-10.62, 0.52), (-11.12, 0.40), (-11.62, 0.28))):
+        box("hero_entry_step", 0.0, step_y, step_top / 2.0 + 0.15, 6.20 - step_index * 0.35, 0.52, step_top - 0.15, pavement)
+    rbox("hero_entry_ramp", 5.15, -11.20, 0.42, 2.20, 2.05, 0.12, pavement, rotation=(0.10, 0.0, 0.0))
+    box("hero_blade_sign", 4.15, -10.62, 5.05, 0.18, 0.92, 2.45, hero_metal, bevel=0.015)
+    box("hero_blade_sign_glow", 4.15, -11.10, 5.05, 0.10, 0.035, 2.05, glow)
+    box("hero_address_plaque", -3.35, -10.38, 1.75, 0.55, 0.06, 0.75, granite)
+    box("hero_address_inset", -3.35, -10.42, 1.75, 0.36, 0.025, 0.50, metal)
+
+    # Rear service elevation: parking/loading door, dock, staff entry,
+    # bins and bicycle parking keep the back from being an empty wall.
+    box("hero_service_portal", 7.50, 10.28, 1.95, 4.15, 0.18, 3.35, trim)
+    box("hero_service_door", 7.50, 10.36, 1.90, 3.65, 0.10, 3.00, hero_metal, bevel=0.010)
+    for seam_z in (1.05, 1.85, 2.65):
+        box("hero_service_door_seam", 7.50, 10.42, seam_z, 3.55, 0.025, 0.045, frame)
+    box("hero_loading_dock", 7.50, 11.15, 0.52, 5.20, 1.55, 0.45, pavement)
+    for bollard_x in (4.85, 10.15):
+        cyl("hero_dock_bollard", bollard_x, 11.85, 0.68, 0.09, 0.76, hero_metal, vertices=12)
+    box("hero_staff_door_frame", -7.00, 10.29, 1.62, 1.35, 0.16, 2.55, trim)
+    box("hero_staff_door", -7.00, 10.37, 1.58, 1.05, 0.09, 2.30, hero_metal)
+    box("hero_staff_canopy", -7.00, 10.78, 3.05, 2.10, 1.05, 0.14, granite)
+    for service_x in (-11.0, -3.0, 1.5, 12.2):
+        face_window(service_x, 10.20, 3.55, 2.15, 1.65, "back")
+    for bin_x in (-11.4, -9.2):
+        box("hero_waste_bin", bin_x, 11.35, 0.82, 1.85, 1.05, 1.08, dark, bevel=0.025)
+        box("hero_waste_bin_lid", bin_x, 11.35, 1.40, 1.92, 1.10, 0.09, hero_metal)
+    for rack_index in range(5):
+        rack_x = 12.2 + rack_index * 0.72
+        tube_between("hero_bike_rack", (rack_x, 11.15, 0.30), (rack_x, 11.15, 1.05), 0.035, 0.035, metal, vertices=8)
+        tube_between("hero_bike_rack_top", (rack_x, 11.15, 1.05), (rack_x + 0.42, 11.15, 1.05), 0.035, 0.035, metal, vertices=8)
+        tube_between("hero_bike_rack_leg", (rack_x + 0.42, 11.15, 1.05), (rack_x + 0.42, 11.15, 0.30), 0.035, 0.035, metal, vertices=8)
+
+    # Downspouts, meters and podium-roof condensers.
+    for pipe_side in (-1.0, 1.0):
+        for pipe_y in (-8.45, 8.85):
+            cyl("hero_downspout", pipe_side * 14.85, pipe_y, 15.35, 0.065, 19.30, frame, vertices=10)
+            for bracket_z in (7.20, 12.20, 17.20, 22.20):
+                box("hero_downspout_bracket", pipe_side * 14.78, pipe_y, bracket_z, 0.20, 0.16, 0.055, metal)
+        meter_x = pipe_side * 15.12
+        box("hero_meter_cabinet", meter_x, -4.35, 1.35, 0.17, 0.85, 1.20, metal, bevel=0.012)
+        box("hero_meter_window", meter_x + pipe_side * 0.095, -4.35, 1.55, 0.025, 0.40, 0.40, glass)
+        for vent_offset in (-0.24, 0.0, 0.24):
+            box("hero_podium_vent", meter_x, 3.40 + vent_offset, 4.55, 0.10, 0.16, 0.65, frame)
+    for ac_x in (-11.0, 11.0):
+        for ac_y in (-9.65, 9.95):
+            box("hero_podium_ac", ac_x, ac_y, 6.18, 1.45, 0.78, 0.72, metal, bevel=0.018)
+            cyl("hero_podium_ac_fan", ac_x, ac_y, 6.57, 0.24, 0.045, frame, vertices=16)
+
+    # Podium-roof terraces at the tower setback.
+    for terrace_side in (-1.0, 1.0):
+        terrace_x = terrace_side * 11.20
+        for post_x in (terrace_x - 1.65, terrace_x + 1.65):
+            for post_y in (-10.05, -9.15):
+                box("hero_podium_pergola_post", post_x, post_y, 6.82, 0.14, 0.14, 1.95, wood)
+        for beam_y in (-10.08, -9.12):
+            box("hero_podium_pergola_beam", terrace_x, beam_y, 7.86, 3.75, 0.15, 0.16, wood)
+        for slat_index in range(5):
+            box("hero_podium_pergola_slat", terrace_x - 1.55 + slat_index * 0.78, -9.60, 8.00, 0.13, 1.16, 0.11, wood)
+    for planter_x in (-13.8, -7.2, 7.2, 13.8):
+        box("hero_podium_roof_planter", planter_x, -9.72, 6.13, 1.75, 0.55, 0.42, granite)
+        box("hero_podium_roof_hedge", planter_x, -9.72, 6.43, 1.55, 0.38, 0.28, hedge, bevel=0.040)
+
+    # Tower-roof parapet, penthouse terrace pergola and roof plant.
+    box("hero_roof_parapet_front", 0.0, -8.95, 25.58, 27.80, 0.18, 0.90, trim)
+    box("hero_roof_parapet_rear", 0.0, 9.35, 25.58, 27.80, 0.18, 0.90, trim)
+    for parapet_side in (-1.0, 1.0):
+        box("hero_roof_parapet_side", parapet_side * 13.90, 0.20, 25.58, 0.18, 18.30, 0.90, trim)
+    for post_x in (-8.0, 0.0, 8.0):
+        box("hero_roof_pergola_post", post_x, -8.20, 26.25, 0.15, 0.15, 2.05, wood)
+    box("hero_roof_pergola_beam", 0.0, -8.20, 27.38, 17.20, 0.17, 0.18, wood)
+    for slat_index in range(9):
+        box("hero_roof_pergola_slat", -7.6 + slat_index * 1.90, -7.72, 27.52, 0.14, 1.10, 0.12, wood)
+    box("hero_lift_overrun", 12.15, 4.00, 26.30, 2.55, 3.10, 2.30, stone, bevel=0.018)
+    box("hero_lift_overrun_cap", 12.15, 4.00, 27.52, 2.80, 3.35, 0.16, granite)
+    cyl("hero_roof_tank", -12.00, 4.20, 26.20, 0.95, 2.05, metal, vertices=18)
+    cone("hero_roof_tank_cap", -12.00, 4.20, 27.48, 1.08, 0.18, 0.48, hero_metal, vertices=18)
+    for hvac_x in (-8.0, 0.0, 8.0):
+        for hvac_y in (-7.50, 8.55):
+            box("hero_roof_hvac", hvac_x, hvac_y, 25.62, 2.25, 1.35, 0.88, metal, bevel=0.020)
+            cyl("hero_roof_hvac_fan", hvac_x, hvac_y, 26.09, 0.34, 0.05, frame, vertices=18)
+    for vent_x in (-4.5, 4.5):
+        cyl("hero_roof_vent", vent_x, 8.20, 25.72, 0.12, 1.05, metal, vertices=12)
+        cone("hero_roof_vent_cap", vent_x, 8.20, 26.34, 0.22, 0.05, 0.24, metal, vertices=12)
+    for panel_x in (-6.8, -3.4, 0.0, 3.4, 6.8):
+        rbox("hero_solar_frame", panel_x, 0.50, 28.38, 2.85, 2.15, 0.08, metal, rotation=(-0.12, 0.0, 0.0), bevel=0.008)
+        rbox("hero_solar_cell", panel_x, 0.53, 28.42, 2.68, 1.98, 0.028, solar, rotation=(-0.12, 0.0, 0.0))
+        for busbar_offset in (-0.68, 0.68):
+            rbox("hero_solar_busbar", panel_x + busbar_offset, 0.535, 28.44, 0.020, 1.90, 0.008, metal, rotation=(-0.12, 0.0, 0.0))
+
+    # Forecourt, side landscape strips, bollards and rear planting.
+    box("hero_forecourt_paving", 0.0, -11.28, 0.345, 25.00, 1.95, 0.07, pavement)
+    box("hero_dropoff_strip", 0.0, -12.08, 0.335, 18.50, 0.42, 0.05, granite)
+    box("hero_rear_paving", 0.0, 11.35, 0.345, 24.00, 1.75, 0.07, pavement)
+    for landscape_side in (-1.0, 1.0):
+        box("hero_side_lawn", landscape_side * 15.55, 0.0, 0.345, 1.20, 18.50, 0.06, lawn)
+        for hedge_y in (-7.5, -2.5, 2.5, 7.5):
+            box("hero_side_hedge", landscape_side * 15.55, hedge_y, 0.62, 0.82, 2.55, 0.48, hedge, bevel=0.055)
+    for planter_x in (-13.0, -9.0, 9.0, 13.0):
+        box("hero_front_planter", planter_x, -11.45, 0.58, 1.85, 0.78, 0.52, granite)
+        box("hero_front_planter_soil", planter_x, -11.45, 0.86, 1.68, 0.60, 0.045, mulch)
+        box("hero_front_planter_hedge", planter_x, -11.45, 1.02, 1.58, 0.50, 0.32, hedge, bevel=0.045)
+    for bollard_x in (-9.0, -6.0, -3.0, 3.0, 6.0, 9.0):
+        cyl("hero_front_bollard", bollard_x, -12.02, 0.68, 0.085, 0.76, hero_metal, vertices=12)
+        box("hero_front_bollard_light", bollard_x, -12.02, 1.08, 0.10, 0.10, 0.045, glow)
+    for bench_x in (-11.8, 11.8):
+        box("hero_front_bench", bench_x, -11.02, 0.58, 2.15, 0.48, 0.10, wood)
+        box("hero_front_bench_base", bench_x, -11.02, 0.42, 1.75, 0.34, 0.24, granite)
+    for rear_hedge_x in (-14.0, -5.0, 0.5, 13.5):
+        box("hero_rear_hedge", rear_hedge_x, 11.85, 0.60, 2.60, 0.55, 0.52, hedge, bevel=0.055)
 
 
 # --------------------------------------------------------------------------- #
