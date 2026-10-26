@@ -7,7 +7,6 @@ extends Node3D
 
 const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
-const TrafficScript := preload("res://scripts/traffic_manager.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
@@ -18,7 +17,6 @@ const CAMERA_TOP := 2
 
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
-var _traffic: NativeTrafficManager
 var _hud: NativeHud
 var _camera: Camera3D
 var _speed_post: NativeSpeedPost
@@ -32,6 +30,12 @@ var render_quality_state := {}
 var _render_scale := 1.0
 var _render_quality_accumulated_time := 0.0
 var _render_quality_frames := 0
+var _render_quality_vote_direction := 0
+var _render_quality_vote_count := 0
+var _camera_follow_yaw := 0.0
+var _camera_target_smooth := Vector3.ZERO
+var _camera_drift_offset_smooth := 0.0
+var _camera_smoothing_initialized := false
 
 
 func _ready() -> void:
@@ -56,10 +60,10 @@ func _ready() -> void:
 	_vehicle.reset_to_transform(_world.spawn_transform)
 	_vehicle.global_transform = _world.spawn_transform
 
-	_traffic = TrafficScript.new() as NativeTrafficManager
-	add_child(_traffic)
-	_traffic.initialize(_world, _vehicle)
-	print("[native] Traffic stats: ", _traffic.get_stats())
+	# 0.2.5: all AI/parked traffic cars are removed by request.  The
+	# freed CPU/GPU budget is spent on the denser static city instead;
+	# there is deliberately no hidden traffic node or parked-car fleet.
+	print("[native] Traffic removed: player vehicle only")
 
 	_create_camera()
 	_hud = HudScript.new() as NativeHud
@@ -85,7 +89,7 @@ func _configure_render_quality(initial: bool) -> void:
 		viewport.msaa_3d = Viewport.MSAA_DISABLED
 		viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
 		if initial:
-			_render_scale = 0.68
+			_render_scale = 0.72
 		viewport.scaling_3d_scale = _render_scale
 	render_quality_state = {
 		"android": is_android,
@@ -93,6 +97,8 @@ func _configure_render_quality(initial: bool) -> void:
 		"msaa": int(viewport.msaa_3d),
 		"screen_space_aa": int(viewport.screen_space_aa),
 		"adaptive": is_android,
+		"evaluation_seconds": 3.0,
+		"hysteresis_votes": 2,
 	}
 
 
@@ -101,18 +107,40 @@ func _update_adaptive_render_quality(delta: float) -> void:
 		return
 	_render_quality_accumulated_time += delta
 	_render_quality_frames += 1
-	if _render_quality_accumulated_time < 1.5:
+	# A 3-second evaluation window plus a repeated-vote requirement avoids
+	# changing (and reallocating) the 3D render target every 1.5 seconds.
+	# Those changes could themselves be perceived as small tugs while the
+	# car was accelerating through varying scenery.
+	if _render_quality_accumulated_time < 3.0:
 		return
 	var measured_fps := float(_render_quality_frames) / maxf(_render_quality_accumulated_time, 0.001)
 	_render_quality_accumulated_time = 0.0
 	_render_quality_frames = 0
+
+	var desired_direction := 0
+	if measured_fps < 44.0:
+		desired_direction = -1
+	elif measured_fps > 56.0:
+		desired_direction = 1
+	if desired_direction == 0:
+		_render_quality_vote_direction = 0
+		_render_quality_vote_count = 0
+		return
+	if desired_direction == _render_quality_vote_direction:
+		_render_quality_vote_count += 1
+	else:
+		_render_quality_vote_direction = desired_direction
+		_render_quality_vote_count = 1
+
+	var required_votes := 1 if measured_fps < 24.0 else 2
+	if _render_quality_vote_count < required_votes:
+		return
+	_render_quality_vote_count = 0
 	var previous_scale := _render_scale
-	if measured_fps < 30.0:
-		_render_scale = maxf(0.50, _render_scale - 0.08)
-	elif measured_fps < 42.0:
-		_render_scale = maxf(0.50, _render_scale - 0.03)
-	elif measured_fps > 55.0:
-		_render_scale = minf(0.82, _render_scale + 0.04)
+	if desired_direction < 0:
+		_render_scale = maxf(0.50, _render_scale - 0.04)
+	else:
+		_render_scale = minf(0.86, _render_scale + 0.04)
 	if not is_equal_approx(previous_scale, _render_scale):
 		_configure_render_quality(false)
 
@@ -161,8 +189,6 @@ func _apply_time_mode() -> void:
 	_world.set_time_of_day(mode)
 	if _vehicle != null:
 		_vehicle.set_headlights_enabled(mode != "day")
-	if _traffic != null:
-		_traffic.set_headlights_enabled(mode != "day")
 
 
 func _on_vehicle_reset_requested() -> void:
@@ -190,12 +216,36 @@ func _process(delta: float) -> void:
 			_run_smoke_checks()
 
 
+func _vehicle_horizontal_yaw() -> float:
+	if _vehicle == null:
+		return 0.0
+	var forward := -_vehicle.global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.0001:
+		return _camera_follow_yaw
+	forward = forward.normalized()
+	return atan2(-forward.x, -forward.z)
+
+
 func _update_camera(delta: float, snap: bool) -> void:
 	if _camera == null or _vehicle == null:
 		return
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
 	var speed_ratio := clampf(speed_kmh / 240.0, 0.0, 1.0)
+	var raw_follow_yaw := _vehicle_horizontal_yaw()
+	if snap or not _camera_smoothing_initialized or delta <= 0.0:
+		_camera_follow_yaw = raw_follow_yaw
+		_camera_drift_offset_smooth = 0.0
+		_camera_smoothing_initialized = true
+	elif _camera_mode == CAMERA_CHASE:
+		# Yaw-only, exponentially damped follow heading.  The chase camera
+		# no longer inherits every small suspension roll/pitch/yaw sample
+		# from the RigidBody basis, a common source of visible twitching
+		# even when the car's centre-of-mass path is smooth.
+		_camera_follow_yaw = lerp_angle(_camera_follow_yaw, raw_follow_yaw, 1.0 - exp(-6.5 * delta))
+	else:
+		_camera_follow_yaw = raw_follow_yaw
 	# The car stays at its real 1.0 scale; it reads larger because the
 	# chase camera now sits closer/lower with a narrower lens.
 	var desired_fov := 58.0 + speed_ratio * 14.0 + (5.0 if _vehicle.is_boosting() else 0.0)
@@ -222,19 +272,32 @@ func _update_camera(delta: float, snap: bool) -> void:
 		_:
 			var distance := 6.15 + speed_ratio * 2.15
 			var height := 2.05 + speed_ratio * 0.38
-			var drift_offset := clampf(-_vehicle.get_lateral_speed_ms() * 0.055, -0.65, 0.65)
-			var desired_position := _vehicle.global_transform * Vector3(drift_offset, height, distance)
+			var drift_offset_target := clampf(-_vehicle.get_lateral_speed_ms() * 0.055, -0.65, 0.65)
+			if snap or delta <= 0.0:
+				_camera_drift_offset_smooth = drift_offset_target
+			else:
+				_camera_drift_offset_smooth = lerpf(
+					_camera_drift_offset_smooth,
+					drift_offset_target,
+					1.0 - exp(-7.0 * delta)
+				)
+			var follow_basis := Basis(Vector3.UP, _camera_follow_yaw)
+			var desired_position := _vehicle.global_position + follow_basis * Vector3(_camera_drift_offset_smooth, height, distance)
 			desired_position = _get_safe_camera_position(desired_position)
 			if snap or delta <= 0.0:
 				_camera.global_position = desired_position
 			else:
-				var weight := 1.0 - exp(-7.0 * delta)
+				var weight := 1.0 - exp(-7.5 * delta)
 				_camera.global_position = _camera.global_position.lerp(desired_position, weight)
-			var forward := -_vehicle.global_transform.basis.z
+			var forward := -follow_basis.z
 			var target := _vehicle.global_position + Vector3.UP * 1.12 + forward * (6.0 + speed_ratio * 6.0)
-			if _camera.global_position.distance_squared_to(target) > 0.001:
-				_camera.look_at(target, Vector3.UP)
-				var roll := clampf(-_vehicle.get_lateral_speed_ms() * 0.0035, -0.035, 0.035)
+			if snap or delta <= 0.0:
+				_camera_target_smooth = target
+			else:
+				_camera_target_smooth = _camera_target_smooth.lerp(target, 1.0 - exp(-12.0 * delta))
+			if _camera.global_position.distance_squared_to(_camera_target_smooth) > 0.001:
+				_camera.look_at(_camera_target_smooth, Vector3.UP)
+				var roll := clampf(_camera_drift_offset_smooth * 0.055, -0.035, 0.035)
 				_camera.rotate_object_local(Vector3.FORWARD, roll)
 
 	# Almost imperceptible vibration only while nitro is active.  Using
@@ -283,8 +346,8 @@ func _run_smoke_checks() -> void:
 		failures.append("world node is missing")
 	if _vehicle == null:
 		failures.append("vehicle node is missing")
-	if _traffic == null:
-		failures.append("traffic node is missing")
+	if find_child("NativeTraffic", true, false) != null or find_child("TrafficManager", true, false) != null:
+		failures.append("traffic node must be completely removed in 0.2.5")
 	if _camera == null:
 		failures.append("camera node is missing")
 	if _speed_post == null:
@@ -319,6 +382,12 @@ func _run_smoke_checks() -> void:
 		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:
+		failures.append("0.2.5 infill city density is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("building_details", 0)) < 180 or int(enhancement_stats.get("city_detail_props", 0)) < 250:
+		failures.append("0.2.5 architectural/street detail density is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("beach_props", 0)) < 50 or int(enhancement_stats.get("marina_boats", 0)) < 8:
+		failures.append("0.2.5 beach/marina detail is incomplete: %s" % str(enhancement_stats))
 
 	var dynamic_world_state := _world.get_dynamic_world_state()
 	if int(dynamic_world_state.get("presets", 0)) < 5 or String(dynamic_world_state.get("preset", "")) != "clear_day" or not bool(dynamic_world_state.get("physical_sky", false)):
@@ -329,6 +398,11 @@ func _run_smoke_checks() -> void:
 	var drive_base_state := _vehicle.get_drive_base_state()
 	if not bool(drive_base_state.get("car_paint_shader", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
 		failures.append("ArcadeCar/car-paint Drive base is not active: %s" % str(drive_base_state))
+	var smoothing_state := _vehicle.get_smoothing_state()
+	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
+		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))
+	if not _camera_smoothing_initialized or not is_finite(_camera_follow_yaw):
+		failures.append("0.2.5 chase-camera smoothing is not initialized")
 
 	var road_visual_state := _world.get_road_visual_state()
 	if not bool(road_visual_state.get("asphalt_shader", false)) or not bool(road_visual_state.get("asphalt_textures", false)) or not bool(road_visual_state.get("ground_winding_godot_cw", false)) or not bool(road_visual_state.get("road_mesh_ready", false)):
@@ -342,13 +416,7 @@ func _run_smoke_checks() -> void:
 	if int(enhancement_stats.get("road_edge_lines", 0)) < 1500 or int(enhancement_stats.get("lane_dashes", 0)) < 800:
 		failures.append("continuous road paint is incomplete: %s" % str(enhancement_stats))
 
-	var traffic_stats := _traffic.get_stats()
-	if int(traffic_stats.get("moving", 0)) < 12 or int(traffic_stats.get("parked", 0)) < 16:
-		failures.append("traffic fleet is incomplete: %s" % str(traffic_stats))
-	if int(traffic_stats.get("paint_materials", 0)) < 5:
-		failures.append("traffic car-paint shader materials are incomplete: %s" % str(traffic_stats))
-	if float(traffic_stats.get("visual_range_moving", 0.0)) < 180.0 or float(traffic_stats.get("visual_range_moving", 9999.0)) > 240.0 or int(traffic_stats.get("visual_range_instances", 0)) < 34:
-		failures.append("traffic distance culling is not active: %s" % str(traffic_stats))
+	var traffic_stats := {"moving": 0, "parked": 0, "total": 0, "removed": true}
 	if float(enhancement_stats.get("shadow_max_distance", 9999.0)) > 260.0 or float(enhancement_stats.get("reflection_probe_max_distance", 9999.0)) > 260.0:
 		failures.append("mobile shadow/reflection ranges are not bounded: %s" % str(enhancement_stats))
 	var spawn_surface := _world.get_surface_at(_vehicle.global_position)
@@ -401,7 +469,7 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s road_visual=%s render_quality=%s" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
@@ -416,6 +484,7 @@ func _run_smoke_checks() -> void:
 			str(dynamic_world_state),
 			str(speed_post_state),
 			str(drive_base_state),
+			str(smoothing_state),
 			str(road_visual_state),
 			str(render_quality_state),
 		])

@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, trafficScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -21,7 +21,6 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/main.gd'),
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
-  readText('scripts/traffic_manager.gd'),
   readText('scripts/hud.gd'),
   readText('scripts/dynamic_world.gd'),
   readText('scripts/speed_post.gd'),
@@ -42,18 +41,19 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=7'), 'Native 0.2.4 must bump Android versionCode to 7');
-assert(preset.includes('version/name="0.2.4-native-alpha"'), 'Native version name must be 0.2.4-native-alpha');
+assert(preset.includes('version/code=8'), 'Native 0.2.5 must bump Android versionCode to 8');
+assert(preset.includes('version/name="0.2.5-native-alpha"'), 'Native version name must be 0.2.5-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${trafficScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}`;
+assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.5 must not load any traffic-car system');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeTrafficManager', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -64,7 +64,6 @@ for (const marker of [
   '_pacejka',
   '_ackermann_angle',
   'GEAR_RATIOS',
-  'AnimatableBody3D',
   'GPUParticles3D',
   'get_visual_aabb_size',
   'PhysicalSkyMaterial',
@@ -83,7 +82,6 @@ for (const marker of [
   'lane_dashes',
   'BACKLIGHT',
   'ALPHA_SCISSOR_THRESHOLD',
-  'MOVING_VISUAL_RANGE_M',
   'visibility_range_end',
   'shadow_max_distance',
   'reflection_probe_max_distance',
@@ -95,8 +93,19 @@ for (const marker of [
   'Viewport.SCREEN_SPACE_AA_FXAA',
   'lod_bias',
   'SHADOW_PARALLEL_2_SPLITS',
+  '_build_infill_buildings',
+  '_build_city_details',
+  'infill_buildings',
+  'city_detail_props',
+  'get_smoothing_state',
+  '_throttle_command',
+  '_smoothed_drive_force_per_wheel',
+  '_shift_torque_blend',
+  'anti_roll_requires_both_wheels',
+  '_camera_follow_yaw',
+  '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.4 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.5 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
