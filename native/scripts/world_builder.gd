@@ -1053,6 +1053,41 @@ func _prop_material(material_name: String) -> StandardMaterial3D:
 			var villa_hedge := _material("villa_hedge", "hedge.jpg", "", Color(0.72, 0.84, 0.62), 1.0, 0.0, Vector3(0.90, 0.90, 0.90), true)
 			villa_hedge.metallic_specular = 0.25
 			return villa_hedge
+		"TownPlaster":
+			# 0.2.9: Building Model No.2 gets the same world-scale
+			# triplanar treatment as the villa, but with a warmer sand
+			# render so the semi-detached pair reads as a different house.
+			var town_plaster := _material("townhouse_plaster", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.92, 0.84, 0.68), 0.94, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			town_plaster.normal_scale = 1.30
+			town_plaster.metallic_specular = 0.35
+			return town_plaster
+		"TownStone":
+			var town_stone := _material("townhouse_stone", "user_stone_tiles_beige.jpg", "", Color(0.88, 0.79, 0.64), 0.92, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			town_stone.metallic_specular = 0.42
+			return town_stone
+		"TownTrim":
+			var town_trim := _material("townhouse_trim", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.95, 0.91, 0.83), 0.86, 0.0, Vector3(0.28, 0.28, 0.28), true)
+			town_trim.normal_scale = 0.90
+			town_trim.metallic_specular = 0.50
+			return town_trim
+		"TownRoof":
+			var town_roof := _material("townhouse_roof", "user_roof_terracotta.jpg", "user_roof_terracotta_normal.jpg", Color(0.94, 0.85, 0.76), 0.95, 0.0, Vector3(0.30, 0.30, 0.30), true)
+			town_roof.normal_scale = 1.25
+			town_roof.metallic_specular = 0.35
+			return town_roof
+		"TownGarage":
+			var town_garage := _material("townhouse_garage", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.36, 0.36), 0.48, 0.55, Vector3(0.45, 0.45, 0.45), true)
+			town_garage.metallic_specular = 0.85
+			return town_garage
+		"TownDoor":
+			var town_door := _material("townhouse_door", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.52, 0.26, 0.14), 0.72, 0.0, Vector3(0.50, 0.50, 0.50), true)
+			town_door.normal_scale = 1.05
+			town_door.metallic_specular = 0.45
+			return town_door
+		"TownDoorAccent":
+			var town_door_accent := _material("townhouse_door_accent", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.34, 0.36), 0.50, 0.10, Vector3(0.50, 0.50, 0.50), true)
+			town_door_accent.metallic_specular = 0.60
+			return town_door_accent
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -2723,14 +2758,20 @@ func _build_buildings() -> void:
 			))
 			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d), yaw)
 		elif kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
+			# Building Model No.2 is likewise one finished architectural
+			# design: a semi-detached townhouse pair measuring exactly
+			# 18.87 x 16.37 m and 11.05 m high (GLB AABB centre z +0.047).
+			# The old model was stretched up to 1.96x over these parcels;
+			# the measured clear space around all nine exported parcels
+			# exceeds 23 m, so the fixed design fits without distortion.
 			townhouse_items.append(building)
 			townhouse_transforms.append(_centered_model_transform(
 				position_value,
 				yaw,
-				Vector3(w / 13.15, total_height / 9.99, d / 13.40),
-				Vector3(0.075, 0.0, 1.075)
+				Vector3.ONE,
+				Vector3(0.0, 0.0, 0.047)
 			))
-			_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
+			_add_box_collider(position_value + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), yaw)
 		elif kind == "rt-hotel" and h >= 15.0 and h <= 38.0 and w <= 55.0 and d <= 38.0:
 			hero_items.append(building)
 			hero_transforms.append(make_transform(
@@ -2749,7 +2790,8 @@ func _build_buildings() -> void:
 	if not _add_batched_model(buildings_root, "res://assets/buildings/glass_tower.glb", tower_transforms, "BlenderGlassTowers"):
 		for item in tower_items:
 			_add_generic_building(buildings_root, item)
-	if not _add_batched_model(buildings_root, "res://assets/buildings/townhouse.glb", townhouse_transforms, "BlenderTownhouses"):
+	var premium_townhouse_built := _add_batched_model(buildings_root, "res://assets/buildings/townhouse.glb", townhouse_transforms, "BlenderTownhouses")
+	if not premium_townhouse_built:
 		for item in townhouse_items:
 			_add_generic_building(buildings_root, item)
 	if not _add_batched_model(buildings_root, "res://assets/buildings/hero_building.glb", hero_transforms, "BlenderHeroBuildings"):
@@ -2765,7 +2807,60 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_villa_detail_pass"] = premium_villa_built
 	_enhancement_stats["premium_villa_material_pass"] = premium_villa_built and _materials.has("villa_plaster") and _materials.has("villa_stone") and _materials.has("villa_granite") and _materials.has("villa_glass") and _materials.has("villa_interior")
 	_enhancement_stats["premium_villa_site_pass"] = premium_villa_built and _materials.has("villa_pavement") and _materials.has("villa_mulch") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
+	# The 0.2.9 smoke proves the same chain for Building Model No.2:
+	# the townhouse GLB in the export must be the new fixed-scale pair
+	# with its dedicated Town* materials resolved to Godot materials.
+	_enhancement_stats["premium_townhouse_models"] = townhouse_transforms.size() if premium_townhouse_built else 0
+	_enhancement_stats["premium_townhouse_fixed_scale"] = premium_townhouse_built
+	_enhancement_stats["premium_townhouse_detail_pass"] = premium_townhouse_built
+	_enhancement_stats["premium_townhouse_material_pass"] = premium_townhouse_built and _materials.has("townhouse_plaster") and _materials.has("townhouse_stone") and _materials.has("townhouse_trim") and _materials.has("townhouse_roof") and _materials.has("townhouse_garage")
+	_enhancement_stats["premium_townhouse_site_pass"] = premium_townhouse_built and _materials.has("townhouse_door") and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
 	_build_infill_buildings(buildings_root)
+
+
+## Building Model No.2 is a fixed 18.87 x 16.37 m design (11.05 m high,
+## GLB AABB centre x/z = 0.0 / +0.047). Infill parcels were generated
+## for generic massing boxes, so a parcel only receives the detailed
+## townhouse when the model's real footprint — in either orientation —
+## clears roads, exported buildings, terrain slope and every other
+## infill parcel. Anything smaller keeps the textured facade fallback
+## instead of stretching doors, floor heights and the pitched roof.
+func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
+	var centre := Vector2(_f(item, "x"), _f(item, "z"))
+	for footprint_variant in [Vector2(18.87, 16.37), Vector2(16.37, 18.87)]:
+		var size: Vector2 = footprint_variant
+		var rect := Rect2(centre - size * 0.5 - Vector2.ONE, size + Vector2(2.0, 2.0))
+		var clear := true
+		var heights: Array[float] = [height_at(centre.x, centre.y)]
+		for corner_offset_variant in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			var corner_offset: Vector2 = corner_offset_variant
+			var corner_xz := centre + Vector2(corner_offset.x * size.x, corner_offset.y * size.y)
+			var corner := Vector3(corner_xz.x, 0.0, corner_xz.y)
+			heights.append(height_at(corner_xz.x, corner_xz.y))
+			if _road_clearance_xz(corner) < 2.7 or not _is_position_clear(corner, 2.0, 0.0):
+				clear = false
+				break
+		if clear and heights.max() - heights.min() > 1.1:
+			clear = false
+		if clear:
+			for other_index in accepted.size():
+				if other_index == self_index:
+					continue
+				var other: Dictionary = accepted[other_index]
+				var other_size := Vector2(_f(other, "w", 18.0), _f(other, "d", 15.0))
+				var other_rect := Rect2(Vector2(_f(other, "x"), _f(other, "z")) - other_size * 0.5, other_size)
+				if rect.intersects(other_rect):
+					clear = false
+					break
+		if clear:
+			for placed_variant in placed_rects:
+				var placed_rect: Rect2 = placed_variant
+				if rect.intersects(placed_rect):
+					clear = false
+					break
+		if clear:
+			return {"fits": true, "yaw": 0.0 if size.x > size.y else PI * 0.5, "rect": rect}
+	return {"fits": false, "yaw": 0.0, "rect": Rect2()}
 
 
 func _build_infill_buildings(parent: Node) -> void:
@@ -2903,6 +2998,7 @@ func _build_infill_buildings(parent: Node) -> void:
 
 	var facade_transforms: Dictionary = {}
 	var infill_townhouse_transforms: Array = []
+	var townhouse_placed_rects: Array = []
 	var infill_hero_transforms: Array = []
 	var infill_glass_transforms: Array = []
 	var flat_roof_transforms: Array = []
@@ -2943,6 +3039,9 @@ func _build_infill_buildings(parent: Node) -> void:
 		# proportions allow it.  Only the remaining infill massing uses the
 		# textured facade-box fallback, avoiding a city of plain cuboids.
 		var model_kind := ""
+		var townhouse_fit: Dictionary = {}
+		if h <= 13.5 and detail_roll < 0.76:
+			townhouse_fit = _townhouse_model_fit(item, item_index, accepted, townhouse_placed_rects)
 		if h >= 34.0:
 			model_kind = "glass"
 			infill_glass_transforms.append(make_transform(
@@ -2957,13 +3056,14 @@ func _build_infill_buildings(parent: Node) -> void:
 				0.0,
 				Vector3(w / 24.50, h / 18.40, d / 18.20)
 			))
-		elif h <= 13.5 and detail_roll < 0.76:
+		elif bool(townhouse_fit.get("fits", false)):
 			model_kind = "townhouse"
+			townhouse_placed_rects.append(townhouse_fit.get("rect", Rect2()))
 			infill_townhouse_transforms.append(_centered_model_transform(
 				base,
-				0.0,
-				Vector3(w / 13.15, h / 9.99, d / 13.40),
-				Vector3(0.075, 0.0, 1.075)
+				float(townhouse_fit.get("yaw", 0.0)),
+				Vector3.ONE,
+				Vector3(0.0, 0.0, 0.047)
 			))
 		else:
 			if not facade_transforms.has(facade):
@@ -3010,7 +3110,10 @@ func _build_infill_buildings(parent: Node) -> void:
 					0.0,
 					Vector3(3.4, 3.7, 3.4)
 				))
-		_add_box_collider(base + Vector3(0.0, (h + roof_height) * 0.5, 0.0), Vector3(w, h + roof_height, d))
+		if model_kind == "townhouse":
+			_add_box_collider(base + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), float(townhouse_fit.get("yaw", 0.0)))
+		else:
+			_add_box_collider(base + Vector3(0.0, (h + roof_height) * 0.5, 0.0), Vector3(w, h + roof_height, d))
 
 		# Ground-floor frontage and balconies face the nearest actual road.
 		# They are all instanced thin boxes, so the city gains close-range
@@ -3031,7 +3134,7 @@ func _build_infill_buildings(parent: Node) -> void:
 		var front_width := d if front_is_x_face else w
 		var front_yaw := PI * 0.5 if front_is_x_face else 0.0
 		var face_centre := base + outward * (half_extent + 0.07)
-		if h >= 6.5:
+		if h >= 6.5 and model_kind != "townhouse":
 			storefront_transforms.append(make_transform(
 				face_centre + Vector3(0.0, 1.45, 0.0),
 				front_yaw,
@@ -3047,7 +3150,7 @@ func _build_infill_buildings(parent: Node) -> void:
 				front_yaw,
 				Vector3(minf(front_width * 0.55, 11.0), 0.16, 1.35)
 			))
-		if h >= 12.0 and detail_roll < 0.72:
+		if h >= 12.0 and detail_roll < 0.72 and model_kind != "townhouse":
 			var lateral := Vector3(outward.z, 0.0, -outward.x)
 			var floor_y := 4.4
 			while floor_y < h - 1.4:
