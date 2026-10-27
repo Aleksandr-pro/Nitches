@@ -49,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=29'), 'Native 0.2.26 must bump Android versionCode to 29');
-assert(preset.includes('version/name="0.2.26-native-alpha"'), 'Native version name must be 0.2.26-native-alpha');
+assert(preset.includes('version/code=30'), 'Native 0.2.27 must bump Android versionCode to 30');
+assert(preset.includes('version/name="0.2.27-native-alpha"'), 'Native version name must be 0.2.27-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -134,6 +134,10 @@ assert(syncScript.includes('grand_hotel.glb') && worldScript.includes('res://ass
 for (const marker of ['premium_hotel_models', 'premium_hotel_fixed_scale', 'premium_hotel_detail_pass', 'premium_hotel_material_pass', 'premium_hotel_site_pass', 'premium_hotel_fronts_corniche', 'BlenderGrandHotels', 'hotel_glass_physical', 'hotel_travertine', 'hotel_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.26 grand hotel marker is missing: ${marker}`);
 }
+for (const marker of ['scaled_local(scale_value)', 'curtain_wall_reflective_glass_0227', 'glass_smoke_luminance_min_0227', 'guardrail_local_axis_0227']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.27 reflective-glass/local-axis marker is missing: ${marker}`);
+}
+assert(!worldScript.includes('Basis(Vector3.UP, yaw).scaled('), 'Native 0.2.27 make_transform must not use global-space Basis.scaled()');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
