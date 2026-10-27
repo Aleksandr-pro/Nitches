@@ -1895,6 +1895,91 @@ func _prop_material(material_name: String) -> Material:
 			hotel_light.emission = Color(1.0, 0.57, 0.22)
 			_register_night_material(hotel_light, 0.0, 0.10, 0.62)
 			return hotel_light
+		"MuseumStone":
+			# Building Model No.9: limestone rainscreen panels at world
+			# scale; every panel/joint is Blender geometry.
+			var museum_stone := _material("museum_limestone", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.86, 0.78, 0.63), 0.88, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			museum_stone.normal_scale = 1.0
+			museum_stone.metallic_specular = 0.50
+			return museum_stone
+		"MuseumStonePale":
+			var museum_stone_pale := _material("museum_limestone_pale", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.96, 0.90, 0.77), 0.88, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			museum_stone_pale.normal_scale = 1.0
+			museum_stone_pale.metallic_specular = 0.50
+			return museum_stone_pale
+		"MuseumCore":
+			var museum_core := _material("museum_core_dark", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.32, 0.30, 0.26), 0.95, 0.0, Vector3(0.30, 0.30, 0.30), true)
+			museum_core.metallic_specular = 0.30
+			return museum_core
+		"MuseumBronze":
+			var museum_bronze := _material("museum_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.60, 0.39, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			museum_bronze.normal_scale = 0.72
+			museum_bronze.metallic_specular = 0.96
+			museum_bronze.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return museum_bronze
+		"MuseumGlass":
+			# Atrium/rear-slot glazing over the real stair, mezzanines
+			# and cafe depth; 1.22 m bay matches the Blender mullions.
+			return _create_curtain_wall_material(
+				"museum_glass_physical",
+				false,
+				Color(0.102, 0.180, 0.262),
+				Color(0.205, 0.332, 0.472),
+				Color(0.245, 0.234, 0.210),
+				Color(0.170, 0.116, 0.061),
+				3.90,
+				1.22,
+				8.0,
+				0.56
+			)
+		"MuseumInterior":
+			var museum_interior := _material("museum_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.170, 0.125, 0.090), 0.96, 0.0, Vector3(0.40, 0.40, 0.40), true)
+			museum_interior.metallic_specular = 0.22
+			museum_interior.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return museum_interior
+		"MuseumWhite":
+			var museum_white := _material("museum_gallery_white", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.93, 0.91, 0.86), 0.85, 0.0, Vector3(0.20, 0.20, 0.20), true)
+			museum_white.normal_scale = 0.85
+			museum_white.metallic_specular = 0.44
+			return museum_white
+		"MuseumGranite":
+			var museum_granite := _material("museum_black_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.42, 0.44, 0.46), 0.36, 0.08, Vector3(0.26, 0.26, 0.26), true)
+			museum_granite.normal_scale = 0.95
+			museum_granite.metallic_specular = 0.86
+			museum_granite.clearcoat_enabled = true
+			museum_granite.clearcoat = 0.32
+			museum_granite.clearcoat_roughness = 0.24
+			return museum_granite
+		"MuseumTravertine":
+			var museum_travertine := _material("museum_travertine", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.93, 0.86, 0.73), 0.86, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			museum_travertine.normal_scale = 1.0
+			museum_travertine.metallic_specular = 0.52
+			return museum_travertine
+		"MuseumWater":
+			var museum_water := _material("museum_pool_water", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.30, 0.62, 0.72, 0.96), 0.075, 0.0, Vector3(0.55, 0.55, 0.55), true)
+			museum_water.normal_scale = 0.42
+			museum_water.metallic_specular = 1.0
+			museum_water.clearcoat_enabled = true
+			museum_water.clearcoat = 0.90
+			museum_water.clearcoat_roughness = 0.045
+			museum_water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			return museum_water
+		"MuseumBannerTeal":
+			var museum_banner_teal := _material("museum_banner_teal", "", "", Color(0.03, 0.36, 0.38), 0.85, 0.0)
+			museum_banner_teal.metallic_specular = 0.35
+			museum_banner_teal.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return museum_banner_teal
+		"MuseumBannerOchre":
+			var museum_banner_ochre := _material("museum_banner_ochre", "", "", Color(0.74, 0.43, 0.11), 0.85, 0.0)
+			museum_banner_ochre.metallic_specular = 0.35
+			museum_banner_ochre.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return museum_banner_ochre
+		"MuseumLight":
+			var museum_light := _material("museum_warm_light", "", "", Color(1.0, 0.72, 0.40), 0.32, 0.0)
+			museum_light.emission_enabled = true
+			museum_light.emission = Color(1.0, 0.57, 0.22)
+			_register_night_material(museum_light, 0.0, 0.10, 0.62)
+			return museum_light
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -3995,6 +4080,8 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "RichTownMosque"
 	if path.ends_with("grand_hotel.glb"):
 		return "BlenderGrandHotels"
+	if path.ends_with("museum.glb"):
+		return "RichTownMuseum"
 	if path.ends_with("street_lamp.glb"):
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
@@ -4047,6 +4134,8 @@ func _batched_model_base_range(path: String) -> float:
 	if path.ends_with("glass_tower.glb"):
 		return 340.0
 	if path.ends_with("grand_hotel.glb"):
+		return 340.0
+	if path.ends_with("museum.glb"):
 		return 340.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
 		return 390.0
@@ -4214,6 +4303,14 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 			{"size": Vector3(32.00, 7.20, 22.00), "center": Vector3(0.0, 3.60, 0.0), "material": _prop_material("HotelStone"), "name": "Podium"},
 			{"size": Vector3(25.60, 36.30, 17.20), "center": Vector3(0.0, 25.75, -1.0), "material": _prop_material("HotelPlaster"), "name": "Shaft"},
 			{"size": Vector3(19.60, 3.40, 13.20), "center": Vector3(0.0, 46.10, -1.2), "material": _prop_material("HotelStone"), "name": "Crown"},
+		]
+	elif path.ends_with("museum.glb"):
+		proxy_end = 1350.0
+		specs = [
+			{"size": Vector3(53.60, 0.60, 37.60), "center": Vector3(0.0, 0.30, 0.0), "material": _prop_material("MuseumGranite"), "name": "Plinth"},
+			{"size": Vector3(45.20, 15.60, 29.20), "center": Vector3(0.0, 8.40, -1.0), "material": _prop_material("MuseumStone"), "name": "Mass"},
+			{"size": Vector3(49.20, 0.55, 33.20), "center": Vector3(0.0, 16.48, -1.0), "material": _prop_material("MuseumWhite"), "name": "Roof"},
+			{"size": Vector3(31.00, 2.30, 10.00), "center": Vector3(0.0, 17.90, -1.0), "material": _prop_material("MuseumTravertine"), "name": "Lantern"},
 		]
 	if specs.is_empty():
 		return
@@ -5234,15 +5331,49 @@ func _build_landmarks() -> void:
 				_add_cylinder(root, 0.45, 22.0, pos + Vector3(15.0, h + 8.0, 0.0), metal, 0.0, 12)
 				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(46.0, h, 18.0), PI * 0.5)
 			"rt-museum":
-				var torus := TorusMesh.new()
-				torus.inner_radius = 11.0
-				torus.outer_radius = 19.0
-				torus.rings = 36
-				torus.ring_segments = 14
-				var torus_transform := Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3(1.0, 1.25, 0.42)), pos + Vector3(0.0, 15.0, 0.0))
-				_mesh_instance(root, torus, metal, torus_transform, "MuseumRing")
-				_add_box(root, Vector3(42.0, 3.0, 16.0), pos + Vector3(0.0, 1.5, 0.0), marble)
-				_add_box_collider(pos + Vector3(0.0, 9.0, 0.0), Vector3(40.0, 18.0, 10.0))
+				# Building Model No.9 is a finished fixed-scale civic
+				# museum measuring 54.00 x 38.00 m and exactly 19.00 m
+				# to the clerestory lantern cap.  Blender -Y is the
+				# public front, so at yaw 0 the glazed atrium slot
+				# faces +Z toward the fountain axis (Z-25), with the
+				# reflecting pool/sculpture court on the same side and
+				# the garden slot + loading dock behind.  The primitive
+				# metal torus on a marble slab is gone.
+				var museum_path := "res://assets/buildings/museum.glb"
+				var museum_parts := _get_model_parts(museum_path)
+				var museum_triangles := 0
+				var museum_aabb := AABB()
+				var museum_has_aabb := false
+				for museum_part_variant in museum_parts:
+					var museum_part: Dictionary = museum_part_variant
+					var museum_mesh := museum_part.get("mesh") as Mesh
+					if museum_mesh == null:
+						continue
+					museum_triangles += _mesh_triangle_count(museum_mesh)
+					var museum_part_aabb := museum_mesh.get_aabb()
+					museum_aabb = museum_part_aabb if not museum_has_aabb else museum_aabb.merge(museum_part_aabb)
+					museum_has_aabb = true
+				var museum_size := museum_aabb.size if museum_has_aabb else Vector3.ZERO
+				var museum_center := museum_aabb.get_center() if museum_has_aabb else Vector3.ZERO
+				museum_center.y = 0.0
+				var museum_transform := _centered_model_transform(pos, 0.0, Vector3.ONE, museum_center)
+				var museum_built := _add_batched_model(root, museum_path, [museum_transform], "RichTownMuseum")
+				_enhancement_stats["premium_museum_built"] = museum_built
+				_enhancement_stats["premium_museum_fixed_scale"] = museum_built and museum_has_aabb and absf(museum_size.x - 54.00) <= 0.25 and absf(museum_size.y - 19.00) <= 0.20 and absf(museum_size.z - 38.00) <= 0.25
+				_enhancement_stats["premium_museum_detail_pass"] = museum_built and museum_parts.size() >= 14 and museum_triangles >= 12000
+				_enhancement_stats["premium_museum_material_pass"] = museum_built and _materials.has("museum_limestone") and _materials.has("museum_limestone_pale") and _materials.has("museum_bronze") and _materials.has("museum_glass_physical") and _materials.has("museum_interior") and _materials.has("museum_gallery_white") and _materials.has("museum_black_granite") and _materials.has("museum_travertine") and _materials.has("museum_pool_water") and _materials.has("museum_warm_light")
+				_enhancement_stats["premium_museum_site_pass"] = museum_built and _materials.has("museum_black_granite") and _materials.has("museum_travertine") and _materials.has("museum_warm_light")
+				_enhancement_stats["premium_museum_model_parts"] = museum_parts.size()
+				_enhancement_stats["premium_museum_triangles"] = museum_triangles
+				_enhancement_stats["premium_museum_width_m"] = museum_size.x
+				_enhancement_stats["premium_museum_height_m"] = museum_size.y
+				_enhancement_stats["premium_museum_depth_m"] = museum_size.z
+				_enhancement_stats["premium_museum_fronts_fountain"] = museum_built
+				if not museum_built:
+					_add_box(root, Vector3(42.0, 3.0, 16.0), pos + Vector3(0.0, 1.5, 0.0), marble)
+				_add_box_collider(pos + Vector3(0.0, 0.25, 0.0), Vector3(54.00, 0.50, 38.00))
+				_add_box_collider(pos + Vector3(0.0, 8.40, -1.00), Vector3(45.60, 15.60, 29.60))
+				_add_box_collider(pos + Vector3(-15.50, 0.45, 15.35), Vector3(17.00, 0.90, 2.70))
 			"rt-opera":
 				# Building Model No.6 is a fixed-scale 52.00 x 56.00 m
 				# civic parcel and exactly 22.00 m high.  Blender -Y is

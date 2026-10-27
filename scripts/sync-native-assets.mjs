@@ -22,6 +22,7 @@ const modelCopies = [
   ['src/assets/models/props/opera_house.glb', 'buildings/opera_house.glb'],
   ['src/assets/models/props/mosque.glb', 'buildings/mosque.glb'],
   ['src/assets/models/props/grand_hotel.glb', 'buildings/grand_hotel.glb'],
+  ['src/assets/models/props/museum.glb', 'buildings/museum.glb'],
   ['src/assets/models/props/street_lamp.glb', 'props/street_lamp.glb'],
   ['src/assets/models/props/bus_shelter.glb', 'props/bus_shelter.glb'],
   ['src/assets/models/props/park_bench.glb', 'props/park_bench.glb'],

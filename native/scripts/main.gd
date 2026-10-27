@@ -9,6 +9,8 @@ const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const MainMenuScript := preload("res://scripts/main_menu.gd")
+const PROFILE_PATH := "user://nitches_profile.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
 const CAMERA_CHASE := 0
@@ -18,6 +20,11 @@ const CAMERA_TOP := 2
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _hud: NativeHud
+var _menu: NativeMainMenu
+var _in_menu := false
+var _menu_orbit_angle := 0.0
+var _profile: Dictionary = {}
+var _profile_save_timer := 0.0
 var _camera: Camera3D
 var _speed_post: NativeSpeedPost
 var _camera_mode := CAMERA_CHASE
@@ -76,12 +83,110 @@ func _ready() -> void:
 	_hud.camera_requested.connect(_cycle_camera)
 	_hud.time_requested.connect(_cycle_time)
 	_hud.reset_requested.connect(_reset_vehicle_to_road)
+	_hud.menu_requested.connect(_show_menu)
+
+	# 0.2.29: the game opens on the main menu (profile / garage /
+	# store / worlds) over a cinematic orbit of the car; Play enters
+	# the world.  Smoke and screenshot runs skip straight to driving.
+	_load_profile()
+	_menu = MainMenuScript.new() as NativeMainMenu
+	add_child(_menu)
+	_menu.bind_specs(_vehicle.get_spec_sheet())
+	_menu.refresh_profile(_profile_view())
+	_menu.play_requested.connect(_enter_game)
+	if _smoke_mode or _screenshot_mode:
+		_enter_game()
+	else:
+		_show_menu()
 
 	_apply_time_mode()
 	_update_camera(0.0, true)
 	print("[native] Nitches Horizon Godot alpha is ready")
 	if _screenshot_mode:
 		_run_screenshot_tour()
+
+
+func _load_profile() -> void:
+	_profile = {
+		"name": "ИГРОК",
+		"credits": 35000,
+		"distance_m": 0.0,
+		"top_speed_kmh": 0.0,
+		"play_seconds": 0.0,
+	}
+	var cfg := ConfigFile.new()
+	if cfg.load(PROFILE_PATH) == OK:
+		for key in _profile.keys():
+			_profile[key] = cfg.get_value("profile", key, _profile[key])
+
+
+func _save_profile() -> void:
+	var cfg := ConfigFile.new()
+	for key in _profile.keys():
+		cfg.set_value("profile", key, _profile[key])
+	cfg.save(PROFILE_PATH)
+
+
+func _profile_view() -> Dictionary:
+	var distance_km := float(_profile.get("distance_m", 0.0)) / 1000.0
+	return {
+		"name": String(_profile.get("name", "ИГРОК")),
+		"credits": int(_profile.get("credits", 35000)),
+		"distance_km": distance_km,
+		"top_speed_kmh": float(_profile.get("top_speed_kmh", 0.0)),
+		"play_seconds": float(_profile.get("play_seconds", 0.0)),
+		"level": 1 + int(distance_km / 50.0),
+	}
+
+
+func _show_menu() -> void:
+	if _smoke_mode or _screenshot_mode or _menu == null:
+		return
+	_in_menu = true
+	if _vehicle != null:
+		_vehicle.freeze = true
+		_vehicle.set_physics_process(false)
+	if _hud != null:
+		_hud.visible = false
+	_menu.refresh_profile(_profile_view())
+	_menu.show_menu()
+	_save_profile()
+
+
+func _enter_game() -> void:
+	_in_menu = false
+	if _menu != null:
+		_menu.hide_menu()
+	if _hud != null:
+		_hud.visible = true
+	if _vehicle != null:
+		_vehicle.freeze = false
+		_vehicle.set_physics_process(true)
+	_snap_camera = true
+
+
+func _update_menu_camera(delta: float) -> void:
+	if _camera == null or _vehicle == null:
+		return
+	_menu_orbit_angle += delta * 0.14
+	var centre := _vehicle.global_position + Vector3(0.0, 1.05, 0.0)
+	var offset := Vector3(sin(_menu_orbit_angle), 0.0, cos(_menu_orbit_angle)) * 7.6 + Vector3(0.0, 2.1, 0.0)
+	_camera.global_position = centre + offset
+	_camera.look_at(centre, Vector3.UP)
+
+
+func _accumulate_profile(delta: float) -> void:
+	if _vehicle == null or delta <= 0.0:
+		return
+	var speed_kmh := _vehicle.get_absolute_speed_kmh()
+	_profile["distance_m"] = float(_profile.get("distance_m", 0.0)) + speed_kmh / 3.6 * delta
+	_profile["top_speed_kmh"] = maxf(float(_profile.get("top_speed_kmh", 0.0)), speed_kmh)
+	_profile["play_seconds"] = float(_profile.get("play_seconds", 0.0)) + delta
+	_profile_save_timer += delta
+	if _profile_save_timer >= 5.0:
+		_profile_save_timer = 0.0
+		_save_profile()
+
 
 
 func _configure_render_quality(initial: bool) -> void:
@@ -179,6 +284,12 @@ func _create_camera() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and not _in_menu and not _smoke_mode and not _screenshot_mode:
+		_show_menu()
+		get_viewport().set_input_as_handled()
+		return
+	if _in_menu:
+		return
 	if event.is_action_pressed(&"camera_toggle"):
 		_cycle_camera()
 		get_viewport().set_input_as_handled()
@@ -235,6 +346,12 @@ func _reset_vehicle_to_road() -> void:
 
 func _process(delta: float) -> void:
 	_update_adaptive_render_quality(delta)
+	if _in_menu:
+		if _camera != null and not _camera.is_current():
+			_camera.make_current()
+		_update_menu_camera(delta)
+		return
+	_accumulate_profile(delta)
 	if _camera != null and not _camera.is_current():
 		_camera.make_current()
 	if _screenshot_mode and _screenshot_free_camera:
@@ -267,7 +384,7 @@ func _update_camera(delta: float, snap: bool) -> void:
 		return
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
-	var speed_ratio := clampf(speed_kmh / 240.0, 0.0, 1.0)
+	var speed_ratio := clampf(speed_kmh / 210.0, 0.0, 1.0)
 	var raw_follow_yaw := _vehicle_horizontal_yaw()
 	if snap or not _camera_smoothing_initialized or delta <= 0.0:
 		_camera_follow_yaw = raw_follow_yaw
@@ -453,6 +570,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.25 Building Model No.7 RichTown Mosque pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("premium_hotel_models", 0)) < 3 or not bool(enhancement_stats.get("premium_hotel_fixed_scale", false)) or not bool(enhancement_stats.get("premium_hotel_detail_pass", false)) or not bool(enhancement_stats.get("premium_hotel_material_pass", false)) or not bool(enhancement_stats.get("premium_hotel_site_pass", false)) or not bool(enhancement_stats.get("premium_hotel_fronts_corniche", false)) or int(enhancement_stats.get("premium_hotel_model_parts", 0)) < 10 or int(enhancement_stats.get("premium_hotel_triangles", 0)) < 30000 or absf(float(enhancement_stats.get("premium_hotel_height_m", 0.0)) - 49.07) > 0.20 or absf(float(enhancement_stats.get("premium_hotel_width_m", 0.0)) - 33.6) > 0.25 or absf(float(enhancement_stats.get("premium_hotel_depth_m", 0.0)) - 26.0) > 0.25:
 		failures.append("0.2.26 Building Model No.8 RichTown Grand Hotel pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("premium_museum_built", false)) or not bool(enhancement_stats.get("premium_museum_fixed_scale", false)) or not bool(enhancement_stats.get("premium_museum_detail_pass", false)) or not bool(enhancement_stats.get("premium_museum_material_pass", false)) or not bool(enhancement_stats.get("premium_museum_site_pass", false)) or not bool(enhancement_stats.get("premium_museum_fronts_fountain", false)) or int(enhancement_stats.get("premium_museum_model_parts", 0)) < 14 or int(enhancement_stats.get("premium_museum_triangles", 0)) < 12000 or absf(float(enhancement_stats.get("premium_museum_height_m", 0.0)) - 19.0) > 0.20 or absf(float(enhancement_stats.get("premium_museum_width_m", 0.0)) - 54.0) > 0.25 or absf(float(enhancement_stats.get("premium_museum_depth_m", 0.0)) - 38.0) > 0.25:
+		failures.append("0.2.29 Building Model No.9 RichTown Museum pass is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("curtain_wall_materials", 0)) < 5 or not bool(enhancement_stats.get("curtain_wall_shader", false)) or not bool(enhancement_stats.get("curtain_wall_opaque_shader", false)) or not bool(enhancement_stats.get("curtain_wall_panel_variation", false)) or not bool(enhancement_stats.get("curtain_wall_weathering", false)) or not bool(enhancement_stats.get("curtain_wall_neutral_glass", false)) or int(enhancement_stats.get("tall_reflection_probes", 0)) < 2:
 		failures.append("0.2.14 physical curtain-wall realism pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("curtain_wall_calibrated_0215", false)) or not bool(enhancement_stats.get("curtain_wall_clearcoat_removed", false)) or not bool(enhancement_stats.get("building_visual_ranges_0215", false)) or int(enhancement_stats.get("model_parts_without_shadow_pass", 0)) < 10 or float(enhancement_stats.get("curtain_wall_detail_fade_start_m", 9999.0)) > 90.0 or float(enhancement_stats.get("curtain_wall_detail_fade_end_m", 9999.0)) > 300.0 or float(enhancement_stats.get("traffic_signal_visual_range_m", 9999.0)) > 360.0:
@@ -566,6 +685,10 @@ func _run_smoke_checks() -> void:
 		failures.append("speed panel is not fully on screen: rect=%s viewport=%s" % [str(speed_rect), str(viewport_size)])
 	if not _rect_is_on_screen(pedal_rect, viewport_size):
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
+	var menu_state := _menu.get_smoke_state()
+	var spec_sheet := _vehicle.get_spec_sheet()
+	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 5 or int(menu_state.get("tabs", 0)) < 5 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
+		failures.append("0.2.29 main menu / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
 
 	if failures.is_empty():
 		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
