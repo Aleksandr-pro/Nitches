@@ -9,6 +9,7 @@ extends CanvasLayer
 ## desktop mouse behave identically.
 
 signal play_requested
+signal world_map_requested
 
 const COL_BG := Color(0.008, 0.20, 0.22, 0.90)
 const COL_PANEL := Color(0.03, 0.14, 0.15, 0.97)
@@ -27,6 +28,7 @@ var _tab_buttons: Array[Button] = []
 var _car_name := ""
 var _specs_bound := false
 var _profile_bound := false
+var _world_map_button: Button
 
 var _top_car_label: Label
 var _top_credits_label: Label
@@ -70,6 +72,7 @@ func get_smoke_state() -> Dictionary:
         "specs_bound": _specs_bound,
         "profile_bound": _profile_bound,
         "visible_now": is_menu_visible(),
+        "world_map_button": _world_map_button != null,
     }
 
 
@@ -444,6 +447,10 @@ func _build_worlds_panel(parent: Node) -> Control:
         locked.disabled = true
         locked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         row.add_child(locked)
+    _world_map_button = _button("ОТКРЫТЬ КАРТУ RICHTOWN", COL_TEAL, Vector2(0.0, 58.0), 20)
+    _world_map_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _world_map_button.pressed.connect(func() -> void: world_map_requested.emit())
+    vbox.add_child(_world_map_button)
     return vbox.get_parent().get_parent() as Control
 
 

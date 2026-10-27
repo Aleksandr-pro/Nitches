@@ -9,12 +9,15 @@ signal camera_requested
 signal time_requested
 signal reset_requested
 signal menu_requested
+signal map_requested
 
 const MinimapScript := preload("res://scripts/minimap.gd")
+const SteeringWheelScript := preload("res://scripts/steering_wheel.gd")
 
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _minimap: NativeMinimap
+var _steering_wheel: NativeSteeringWheel
 var _district_label: Label
 var _coordinates_label: Label
 var _objective_label: Label
@@ -67,6 +70,8 @@ func get_smoke_state() -> Dictionary:
 		"minimap_counts": _minimap.get_feature_counts() if _minimap != null else {},
 		"speed_rect": _speed_panel.get_global_rect() if _speed_panel != null else Rect2(),
 		"pedal_rect": _pedal_row.get_global_rect() if _pedal_row != null else Rect2(),
+		"steering_wheel": _steering_wheel.get_smoke_state() if _steering_wheel != null else {},
+		"steering_wheel_rect": _steering_wheel.get_global_rect() if _steering_wheel != null else Rect2(),
 		"viewport_size": viewport_size,
 		"desktop_controls_hint": _desktop_hint_label != null,
 		"build_error": _build_error,
@@ -179,7 +184,7 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 19)
 	_district_label = _make_label(info_box, "RICHTOWN", 23)
 	_coordinates_label = _make_label(info_box, "КООРДИНАТЫ  X —  •  Z —  •  Y —", 16, Color(0.62, 1.0, 0.78))
-	_objective_label = _make_label(info_box, "СВОБОДНАЯ ПОЕЗДКА • СВАЙП — КАМЕРА", 14, Color(0.78, 0.90, 1.0))
+	_objective_label = _make_label(info_box, "СВОБОДНАЯ ПОЕЗДКА • РУЛЬ — ВРАЩАТЬ • КАРТА — МИНИКАРТА", 14, Color(0.78, 0.90, 1.0))
 
 	# Minimap, performance and small actions, top-right.
 	var right_column := VBoxContainer.new()
@@ -193,6 +198,26 @@ func _build_ui() -> void:
 	var minimap_panel := _make_panel(right_column)
 	_minimap = MinimapScript.new() as NativeMinimap
 	minimap_panel.add_child(_minimap)
+	# The whole minimap is the obvious phone target for the big map.
+	var minimap_open_button := Button.new()
+	minimap_open_button.name = "OpenWorldMapButton"
+	minimap_open_button.text = "КАРТА ↗"
+	minimap_open_button.focus_mode = Control.FOCUS_NONE
+	minimap_open_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	minimap_open_button.set_anchors_preset(Control.PRESET_FULL_RECT)
+	minimap_open_button.add_theme_font_size_override("font_size", 12)
+	minimap_open_button.add_theme_color_override("font_color", Color(1.0, 0.82, 0.42))
+	minimap_open_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	var minimap_button_style := StyleBoxFlat.new()
+	minimap_button_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	minimap_button_style.content_margin_top = 158.0
+	minimap_button_style.content_margin_right = 8.0
+	minimap_open_button.add_theme_stylebox_override("normal", minimap_button_style)
+	minimap_open_button.add_theme_stylebox_override("hover", minimap_button_style)
+	minimap_open_button.add_theme_stylebox_override("pressed", minimap_button_style)
+	minimap_open_button.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	minimap_open_button.pressed.connect(func() -> void: map_requested.emit())
+	minimap_panel.add_child(minimap_open_button)
 
 	var performance_panel := _make_panel(right_column)
 	_performance_label = _make_label(performance_panel, "FPS —", 13, Color(0.78, 0.96, 0.84))
@@ -211,16 +236,14 @@ func _build_ui() -> void:
 	var menu_button := _make_action_button(action_row, "MENU", Vector2(72.0, 44.0))
 	menu_button.pressed.connect(func() -> void: menu_requested.emit())
 
-	# Steering, bottom-left.
-	var steering_row := HBoxContainer.new()
-	steering_row.name = "SteeringRow"
-	steering_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT, false)
-	_set_offsets(steering_row, 16.0, -102.0, 226.0, -16.0)
-	steering_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	steering_row.add_theme_constant_override("separation", 10)
-	root.add_child(steering_row)
-	_make_touch_button(steering_row, "◀", "steer_left", Vector2(92.0, 82.0), Color(0.02, 0.22, 0.40))
-	_make_touch_button(steering_row, "▶", "steer_right", Vector2(92.0, 82.0), Color(0.02, 0.22, 0.40))
+	# 0.2.32 steering wheel, bottom-left.  This replaces the two
+	# binary left/right buttons: the rim itself is grabbed and
+	# rotated, giving immediate analog lock on phone and mouse.
+	_steering_wheel = SteeringWheelScript.new() as NativeSteeringWheel
+	_steering_wheel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT, false)
+	_set_offsets(_steering_wheel, 16.0, -188.0, 188.0, -16.0)
+	_steering_wheel.steering_changed.connect(_on_steering_wheel_changed)
+	root.add_child(_steering_wheel)
 
 	# Speed and nitro above the pedals.
 	var speed_panel := _make_panel(root)
@@ -280,7 +303,7 @@ func _build_ui() -> void:
 		hint_panel.name = "DesktopControlsHint"
 		hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
 		_set_offsets(hint_panel, -280.0, -66.0, 280.0, -14.0)
-		_desktop_hint_label = _make_label(hint_panel, "WASD — ЕХАТЬ • SPACE — ДРИФТ • SHIFT — N₂O • C — КАМЕРА • ДРАГ МЫШИ — ОРБИТА • КОЛЕСО — ЗУМ", 12, Color(0.86, 0.94, 1.0))
+		_desktop_hint_label = _make_label(hint_panel, "WASD/РУЛЬ — ЕХАТЬ • SPACE — ДРИФТ • SHIFT — N₂O • C — КАМЕРА • M — КАРТА • ДРАГ МЫШИ — ОРБИТА", 12, Color(0.86, 0.94, 1.0))
 		_desktop_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_desktop_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_desktop_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -288,7 +311,7 @@ func _build_ui() -> void:
 
 func _update_static_labels() -> void:
 	if _objective_label != null:
-		_objective_label.text = "СВОБОДНАЯ ПОЕЗДКА • СВАЙП — КАМЕРА"
+		_objective_label.text = "СВОБОДНАЯ ПОЕЗДКА • РУЛЬ — ВРАЩАТЬ • КАРТА — МИНИКАРТА"
 	_update_coordinates_label()
 
 
@@ -306,6 +329,20 @@ func _update_coordinates_label() -> void:
 	]
 
 
+func reset_touch_controls() -> void:
+	if _steering_wheel != null:
+		_steering_wheel.force_release()
+	if _vehicle != null:
+		_vehicle.set_touch_steering(0.0, false)
+		for action_name in ["accelerate", "brake_reverse", "handbrake", "boost"]:
+			_vehicle.set_touch_input(action_name, false)
+
+
+func _on_steering_wheel_changed(value: float, engaged: bool) -> void:
+	if _vehicle != null:
+		_vehicle.set_touch_steering(value, engaged)
+
+
 func _on_touch_button_down(action_name: String) -> void:
 	if _vehicle != null:
 		_vehicle.set_touch_input(action_name, true)
@@ -317,6 +354,10 @@ func _on_touch_button_up(action_name: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# Keep the visible rim aligned with keyboard/gamepad steering
+	# when the touch wheel itself is not being held.
+	if _steering_wheel != null and _vehicle != null and not _steering_wheel.is_engaged():
+		_steering_wheel.set_display_value(_vehicle.steering_input)
 	# Full-rate UI writes can invalidate Canvas every frame. Driving input
 	# remains continuous through VehicleController; only visible labels are
 	# refreshed at 12 Hz, and district/minimap/performance at 4 Hz below.

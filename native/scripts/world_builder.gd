@@ -254,6 +254,20 @@ func get_park_rects() -> Array:
 	return rects
 
 
+## Named park entries for the 0.2.32 full-screen world map.  The
+## minimap only needs rectangles; the big map also shows names.
+func get_park_map_entries() -> Array:
+	var entries: Array = []
+	for spec_variant in PARK_SPECS:
+		var spec: Dictionary = spec_variant
+		entries.append({
+			"id": String(spec.get("id", "park")),
+			"label": String(spec.get("label", "Парк")),
+			"rect": spec.get("rect", Rect2()),
+		})
+	return entries
+
+
 func _is_in_park(x: float, z: float, pad: float = 0.0) -> bool:
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant

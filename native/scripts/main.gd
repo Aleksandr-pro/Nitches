@@ -10,6 +10,7 @@ const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
+const WorldMapScript := preload("res://scripts/world_map.gd")
 const PROFILE_PATH := "user://nitches_profile.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -27,6 +28,8 @@ var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _hud: NativeHud
 var _menu: NativeMainMenu
+var _world_map: NativeWorldMap
+var _map_open := false
 var _in_menu := false
 var _menu_orbit_angle := 0.0
 var _profile: Dictionary = {}
@@ -106,6 +109,15 @@ func _ready() -> void:
 	_menu.bind_specs(_vehicle.get_spec_sheet())
 	_menu.refresh_profile(_profile_view())
 	_menu.play_requested.connect(_enter_game)
+	_menu.world_map_requested.connect(_show_world_map)
+
+	# 0.2.32: full-screen named RichTown map over the game.  The HUD
+	# minimap and M/Tab open it; the car is frozen while it is read.
+	_world_map = WorldMapScript.new() as NativeWorldMap
+	add_child(_world_map)
+	_world_map.bind(_world, _vehicle)
+	_world_map.close_requested.connect(_hide_world_map)
+	_hud.map_requested.connect(_show_world_map)
 	if _smoke_mode or _screenshot_mode:
 		_enter_game()
 	else:
@@ -154,8 +166,12 @@ func _profile_view() -> Dictionary:
 func _show_menu() -> void:
 	if _smoke_mode or _screenshot_mode or _menu == null:
 		return
+	if _map_open:
+		_hide_world_map()
 	_camera_drag_touch_index = -1
 	_camera_mouse_dragging = false
+	if _hud != null:
+		_hud.reset_touch_controls()
 	_in_menu = true
 	if _vehicle != null:
 		_vehicle.freeze = true
@@ -170,9 +186,45 @@ func _show_menu() -> void:
 func _enter_game() -> void:
 	_camera_drag_touch_index = -1
 	_camera_mouse_dragging = false
+	if _world_map != null:
+		_world_map.hide_map()
+	_map_open = false
 	_in_menu = false
 	if _menu != null:
 		_menu.hide_menu()
+	if _hud != null:
+		_hud.visible = true
+	if _vehicle != null:
+		_vehicle.freeze = false
+		_vehicle.set_physics_process(true)
+	_snap_camera = true
+
+
+func _show_world_map() -> void:
+	if _smoke_mode or _screenshot_mode or _map_open or _world_map == null:
+		return
+	_camera_drag_touch_index = -1
+	_camera_mouse_dragging = false
+	_map_open = true
+	if _hud != null:
+		_hud.reset_touch_controls()
+	if _vehicle != null:
+		_vehicle.freeze = true
+		_vehicle.set_physics_process(false)
+	if _hud != null:
+		_hud.visible = false
+	_world_map.show_map()
+	_save_profile()
+
+
+func _hide_world_map() -> void:
+	if _world_map != null:
+		_world_map.hide_map()
+	if not _map_open:
+		return
+	_map_open = false
+	if _in_menu:
+		return
 	if _hud != null:
 		_hud.visible = true
 	if _vehicle != null:
@@ -307,11 +359,20 @@ func _create_camera() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _map_open:
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed(&"map_toggle"):
+			_hide_world_map()
+			get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and not _in_menu and not _smoke_mode and not _screenshot_mode:
 		_show_menu()
 		get_viewport().set_input_as_handled()
 		return
 	if _in_menu:
+		return
+	if event.is_action_pressed(&"map_toggle"):
+		_show_world_map()
+		get_viewport().set_input_as_handled()
 		return
 	if _handle_camera_orbit_input(event):
 		get_viewport().set_input_as_handled()
@@ -494,6 +555,10 @@ func _process(delta: float) -> void:
 		if _camera != null and not _camera.is_current():
 			_camera.make_current()
 		_update_menu_camera(delta)
+		return
+	if _map_open:
+		if _camera != null and not _camera.is_current():
+			_camera.make_current()
 		return
 	_accumulate_profile(delta)
 	if _camera != null and not _camera.is_current():
@@ -685,6 +750,8 @@ func _run_smoke_checks() -> void:
 		failures.append("speed post node is missing")
 	if _hud == null:
 		failures.append("HUD node is missing")
+	if _world_map == null:
+		failures.append("world map node is missing")
 	if not failures.is_empty():
 		_finish_smoke(failures)
 		return
@@ -871,7 +938,12 @@ func _run_smoke_checks() -> void:
 		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
 	var menu_state := _menu.get_smoke_state()
 	var spec_sheet := _vehicle.get_spec_sheet()
-	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 5 or int(menu_state.get("tabs", 0)) < 5 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
+	var world_map_state := _world_map.get_smoke_state()
+	var steering_wheel_state: Dictionary = hud_state.get("steering_wheel", {})
+	var steering_wheel_rect: Rect2 = hud_state.get("steering_wheel_rect", Rect2())
+	if not bool(world_map_state.get("world_map_0232", false)) or not bool(world_map_state.get("created", false)) or not bool(world_map_state.get("data_bound", false)) or bool(world_map_state.get("visible_now", true)) or int(world_map_state.get("districts", 0)) < 5 or int(world_map_state.get("district_labels", 0)) < 5 or int(world_map_state.get("roads", 0)) < 50 or int(world_map_state.get("road_labels", 0)) < 6 or int(world_map_state.get("pois", 0)) < 20 or int(world_map_state.get("poi_labels", 0)) < 20 or int(world_map_state.get("parks", 0)) < 3 or not bool(steering_wheel_state.get("touch_steering_wheel_0232", false)) or not bool(steering_wheel_state.get("created", false)) or float(steering_wheel_state.get("max_lock_degrees", 0.0)) < 130.0 or float(steering_wheel_state.get("centering_rate", 0.0)) < 4.0 or not _rect_is_on_screen(steering_wheel_rect, viewport_size) or not bool(smoothing_state.get("touch_steering_wheel_0232", false)):
+		failures.append("0.2.32 steering-wheel / full world-map pass is incomplete: map=%s wheel=%s smoothing=%s" % [str(world_map_state), str(steering_wheel_state), str(smoothing_state)])
+	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 5 or int(menu_state.get("tabs", 0)) < 5 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
 		failures.append("0.2.29 main menu / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
 
 	if failures.is_empty():
