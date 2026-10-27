@@ -314,7 +314,8 @@ for (const marker of [
   'boulevard_lawn_islands',
   'WashingtoniaWhiteGravelBeds',
   'CafeWarmLight',
-  'BoulevardCafeGlassArcades',
+  'CafeFabric',
+  'cafe_linen_normal.png',
   'premium_boulevard_promenade_m2',
   'PremiumStonePavingShader',
   'premium_stone_paving.gdshader',
@@ -400,6 +401,8 @@ if (requireAssets) {
     'assets/textures/user_sky_day.jpg',
     'assets/textures/user_sky_sunset.jpg',
     'assets/textures/user_sky_night.jpg',
+    'assets/textures/cafe_linen.jpg',
+    'assets/textures/cafe_linen_normal.png',
   ];
   for (const relative of required) {
     const file = path.join(root, relative);
