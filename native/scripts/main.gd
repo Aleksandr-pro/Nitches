@@ -80,6 +80,8 @@ func _ready() -> void:
 	_apply_time_mode()
 	_update_camera(0.0, true)
 	print("[native] Nitches Horizon Godot alpha is ready")
+	if _screenshot_mode:
+		_run_screenshot_tour()
 
 
 func _configure_render_quality(initial: bool) -> void:
