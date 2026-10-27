@@ -863,11 +863,11 @@ def build_park_bench():
         tube_between("park_bench_arm_support", (frame_x, 0.235, 0.455),
                      (frame_x, 0.265, 0.655), 0.022, 0.022, metal, vertices=10)
         sphere("park_bench_arm_knob", frame_x, 0.295, 0.655, 0.068, 0.068, 0.068, metal)
-        # Rosette medallion on the outer face of each cast frame.
+        # Rosette medallion bolted to the outer face of the front leg.
         outer_x = frame_x + (0.045 if frame_x > 0.0 else -0.045)
-        cyl("park_bench_medallion", outer_x, 0.000, 0.260, 0.055, 0.018,
+        cyl("park_bench_medallion", outer_x, 0.235, 0.260, 0.038, 0.018,
             dark, vertices=16, rotation=(0.0, math.pi / 2.0, 0.0))
-        cyl("park_bench_medallion_boss", outer_x, 0.000, 0.260, 0.022, 0.028,
+        cyl("park_bench_medallion_boss", outer_x, 0.235, 0.260, 0.016, 0.028,
             metal, vertices=10, rotation=(0.0, math.pi / 2.0, 0.0))
         for slat_y in seat_ys:
             cyl("park_bench_seat_bolt", frame_x, slat_y, 0.482, 0.012, 0.012,
@@ -888,8 +888,8 @@ def build_park_bench():
 # across the rafter tails and 3.84 m tall, replacing the box-built museum
 # pergola from 0.2.22.  Six tapered round columns on stepped plinths
 # with collars and capitals carry a hexagonal ring of through-tenoned
-# beams, nine cross rafters in three directions and a dense purlin
-# lattice around a central hub with a ball finial.  Column centres sit
+# beams, six radial rafters and two hexagonal purlin rings around a
+# central hub with a ball finial.  Column centres sit
 # at r=5.2 m, angles 30deg + k*60deg, exactly where the 0.2.22 native
 # colliders already are.
 # --------------------------------------------------------------------------- #
@@ -929,20 +929,17 @@ def build_park_pergola():
         rbox("pergola_ring_beam_lower", mx, my, 3.225, column_radius + 0.30, 0.120, 0.050,
              wood, rotation=(0.0, 0.0, yaw), bevel=0.008)
 
-    # Nine cross rafters: three directions (the hexagon's axes), three
-    # parallel members each, spanning over the ring with eaves tails.
-    for direction_index in range(3):
-        yaw = direction_index * math.pi / 3.0
-        for offset in (-2.60, 0.0, 2.60):
-            ox = -math.sin(yaw) * offset
-            oy = math.cos(yaw) * offset
-            half_span = math.sqrt(max(column_radius * column_radius - offset * offset, 1.0))
-            rbox("pergola_rafter", ox, oy, 3.500, (half_span + 0.55) * 2.0, 0.130, 0.160,
-                 wood, rotation=(0.0, 0.0, yaw), bevel=0.010)
+    # Six radial rafters run from the central hub to each column and
+    # project 0.55 m past the ring as eaves tails -- the clean radial
+    # geometry of a real hexagonal pergola.
+    for rafter_index in range(6):
+        angle = math.pi / 6.0 + rafter_index * math.tau / 6.0
+        rbox("pergola_rafter", math.cos(angle) * 2.750, math.sin(angle) * 2.750, 3.500,
+             6.00, 0.140, 0.170, wood, rotation=(0.0, 0.0, angle), bevel=0.010)
 
-    # Purlin lattice over the rafters: two hexagonal rings of small
-    # battens that catch the light and read as real shade structure.
-    for ring_radius, ring_z in ((3.90, 3.610), (2.10, 3.610)):
+    # Two hexagonal purlin rings tie the radial rafters together and
+    # throw the ring shadows that make the shade structure read.
+    for ring_radius, ring_z in ((3.60, 3.610), (1.80, 3.610)):
         for side_index in range(6):
             angle1 = math.pi / 6.0 + side_index * math.tau / 6.0
             angle2 = math.pi / 6.0 + (side_index + 1) * math.tau / 6.0
@@ -950,10 +947,10 @@ def build_park_pergola():
             x2, y2 = math.cos(angle2) * ring_radius, math.sin(angle2) * ring_radius
             yaw = math.atan2(y2 - y1, x2 - x1)
             rbox("pergola_purlin", (x1 + x2) * 0.5, (y1 + y2) * 0.5, ring_z,
-                 ring_radius + 0.16, 0.075, 0.055, wood,
+                 ring_radius + 0.10, 0.075, 0.055, wood,
                  rotation=(0.0, 0.0, yaw), bevel=0.006)
 
-    # Central hub where the middle rafters cross, with a ball finial.
+    # Central hub where the radial rafters meet, with a ball finial.
     cyl("pergola_hub", 0, 0, 3.560, 0.300, 0.180, wood, vertices=24)
     cyl("pergola_finial_stem", 0, 0, 3.680, 0.035, 0.090, metal, vertices=12)
     sphere("pergola_finial_ball", 0, 0, 3.760, 0.150, 0.150, 0.150, metal)
