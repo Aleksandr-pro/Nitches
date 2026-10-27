@@ -1043,6 +1043,7 @@ func _create_concrete_material(
 	material.set_shader_parameter("normal_strength", normal_strength)
 	_materials[key] = material
 	_enhancement_stats["concrete_stochastic_0217"] = true
+	_enhancement_stats["paving_variety_0228"] = true
 	_enhancement_stats["concrete_shader_materials"] = int(_enhancement_stats.get("concrete_shader_materials", 0)) + 1
 	return material
 
@@ -1075,6 +1076,7 @@ func _create_premium_paving_material(
 	material.set_shader_parameter("normal_strength", normal_strength)
 	_materials[key] = material
 	_enhancement_stats["premium_stone_paving_shader_0218"] = true
+	_enhancement_stats["paving_running_bond_0228"] = true
 	_enhancement_stats["premium_stone_paving_materials"] = int(_enhancement_stats.get("premium_stone_paving_materials", 0)) + 1
 	return material
 
