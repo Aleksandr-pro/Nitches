@@ -2580,7 +2580,7 @@ def build_opera():
         box("opera_grand_step", 0.0, -27.18 + step_index * 0.54, 0.055 + step_index * 0.055,
             35.0, 0.62, 0.11 + step_index * 0.055, limestone)
     for ramp_side in (-1.0, 1.0):
-        rbox("opera_access_ramp", ramp_side * 20.35, -25.65, 0.20, 3.15, 4.65, 0.14, limestone,
+        rbox("opera_access_ramp", ramp_side * 20.35, -25.65, 0.237, 3.15, 4.65, 0.14, limestone,
              rotation=(0.072, 0.0, 0.0))
         box("opera_ramp_kerb", ramp_side * 21.98, -25.65, 0.46, 0.16, 4.65, 0.34, opera_granite)
         box("opera_ramp_light_strip", ramp_side * 18.78, -25.65, 0.43, 0.07, 4.25, 0.045, opera_light)
@@ -2648,6 +2648,20 @@ def build_opera():
         box("opera_fly_tower_louvre", louvre_x, 19.72, 14.35, 0.17, 0.10, 7.45, bronze)
     for louvre_z in (11.2, 12.8, 14.4, 16.0, 17.6):
         box("opera_fly_tower_louvre_rail", 0.0, 19.74, louvre_z, 15.3, 0.09, 0.12, frame)
+    # The front and flanks of the fly tower remain visible in the gaps
+    # between the shells; give them the same bronze louvre rhythm
+    # instead of leaving three blank stone planes behind the vaults.
+    box("opera_fly_tower_front_shadow", 0.0, 9.43, 14.35, 15.8, 0.10, 7.8, interior)
+    for louvre_index in range(15):
+        louvre_x = -7.0 + louvre_index * 1.0
+        box("opera_fly_tower_front_louvre", louvre_x, 9.35, 14.35, 0.17, 0.10, 7.45, bronze)
+    for louvre_z in (11.2, 12.8, 14.4, 16.0, 17.6):
+        box("opera_fly_tower_front_louvre_rail", 0.0, 9.33, louvre_z, 15.3, 0.09, 0.12, frame)
+    for tower_side in (-1.0, 1.0):
+        for seam_y in (11.0, 14.5, 18.0):
+            box("opera_fly_tower_side_seam", tower_side * 12.56, seam_y, 10.35, 0.075, 0.18, 18.8, limestone)
+        for seam_z in (4.0, 7.2, 10.4, 13.6, 16.8):
+            box("opera_fly_tower_side_horizontal_seam", tower_side * 12.55, 14.5, seam_z, 0.065, 9.6, 0.065, frame)
     for plant_x, plant_y, plant_w, plant_d in ((-8.2, 12.6, 4.2, 2.1), (-2.6, 16.6, 3.4, 1.8), (4.8, 12.4, 4.8, 2.2), (9.4, 16.2, 2.8, 1.7)):
         box("opera_fly_roof_plant", plant_x, plant_y, 20.78, plant_w, plant_d, 1.05, metal)
         box("opera_fly_roof_plant_lid", plant_x, plant_y, 21.36, plant_w - 0.24, plant_d - 0.24, 0.11, frame)
@@ -3059,6 +3073,7 @@ def build_opera():
         box("opera_front_planter_soil", planter_x, -18.55, 0.97, 2.38, 0.58, 0.045, mulch)
         box("opera_front_planter_hedge", planter_x, -18.55, 1.16, 2.18, 0.46, 0.34, hedge, bevel=0.045)
 
+    formal_tree_builder = MeshBuilder()
     for garden_side in (-1.0, 1.0):
         box("opera_side_lawn", garden_side * 24.55, 21.0, 0.43, 1.65, 12.5, 0.055, lawn)
         box("opera_side_garden_hedge", garden_side * 24.55, 17.2, 0.76, 1.05, 3.35, 0.58, hedge, bevel=0.055)
@@ -3066,10 +3081,34 @@ def build_opera():
         for tree_y in (-13.0, 20.9):
             cyl("opera_formal_tree_planter", garden_side * 24.55, tree_y, 0.62, 0.78, 0.52, opera_granite, vertices=18)
             cyl("opera_formal_tree_trunk", garden_side * 24.55, tree_y, 1.75, 0.09, 1.95, opera_wood, vertices=10)
-            sphere("opera_formal_tree_canopy", garden_side * 24.55, tree_y, 3.25, 2.35, 2.35, 2.05, hedge)
+            # Five overlapping irregular ellipsoids avoid the perfect
+            # green lollipop silhouette of a single UV sphere.
+            tree_x = garden_side * 24.55
+            canopy_clusters = (
+                (0.00, 0.00, 3.18, 1.16, 1.04, 0.92, 0.20),
+                (-0.62, -0.18, 2.88, 0.78, 0.72, 0.66, 0.85),
+                (0.58, 0.22, 2.94, 0.82, 0.76, 0.70, -0.55),
+                (-0.16, 0.58, 3.38, 0.76, 0.82, 0.68, 0.42),
+                (0.20, -0.52, 3.48, 0.72, 0.70, 0.74, -0.24),
+            )
+            for cluster_x, cluster_y, cluster_z, radius_x, radius_y, radius_z, cluster_yaw in canopy_clusters:
+                builder_ellipsoid(
+                    formal_tree_builder,
+                    Vector((tree_x + cluster_x, tree_y + cluster_y, cluster_z)),
+                    (radius_x, radius_y, radius_z),
+                    segments=10,
+                    yaw=cluster_yaw,
+                    pitch=cluster_yaw * 0.35,
+                    rings=2,
+                )
+            tube_between("opera_formal_tree_branch", (tree_x, tree_y, 2.35),
+                         (tree_x - 0.42, tree_y - 0.10, 3.05), 0.055, 0.035, opera_wood, vertices=8)
+            tube_between("opera_formal_tree_branch", (tree_x, tree_y, 2.35),
+                         (tree_x + 0.42, tree_y + 0.14, 3.10), 0.055, 0.035, opera_wood, vertices=8)
     for rear_planter_x in (-19.0, -14.5, 14.5, 19.0):
         box("opera_rear_planter", rear_planter_x, 26.35, 0.62, 2.45, 0.72, 0.52, opera_granite)
         box("opera_rear_planter_hedge", rear_planter_x, 26.35, 1.00, 2.12, 0.48, 0.34, hedge, bevel=0.045)
+    formal_tree_builder.build("opera_formal_tree_canopies", hedge, smooth=True)
 
 
 # --------------------------------------------------------------------------- #
