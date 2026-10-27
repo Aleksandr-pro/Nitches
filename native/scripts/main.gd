@@ -26,6 +26,9 @@ var _time_index := 0
 var _smoke_mode := false
 var _smoke_frames := 0
 var _smoke_completed := false
+var _screenshot_mode := false
+var _screenshot_dir := ""
+var _screenshot_free_camera := false
 var render_quality_state := {}
 var _render_scale := 1.0
 var _render_quality_accumulated_time := 0.0
@@ -232,8 +235,13 @@ func _process(delta: float) -> void:
 	_update_adaptive_render_quality(delta)
 	if _camera != null and not _camera.is_current():
 		_camera.make_current()
-	_update_camera(delta, _snap_camera)
-	_snap_camera = false
+	if _screenshot_mode and _screenshot_free_camera:
+		# The screenshot tour owns the camera for the current shot; the
+		# follow rig must not fight the authored viewpoint.
+		pass
+	else:
+		_update_camera(delta, _snap_camera)
+		_snap_camera = false
 	if _smoke_mode and not _smoke_completed:
 		_smoke_frames += 1
 		if _smoke_frames >= 90:
@@ -619,6 +627,17 @@ func _parse_screenshot_request() -> void:
 
 func _run_screenshot_tour() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	# CI renders on Mesa lavapipe (software Vulkan): MSAA is the one
+	# full-screen cost that changes almost nothing for a visual audit,
+	# so swap it for FXAA in this mode only.  Shipped quality settings
+	# on real devices are untouched.
+	var viewport := get_viewport()
+	viewport.msaa_3d = Viewport.MSAA_DISABLED
+	viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+	print("[native-screenshots] adapter=%s vendor=%s" % [
+		RenderingServer.get_video_adapter_name(),
+		RenderingServer.get_video_adapter_vendor(),
+	])
 	# Software rendering in CI produces very slow frames; let each one
 	# advance physics far enough for the car to settle on its wheels.
 	Engine.max_physics_steps_per_frame = 60
@@ -631,7 +650,7 @@ func _run_screenshot_tour() -> void:
 	var shots: Array[Dictionary] = [
 		{
 			"name": "01_spawn_gameplay", "time": "day", "hud": true,
-			"vehicle": "spawn", "gameplay_camera": true, "frames": 10,
+			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
 		},
 		{
 			"name": "02_mosque_east", "time": "day", "vehicle": "hide",
@@ -667,7 +686,7 @@ func _run_screenshot_tour() -> void:
 
 	# Warm-up: import/runtime LOD, reflection probes and visibility
 	# ranges all settle over the first rendered frames.
-	for i in range(8):
+	for i in range(4):
 		await RenderingServer.frame_post_draw
 
 	var saved := 0
@@ -679,6 +698,7 @@ func _run_screenshot_tour() -> void:
 
 
 func _capture_screenshot(shot: Dictionary) -> bool:
+	var shot_started_ms := Time.get_ticks_msec()
 	var shot_name := String(shot.get("name", "shot"))
 	_time_index = maxi(TIME_MODES.find(String(shot.get("time", "day"))), 0)
 	_apply_time_mode()
@@ -722,7 +742,7 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 			_camera.look_at(target, Vector3.UP)
 		print("[native-screenshots] %s camera=%s target=%s" % [shot_name, str(cam_pos), str(target)])
 
-	var frames := int(shot.get("frames", 6))
+	var frames := int(shot.get("frames", 3))
 	for i in range(frames):
 		await RenderingServer.frame_post_draw
 
@@ -735,5 +755,8 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 	if err != OK:
 		push_error("[native-screenshots] FAIL: save_png(%s) error %d" % [path, err])
 		return false
-	print("[native-screenshots] SAVED %s (%dx%d)" % [path, image.get_width(), image.get_height()])
+	print("[native-screenshots] SAVED %s (%dx%d) in %.1fs" % [
+		path, image.get_width(), image.get_height(),
+		float(Time.get_ticks_msec() - shot_started_ms) / 1000.0,
+	])
 	return true
