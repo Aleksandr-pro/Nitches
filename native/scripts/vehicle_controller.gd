@@ -24,14 +24,31 @@ const ANTI_ROLL_REAR := 6400.0
 const WHEELBASE := 2.86
 const TRACK_WIDTH := 1.64
 const ENGINE_IDLE_RPM := 850.0
-const ENGINE_REDLINE_RPM := 7200.0
-const GEAR_RATIOS: Array[float] = [3.66, 2.43, 1.69, 1.32, 1.00, 0.65]
-const REVERSE_RATIO := 3.35
-const FINAL_DRIVE := 3.73
+const ENGINE_REDLINE_RPM := 6400.0
+# Owner-supplied spec sheet for the player car (Shelby GT500, 428 cid
+# V8): 365 hp SAE gross, 569 Nm at 3200 rpm, 0-100 km/h in 6.0 s,
+# ~207 km/h top speed.  The drivetrain is the period 4-speed manual
+# (2.32/1.69/1.29/1.00) with a 3.91 final drive, so top speed is
+# gearing-limited at the 6400 rpm redline: 6400/3.91 wheel rpm on a
+# 0.3378 m tyre is 57.9 m/s = 208 km/h, matching the sheet.
+const GEAR_RATIOS: Array[float] = [2.32, 1.69, 1.29, 1.00]
+const REVERSE_RATIO := 2.78
+const FINAL_DRIVE := 3.91
 const DRIVETRAIN_EFFICIENCY := 0.86
 const AIR_DENSITY := 1.225
 const DRAG_AREA := 0.72
 const DOWNFORCE_AREA := 0.52
+const SPEC_NAME := "Shelby GT500"
+const SPEC_YEAR := 1967
+const SPEC_ENGINE := "V8, 7.0 л (428 cid)"
+const SPEC_POWER_HP := 365
+const SPEC_POWER_NOTE := "SAE gross"
+const SPEC_TORQUE_NM := 569
+const SPEC_TORQUE_RPM := 3200
+const SPEC_ACCEL_0_100_S := 6.0
+const SPEC_TOP_SPEED_KMH := 207
+const SPEC_GEARBOX := "4-ступенчатая механика"
+const SPEC_DRIVE := "задний"
 
 var steering_angle := 0.0
 var throttle_input := 0.0
@@ -688,22 +705,25 @@ func _physics_process(delta: float) -> void:
 
 
 func _engine_torque_curve(rpm: float) -> float:
+	# 428 big-block shape: peak 569 Nm at 3200 rpm, still 88% at the
+	# 5400 rpm power peak (569*0.88 at 5400 rpm = 380 hp gross, close
+	# to the 365 hp SAE gross rating once accessory losses land).
 	var points: Array[Vector2] = [
-		Vector2(850.0, 0.58),
-		Vector2(1800.0, 0.78),
-		Vector2(3200.0, 0.96),
-		Vector2(4700.0, 1.0),
-		Vector2(5900.0, 0.91),
-		Vector2(6800.0, 0.78),
-		Vector2(7200.0, 0.62),
+		Vector2(850.0, 0.62),
+		Vector2(1800.0, 0.80),
+		Vector2(3200.0, 1.00),
+		Vector2(4400.0, 0.97),
+		Vector2(5400.0, 0.88),
+		Vector2(6000.0, 0.78),
+		Vector2(6400.0, 0.66),
 	]
 	if rpm <= points[0].x:
-		return 525.0 * points[0].y
+		return 569.0 * points[0].y
 	for i in range(1, points.size()):
 		if rpm <= points[i].x:
 			var t := (rpm - points[i - 1].x) / maxf(points[i].x - points[i - 1].x, 1.0)
-			return 525.0 * lerpf(points[i - 1].y, points[i].y, t)
-	return 525.0 * points[points.size() - 1].y
+			return 569.0 * lerpf(points[i - 1].y, points[i].y, t)
+	return 569.0 * points[points.size() - 1].y
 
 
 func _pacejka(slip: float, stiffness: float, shape: float, curvature: float) -> float:
@@ -738,7 +758,7 @@ func _update_drivetrain(delta: float) -> void:
 	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 4600.0 * delta), ENGINE_IDLE_RPM, ENGINE_REDLINE_RPM)
 
 	if not _reverse_engaged and _gear_shift_timer <= 0.0:
-		if throttle_input > 0.04 and _engine_rpm > 6250.0 and _current_gear < GEAR_RATIOS.size() - 1:
+		if throttle_input > 0.04 and _engine_rpm > 5950.0 and _current_gear < GEAR_RATIOS.size() - 1:
 			var old_ratio := GEAR_RATIOS[_current_gear]
 			_current_gear += 1
 			ratio = GEAR_RATIOS[_current_gear]
@@ -1198,6 +1218,26 @@ func get_speed_kmh() -> float:
 
 func get_absolute_speed_kmh() -> float:
 	return absf(_forward_speed) * 3.6
+
+
+## Owner-supplied Shelby GT500 figures shown in the garage.  The
+## drivetrain constants above are tuned so the simulated car lands on
+## the same numbers (569 Nm peak, gearing-limited ~207 km/h).
+func get_spec_sheet() -> Dictionary:
+	return {
+		"name": SPEC_NAME,
+		"year": SPEC_YEAR,
+		"engine": SPEC_ENGINE,
+		"power_hp": SPEC_POWER_HP,
+		"power_note": SPEC_POWER_NOTE,
+		"torque_nm": SPEC_TORQUE_NM,
+		"torque_rpm": SPEC_TORQUE_RPM,
+		"accel_0_100_s": SPEC_ACCEL_0_100_S,
+		"top_speed_kmh": SPEC_TOP_SPEED_KMH,
+		"gearbox": SPEC_GEARBOX,
+		"drive": SPEC_DRIVE,
+		"gears": GEAR_RATIOS.size(),
+	}
 
 
 func get_nitro_ratio() -> float:

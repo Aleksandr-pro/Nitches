@@ -8,6 +8,7 @@ extends CanvasLayer
 signal camera_requested
 signal time_requested
 signal reset_requested
+signal menu_requested
 
 const MinimapScript := preload("res://scripts/minimap.gd")
 
@@ -207,6 +208,8 @@ func _build_ui() -> void:
 	time_button.pressed.connect(func() -> void: time_requested.emit())
 	var reset_button := _make_action_button(action_row, "RESET", Vector2(72.0, 44.0))
 	reset_button.pressed.connect(func() -> void: reset_requested.emit())
+	var menu_button := _make_action_button(action_row, "MENU", Vector2(72.0, 44.0))
+	menu_button.pressed.connect(func() -> void: menu_requested.emit())
 
 	# Steering, bottom-left.
 	var steering_row := HBoxContainer.new()

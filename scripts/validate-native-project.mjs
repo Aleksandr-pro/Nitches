@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -37,6 +37,7 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readFile('scripts/sync-native-assets.mjs', 'utf8'),
   readFile('blender/build_props.py', 'utf8'),
   readFile('.github/workflows/native-godot-desktop.yml', 'utf8'),
+  readText('scripts/main_menu.gd'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -49,8 +50,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=31'), 'Native 0.2.28 must bump Android versionCode to 31');
-assert(preset.includes('version/name="0.2.28-native-alpha"'), 'Native version name must be 0.2.28-native-alpha');
+assert(preset.includes('version/code=32'), 'Native 0.2.29 must bump Android versionCode to 32');
+assert(preset.includes('version/name="0.2.29-native-alpha"'), 'Native version name must be 0.2.29-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -71,7 +72,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}`;
 for (const marker of ['DesktopControlsHint', 'is_touchscreen_available', 'KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -134,6 +135,14 @@ assert(syncScript.includes('grand_hotel.glb') && worldScript.includes('res://ass
 for (const marker of ['premium_hotel_models', 'premium_hotel_fixed_scale', 'premium_hotel_detail_pass', 'premium_hotel_material_pass', 'premium_hotel_site_pass', 'premium_hotel_fronts_corniche', 'BlenderGrandHotels', 'hotel_glass_physical', 'hotel_travertine', 'hotel_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.26 grand hotel marker is missing: ${marker}`);
 }
+assert(blenderScript.includes('def build_museum():') && blenderScript.includes('(build_museum, "museum.glb")'), 'Blender Building Model No.9 museum builder/export is missing');
+assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/buildings/museum.glb'), 'Native 0.2.29 must stage and load the Museum GLB');
+for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
+}
+for (const marker of ['class_name NativeMainMenu', 'play_requested', 'nitches_profile.cfg', 'get_spec_sheet', 'SPEC_TORQUE_NM', 'menu_requested', '_update_menu_camera']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.29 main-menu/spec marker is missing: ${marker}`);
+}
 for (const marker of ['paving_variety_0228', 'paving_running_bond_0228', 'bond_cell', 'joint_grime', 'batch_drift']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.28 paving-variety marker is missing: ${marker}`);
 }
@@ -144,7 +153,7 @@ assert(!worldScript.includes('Basis(Vector3.UP, yaw).scaled('), 'Native 0.2.27 m
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -466,6 +475,12 @@ const hotelBytes = await readFile('src/assets/models/props/grand_hotel.glb');
 assert(hotelBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Grand Hotel source is an LFS pointer or corrupt GLB');
 const grandHotelParcels = data.buildings.filter((b) => b.kind === 'rt-hotel' && b.h > 38 && b.w >= 33 && b.w <= 36 && b.d >= 25 && b.d <= 28);
 assert(grandHotelParcels.length === 3 && grandHotelParcels.every((b) => b.x === 892), 'Building Model No.8 must land on exactly the three tall 34x26 Corniche parcels at X892');
+const museumInfo = await stat('src/assets/models/props/museum.glb');
+assert(museumInfo.size > 1_000_000, 'Native 0.2.29 Museum GLB is unexpectedly small');
+const museumBytes = await readFile('src/assets/models/props/museum.glb');
+assert(museumBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Museum source is an LFS pointer or corrupt GLB');
+const museumLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-museum');
+assert(museumLandmark && museumLandmark.x === 665 && museumLandmark.z === -340, 'RichTown Museum landmark must stay at X665 Z-340');
 
 if (requireAssets) {
   const required = [
@@ -478,6 +493,7 @@ if (requireAssets) {
     'assets/buildings/opera_house.glb',
     'assets/buildings/mosque.glb',
     'assets/buildings/grand_hotel.glb',
+    'assets/buildings/museum.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
     'assets/props/park_bench.glb',
