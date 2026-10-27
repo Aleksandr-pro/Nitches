@@ -4454,6 +4454,15 @@ def build_hotel():
         box("hotel_balcony_rail_top", cx, face_y + sign * 1.54, floor_base + 1.09, 2.96, 0.09, 0.07, bronze)
         box("hotel_balcony_divider", cx + 1.56, slab_y, floor_base + 0.72, 0.09, 1.52, 1.18, bronze)
 
+    def side_balcony(face_x, cy, sign, floor_base):
+        slab_x = face_x + sign * 0.80
+        box("hotel_side_balcony_slab", slab_x, cy, floor_base + 0.10, 1.62, 2.95, 0.16, stone)
+        box("hotel_side_balcony_rail_glass", face_x + sign * 1.54, cy, floor_base + 0.66, 0.05, 2.85, 0.78, glass)
+        box("hotel_side_balcony_rail_top", face_x + sign * 1.54, cy, floor_base + 1.09, 0.09, 2.96, 0.07, bronze)
+        for ret in (-1.44, 1.44):
+            box("hotel_side_balcony_return", slab_x, cy + ret, floor_base + 0.66, 1.52, 0.05, 0.78, glass)
+            box("hotel_side_balcony_return_top", slab_x, cy + ret, floor_base + 1.09, 1.56, 0.07, 0.07, bronze)
+
     # ---- parcel plinth and two-storey podium -------------------------
     box("hotel_plinth", 0.0, 0.0, 0.15, 33.60, 26.00, 0.30, granite, bevel=0.015)
     box("hotel_podium", 0.0, 0.0, 3.80, 32.40, 22.40, 7.00, stone, bevel=0.02)
@@ -4515,10 +4524,19 @@ def build_hotel():
         cyl("hotel_lantern_post", lx, -12.30, 1.55, 0.05, 2.50, bronze, vertices=8)
         sphere("hotel_lantern_globe", lx, -12.30, 2.95, 0.34, 0.34, 0.40, light)
     for fx, flag_mat in ((-10.50, accent), (10.50, curtain)):
-        cyl("hotel_flag_pole", fx, -12.20, 5.10, 0.045, 9.60, frame, vertices=8)
-        sphere("hotel_flag_finial", fx, -12.20, 10.02, 0.14, 0.14, 0.14, bronze)
-        flag_dir = 1.0 if fx < 0 else -1.0
-        box("hotel_flag", fx + flag_dir * 0.90, -12.20, 9.15, 1.70, 0.04, 1.05, flag_mat)
+        # Tapered pole on a granite base; both flags fly the same way
+        # (one wind) as a ripple of four overlapping yawed cloth
+        # segments, so they read as flags instead of flat panels.
+        cone("hotel_flag_pole", fx, -12.20, 5.10, 0.09, 0.04, 9.60, frame, vertices=10)
+        cyl("hotel_flag_pole_base", fx, -12.20, 0.55, 0.30, 0.50, granite, vertices=12)
+        sphere("hotel_flag_finial", fx, -12.20, 10.02, 0.17, 0.17, 0.17, bronze)
+        box("hotel_flag_hoist", fx + 0.07, -12.20, 9.28, 0.05, 0.06, 1.30, bronze)
+        for seg in range(4):
+            seg_x = fx + 0.38 + seg * 0.56
+            seg_y = -12.20 + math.sin(seg * 1.15) * 0.11
+            seg_z = 9.30 - seg * 0.055
+            seg_yaw = 0.30 if seg % 2 == 0 else -0.30
+            rbox("hotel_flag", seg_x, seg_y, seg_z, 0.64, 0.035, 1.24, flag_mat, rotation=(0.0, 0.0, seg_yaw))
     for px in (-14.60, 14.60):
         box("hotel_planter", px, -11.90, 0.55, 2.60, 0.90, 0.50, granite)
         box("hotel_planter_hedge", px, -11.90, 0.88, 2.42, 0.74, 0.30, hedge, bevel=0.04)
@@ -4580,8 +4598,7 @@ def build_hotel():
             sign = -1.0 if face == "left" else 1.0
             for wy in (-4.40, 1.00, 6.40):
                 tower_window(side_x, wy, win_z, 2.20, 2.15, face)
-                box("hotel_french_rail", side_x + sign * 0.18, wy, floor_base + 0.66, 0.05, 2.30, 0.78, glass)
-                box("hotel_french_rail_top", side_x + sign * 0.18, wy, floor_base + 1.09, 0.09, 2.36, 0.07, bronze)
+                side_balcony(side_x, wy, sign, floor_base)
 
     # ---- crown: cornice, penthouse tier, roof furniture ---------------
     box("hotel_cornice", 0.0, 1.00, 44.15, 27.60, 19.20, 0.50, stone)
