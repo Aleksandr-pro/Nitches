@@ -164,6 +164,21 @@ def standard_mats():
     mat("MosqueTile", (0.04, 0.48, 0.52), roughness=0.24, metallic=0.05)
     mat("MosqueGranite", (0.05, 0.055, 0.06), roughness=0.42, metallic=0.08)
     mat("MosqueLight", (1.0, 0.72, 0.38), roughness=0.32, emission=(1.0, 0.55, 0.20))
+    # Building Model No.8 is an original beachfront grand hotel for the
+    # Corniche hotel parcels: travertine stone, warm plaster, bronze
+    # balcony/spandrel metalwork, inhabited warm interiors behind real
+    # glass, black granite and a turquoise podium-roof pool.
+    mat("HotelStone", (0.74, 0.66, 0.54), roughness=0.88)
+    mat("HotelPlaster", (0.88, 0.84, 0.76), roughness=0.90)
+    mat("HotelBronze", (0.46, 0.30, 0.15), roughness=0.34, metallic=0.82)
+    mat("HotelGlass", (0.10, 0.26, 0.32), roughness=0.07, metallic=0.15)
+    mat("HotelInterior", (0.10, 0.075, 0.05), roughness=0.95)
+    mat("HotelGranite", (0.06, 0.065, 0.07), roughness=0.42, metallic=0.08)
+    mat("HotelWood", (0.40, 0.24, 0.12), roughness=0.78)
+    mat("HotelWater", (0.05, 0.42, 0.48), roughness=0.08, metallic=0.05)
+    mat("HotelCurtain", (0.78, 0.71, 0.60), roughness=1.0)
+    mat("HotelAccent", (0.03, 0.38, 0.40), roughness=0.60)
+    mat("HotelLight", (1.0, 0.74, 0.42), roughness=0.32, emission=(1.0, 0.58, 0.24))
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -4380,6 +4395,212 @@ def build_mosque():
 
 
 # --------------------------------------------------------------------------- #
+def build_hotel():
+    """Building Model No.8: an original beachfront grand hotel authored
+    for the 34 x 26 m Corniche hotel parcels (X892 row).  Two-storey
+    stone podium with a porte-cochere entrance, an 11-floor guest tower
+    with balconied bays and a full-height bronze/glass centre bay, a
+    pool terrace on the podium roof and a set-back penthouse crown.
+    Authored envelope 33.6 x 26.0 m, about 49 m to the beacon."""
+    stone = MATS["HotelStone"]
+    plaster = MATS["HotelPlaster"]
+    bronze = MATS["HotelBronze"]
+    glass = MATS["HotelGlass"]
+    interior = MATS["HotelInterior"]
+    granite = MATS["HotelGranite"]
+    wood = MATS["HotelWood"]
+    water = MATS["HotelWater"]
+    light = MATS["HotelLight"]
+    curtain = MATS["HotelCurtain"]
+    accent = MATS["HotelAccent"]
+    frame = MATS["WindowFrame"]
+    dark = MATS["RoofDark"]
+    hedge = MATS["VillaHedge"]
+
+    def tower_window(cx, cy, cz, width, height, face):
+        sign = -1.0 if face in ("front", "left") else 1.0
+        variant = int(abs(cx * 3.1 + cy * 4.7 + cz * 6.3)) % 5
+        if face in ("front", "back"):
+            box("hotel_win_frame", cx, cy + sign * 0.030, cz, width + 0.16, 0.14, height + 0.16, frame)
+            box("hotel_win_interior", cx, cy + sign * 0.012, cz, width - 0.02, 0.03, height - 0.02, interior)
+            if variant == 0:
+                box("hotel_win_lit", cx, cy + sign * 0.052, cz, width - 0.14, 0.025, height - 0.14, light)
+            elif variant == 1:
+                for sd in (-1.0, 1.0):
+                    box("hotel_win_curtain", cx + sd * (width / 2.0 - 0.16), cy + sign * 0.052, cz, 0.22, 0.03, height - 0.14, curtain)
+            elif variant == 2:
+                box("hotel_win_blind", cx, cy + sign * 0.052, cz + height * 0.31, width - 0.10, 0.03, height * 0.34, curtain)
+            box("hotel_win_glass", cx, cy + sign * 0.088, cz, width, 0.04, height, glass)
+            box("hotel_win_mullion", cx, cy + sign * 0.102, cz, 0.05, 0.05, height, frame)
+            box("hotel_win_sill", cx, cy + sign * 0.10, cz - height / 2.0 - 0.065, width + 0.30, 0.26, 0.09, stone)
+        else:
+            box("hotel_win_frame", cx + sign * 0.030, cy, cz, 0.14, width + 0.16, height + 0.16, frame)
+            box("hotel_win_interior", cx + sign * 0.012, cy, cz, 0.03, width - 0.02, height - 0.02, interior)
+            if variant == 0:
+                box("hotel_win_lit", cx + sign * 0.052, cy, cz, 0.025, width - 0.14, height - 0.14, light)
+            elif variant == 1:
+                for sd in (-1.0, 1.0):
+                    box("hotel_win_curtain", cx + sign * 0.052, cy + sd * (width / 2.0 - 0.16), cz, 0.03, 0.22, height - 0.14, curtain)
+            elif variant == 2:
+                box("hotel_win_blind", cx + sign * 0.052, cy, cz + height * 0.31, 0.03, width - 0.10, height * 0.34, curtain)
+            box("hotel_win_glass", cx + sign * 0.088, cy, cz, 0.04, width, height, glass)
+            box("hotel_win_mullion", cx + sign * 0.102, cy, cz, 0.05, 0.05, height, frame)
+            box("hotel_win_sill", cx + sign * 0.10, cy, cz - height / 2.0 - 0.065, 0.26, width + 0.30, 0.09, stone)
+
+    def balcony(cx, face_y, sign, floor_base):
+        slab_y = face_y + sign * 0.80
+        box("hotel_balcony_slab", cx, slab_y, floor_base + 0.10, 2.95, 1.62, 0.16, stone)
+        box("hotel_balcony_rail_glass", cx, face_y + sign * 1.54, floor_base + 0.66, 2.85, 0.05, 0.78, glass)
+        box("hotel_balcony_rail_top", cx, face_y + sign * 1.54, floor_base + 1.09, 2.96, 0.09, 0.07, bronze)
+        box("hotel_balcony_divider", cx + 1.56, slab_y, floor_base + 0.98, 0.09, 1.52, 1.80, bronze)
+
+    # ---- parcel plinth and two-storey podium -------------------------
+    box("hotel_plinth", 0.0, 0.0, 0.15, 33.60, 26.00, 0.30, granite, bevel=0.015)
+    box("hotel_podium", 0.0, 0.0, 3.80, 32.40, 22.40, 7.00, stone, bevel=0.02)
+    box("hotel_podium_cornice", 0.0, 0.0, 7.45, 33.00, 23.00, 0.30, plaster)
+    box("hotel_podium_roof", 0.0, 0.0, 7.63, 32.20, 22.20, 0.08, dark)
+    for side_y in (-11.24, 11.24):
+        box("hotel_podium_base", 0.0, side_y, 0.80, 32.55, 0.14, 1.00, granite)
+        box("hotel_podium_bronze_band", 0.0, side_y, 4.62, 32.55, 0.12, 0.34, bronze)
+    for side_x in (-16.24, 16.24):
+        box("hotel_podium_base_side", side_x, 0.0, 0.80, 0.14, 22.55, 1.00, granite)
+        box("hotel_podium_bronze_band_side", side_x, 0.0, 4.62, 0.12, 22.55, 0.34, bronze)
+
+    # Podium colonnade: piers, lobby glazing and a restaurant row above.
+    pier_xs = [-14.4 + 3.6 * i for i in range(9)]
+    bay_xs = [-12.6 + 3.6 * i for i in range(8)]
+    for face_y, face in ((-11.20, "front"), (11.20, "back")):
+        sign = -1.0 if face == "front" else 1.0
+        for px in pier_xs:
+            box("hotel_podium_pier", px, face_y + sign * 0.10, 2.60, 0.95, 0.34, 4.40, plaster)
+            box("hotel_podium_pier_cap", px, face_y + sign * 0.12, 4.92, 1.15, 0.38, 0.22, bronze)
+        for bx in bay_xs:
+            if face == "front" and abs(bx) < 3.7:
+                continue  # entrance bays are built separately below
+            box("hotel_lobby_frame", bx, face_y + sign * 0.045, 2.55, 3.00, 0.15, 4.00, frame)
+            box("hotel_lobby_interior", bx, face_y + sign * 0.015, 2.55, 2.86, 0.03, 3.86, interior)
+            box("hotel_lobby_lit", bx, face_y + sign * 0.045, 2.45, 2.70, 0.02, 3.60, light)
+            box("hotel_lobby_glass", bx, face_y + sign * 0.105, 2.55, 2.86, 0.04, 3.86, glass)
+            box("hotel_lobby_mullion", bx, face_y + sign * 0.12, 2.55, 0.06, 0.05, 3.86, bronze)
+            box("hotel_upper_frame", bx, face_y + sign * 0.04, 6.15, 2.50, 0.13, 1.55, frame)
+            box("hotel_upper_interior", bx, face_y + sign * 0.012, 6.15, 2.36, 0.03, 1.41, interior)
+            box("hotel_upper_glass", bx, face_y + sign * 0.09, 6.15, 2.36, 0.04, 1.41, glass)
+    for side_x, face in ((-16.20, "left"), (16.20, "right")):
+        sign = -1.0 if face == "left" else 1.0
+        for wy in (-8.0, -4.0, 0.0, 4.0, 8.0):
+            tower_window(side_x, wy, 2.60, 2.30, 3.60, face)
+            tower_window(side_x, wy, 6.15, 2.10, 1.50, face)
+
+    # ---- porte-cochere entrance (front, -Y) --------------------------
+    box("hotel_entrance_interior", 0.0, -11.26, 2.55, 9.60, 0.08, 4.30, interior)
+    box("hotel_entrance_lit", 0.0, -11.31, 2.45, 9.30, 0.02, 4.00, light)
+    box("hotel_entrance_glass", 0.0, -11.34, 2.55, 9.40, 0.04, 4.20, glass)
+    for mx in (-4.7, -2.35, 2.35, 4.7):
+        box("hotel_entrance_mullion", mx, -11.37, 2.55, 0.09, 0.06, 4.20, bronze)
+    cyl("hotel_revolving_drum", 0.0, -11.55, 1.95, 1.45, 3.30, glass, vertices=24)
+    cyl("hotel_revolving_top", 0.0, -11.55, 3.68, 1.56, 0.18, bronze, vertices=24)
+    cyl("hotel_revolving_post", 0.0, -11.55, 1.95, 0.09, 3.30, bronze, vertices=10)
+    for dx in (-3.45, 3.45):
+        box("hotel_side_door_frame", dx, -11.36, 1.95, 1.70, 0.10, 3.30, bronze)
+        box("hotel_side_door_glass", dx, -11.40, 1.95, 1.50, 0.04, 3.10, glass)
+    box("hotel_carpet", 0.0, -12.25, 0.325, 3.60, 1.50, 0.05, curtain)
+    box("hotel_canopy", 0.0, -11.35, 4.85, 13.00, 2.90, 0.22, stone)
+    box("hotel_canopy_fascia", 0.0, -12.85, 4.72, 13.00, 0.14, 0.50, bronze)
+    for sx in (-3.2, -1.6, 0.0, 1.6, 3.2):
+        rbox("hotel_star", sx, -12.94, 4.72, 0.34, 0.05, 0.34, light, rotation=(0.0, 0.785398, 0.0))
+    for cx in (-5.90, 5.90):
+        cyl("hotel_canopy_column", cx, -12.45, 2.55, 0.16, 4.50, bronze, vertices=12)
+        cyl("hotel_canopy_column_base", cx, -12.45, 0.42, 0.26, 0.24, granite, vertices=12)
+    for lx in (-7.60, 7.60):
+        cyl("hotel_lantern_post", lx, -12.30, 1.55, 0.05, 2.50, bronze, vertices=8)
+        sphere("hotel_lantern_globe", lx, -12.30, 2.95, 0.34, 0.34, 0.40, light)
+    for fx, flag_mat in ((-10.50, accent), (10.50, curtain)):
+        cyl("hotel_flag_pole", fx, -12.20, 3.80, 0.045, 7.00, frame, vertices=8)
+        sphere("hotel_flag_finial", fx, -12.20, 7.42, 0.14, 0.14, 0.14, bronze)
+        flag_dir = 1.0 if fx < 0 else -1.0
+        box("hotel_flag", fx + flag_dir * 0.80, -12.20, 6.72, 1.50, 0.04, 0.95, flag_mat)
+    for px in (-14.60, 14.60):
+        box("hotel_planter", px, -11.90, 0.55, 2.60, 0.90, 0.50, granite)
+        box("hotel_planter_hedge", px, -11.90, 0.88, 2.42, 0.74, 0.30, hedge, bevel=0.04)
+
+    # ---- podium-roof pool terrace ------------------------------------
+    box("hotel_terrace_deck", 0.0, -9.50, 7.70, 26.00, 3.40, 0.10, wood)
+    box("hotel_pool_basin", -4.50, -9.50, 8.02, 13.00, 2.70, 0.66, granite)
+    box("hotel_pool_water", -4.50, -9.50, 8.30, 12.55, 2.25, 0.08, water)
+    for rim_y in (-10.92, -8.08):
+        box("hotel_pool_coping", -4.50, rim_y, 8.37, 13.30, 0.28, 0.07, stone)
+    for rim_x in (-11.12, 2.12):
+        box("hotel_pool_coping_end", rim_x, -9.50, 8.37, 0.28, 2.60, 0.07, stone)
+    for post_x in (6.40, 11.60):
+        for post_y in (-10.70, -8.30):
+            cyl("hotel_pergola_post", post_x, post_y, 8.80, 0.09, 2.20, wood, vertices=8)
+    for beam_x in (6.40, 7.70, 9.00, 10.30, 11.60):
+        box("hotel_pergola_beam", beam_x, -9.50, 9.95, 0.16, 3.00, 0.14, wood)
+    box("hotel_terrace_rail_glass", 0.0, -11.38, 8.15, 32.60, 0.05, 0.85, glass)
+    box("hotel_terrace_rail_top", 0.0, -11.38, 8.62, 32.70, 0.09, 0.07, bronze)
+    for rx in range(-16, 17, 4):
+        box("hotel_terrace_rail_post", float(rx), -11.38, 8.12, 0.06, 0.06, 0.95, frame)
+    for px in (-13.50, 13.50):
+        box("hotel_terrace_planter", px, 9.60, 7.95, 3.40, 1.00, 0.55, granite)
+        box("hotel_terrace_hedge", px, 9.60, 8.30, 3.20, 0.82, 0.34, hedge, bevel=0.04)
+
+    # ---- guest tower ---------------------------------------------------
+    box("hotel_tower", 0.0, 1.00, 22.10, 26.00, 17.60, 43.60, plaster, bevel=0.03)
+    box("hotel_tower_plinth", 0.0, 1.00, 7.95, 26.80, 18.40, 0.70, stone)
+    for pier_x in (-12.35, 12.35):
+        box("hotel_tower_end_pier", pier_x, 1.00, 22.10, 2.50, 18.40, 43.60, stone, bevel=0.02)
+        box("hotel_tower_pier_bronze", pier_x, -8.28, 26.02, 0.50, 0.14, 35.75, bronze)
+        box("hotel_tower_pier_bronze_back", pier_x, 10.28, 26.02, 0.50, 0.14, 35.75, bronze)
+    for fin_x in (-1.70, 1.70):
+        box("hotel_centre_fin_front", fin_x, -7.98, 26.02, 0.35, 0.55, 35.75, bronze)
+        box("hotel_centre_fin_back", fin_x, 9.98, 26.02, 0.35, 0.55, 35.75, bronze)
+
+    tower_bays = [-9.75 + 3.25 * i for i in range(7)]
+    for floor in range(11):
+        floor_base = 8.15 + 3.25 * floor
+        win_z = floor_base + 1.68
+        for face_y, face in ((-7.80, "front"), (9.80, "back")):
+            sign = -1.0 if face == "front" else 1.0
+            box("hotel_spandrel", 0.0, face_y + sign * 0.045, floor_base + 0.30, 22.20, 0.13, 0.52, bronze)
+            for bx in tower_bays:
+                if abs(bx) < 0.10:
+                    # Full-height glazed centre bay (lift/atrium slot).
+                    box("hotel_centre_frame", 0.0, face_y + sign * 0.04, win_z, 3.10, 0.14, 3.00, frame)
+                    box("hotel_centre_interior", 0.0, face_y + sign * 0.012, win_z, 2.92, 0.03, 2.86, interior)
+                    box("hotel_centre_glass", 0.0, face_y + sign * 0.095, win_z, 2.92, 0.04, 2.86, glass)
+                    box("hotel_centre_transom", 0.0, face_y + sign * 0.11, win_z + 0.55, 2.92, 0.05, 0.07, bronze)
+                    continue
+                tower_window(bx, face_y, win_z, 2.30, 2.15, face)
+                balcony(bx, face_y, sign, floor_base)
+            box("hotel_balcony_end_divider", -11.31, face_y + sign * 0.80, floor_base + 0.98, 0.09, 1.52, 1.80, bronze)
+        for side_x, face in ((-13.60, "left"), (13.60, "right")):
+            sign = -1.0 if face == "left" else 1.0
+            for wy in (-4.40, 1.00, 6.40):
+                tower_window(side_x, wy, win_z, 2.20, 2.15, face)
+                box("hotel_french_rail", side_x + sign * 0.18, wy, floor_base + 0.66, 0.05, 2.30, 0.78, glass)
+                box("hotel_french_rail_top", side_x + sign * 0.18, wy, floor_base + 1.09, 0.09, 2.36, 0.07, bronze)
+
+    # ---- crown: cornice, penthouse tier, roof furniture ---------------
+    box("hotel_cornice", 0.0, 1.00, 44.15, 27.60, 19.20, 0.50, stone)
+    box("hotel_cornice_bronze", 0.0, 1.00, 43.86, 27.70, 19.30, 0.10, bronze)
+    box("hotel_roof_slab", 0.0, 1.00, 44.44, 26.40, 18.00, 0.08, dark)
+    box("hotel_penthouse", 0.0, 1.20, 46.00, 20.00, 13.60, 3.20, plaster, bevel=0.02)
+    box("hotel_penthouse_cornice", 0.0, 1.20, 47.72, 20.80, 14.40, 0.25, stone)
+    box("hotel_penthouse_roof", 0.0, 1.20, 47.88, 19.60, 13.20, 0.08, dark)
+    for face_y, face in ((-5.60, "front"), (8.00, "back")):
+        for bx in (-7.80, -3.90, 0.0, 3.90, 7.80):
+            tower_window(bx, face_y, 46.05, 2.60, 2.20, face)
+    for px in (-10.60, 10.60):
+        box("hotel_roof_plant", px, 5.00, 45.30, 3.40, 4.20, 1.70, dark, bevel=0.02)
+        cyl("hotel_roof_vent", px, 5.00, 46.35, 0.55, 0.50, frame, vertices=12)
+    box("hotel_roof_rail_front_glass", 0.0, -7.55, 44.85, 26.00, 0.05, 0.70, glass)
+    box("hotel_roof_rail_back_glass", 0.0, 9.55, 44.85, 26.00, 0.05, 0.70, glass)
+    box("hotel_roof_rail_front_top", 0.0, -7.55, 45.24, 26.10, 0.09, 0.07, bronze)
+    box("hotel_roof_rail_back_top", 0.0, 9.55, 45.24, 26.10, 0.09, 0.07, bronze)
+    cyl("hotel_beacon_mast", 0.0, 1.20, 48.35, 0.06, 0.90, bronze, vertices=8)
+    sphere("hotel_beacon", 0.0, 1.20, 48.92, 0.30, 0.30, 0.30, light)
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out_dir = argv[0] if argv else os.path.join(os.getcwd(), "props_out")
@@ -4399,6 +4620,7 @@ def main():
         (build_main_tower, "main_tower.glb"),
         (build_opera, "opera_house.glb"),
         (build_mosque, "mosque.glb"),
+        (build_hotel, "grand_hotel.glb"),
         (build_palm_date, "palm_date.glb"),
         (build_palm_royal, "palm_royal.glb"),
         (build_grass_tuft, "grass_tuft.glb"),
