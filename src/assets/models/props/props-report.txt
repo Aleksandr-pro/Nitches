@@ -9,7 +9,7 @@ props_out/ornamental_shrub.glb: meshes=3 tris=5260 size=0.91x1.06x1.01m minY=0.0
 props_out/palm_date.glb: meshes=6 tris=17107 size=8.29x8.72x8.54m minY=-0.01 mats=PalmTrunk,PalmCrown,PalmLeaf,PalmLeafDry,PalmRachis,PalmFruit
 props_out/palm_royal.glb: meshes=4 tris=12821 size=8.07x10.18x8.00m minY=-0.00 mats=PalmTrunk,PalmCrownshaft,PalmLeaf,PalmRachis
 props_out/park_bench.glb: meshes=58 tris=4464 size=2.40x1.03x0.80m minY=0.00 mats=PropsWood,PropsMetal,RoofDark
-props_out/park_pergola.glb: meshes=78 tris=8668 size=11.50x3.83x11.42m minY=0.00 mats=VillaStone,PropsWood,PropsMetal
+props_out/park_pergola.glb: meshes=75 tris=8344 size=10.03x3.83x11.50m minY=0.00 mats=VillaStone,PropsWood,PropsMetal
 props_out/street_lamp.glb: meshes=83 tris=5720 size=0.54x6.63x4.97m minY=0.00 mats=RoofDark,PropsMetal,LampGlow
 props_out/townhouse.glb: meshes=972 tris=17024 size=18.87x11.05x16.37m minY=0.00 mats=VillaGranite,TownTrim,TownRoof,WindowFrame,TownStone,TownPlaster,TownGarage,VillaGlass,LampGlow,VillaPavement,VillaInterior,VillaCurtain,PropsMetal,VillaWood,TownDoor,VillaHedge,RoofDark,VillaDeck,VillaLawn,VillaMulch,TownDoorAccent,SolarCell
 props_out/traffic_signal_long.glb: meshes=92 tris=10916 size=8.05x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
