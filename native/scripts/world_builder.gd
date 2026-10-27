@@ -20,6 +20,11 @@ const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
+const STREAM_CELL_M := 64.0
+const COLLIDER_ACTIVE_RADIUS_M := 150.0
+const COLLIDER_RELEASE_RADIUS_M := 175.0
+const STREAM_HIDE_BEHIND_M := 85.0
+const STREAM_SHOW_BEHIND_M := 68.0
 const ROAD_GRID_CELL_M := 40.0
 const ROAD_GRID_QUERY_CLEARANCE_M := 10.0
 const ROAD_SURFACE_OFFSET_M := 0.095
@@ -152,6 +157,11 @@ var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
 var _sail_mesh: ArrayMesh
 var _elapsed := 0.0
+var _stream_chunks: Array[Dictionary] = []
+var _collider_cells: Dictionary = {}
+var _active_collider_cells: Dictionary = {}
+var _streaming_timer := 0.0
+var _streaming_initialized := false
 
 
 func _process(delta: float) -> void:
@@ -206,6 +216,15 @@ func build_world() -> Dictionary:
 	_build_reflection_probes()
 	_build_world_bounds()
 	set_time_of_day("day")
+	# 0.2.30: register streaming totals and sectorise colliders
+	# around the spawn point before the first frame; chunk hiding
+	# itself stays off until the reflection probes have captured.
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
 	is_built = true
 	return get_stats()
 
@@ -844,6 +863,105 @@ func _create_collision_root() -> void:
 	add_child(_collision_root)
 
 
+
+## 0.2.30 directional streaming: MultiMesh chunks behind the camera
+## retire from every render pass (including shadow maps), and static
+## colliders are only live in a radius around the car.  Geometry,
+## materials and shaders are untouched -- the city in front of the
+## camera keeps full detail; what is behind simply stops costing
+## CPU/GPU.  Decisions use the camera position shifted along the car
+## velocity (lookahead), a whole-chunk clear distance (centre distance
+## minus AABB radius, so tall shadow casters effectively stay), and
+## separate hide/show thresholds against flicker.
+func update_streaming(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3, focus_velocity: Vector3, delta: float) -> void:
+	_streaming_timer += delta
+	if _streaming_initialized and _streaming_timer < 0.2:
+		return
+	_streaming_timer = 0.0
+	_streaming_initialized = true
+	_streaming_tick(cam_pos, cam_forward, focus_pos, focus_velocity)
+
+
+func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3, focus_velocity: Vector3) -> void:
+	var fwd := Vector2(cam_forward.x, cam_forward.z)
+	fwd = fwd.normalized() if fwd.length_squared() > 0.001 else Vector2(0.0, -1.0)
+	var lookahead := Vector3(focus_velocity.x, 0.0, focus_velocity.z) * 0.9
+	if lookahead.length() > 45.0:
+		lookahead = lookahead.normalized() * 45.0
+	var anchor := cam_pos + lookahead
+	# Reflection probes capture once at startup; do not hide anything
+	# until they have seen the complete city.
+	var allow_hide := _elapsed > 2.5
+	var hidden_count := 0
+	for chunk in _stream_chunks:
+		var node := chunk.get("node") as MultiMeshInstance3D
+		if node == null:
+			continue
+		var centre: Vector3 = chunk.get("centre", Vector3.ZERO)
+		var radius := float(chunk.get("radius", 0.0))
+		var is_hidden := bool(chunk.get("hidden", false))
+		if radius > 210.0:
+			if is_hidden:
+				node.visible = true
+				chunk["hidden"] = false
+			continue
+		var to := Vector2(centre.x - anchor.x, centre.z - anchor.z)
+		var dist := to.length()
+		var clear := dist - radius
+		var dot := 1.0
+		if dist > 0.01:
+			dot = (to / dist).dot(fwd)
+		if allow_hide and not is_hidden and dot < -0.18 and clear > STREAM_HIDE_BEHIND_M:
+			node.visible = false
+			chunk["hidden"] = true
+			is_hidden = true
+		elif is_hidden and (dot > -0.05 or clear < STREAM_SHOW_BEHIND_M):
+			node.visible = true
+			chunk["hidden"] = false
+			is_hidden = false
+		if is_hidden:
+			hidden_count += 1
+
+	var focus_2d := Vector2(focus_pos.x, focus_pos.z)
+	var active_shapes := 0
+	for cell_variant in _collider_cells.keys():
+		var cell := cell_variant as Vector2i
+		var cell_centre := Vector2(
+			WORLD_AABB.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
+			WORLD_AABB.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
+		)
+		var cell_dist := cell_centre.distance_to(focus_2d)
+		var was_active := bool(_active_collider_cells.get(cell, true))
+		var want_active := was_active
+		if cell_dist < COLLIDER_ACTIVE_RADIUS_M:
+			want_active = true
+		elif cell_dist > COLLIDER_RELEASE_RADIUS_M:
+			want_active = false
+		if want_active != was_active or not _active_collider_cells.has(cell):
+			for shape_variant in (_collider_cells[cell] as Array):
+				var shape := shape_variant as CollisionShape3D
+				if shape != null:
+					shape.disabled = not want_active
+			_active_collider_cells[cell] = want_active
+		if want_active:
+			active_shapes += (_collider_cells[cell] as Array).size()
+
+	_enhancement_stats["directional_streaming_0230"] = true
+	_enhancement_stats["streaming_chunks_total"] = _stream_chunks.size()
+	_enhancement_stats["streaming_chunks_hidden"] = hidden_count
+	_enhancement_stats["streaming_colliders_active"] = active_shapes
+
+
+func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
+	var cell := Vector2i(
+		floori((centre.x - WORLD_AABB.position.x) / STREAM_CELL_M),
+		floori((centre.z - WORLD_AABB.position.z) / STREAM_CELL_M)
+	)
+	if not _collider_cells.has(cell):
+		_collider_cells[cell] = []
+	(_collider_cells[cell] as Array).append(collision)
+
+
 func _add_box_collider(center: Vector3, size: Vector3, yaw: float = 0.0) -> void:
 	if _collision_root == null:
 		return
@@ -853,6 +971,7 @@ func _add_box_collider(center: Vector3, size: Vector3, yaw: float = 0.0) -> void
 	collision.shape = shape
 	collision.transform = make_transform(center, yaw, Vector3.ONE)
 	_collision_root.add_child(collision)
+	_register_collider(collision, center)
 
 
 func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> void:
@@ -865,6 +984,7 @@ func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> vo
 	collision.shape = shape
 	collision.position = center
 	_collision_root.add_child(collision)
+	_register_collider(collision, center)
 
 
 func _build_environment() -> void:
@@ -4055,6 +4175,12 @@ func _add_multimesh(
 			# switches to them earlier than the desktop bias.
 			instance.lod_bias = 0.65
 		parent.add_child(instance)
+		_stream_chunks.append({
+			"node": instance,
+			"centre": chunk_aabb.get_center(),
+			"radius": chunk_aabb.size.length() * 0.5,
+			"hidden": false,
+		})
 		_multimesh_chunk_count += 1
 		built_any = true
 

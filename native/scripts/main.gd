@@ -346,6 +346,10 @@ func _reset_vehicle_to_road() -> void:
 
 func _process(delta: float) -> void:
 	_update_adaptive_render_quality(delta)
+	if _world != null and _camera != null and _vehicle != null:
+		# 0.2.30 directional streaming: full detail in the view
+		# direction, retired render/physics load behind the camera.
+		_world.update_streaming(_camera.global_position, -_camera.global_transform.basis.z, _vehicle.global_position, _vehicle.linear_velocity, delta)
 	if _in_menu:
 		if _camera != null and not _camera.is_current():
 			_camera.make_current()
@@ -548,6 +552,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.27 reflective glass/guardrail local-axis pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("paving_variety_0228", false)) or not bool(enhancement_stats.get("paving_running_bond_0228", false)):
 		failures.append("0.2.28 paving variety pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("directional_streaming_0230", false)) or int(enhancement_stats.get("streaming_chunks_total", 0)) < 60 or int(enhancement_stats.get("streaming_colliders_total", 0)) < 300 or int(enhancement_stats.get("streaming_colliders_active", 0)) >= int(enhancement_stats.get("streaming_colliders_total", 0)):
+		failures.append("0.2.30 directional streaming pass is incomplete: %s" % str(enhancement_stats))
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
