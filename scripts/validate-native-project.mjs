@@ -47,8 +47,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=21'), 'Native 0.2.18 must bump Android versionCode to 21');
-assert(preset.includes('version/name="0.2.18-native-alpha"'), 'Native version name must be 0.2.18-native-alpha');
+assert(preset.includes('version/code=22'), 'Native 0.2.19 must bump Android versionCode to 22');
+assert(preset.includes('version/name="0.2.19-native-alpha"'), 'Native version name must be 0.2.19-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -67,9 +67,10 @@ assert(!worldScript.includes('_get_palm_crown_mesh') && !worldScript.includes('_
 for (const marker of ['paver_id', 'gum_spots', 'macro_stain', 'world_position', 'pattern_scale']) {
   assert(concreteSurfaceShader.includes(marker), `Native 0.2.17 concrete shader marker is missing: ${marker}`);
 }
-for (const marker of ['stone_texture', 'fine_normal_texture', 'dominant_plane', 'district_variation', 'polished_wear', 'PremiumStone']) {
-  assert(premiumStonePavingShader.includes(marker) || worldScript.includes(marker), `Native 0.2.18 premium stone paving marker is missing: ${marker}`);
+for (const marker of ['stone_texture', 'fine_normal_texture', 'dominant_plane', 'district_variation', 'polished_wear', 'PremiumStone', 'formal_slab_joint', 'formal_slab_id', 'slab_joint']) {
+  assert(premiumStonePavingShader.includes(marker) || worldScript.includes(marker), `Native 0.2.19 premium stone paving marker is missing: ${marker}`);
 }
+assert(wetAsphaltShader.includes('boulevard_mask') && worldScript.includes('boulevard_dark_asphalt_0219'), 'Native 0.2.19 must keep the dark resurfaced RichTown Boulevard asphalt mask');
 for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.glb', 'flower_clump.glb', 'ornamental_shrub.glb']) {
   assert(syncScript.includes(vegetationModel), `Native asset sync is missing ${vegetationModel}`);
   assert(worldScript.includes(`res://assets/vegetation/${vegetationModel}`), `Native world does not load ${vegetationModel}`);
@@ -308,8 +309,11 @@ for (const marker of [
   'CafeBronze',
   'DubaiPremiumCafes',
   'dubai_premium_cafe_model',
+  'dubai_premium_cafe_triangles',
+  'dubai_premium_cafe_pbr_0219',
   'premium_boulevard_paving',
   'boulevard_cafes',
+  'boulevard_spawn_cafes',
   'boulevard_palm_planters',
   'boulevard_lawn_islands',
   'WashingtoniaWhiteGravelBeds',
@@ -321,17 +325,31 @@ for (const marker of [
   'premium_stone_paving.gdshader',
   'premium_stone_paving_shader_0218',
   'boulevard_rebuild_0218',
+  'boulevard_reference_0219',
+  'boulevard_dark_asphalt_0219',
   'boulevard_granite_curbs',
   'boulevard_premium_sidewalk_slabs',
   'boulevard_fresh_markings',
+  'boulevard_yellow_edge_lines',
+  'BoulevardYellowEdgeLines',
   'boulevard_arcades',
   'boulevard_cafe_tables',
   'boulevard_cafe_umbrellas',
   'boulevard_drip_emitters',
-  'boulevard_royal_palms',
-  'boulevard_extra_royal_palms',
+  'boulevard_date_palms',
+  'boulevard_extra_date_palms',
   'boulevard_lawn_area_m2',
   'boulevard_topiary',
+  'boulevard_continuous_hedges',
+  'boulevard_modern_lamps',
+  'BoulevardStreetLampPoles',
+  'boulevard_stone_benches',
+  'BoulevardStoneBenches',
+  'boulevard_pool_decks',
+  'BoulevardPoolDecks',
+  'boulevard_marina_deck_segments',
+  'BoulevardMarinaPromenadeDeck',
+  'boulevard_frontage_infill',
   'boulevard_ground_cover',
   'PremiumPromenade_ScreenshotAxis',
   'BoulevardGraniteCurbs',
@@ -347,7 +365,7 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.18 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
 const data = JSON.parse(dataText);
@@ -362,6 +380,9 @@ assert(data.buildings.filter((b) => b.model === 'glass_tower').length === 8, 'Ex
 assert(data.landmarks.length === 15, 'Expected all 15 RichTown landmarks');
 assert(data.palms.length === 112, 'Expected 112 RichTown palms');
 assert(data.spawn.x === 760 && data.spawn.z === 330, 'Unexpected native spawn point');
+
+const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
+assert(detailedCafeInfo.size > 2_500_000, 'Native 0.2.19 must use the detailed 2.86 MB PR #61 Dubai Premium Cafe, not the earlier lightweight GLB');
 
 if (requireAssets) {
   const required = [

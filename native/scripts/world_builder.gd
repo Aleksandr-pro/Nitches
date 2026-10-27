@@ -417,6 +417,18 @@ func height_at(x: float, z: float) -> float:
 	return lerpf(lerpf(h00, h10, tx), lerpf(h01, h11, tx), tz)
 
 
+## Ground height for Boulevard furniture/planting.  East of the road at
+## Z=140..390 the exported 10 m height grid falls into the marina, but
+## the master-plan promenade is a raised quay at carriageway level.
+## `_build_premium_boulevard_details()` now builds that deck explicitly;
+## using raw `height_at()` there buried the east cafes/lawns roughly
+## 1-4 m below the road and was a major part of the empty spawn view.
+func _boulevard_ground_y(x: float, z: float) -> float:
+	if x >= 771.0 and x <= 790.0 and z >= 140.0 and z <= 390.0:
+		return height_at(760.0, z) - 0.18
+	return height_at(x, z)
+
+
 func find_nearest_road_transform(world_position: Vector3) -> Transform3D:
 	var best_point := Vector3(world_position.x, height_at(world_position.x, world_position.z) + 1.1, world_position.z)
 	var best_direction := Vector3(0.0, 0.0, -1.0)
@@ -919,10 +931,10 @@ func _terrain_material(kind: String) -> Material:
 	if kind == "plaza":
 		return _create_premium_paving_material(
 			"terrain_premium_pavers_shader",
-			Color(0.92, 0.88, 0.78),
-			0.76,
-			0.115,
-			0.42
+			Color(0.84, 0.80, 0.70),
+			0.68,
+			0.140,
+			0.50
 		)
 	var material: StandardMaterial3D
 	match kind:
@@ -974,6 +986,7 @@ func _create_asphalt_material() -> ShaderMaterial:
 	_enhancement_stats["asphalt_layers"] = 3 if has_textures and wear != null else 1
 	_enhancement_stats["road_crown_m"] = ROAD_CROWN_M
 	_enhancement_stats["asphalt_wetness"] = 0.12
+	_enhancement_stats["boulevard_dark_asphalt_0219"] = true
 	return material
 
 
@@ -2184,10 +2197,10 @@ func _build_road_edges(parent: Node) -> void:
 	boulevard_granite_material.metallic_specular = 0.82
 	var boulevard_slab_material := _create_premium_paving_material(
 		"terrain_premium_pavers_shader",
-		Color(0.92, 0.88, 0.78),
-		0.76,
-		0.115,
-		0.42
+		Color(0.84, 0.80, 0.70),
+		0.68,
+		0.140,
+		0.50
 	)
 	var box_mesh := BoxMesh.new()
 	box_mesh.size = Vector3.ONE
@@ -2243,6 +2256,7 @@ func _build_road_markings(parent: Node) -> void:
 	var arrow_groups: Array[Array] = [[], [], []]
 	var parking_groups: Array[Array] = [[], [], []]
 	var center_groups: Array[Array] = [[], []]
+	var boulevard_edge_transforms: Array[Transform3D] = []
 	var bike_transforms: Array[Transform3D] = []
 	var tactile_transforms: Array[Transform3D] = []
 	var lane_arrow_count := 0
@@ -2308,14 +2322,20 @@ func _build_road_markings(parent: Node) -> void:
 					var edge_side := float(edge_side_variant)
 					var edge_offset := edge_side * maxf(half_width - 0.42, 0.6)
 					var edge_center: Vector3 = midpoint + side * edge_offset
-					var edge_group := 0 if is_boulevard else mini(2, int(_hash01(road_index * 271 + i * 11, int(edge_side) * 43 + 17) * 3.0))
-					(edge_groups[edge_group] as Array).append(make_transform(
+					var edge_transform := make_transform(
 						Vector3(edge_center.x, _road_surface_y(midpoint.y, edge_offset, half_width, crown_scale) + 0.019, edge_center.z),
 						yaw,
-						Vector3(0.19 if is_boulevard else 0.16, 0.034, length + 0.05)
-					))
+						Vector3(0.20 if is_boulevard else 0.16, 0.034, length + 0.05)
+					)
 					if is_boulevard:
+						# Reference-corridor treatment: both kerb lines
+						# are fresh yellow, framing the dark resurfaced
+						# carriageway in perspective.
+						boulevard_edge_transforms.append(edge_transform)
 						boulevard_fresh_markings += 1
+					else:
+						var edge_group := mini(2, int(_hash01(road_index * 271 + i * 11, int(edge_side) * 43 + 17) * 3.0))
+						(edge_groups[edge_group] as Array).append(edge_transform)
 
 			if not near_paint_break:
 				# Opposing traffic is separated by a double yellow solid
@@ -2581,6 +2601,8 @@ func _build_road_markings(parent: Node) -> void:
 	for group in 2:
 		center_total += (center_groups[group] as Array).size()
 		_add_multimesh(parent, stripe_mesh, yellow_paints[group], center_groups[group], "RoadCenterLines_Y%d" % group, false)
+	edge_total += boulevard_edge_transforms.size()
+	_add_multimesh(parent, stripe_mesh, yellow_paints[0], boulevard_edge_transforms, "BoulevardYellowEdgeLines", false, -1.0, 380.0, 220.0)
 	_add_multimesh(parent, stripe_mesh, bike_material, bike_transforms, "BikeLaneSurfaces", false)
 	_add_multimesh(parent, stripe_mesh, tactile_material, tactile_transforms, "TactilePaving", false)
 
@@ -2590,6 +2612,7 @@ func _build_road_markings(parent: Node) -> void:
 	_enhancement_stats["center_lines"] = center_total
 	_enhancement_stats["lane_arrows"] = lane_arrow_count
 	_enhancement_stats["boulevard_fresh_markings"] = boulevard_fresh_markings
+	_enhancement_stats["boulevard_yellow_edge_lines"] = boulevard_edge_transforms.size()
 	_enhancement_stats["parking_markings"] = parking_total
 	_enhancement_stats["bike_lane_segments"] = bike_transforms.size()
 	_enhancement_stats["tactile_paving"] = tactile_transforms.size()
@@ -3951,10 +3974,16 @@ func _build_infill_buildings(parent: Node) -> void:
 				var w := 15.0 + _hash01(ix, iz) * 9.0
 				var d := 13.0 + _hash01(iz, ix) * 8.0
 				var h := 8.0 + _hash01(ix + 9, iz + 4) * 20.0
-				if x >= 690.0 and x <= 880.0 and z >= -260.0 and z <= 240.0:
-					w = 16.0 + _hash01(ix, iz) * 9.0
+				# 0.2.19: the reference is a continuous urban wall, not a
+				# downtown cluster that dissolves into detached villas
+				# before the spawn.  Keep the exported villas/landmarks,
+				# but make every genuinely empty Boulevard parcel a
+				# mid/high-rise frontage parcel from Z=-430 to Z=430.
+				var boulevard_frontage := x >= 690.0 and x <= 880.0 and z >= -430.0 and z <= 430.0
+				if boulevard_frontage:
+					w = 17.0 + _hash01(ix, iz) * 8.0
 					d = 15.0 + _hash01(iz, ix) * 8.0
-					h = 18.0 + _hash01(ix + 9, iz + 4) * 42.0
+					h = 18.0 + _hash01(ix + 9, iz + 4) * 38.0
 				elif x >= 1150.0:
 					w = 14.0 + _hash01(ix, iz) * 8.0
 					d = 11.0 + _hash01(iz, ix) * 7.0
@@ -4017,7 +4046,7 @@ func _build_infill_buildings(parent: Node) -> void:
 
 				var facade_roll := _hash01(ix * 17 + 5, iz * 19 + 8)
 				var facade := "userPlaster"
-				if x >= 690.0 and x <= 880.0 and z >= -260.0 and z <= 240.0:
+				if boulevard_frontage:
 					facade = "glassTower" if facade_roll < 0.42 else ("hotelTower" if facade_roll < 0.68 else ("marbleTower" if facade_roll < 0.86 else "goldTower"))
 				elif x >= 840.0 and x < 1150.0:
 					facade = "hotelTower" if facade_roll < 0.42 else ("glassTower" if facade_roll < 0.66 else ("sandTower" if facade_roll < 0.84 else "marbleTower"))
@@ -4042,10 +4071,98 @@ func _build_infill_buildings(parent: Node) -> void:
 					"kind": "rt-infill",
 					"model": "generic",
 					"facade": facade,
+					"boulevardFrontage": boulevard_frontage,
 				})
+
+	# Targeted 0.2.19 Boulevard frontage.  The citywide 24 x 27 m search
+	# grid almost never lands in the narrow gaps between the exported
+	# Boulevard towers (the first CI smoke found only two qualifying
+	# parcels), so test a small deterministic set of real gaps on both
+	# faces.  These are still genuine infill buildings: every corner is
+	# checked against roads/exported buildings/pools/landmarks and
+	# against the generic infill accepted above.  East Z=150..380 is
+	# marina water and is deliberately left as the raised quay built by
+	# the premium Boulevard pass.
+	var targeted_frontage_specs: Array[Dictionary] = [
+		{"x": 710.0, "z": -364.0, "w": 20.0, "d": 16.0, "h": 30.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": -320.0, "w": 20.0, "d": 16.0, "h": 42.0, "facade": "glassTower"},
+		{"x": 710.0, "z": -232.0, "w": 20.0, "d": 16.0, "h": 36.0, "facade": "marbleTower"},
+		{"x": 710.0, "z": -180.0, "w": 20.0, "d": 14.0, "h": 48.0, "facade": "glassTower"},
+		{"x": 710.0, "z": 143.0, "w": 20.0, "d": 18.0, "h": 38.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": 242.0, "w": 20.0, "d": 14.0, "h": 30.0, "facade": "marbleTower"},
+		{"x": 710.0, "z": 287.0, "w": 20.0, "d": 16.0, "h": 34.0, "facade": "glassTower"},
+		{"x": 710.0, "z": 371.0, "w": 20.0, "d": 14.0, "h": 28.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": 408.0, "w": 20.0, "d": 14.0, "h": 32.0, "facade": "goldTower"},
+		{"x": 804.0, "z": -366.0, "w": 20.0, "d": 16.0, "h": 30.0, "facade": "marbleTower"},
+		{"x": 804.0, "z": -320.0, "w": 20.0, "d": 16.0, "h": 44.0, "facade": "glassTower"},
+		{"x": 804.0, "z": -232.0, "w": 20.0, "d": 16.0, "h": 38.0, "facade": "hotelTower"},
+		{"x": 804.0, "z": -181.0, "w": 20.0, "d": 14.0, "h": 46.0, "facade": "glassTower"},
+		{"x": 804.0, "z": -128.0, "w": 20.0, "d": 14.0, "h": 34.0, "facade": "goldTower"},
+		{"x": 804.0, "z": 82.0, "w": 20.0, "d": 18.0, "h": 40.0, "facade": "glassTower"},
+		{"x": 804.0, "z": 120.0, "w": 20.0, "d": 18.0, "h": 32.0, "facade": "hotelTower"},
+	]
+	for targeted_spec in targeted_frontage_specs:
+		var targeted_x := _f(targeted_spec, "x")
+		var targeted_z := _f(targeted_spec, "z")
+		var targeted_w := _f(targeted_spec, "w", 20.0)
+		var targeted_d := _f(targeted_spec, "d", 16.0)
+		var targeted_y := height_at(targeted_x, targeted_z)
+		if targeted_y < 1.55:
+			continue
+		var targeted_valid := true
+		var targeted_min_height := INF
+		var targeted_max_height := -INF
+		for targeted_corner in [
+			Vector3(targeted_x - targeted_w * 0.5, 0.0, targeted_z - targeted_d * 0.5),
+			Vector3(targeted_x + targeted_w * 0.5, 0.0, targeted_z - targeted_d * 0.5),
+			Vector3(targeted_x - targeted_w * 0.5, 0.0, targeted_z + targeted_d * 0.5),
+			Vector3(targeted_x + targeted_w * 0.5, 0.0, targeted_z + targeted_d * 0.5),
+		]:
+			var targeted_corner_height := height_at(targeted_corner.x, targeted_corner.z)
+			targeted_min_height = minf(targeted_min_height, targeted_corner_height)
+			targeted_max_height = maxf(targeted_max_height, targeted_corner_height)
+			if _road_clearance_xz(targeted_corner) < 2.7 or not _is_position_clear(targeted_corner, 1.2, 0.0):
+				targeted_valid = false
+				break
+		if not targeted_valid or targeted_max_height - targeted_min_height > 1.1:
+			continue
+		for existing_frontage in accepted:
+			if absf(targeted_x - _f(existing_frontage, "x")) < (targeted_w + _f(existing_frontage, "w")) * 0.5 + 3.0 and absf(targeted_z - _f(existing_frontage, "z")) < (targeted_d + _f(existing_frontage, "d")) * 0.5 + 3.0:
+				targeted_valid = false
+				break
+		if not targeted_valid:
+			continue
+		for landmark_variant in data.get("landmarks", []):
+			var landmark: Dictionary = landmark_variant
+			var landmark_pos := _item_position(landmark)
+			var safe_radius := maxf(_f(landmark, "r", 26.0), 26.0) + maxf(targeted_w, targeted_d) * 0.55
+			if Vector2(targeted_x - landmark_pos.x, targeted_z - landmark_pos.z).length() < safe_radius:
+				targeted_valid = false
+				break
+		if not targeted_valid:
+			continue
+		accepted.append({
+			"x": targeted_x,
+			"y": targeted_y,
+			"z": targeted_z,
+			"w": targeted_w,
+			"d": targeted_d,
+			"h": _f(targeted_spec, "h", 30.0),
+			"roofH": 0.0,
+			"rotY": 0.0,
+			"kind": "rt-infill",
+			"model": "generic",
+			"facade": String(targeted_spec.get("facade", "glassTower")),
+			"boulevardFrontage": true,
+		})
 
 	_infill_buildings = accepted
 	_enhancement_stats["infill_buildings"] = accepted.size()
+	var boulevard_frontage_count := 0
+	for frontage_item in accepted:
+		if bool(frontage_item.get("boulevardFrontage", false)) and _f(frontage_item, "h") >= 18.0:
+			boulevard_frontage_count += 1
+	_enhancement_stats["boulevard_frontage_infill"] = boulevard_frontage_count
 	if accepted.is_empty():
 		_enhancement_stats["building_details"] = 0
 		return
@@ -4777,7 +4894,7 @@ func _build_vegetation() -> void:
 	# shrinking RichTown or the player car.
 	var date_palm_transforms: Array[Transform3D] = []
 	var royal_palm_transforms: Array[Transform3D] = []
-	var boulevard_royal_palm_count := 0
+	var boulevard_date_palm_count := 0
 	for palm_index in palms.size():
 		var palm: Dictionary = palms[palm_index]
 		var exported_scale := clampf(_f(palm, "s", 1.0), 0.82, 1.30)
@@ -4786,7 +4903,11 @@ func _build_vegetation() -> void:
 		var is_boulevard_row := minf(absf(base.x - 745.5), absf(base.x - 774.5)) < 0.75
 		var use_royal := false
 		if is_boulevard_row:
-			use_royal = true
+			# 0.2.19: the reference avenue is planted with broad, dense
+			# date palms.  The 0.2.18 royal row was stretched 1.30x in
+			# height and narrowed to 0.90x, which read as bare poles
+			# with a few drooping strands on the phone.
+			use_royal = false
 		elif base.x >= 620.0 and base.x <= 720.0 and base.z >= -180.0 and base.z <= 120.0:
 			use_royal = palm_index % 3 != 0
 		elif base.x >= 720.0 and base.x <= 805.0:
@@ -4800,9 +4921,13 @@ func _build_vegetation() -> void:
 		var width_scale := uniform_scale * (0.94 + variation * 0.12)
 		var height_scale := uniform_scale * (0.94 + _hash01(palm_index * 31 + 5, palm_index * 13 + 53) * 0.12)
 		if is_boulevard_row:
-			width_scale *= 0.90
-			height_scale *= 1.30
-			boulevard_royal_palm_count += 1
+			# Source date palm: 8.47 m crown width x 8.82 m high.
+			# At the exported scale this produces roughly a 7.5-8.0 m
+			# crown over a 7.7-8.5 m trunk, matching the reference
+			# instead of a 10 m Washingtonia-like pole.
+			width_scale = uniform_scale * 1.18
+			height_scale = uniform_scale * 1.12
+			boulevard_date_palm_count += 1
 		var palm_transform := make_transform(base, _f(palm, "rotY") + variation * 0.37, Vector3(width_scale, height_scale, width_scale))
 		if use_royal:
 			royal_palm_transforms.append(palm_transform)
@@ -4814,7 +4939,8 @@ func _build_vegetation() -> void:
 	_enhancement_stats["detailed_palms_0217"] = date_palms_built or royal_palms_built
 	_enhancement_stats["date_palms"] = date_palm_transforms.size() if date_palms_built else 0
 	_enhancement_stats["royal_palms"] = royal_palm_transforms.size() if royal_palms_built else 0
-	_enhancement_stats["boulevard_royal_palms"] = boulevard_royal_palm_count if royal_palms_built else 0
+	_enhancement_stats["boulevard_date_palms"] = boulevard_date_palm_count if date_palms_built else 0
+	_enhancement_stats["boulevard_royal_palms"] = 0
 	_enhancement_stats["detailed_palms"] = int(_enhancement_stats.get("date_palms", 0)) + int(_enhancement_stats.get("royal_palms", 0))
 
 
@@ -5039,6 +5165,11 @@ func _make_paving_patch_mesh(min_x: float, max_x: float, min_z: float, max_z: fl
 	return tool.commit()
 
 
+## 0.2.19 RichTown Boulevard reference corridor: dark resurfaced asphalt
+## with yellow kerb lines, premium stone promenades, granite rules,
+## near-continuous lawn/hedge bands, dense date palms, modern lamps and
+## stone benches, detailed PR #61 cafes, attached glass arcades and a
+## higher Boulevard building frontage from spawn to the X738/Z23 focus.
 func _build_premium_boulevard_details(parent: Node) -> void:
 	# Native 0.2.18 boulevard rebuild.  The four-lane carriageway stays on
 	# X=760, but the photograph at X=738/Z=23 was taken from its western
@@ -5050,17 +5181,17 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	# south to the spawn so the result is visible immediately at start.
 	var pavers := _create_premium_paving_material(
 		"terrain_premium_pavers_shader",
-		Color(0.92, 0.88, 0.78),
-		0.76,
-		0.115,
-		0.42
+		Color(0.84, 0.80, 0.70),
+		0.68,
+		0.140,
+		0.50
 	)
 	var spine_pavers := _create_premium_paving_material(
 		"boulevard_spine_pavers_shader",
-		Color(0.70, 0.68, 0.62),
-		0.80,
-		0.096,
-		0.38
+		Color(0.62, 0.60, 0.55),
+		0.72,
+		0.120,
+		0.46
 	)
 	var promenade_area_m2 := 0.0
 	var patch_index := 0
@@ -5119,7 +5250,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				continue
 			if is_equal_approx(curb_x, 706.2) and center_z >= 15.0 and center_z <= 31.0:
 				continue
-			var y := height_at(curb_x, center_z) + 0.08
+			var y := _boulevard_ground_y(curb_x, center_z) + 0.08
 			promenade_curb_transforms.append(make_transform(Vector3(curb_x, y, center_z), 0.0, Vector3(0.22, 0.16, 2.05)))
 	# Flat black-granite inlays subdivide the remaining stone into formal
 	# walking rooms.  They follow terrain in 4 m bites and remain one
@@ -5128,7 +5259,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var band_z := float(z) + 2.0
 		for band_x in [716.5, 728.2, 736.8, 777.8, 782.8, 788.0]:
 			promenade_curb_transforms.append(make_transform(
-				Vector3(float(band_x), height_at(float(band_x), band_z) + 0.082, band_z),
+				Vector3(float(band_x), _boulevard_ground_y(float(band_x), band_z) + 0.082, band_z),
 				0.0,
 				Vector3(0.34, 0.035, 3.90)
 			))
@@ -5136,14 +5267,14 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for x in range(708, 744, 4):
 			var west_band_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(west_band_x, height_at(west_band_x, float(band_z)) + 0.082, float(band_z)),
+				Vector3(west_band_x, _boulevard_ground_y(west_band_x, float(band_z)) + 0.082, float(band_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.44)
 			))
 		for x in range(776, 790, 4):
 			var east_band_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(east_band_x, height_at(east_band_x, float(band_z)) + 0.082, float(band_z)),
+				Vector3(east_band_x, _boulevard_ground_y(east_band_x, float(band_z)) + 0.082, float(band_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.44)
 			))
@@ -5151,11 +5282,80 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for x in range(682, 744, 4):
 			var axis_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(axis_x, height_at(axis_x, float(axis_z)) + 0.090, float(axis_z)),
+				Vector3(axis_x, _boulevard_ground_y(axis_x, float(axis_z)) + 0.090, float(axis_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.48)
 			))
+
+	# 0.2.19: in 0.2.18 the longitudinal granite rules stopped after the
+	# focus block, so the spawn screenshots still showed an unstructured
+	# cream field.  Continue the same two dark rules through every block,
+	# with a transverse rule every 42 m.  All of it remains in the one
+	# PremiumGraniteEdging MultiMesh above/below.
+	var reference_cross_streets := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	for z in range(-420, 420, 4):
+		var reference_z := float(z) + 2.0
+		if reference_z >= -104.0 and reference_z <= 56.0:
+			continue
+		var near_reference_crossing := false
+		for cross_z in reference_cross_streets:
+			if absf(reference_z - float(cross_z)) < 9.0:
+				near_reference_crossing = true
+				break
+		if near_reference_crossing:
+			continue
+		for reference_x in [743.8, 776.2, 788.8]:
+			var reference_x_value := float(reference_x)
+			promenade_curb_transforms.append(make_transform(
+				Vector3(reference_x_value, _boulevard_ground_y(reference_x_value, reference_z) + 0.080, reference_z),
+				0.0,
+				Vector3(0.22, 0.15, 4.05)
+			))
+	for z in range(-420, 421, 42):
+		var transverse_z := float(z)
+		if transverse_z >= -104.0 and transverse_z <= 56.0:
+			continue
+		var near_transverse_crossing := false
+		for cross_z in reference_cross_streets:
+			if absf(transverse_z - float(cross_z)) < 10.0:
+				near_transverse_crossing = true
+				break
+		if near_transverse_crossing:
+			continue
+		for transverse_x in [734.0, 738.0, 742.0, 778.0, 782.0, 786.0]:
+			var transverse_x_value := float(transverse_x)
+			promenade_curb_transforms.append(make_transform(
+				Vector3(transverse_x_value, _boulevard_ground_y(transverse_x_value, transverse_z) + 0.082, transverse_z),
+				0.0,
+				Vector3(3.90, 0.035, 0.44)
+			))
 	_add_multimesh(parent, curb_mesh, granite, promenade_curb_transforms, "PremiumGraniteEdging", false)
+
+	# East marina quay, Z=140..390.  The height grid falls from the road
+	# into marina water immediately east of X=771, so a flat object at
+	# local terrain height is buried on its west side and floating on
+	# its east side.  Build the intended raised stone promenade deck in
+	# road-following segments, finish its water edge with a granite
+	# quay wall, and give the deck real box collision.  All east-side
+	# 0.2.19 planting/furniture/cafes in this district use
+	# `_boulevard_ground_y()` and therefore sit on this deck.
+	var marina_deck_transforms: Array[Transform3D] = []
+	var marina_quay_transforms: Array[Transform3D] = []
+	for deck_z in range(145, 390, 10):
+		var deck_center_z := float(deck_z)
+		var deck_y := _boulevard_ground_y(780.5, deck_center_z)
+		var deck_center := Vector3(780.5, deck_y - 0.175, deck_center_z)
+		var deck_size := Vector3(19.0, 0.35, 10.45)
+		marina_deck_transforms.append(make_transform(deck_center, 0.0, deck_size))
+		_add_box_collider(deck_center, deck_size)
+		marina_quay_transforms.append(make_transform(
+			Vector3(789.7, deck_y - 2.70, deck_center_z),
+			0.0,
+			Vector3(0.70, 5.40, 10.45)
+		))
+	_add_multimesh(parent, curb_mesh, pavers, marina_deck_transforms, "BoulevardMarinaPromenadeDeck", true)
+	_add_multimesh(parent, curb_mesh, granite, marina_quay_transforms, "BoulevardMarinaQuayWall", true)
+	_enhancement_stats["boulevard_marina_deck_segments"] = marina_deck_transforms.size()
 
 	# Large formal lawn rooms replace the eight small 3.35 m strips from
 	# the first boulevard pass.  West rooms occupy both the cafe band and
@@ -5194,29 +5394,33 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		Vector4(716.0, -43.0, 11.0, 14.0),
 		Vector4(716.0, 0.0, 11.0, 10.0),
 		Vector4(716.0, 45.0, 11.0, 9.0),
-		Vector4(732.5, -76.0, 7.5, 14.0),
-		Vector4(732.5, -52.0, 7.5, 14.0),
-		Vector4(732.5, -28.0, 7.5, 14.0),
-		Vector4(732.5, -4.0, 7.5, 14.0),
-		Vector4(732.5, 20.0, 7.5, 14.0),
-		Vector4(732.5, 44.0, 7.5, 14.0),
-		Vector4(741.8, -68.5, 4.4, 11.0),
-		Vector4(741.8, -47.5, 4.4, 11.0),
-		Vector4(741.8, -26.5, 4.4, 11.0),
-		Vector4(741.8, -5.5, 4.4, 11.0),
-		Vector4(741.8, 36.5, 4.4, 11.0),
-		Vector4(781.5, -86.0, 7.0, 12.0),
-		Vector4(781.5, -2.0, 7.0, 12.0),
-		Vector4(781.5, 39.0, 7.0, 12.0),
+		Vector4(732.5, -76.0, 7.5, 19.0),
+		Vector4(732.5, -52.0, 7.5, 19.0),
+		Vector4(732.5, -28.0, 7.5, 19.0),
+		Vector4(732.5, -4.0, 7.5, 19.0),
+		Vector4(732.5, 20.0, 7.5, 19.0),
+		Vector4(732.5, 44.0, 7.5, 19.0),
+		Vector4(741.8, -68.5, 4.4, 17.0),
+		Vector4(741.8, -47.5, 4.4, 17.0),
+		Vector4(741.8, -26.5, 4.4, 17.0),
+		Vector4(741.8, -5.5, 4.4, 17.0),
+		Vector4(741.8, 36.5, 4.4, 17.0),
+		Vector4(780.0, -86.0, 5.4, 18.0),
+		Vector4(780.0, -2.0, 5.4, 18.0),
+		Vector4(780.0, 39.0, 5.4, 18.0),
 		Vector4(706.0, 9.0, 44.0, 4.2),
 		Vector4(706.0, 37.0, 44.0, 4.2),
-		Vector4(738.0, 330.0, 6.4, 14.0),
-		Vector4(781.5, 330.0, 6.8, 14.0),
 	]
 	var cross_street_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
-	for candidate_z in range(-384, 391, 44):
+	# 0.2.19: this was the main visual failure at spawn.  The old 44 m
+	# candidate pitch produced a 14 m planter followed by ~30 m of empty
+	# stone.  The reference has an almost continuous formal planting
+	# band between the palms, so generate a 16.5 m module in every 21 m
+	# palm bay.  The remaining ~4.5 m is the white-pebble palm bed and a
+	# narrow stone maintenance joint.
+	for candidate_z in range(-404, 405, 21):
 		var west_z := float(candidate_z)
-		var east_z := west_z + 22.0
+		var east_z := west_z + 10.0
 		var west_blocked := west_z > -110.0 and west_z < 60.0
 		var east_blocked := east_z > -110.0 and east_z < 60.0
 		for cross_z in cross_street_z:
@@ -5224,18 +5428,23 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				west_blocked = true
 			if absf(east_z - float(cross_z)) < 17.0:
 				east_blocked = true
-		if not west_blocked and absf(west_z - 330.0) >= 24.0:
-			lawn_island_specs.append(Vector4(738.0, west_z, 6.4, 14.0))
-		if not east_blocked and absf(east_z - 330.0) >= 24.0 and east_z <= 405.0:
-			lawn_island_specs.append(Vector4(781.5, east_z, 6.8, 14.0))
+		# The two new eastern cafe terraces occupy the planting band; the
+		# cafe itself becomes the frontage object in those bays.
+		if absf(east_z - 150.0) < 14.0 or absf(east_z - 330.0) < 14.0:
+			east_blocked = true
+		if not west_blocked:
+			lawn_island_specs.append(Vector4(742.3, west_z, 5.0, 16.5))
+		if not east_blocked and east_z <= 405.0:
+			lawn_island_specs.append(Vector4(778.8, east_z, 5.4, 16.5))
 
 	var accepted_lawn_islands := 0
 	var accepted_lawn_area_m2 := 0.0
+	var continuous_hedge_count := 0
 	for island_index in lawn_island_specs.size():
 		var island_spec := lawn_island_specs[island_index]
 		var island_size := Vector2(island_spec.z, island_spec.w)
 		var center := Vector3(island_spec.x, 0.0, island_spec.y)
-		center.y = height_at(center.x, center.z)
+		center.y = _boulevard_ground_y(center.x, center.z)
 		if not _is_boulevard_rect_clear(center, island_size, 0.85):
 			continue
 		accepted_lawn_islands += 1
@@ -5244,6 +5453,20 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		lawn_transforms.append(make_transform(center + Vector3(0.0, 0.32, 0.0), 0.0, Vector3(maxf(island_size.x - 0.55, 0.8), 0.10, maxf(island_size.y - 0.55, 0.8))))
 		mulch_transforms.append(make_transform(center + Vector3(0.0, 0.385, 0.0), 0.0, Vector3(maxf(island_size.x * 0.42, 0.7), 0.045, maxf(island_size.y * 0.72, 0.7))))
 		_add_box_collider(center + Vector3(0.0, 0.18, 0.0), Vector3(island_size.x, 0.36, island_size.y))
+
+		# The defining green element in the reference is not an isolated
+		# sphere: it is a clipped hedge running along the road edge of
+		# every planting bay.  Keep it in the same hedge MultiMesh so the
+		# visual continuity does not cost another draw-call family.
+		if island_size.y >= 14.0 and island_size.x <= 8.0:
+			var road_side_sign := 1.0 if center.x < 760.0 else -1.0
+			var continuous_hedge_x := center.x + road_side_sign * (island_size.x * 0.5 - 0.78)
+			hedge_block_transforms.append(make_transform(
+				Vector3(continuous_hedge_x, center.y + 0.76, center.z),
+				0.0,
+				Vector3(1.12, 0.82, island_size.y - 1.1)
+			))
+			continuous_hedge_count += 1
 
 		var corner_x := maxf(island_size.x * 0.5 - 1.05, 0.35)
 		var corner_z := maxf(island_size.y * 0.5 - 1.05, 0.35)
@@ -5270,7 +5493,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 					var split_hedge_size := Vector3(island_size.x * 0.30, 0.70, minf(island_size.y * 0.42, 1.35)) if long_axis_is_x else Vector3(minf(island_size.x * 0.42, 1.55), 0.70, island_size.y * 0.29)
 					hedge_block_transforms.append(make_transform(center + hedge_offset, 0.0, split_hedge_size))
 
-		var grass_count := clampi(int(round(island_size.x * island_size.y / 16.0)), 4, 10)
+		var grass_count := clampi(int(round(island_size.x * island_size.y / 13.0)), 5, 12)
 		for grass_index in grass_count:
 			var grass_seed := island_index * 101 + grass_index * 17
 			var grass_local := Vector3(
@@ -5280,7 +5503,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 			)
 			var grass_scale := 0.82 + _hash01(grass_seed * 13 + 17, grass_seed * 19 + 43) * 0.58
 			boulevard_grass_transforms.append(make_transform(center + grass_local, _hash01(grass_seed * 29 + 3, grass_seed * 31 + 13) * TAU, Vector3(grass_scale, grass_scale * 0.94, grass_scale)))
-		var flower_count := 3 if island_size.x * island_size.y > 100.0 else 2
+		var flower_count := 3 if island_size.x * island_size.y > 70.0 else 2
 		for flower_index in flower_count:
 			var flower_seed := island_index * 211 + flower_index * 37
 			var flower_local := Vector3(
@@ -5301,11 +5524,11 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	_add_multimesh(parent, lawn_mesh, hedge, hedge_block_transforms, "BoulevardClippedHedges", false)
 	_add_multimesh(parent, cone_hedge_mesh, hedge, cone_topiary_transforms, "BoulevardConeTopiary", false)
 
-	# The slim royal-palm rows already run on both sides of the avenue.
+	# The dense date-palm rows already run on both sides of the avenue.
 	# Extend their circular white-pebble beds, granite rings and visible
 	# drip loops over the whole boulevard, with loose pebble geometry and
 	# individual emitters in the screenshot and spawn districts.  Seven
-	# additional royal palms frame the western plaza edge/screenshot axis.
+	# additional date palms frame the western plaza edge/screenshot axis.
 	var pebble_material := _material("boulevard_white_pebbles", "user_sand_beach_white.jpg", "user_sand_rippled_normal.jpg", Color(0.98, 0.97, 0.93), 0.94, 0.0, Vector3(1.65, 1.65, 1.65), true)
 	pebble_material.normal_scale = 0.72
 	var irrigation_material := _material("boulevard_irrigation", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.12, 0.12), 0.74, 0.0)
@@ -5338,9 +5561,9 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var palm_z := _f(palm, "z")
 		if palm_z < -430.0 or palm_z > 430.0 or minf(absf(palm_x - 745.5), absf(palm_x - 774.5)) > 1.0:
 			continue
-		palm_bed_centers.append(Vector3(palm_x, height_at(palm_x, palm_z), palm_z))
+		palm_bed_centers.append(Vector3(palm_x, _boulevard_ground_y(palm_x, palm_z), palm_z))
 
-	var extra_royal_palm_transforms: Array = []
+	var extra_date_palm_transforms: Array = []
 	var extra_palm_specs: Array[Vector2] = [
 		Vector2(704.5, -82.0),
 		Vector2(704.5, -40.0),
@@ -5352,21 +5575,21 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	]
 	for extra_index in extra_palm_specs.size():
 		var extra_spec := extra_palm_specs[extra_index]
-		var extra_base := Vector3(extra_spec.x, height_at(extra_spec.x, extra_spec.y) - 0.03, extra_spec.y)
+		var extra_base := Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y) - 0.03, extra_spec.y)
 		if not _is_position_clear(extra_base, 2.0, 3.0):
 			continue
-		palm_bed_centers.append(Vector3(extra_spec.x, height_at(extra_spec.x, extra_spec.y), extra_spec.y))
-		extra_royal_palm_transforms.append(make_transform(
+		palm_bed_centers.append(Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y), extra_spec.y))
+		extra_date_palm_transforms.append(make_transform(
 			extra_base,
 			_hash01(extra_index * 37 + 91, extra_index * 41 + 17) * TAU,
-			Vector3(0.66, 0.96, 0.66)
+			Vector3(0.86, 0.84, 0.86)
 		))
 		_add_cylinder_collider(extra_base + Vector3(0.0, 3.2, 0.0), 0.34, 6.4)
-	var extra_palms_built := _add_batched_model(parent, "res://assets/vegetation/palm_royal.glb", extra_royal_palm_transforms, "BoulevardExtraRoyalPalms")
+	var extra_palms_built := _add_batched_model(parent, "res://assets/vegetation/palm_date.glb", extra_date_palm_transforms, "BoulevardExtraDatePalms")
 	if extra_palms_built:
-		_enhancement_stats["royal_palms"] = int(_enhancement_stats.get("royal_palms", 0)) + extra_royal_palm_transforms.size()
-		_enhancement_stats["boulevard_royal_palms"] = int(_enhancement_stats.get("boulevard_royal_palms", 0)) + extra_royal_palm_transforms.size()
-		_enhancement_stats["detailed_palms"] = int(_enhancement_stats.get("detailed_palms", 0)) + extra_royal_palm_transforms.size()
+		_enhancement_stats["date_palms"] = int(_enhancement_stats.get("date_palms", 0)) + extra_date_palm_transforms.size()
+		_enhancement_stats["boulevard_date_palms"] = int(_enhancement_stats.get("boulevard_date_palms", 0)) + extra_date_palm_transforms.size()
+		_enhancement_stats["detailed_palms"] = int(_enhancement_stats.get("detailed_palms", 0)) + extra_date_palm_transforms.size()
 
 	var pebble_transforms: Array[Transform3D] = []
 	var ring_transforms: Array[Transform3D] = []
@@ -5398,17 +5621,173 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				stone_angle,
 				Vector3(stone_width, 0.065, stone_width * 0.78)
 			))
+		# Low ornamental tufts break the perfect white discs and link
+		# each trunk bed visually into the continuous planting band.
+		for planting_index in 3:
+			var planting_angle := TAU * float(planting_index) / 3.0 + float(bed_index % 5) * 0.23
+			boulevard_grass_transforms.append(make_transform(
+				bed_center + Vector3(cos(planting_angle) * 1.18, 0.145, sin(planting_angle) * 1.18),
+				planting_angle,
+				Vector3.ONE * 0.72
+			))
+		if bed_index % 2 == 0:
+			var flower_angle := 0.71 + float(bed_index % 7) * 0.19
+			boulevard_flower_transforms.append(make_transform(
+				bed_center + Vector3(cos(flower_angle) * 1.22, 0.145, sin(flower_angle) * 1.22),
+				flower_angle,
+				Vector3.ONE * 0.68
+			))
 	_add_multimesh(parent, pebble_disk, pebble_material, pebble_transforms, "WashingtoniaWhiteGravelBeds", false)
 	_add_multimesh(parent, ring_mesh, granite, ring_transforms, "WashingtoniaGraniteRings", false)
 	_add_multimesh(parent, drip_ring_mesh, irrigation_material, drip_transforms, "WashingtoniaDripIrrigation", false)
 	_add_multimesh(parent, emitter_mesh, irrigation_material, drip_emitter_transforms, "BoulevardDripEmitters", false)
 	_add_multimesh(parent, loose_pebble_mesh, pebble_material, loose_pebble_transforms, "BoulevardLooseWhitePebbles", false)
 
-	# Five placements of the reusable Dubai-inspired cafe GLB (three west,
-	# two rotated on the east) plus five attached building arcades.  The
-	# GLB supplies its glass, mashrabiya screens, interior, counters,
-	# planters, terrace tables and parasols; the procedural batches below
-	# are retained for the building-front arcades and their seating.
+	# Reference street furniture.  The exported heroic lamps are useful
+	# landmarks but are far too sparse to establish the avenue rhythm in
+	# the photograph.  Add a slim contemporary L-arm lamp in every palm
+	# bay and a long stone bench in every second bay.  Four MultiMesh
+	# families cover the whole 860 m corridor; no per-lamp nodes.
+	var furniture_metal := _material("boulevard_modern_lamp_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.22, 0.27, 0.29), 0.32, 0.72)
+	var furniture_head := _material("boulevard_modern_lamp_head", "", "", Color(1.0, 0.74, 0.40), 0.30, 0.05)
+	furniture_head.emission_enabled = true
+	furniture_head.emission = Color(0.36, 0.17, 0.045)
+	_register_night_material(furniture_head, 0.04, 0.72, 2.15)
+	var lamp_pole_mesh := CylinderMesh.new()
+	lamp_pole_mesh.top_radius = 0.055
+	lamp_pole_mesh.bottom_radius = 0.075
+	lamp_pole_mesh.height = 5.6
+	lamp_pole_mesh.radial_segments = 10
+	var furniture_box_mesh := BoxMesh.new()
+	furniture_box_mesh.size = Vector3.ONE
+	var modern_lamp_poles: Array[Transform3D] = []
+	var modern_lamp_arms: Array[Transform3D] = []
+	var modern_lamp_heads: Array[Transform3D] = []
+	var stone_bench_transforms: Array[Transform3D] = []
+	var modern_lamp_count := 0
+	var stone_bench_count := 0
+	for furniture_z in range(-404, 405, 21):
+		var west_furniture_z := float(furniture_z)
+		var east_furniture_z := west_furniture_z + 10.0
+		for side_index in 2:
+			var is_west_side := side_index == 0
+			var side_z := west_furniture_z if is_west_side else east_furniture_z
+			if side_z > 405.0:
+				continue
+			var near_furniture_crossing := false
+			for cross_z in reference_cross_streets:
+				if absf(side_z - float(cross_z)) < 8.0:
+					near_furniture_crossing = true
+					break
+			if near_furniture_crossing:
+				continue
+			var lamp_x := 746.9 if is_west_side else 773.1
+			var road_direction := 1.0 if is_west_side else -1.0
+			var lamp_base := Vector3(lamp_x, _boulevard_ground_y(lamp_x, side_z), side_z)
+			modern_lamp_poles.append(make_transform(lamp_base + Vector3(0.0, 2.80, 0.0), 0.0, Vector3.ONE))
+			modern_lamp_arms.append(make_transform(
+				lamp_base + Vector3(road_direction * 0.78, 5.62, 0.0),
+				0.0,
+				Vector3(1.62, 0.09, 0.10)
+			))
+			modern_lamp_heads.append(make_transform(
+				lamp_base + Vector3(road_direction * 1.55, 5.54, 0.0),
+				0.0,
+				Vector3(0.72, 0.09, 0.24)
+			))
+			_add_cylinder_collider(lamp_base + Vector3(0.0, 2.80, 0.0), 0.13, 5.6)
+			modern_lamp_count += 1
+
+			var bench_clear_of_cafe := true
+			if not is_west_side:
+				for cafe_frontage_z in [-58.0, 18.0, 150.0, 330.0]:
+					if absf(side_z - float(cafe_frontage_z)) < 7.0:
+						bench_clear_of_cafe = false
+						break
+			if bench_clear_of_cafe and int((furniture_z + 404) / 21) % 2 == 0:
+				# Benches sit on the stone side of the planting band and
+				# look across the hedge/palms to the carriageway.
+				var bench_x := 739.0 if is_west_side else 783.0
+				var bench_center := Vector3(bench_x, _boulevard_ground_y(bench_x, side_z), side_z)
+				stone_bench_transforms.append(make_transform(
+					bench_center + Vector3(0.0, 0.38, 0.0),
+					0.0,
+					Vector3(0.62, 0.16, 2.55)
+				))
+				for bench_leg_sign in [-1.0, 1.0]:
+					stone_bench_transforms.append(make_transform(
+						bench_center + Vector3(0.0, 0.16, float(bench_leg_sign) * 0.95),
+						0.0,
+						Vector3(0.48, 0.32, 0.24)
+					))
+				_add_box_collider(bench_center + Vector3(0.0, 0.30, 0.0), Vector3(0.68, 0.60, 2.60))
+				stone_bench_count += 1
+	_add_multimesh(parent, lamp_pole_mesh, furniture_metal, modern_lamp_poles, "BoulevardStreetLampPoles", true, -1.0, 240.0, 180.0)
+	_add_multimesh(parent, furniture_box_mesh, furniture_metal, modern_lamp_arms, "BoulevardStreetLampArms", true, -1.0, 240.0, 180.0)
+	_add_multimesh(parent, furniture_box_mesh, furniture_head, modern_lamp_heads, "BoulevardStreetLampHeads", false, -1.0, 240.0, 180.0)
+	_add_multimesh(parent, furniture_box_mesh, pavers, stone_bench_transforms, "BoulevardStoneBenches", true, -1.0, 220.0, 180.0)
+
+	# The flat blue rectangles in the rejection screenshots are private
+	# villa pools whose water slab reaches almost exactly to the public
+	# promenade.  Finish every Boulevard-adjacent pool as a private yard:
+	# stone deck, raised granite coping and a clipped hedge screen on the
+	# public side.  This keeps the real pools, but removes the raw
+	# editor-plane read from the drive-by view.
+	var pool_deck_transforms: Array[Transform3D] = []
+	var pool_coping_transforms: Array[Transform3D] = []
+	var pool_screen_transforms: Array[Transform3D] = []
+	var boulevard_pool_deck_count := 0
+	for pool_variant in data.get("pools", []):
+		var pool: Dictionary = pool_variant
+		var pool_x := _f(pool, "x")
+		var pool_z := _f(pool, "z")
+		var west_pool := pool_x >= 720.0 and pool_x <= 744.0
+		var east_pool := pool_x >= 776.0 and pool_x <= 800.0
+		if pool_z < -430.0 or pool_z > 430.0 or not (west_pool or east_pool):
+			continue
+		var pool_center := _item_position(pool)
+		var pool_w := maxf(_f(pool, "w", 10.0), 4.0)
+		var pool_d := maxf(_f(pool, "d", 6.0), 3.0)
+		pool_deck_transforms.append(make_transform(
+			pool_center + Vector3(0.0, 0.10, 0.0),
+			0.0,
+			Vector3(pool_w + 2.6, 0.16, pool_d + 2.6)
+		))
+		for coping_sign in [-1.0, 1.0]:
+			pool_coping_transforms.append(make_transform(
+				pool_center + Vector3(0.0, 0.22, float(coping_sign) * (pool_d * 0.5 + 0.28)),
+				0.0,
+				Vector3(pool_w + 0.8, 0.12, 0.38)
+			))
+			pool_coping_transforms.append(make_transform(
+				pool_center + Vector3(float(coping_sign) * (pool_w * 0.5 + 0.28), 0.22, 0.0),
+				0.0,
+				Vector3(0.38, 0.12, pool_d + 0.8)
+			))
+		var pool_screen_x := pool_center.x + (pool_w * 0.5 + 1.55 if west_pool else -(pool_w * 0.5 + 1.55))
+		pool_screen_transforms.append(make_transform(
+			Vector3(pool_screen_x, pool_center.y + 0.55, pool_center.z),
+			0.0,
+			Vector3(0.85, 0.78, pool_d + 2.4)
+		))
+		for lounger_sign in [-1.0, 1.0]:
+			var lounger_x := pool_center.x + (-(pool_w * 0.5 - 0.95) if west_pool else pool_w * 0.5 - 0.95)
+			pool_deck_transforms.append(make_transform(
+				Vector3(lounger_x, pool_center.y + 0.25, pool_center.z + float(lounger_sign) * minf(pool_d * 0.24, 1.25)),
+				0.0,
+				Vector3(0.58, 0.13, 1.65)
+			))
+		boulevard_pool_deck_count += 1
+	_add_multimesh(parent, furniture_box_mesh, pavers, pool_deck_transforms, "BoulevardPoolDecks", false)
+	_add_multimesh(parent, furniture_box_mesh, granite, pool_coping_transforms, "BoulevardPoolCoping", false)
+	_add_multimesh(parent, furniture_box_mesh, hedge, pool_screen_transforms, "BoulevardPoolHedgeScreens", false)
+
+	# Nine placements of the second agent's detailed PR #61 cafe GLB:
+	# five west-facing terraces and four rotated east-facing terraces,
+	# including one pair at the X760/Z330 spawn.  The 2.86 MB PBR model
+	# supplies its interior, counters, glass, mashrabiya screens,
+	# planters, terrace tables and linen umbrellas; the procedural
+	# batches below dress the attached building arcades.
 	var glass: Material = _prop_material("FacadeGlass")
 	var canopy_material := _material("boulevard_cafe_canopy", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.78, 0.68, 0.56), 0.72, 0.02, Vector3(0.35, 0.35, 0.35), true)
 	canopy_material.normal_scale = 0.82
@@ -5434,18 +5813,25 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		{"x": 718.0, "z": 27.0, "facing": 1.0},
 		{"x": 782.0, "z": -58.0, "facing": -1.0},
 		{"x": 782.0, "z": 18.0, "facing": -1.0},
+		{"x": 718.0, "z": 330.0, "facing": 1.0},
+		{"x": 782.0, "z": 330.0, "facing": -1.0},
+		{"x": 718.0, "z": -132.0, "facing": 1.0},
+		{"x": 782.0, "z": 150.0, "facing": -1.0},
 	]
 	var cafe_transforms: Array[Transform3D] = []
 	var accepted_cafes := 0
+	var accepted_spawn_cafes := 0
 	for cafe_spec in cafe_specs:
 		var facing := _f(cafe_spec, "facing", 1.0)
 		var base := Vector3(_f(cafe_spec, "x"), 0.0, _f(cafe_spec, "z"))
-		base.y = height_at(base.x, base.z)
+		base.y = _boulevard_ground_y(base.x, base.z)
 		# The reusable GLB is 11.42 x 9.02 m in plan.  Check the whole
 		# footprint, not only its centre, against exported/infill buildings.
 		if not _is_boulevard_rect_clear(base, Vector2(11.6, 9.2), 0.55):
 			continue
 		accepted_cafes += 1
+		if absf(base.z - 330.0) < 1.0:
+			accepted_spawn_cafes += 1
 		var cafe_yaw := 0.0
 		if facing < 0.0:
 			cafe_yaw = PI
@@ -5458,6 +5844,10 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		)
 	var cafe_model_path := "res://assets/props/dubai_premium_cafe.glb"
 	var cafe_model_parts := _get_model_parts(cafe_model_path)
+	var cafe_model_triangles := 0
+	for cafe_part_variant in cafe_model_parts:
+		var cafe_part: Dictionary = cafe_part_variant
+		cafe_model_triangles += _mesh_triangle_count(cafe_part.get("mesh") as Mesh)
 	var cafes_built := _add_batched_model(
 		parent,
 		cafe_model_path,
@@ -5466,6 +5856,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	)
 	if not cafes_built:
 		accepted_cafes = 0
+		accepted_spawn_cafes = 0
 
 	# Attached storefront arcades for exported buildings that actually
 	# front RichTown Boulevard.  Their glass line, columns, canopy and
@@ -5476,6 +5867,16 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		{"front_x": 728.1, "z": 186.0, "length": 24.0, "facing": 1.0, "tables": true},
 		{"front_x": 728.7, "z": -156.0, "length": 24.0, "facing": 1.0, "tables": false},
 		{"front_x": 787.0, "z": -206.0, "length": 24.0, "facing": -1.0, "tables": false},
+		# 0.2.19 frontage extensions use faces that are clear in the
+		# exported city: hotel/generic blocks north of the focus and two
+		# promenade galleries near spawn.  Villa lots with pools are
+		# deliberately not dressed as shopfronts.
+		{"front_x": 726.0, "z": -274.0, "length": 18.0, "facing": 1.0, "tables": true},
+		{"front_x": 725.8, "z": -205.0, "length": 28.0, "facing": 1.0, "tables": true},
+		{"front_x": 791.0, "z": -274.0, "length": 18.0, "facing": -1.0, "tables": true},
+		{"front_x": 788.7, "z": -156.0, "length": 28.0, "facing": -1.0, "tables": true},
+		{"front_x": 788.0, "z": 286.0, "length": 28.0, "facing": -1.0, "tables": true},
+		{"front_x": 788.0, "z": 374.0, "length": 28.0, "facing": -1.0, "tables": false},
 	]
 	var accepted_arcades := 0
 	for arcade_index in arcade_specs.size():
@@ -5484,12 +5885,12 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var arcade_z := _f(arcade, "z")
 		var arcade_length := _f(arcade, "length", 24.0)
 		var arcade_facing := _f(arcade, "facing", 1.0)
-		var arcade_base := Vector3(front_x, height_at(front_x, arcade_z), arcade_z)
+		var arcade_base := Vector3(front_x, _boulevard_ground_y(front_x, arcade_z), arcade_z)
 		var column_probe := arcade_base + Vector3(arcade_facing * 2.8, 0.0, 0.0)
 		if not _is_position_clear(column_probe, 0.55, 2.4):
 			continue
 		accepted_arcades += 1
-		var panel_count := 6
+		var panel_count := maxi(4, int(round(arcade_length / 4.0)))
 		var panel_width := arcade_length / float(panel_count)
 		for panel_index in panel_count:
 			var panel_z := arcade_z - arcade_length * 0.5 + panel_width * (float(panel_index) + 0.5)
@@ -5500,20 +5901,46 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 			frame_transforms.append(make_transform(Vector3(front_x + arcade_facing * 2.82, arcade_base.y + 1.82, boundary_z), 0.0, Vector3(0.22, 3.64, 0.22)))
 		frame_transforms.append(make_transform(Vector3(front_x + arcade_facing * 0.16, arcade_base.y + 3.28, arcade_z), 0.0, Vector3(0.15, 0.15, arcade_length + 0.15)))
 		frame_transforms.append(make_transform(Vector3(front_x + arcade_facing * 0.16, arcade_base.y + 0.12, arcade_z), 0.0, Vector3(0.15, 0.20, arcade_length + 0.15)))
+		# One-metre shopfront mullions and two horizontal rails keep the
+		# glass from reading as one uninterrupted transparent sheet.
+		for mullion_offset in range(int(-arcade_length * 0.5) + 1, int(arcade_length * 0.5)):
+			frame_transforms.append(make_transform(
+				Vector3(front_x + arcade_facing * 0.19, arcade_base.y + 1.66, arcade_z + float(mullion_offset)),
+				0.0,
+				Vector3(0.07, 3.08, 0.07)
+			))
+		for rail_y in [1.05, 2.18]:
+			frame_transforms.append(make_transform(
+				Vector3(front_x + arcade_facing * 0.19, arcade_base.y + float(rail_y), arcade_z),
+				0.0,
+				Vector3(0.09, 0.09, arcade_length)
+			))
+		for pier_sign in [-1.0, 1.0]:
+			counter_transforms.append(make_transform(
+				Vector3(front_x + arcade_facing * 0.28, arcade_base.y + 1.86, arcade_z + float(pier_sign) * arcade_length * 0.5),
+				0.0,
+				Vector3(0.52, 3.72, 0.52)
+			))
+		sign_transforms.append(make_transform(
+			Vector3(front_x + arcade_facing * 2.98, arcade_base.y + 3.62, arcade_z),
+			0.0,
+			Vector3(0.08, 0.08, arcade_length * 0.92)
+		))
 		canopy_transforms.append(make_transform(Vector3(front_x + arcade_facing * 1.48, arcade_base.y + 3.78, arcade_z), 0.0, Vector3(3.25, 0.18, arcade_length + 1.0)))
-		for slat_index in range(13):
+		for slat_index in range(int(round(arcade_length / 2.0)) + 1):
 			var slat_z := arcade_z - arcade_length * 0.5 + float(slat_index) * 2.0
 			canopy_transforms.append(make_transform(Vector3(front_x + arcade_facing * 1.48, arcade_base.y + 3.93, slat_z), 0.0, Vector3(3.65, 0.07, 0.22)))
 		sign_transforms.append(make_transform(Vector3(front_x + arcade_facing * 0.22, arcade_base.y + 3.02, arcade_z), 0.0, Vector3(0.12, 0.50, arcade_length * 0.58)))
 		for planter_index in panel_count:
 			var arcade_planter_z := arcade_z - arcade_length * 0.5 + panel_width * (float(planter_index) + 0.5)
-			var arcade_planter_center := Vector3(front_x + arcade_facing * 3.35, height_at(front_x + arcade_facing * 3.35, arcade_planter_z) + 0.24, arcade_planter_z)
+			var arcade_planter_center := Vector3(front_x + arcade_facing * 3.35, _boulevard_ground_y(front_x + arcade_facing * 3.35, arcade_planter_z) + 0.24, arcade_planter_z)
 			counter_transforms.append(make_transform(arcade_planter_center, 0.0, Vector3(0.65, 0.46, 2.45)))
 			boulevard_shrub_transforms.append(make_transform(arcade_planter_center + Vector3(0.0, 0.25, 0.0), float(arcade_index * 3 + planter_index) * 0.63, Vector3.ONE * 0.84))
 		if bool(arcade.get("tables", false)):
-			for table_offset_z in [-10.0, -6.0, -2.0, 2.0, 6.0, 10.0]:
+			var table_offsets := [-10.0, -6.0, -2.0, 2.0, 6.0, 10.0] if arcade_length >= 24.0 else [-6.0, -2.0, 2.0, 6.0]
+			for table_offset_z in table_offsets:
 				var arcade_table_center := Vector3(front_x + arcade_facing * 1.55, 0.0, arcade_z + float(table_offset_z))
-				arcade_table_center.y = height_at(arcade_table_center.x, arcade_table_center.z)
+				arcade_table_center.y = _boulevard_ground_y(arcade_table_center.x, arcade_table_center.z)
 				table_top_transforms.append(make_transform(arcade_table_center + Vector3(0.0, 0.82, 0.0), 0.0, Vector3(1.38, 0.10, 1.38)))
 				table_leg_transforms.append(make_transform(arcade_table_center + Vector3(0.0, 0.43, 0.0), 0.0, Vector3(0.35, 0.76, 0.35)))
 				for arcade_chair_index in 3:
@@ -5563,6 +5990,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	_add_multimesh(parent, unit_box, chair_material, chair_back_transforms, "BoulevardCafeChairBacks", false)
 	_add_multimesh(parent, cafe_leg_mesh, chair_material, chair_leg_transforms, "BoulevardCafeChairLegs", false)
 	_enhancement_stats["boulevard_cafes"] = accepted_cafes
+	_enhancement_stats["boulevard_spawn_cafes"] = accepted_spawn_cafes
 	_enhancement_stats["boulevard_arcades"] = accepted_arcades
 	# Each GLB cafe contains three terrace tables and three parasols;
 	# table_top_transforms now contains only the attached-arcade tables.
@@ -5570,13 +5998,20 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	_enhancement_stats["boulevard_cafe_umbrellas"] = accepted_cafes * 3
 	_enhancement_stats["dubai_premium_cafe_model"] = cafes_built
 	_enhancement_stats["dubai_premium_cafe_model_parts"] = cafe_model_parts.size()
+	_enhancement_stats["dubai_premium_cafe_triangles"] = cafe_model_triangles
+	_enhancement_stats["dubai_premium_cafe_pbr_0219"] = cafes_built and cafe_model_parts.size() >= 12 and cafe_model_triangles >= 10000
 	_enhancement_stats["boulevard_palm_planters"] = pebble_transforms.size()
 	_enhancement_stats["boulevard_drip_emitters"] = drip_emitter_transforms.size()
 	_enhancement_stats["boulevard_lawn_islands"] = accepted_lawn_islands
 	_enhancement_stats["boulevard_lawn_area_m2"] = accepted_lawn_area_m2
 	_enhancement_stats["boulevard_topiary"] = ball_topiary_transforms.size() + hedge_block_transforms.size() + cone_topiary_transforms.size()
+	_enhancement_stats["boulevard_continuous_hedges"] = continuous_hedge_count
+	_enhancement_stats["boulevard_modern_lamps"] = modern_lamp_count
+	_enhancement_stats["boulevard_stone_benches"] = stone_bench_count
+	_enhancement_stats["boulevard_pool_decks"] = boulevard_pool_deck_count
 	_enhancement_stats["boulevard_ground_cover"] = boulevard_ground_cover_count
-	_enhancement_stats["boulevard_extra_royal_palms"] = extra_royal_palm_transforms.size() if extra_palms_built else 0
+	_enhancement_stats["boulevard_extra_date_palms"] = extra_date_palm_transforms.size() if extra_palms_built else 0
+	_enhancement_stats["boulevard_extra_royal_palms"] = 0
 	_enhancement_stats["premium_boulevard_promenade_m2"] = promenade_area_m2
 	_enhancement_stats["boulevard_rebuild_0218"] = (
 		bool(_enhancement_stats.get("premium_stone_paving_shader_0218", false))
@@ -5588,6 +6023,22 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		and accepted_lawn_islands >= 24
 		and pebble_transforms.size() >= 60
 		and boulevard_ground_cover_count >= 180
+	)
+	_enhancement_stats["boulevard_reference_0219"] = (
+		bool(_enhancement_stats.get("boulevard_rebuild_0218", false))
+		and bool(_enhancement_stats.get("boulevard_dark_asphalt_0219", false))
+		and bool(_enhancement_stats.get("dubai_premium_cafe_pbr_0219", false))
+		and accepted_cafes >= 8
+		and accepted_spawn_cafes >= 1
+		and accepted_arcades >= 9
+		and accepted_lawn_islands >= 45
+		and continuous_hedge_count >= 45
+		and modern_lamp_count >= 55
+		and stone_bench_count >= 25
+		and boulevard_pool_deck_count >= 3
+		and int(_enhancement_stats.get("boulevard_marina_deck_segments", 0)) >= 20
+		and int(_enhancement_stats.get("boulevard_date_palms", 0)) >= 60
+		and int(_enhancement_stats.get("boulevard_frontage_infill", 0)) >= 8
 	)
 
 

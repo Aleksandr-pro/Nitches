@@ -215,11 +215,21 @@ void fragment() {
 	ALBEDO *= mix(1.0, 0.72, damp);
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.58, 0.62, 0.68), puddle);
 
+	// 0.2.19 reference corridor: RichTown Boulevard itself is a freshly
+	// resurfaced charcoal carriageway, while side streets retain the
+	// older grey aggregate.  The world-space mask is confined to the
+	// exported X=760, Z=-430..430 avenue and its intersection pads.
+	float boulevard_mask = (1.0 - smoothstep(11.2, 13.2, abs(world_pos.x - 760.0)))
+		* smoothstep(-438.0, -428.0, world_pos.z)
+		* (1.0 - smoothstep(428.0, 438.0, world_pos.z));
+	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.43, 0.45, 0.49), boulevard_mask * 0.86);
+
 	float surface_roughness = dry_roughness;
 	surface_roughness += (wear_luma - 0.065) * 0.65;
 	surface_roughness -= wheel_track * 0.10 + oil * 0.18;
 	surface_roughness += crack * 0.045 + joint * 0.05 + repair_patch * 0.015;
 	surface_roughness = clamp(surface_roughness, 0.70, 0.985);
+	surface_roughness = mix(surface_roughness, 0.82, boulevard_mask * 0.72);
 
 	ROUGHNESS = mix(surface_roughness, wet_roughness, damp);
 	ROUGHNESS = mix(ROUGHNESS, puddle_roughness, puddle);
