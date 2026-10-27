@@ -4452,13 +4452,13 @@ def build_hotel():
         box("hotel_balcony_slab", cx, slab_y, floor_base + 0.10, 2.95, 1.62, 0.16, stone)
         box("hotel_balcony_rail_glass", cx, face_y + sign * 1.54, floor_base + 0.66, 2.85, 0.05, 0.78, glass)
         box("hotel_balcony_rail_top", cx, face_y + sign * 1.54, floor_base + 1.09, 2.96, 0.09, 0.07, bronze)
-        box("hotel_balcony_divider", cx + 1.56, slab_y, floor_base + 0.98, 0.09, 1.52, 1.80, bronze)
+        box("hotel_balcony_divider", cx + 1.56, slab_y, floor_base + 0.72, 0.09, 1.52, 1.18, bronze)
 
     # ---- parcel plinth and two-storey podium -------------------------
     box("hotel_plinth", 0.0, 0.0, 0.15, 33.60, 26.00, 0.30, granite, bevel=0.015)
     box("hotel_podium", 0.0, 0.0, 3.80, 32.40, 22.40, 7.00, stone, bevel=0.02)
     box("hotel_podium_cornice", 0.0, 0.0, 7.45, 33.00, 23.00, 0.30, plaster)
-    box("hotel_podium_roof", 0.0, 0.0, 7.63, 32.20, 22.20, 0.08, dark)
+    box("hotel_podium_roof", 0.0, 0.0, 7.63, 32.20, 22.20, 0.08, stone)
     for side_y in (-11.24, 11.24):
         box("hotel_podium_base", 0.0, side_y, 0.80, 32.55, 0.14, 1.00, granite)
         box("hotel_podium_bronze_band", 0.0, side_y, 4.62, 32.55, 0.12, 0.34, bronze)
@@ -4497,9 +4497,9 @@ def build_hotel():
     box("hotel_entrance_glass", 0.0, -11.34, 2.55, 9.40, 0.04, 4.20, glass)
     for mx in (-4.7, -2.35, 2.35, 4.7):
         box("hotel_entrance_mullion", mx, -11.37, 2.55, 0.09, 0.06, 4.20, bronze)
-    cyl("hotel_revolving_drum", 0.0, -11.55, 1.95, 1.45, 3.30, glass, vertices=24)
-    cyl("hotel_revolving_top", 0.0, -11.55, 3.68, 1.56, 0.18, bronze, vertices=24)
-    cyl("hotel_revolving_post", 0.0, -11.55, 1.95, 0.09, 3.30, bronze, vertices=10)
+    cyl("hotel_revolving_drum", 0.0, -11.40, 1.95, 1.45, 3.30, glass, vertices=24)
+    cyl("hotel_revolving_top", 0.0, -11.40, 3.68, 1.55, 0.18, bronze, vertices=24)
+    cyl("hotel_revolving_post", 0.0, -11.40, 1.95, 0.09, 3.30, bronze, vertices=10)
     for dx in (-3.45, 3.45):
         box("hotel_side_door_frame", dx, -11.36, 1.95, 1.70, 0.10, 3.30, bronze)
         box("hotel_side_door_glass", dx, -11.40, 1.95, 1.50, 0.04, 3.10, glass)
@@ -4515,10 +4515,10 @@ def build_hotel():
         cyl("hotel_lantern_post", lx, -12.30, 1.55, 0.05, 2.50, bronze, vertices=8)
         sphere("hotel_lantern_globe", lx, -12.30, 2.95, 0.34, 0.34, 0.40, light)
     for fx, flag_mat in ((-10.50, accent), (10.50, curtain)):
-        cyl("hotel_flag_pole", fx, -12.20, 3.80, 0.045, 7.00, frame, vertices=8)
-        sphere("hotel_flag_finial", fx, -12.20, 7.42, 0.14, 0.14, 0.14, bronze)
+        cyl("hotel_flag_pole", fx, -12.20, 5.10, 0.045, 9.60, frame, vertices=8)
+        sphere("hotel_flag_finial", fx, -12.20, 10.02, 0.14, 0.14, 0.14, bronze)
         flag_dir = 1.0 if fx < 0 else -1.0
-        box("hotel_flag", fx + flag_dir * 0.80, -12.20, 6.72, 1.50, 0.04, 0.95, flag_mat)
+        box("hotel_flag", fx + flag_dir * 0.90, -12.20, 9.15, 1.70, 0.04, 1.05, flag_mat)
     for px in (-14.60, 14.60):
         box("hotel_planter", px, -11.90, 0.55, 2.60, 0.90, 0.50, granite)
         box("hotel_planter_hedge", px, -11.90, 0.88, 2.42, 0.74, 0.30, hedge, bevel=0.04)
@@ -4547,6 +4547,9 @@ def build_hotel():
     # ---- guest tower ---------------------------------------------------
     box("hotel_tower", 0.0, 1.00, 22.10, 26.00, 17.60, 43.60, plaster, bevel=0.03)
     box("hotel_tower_plinth", 0.0, 1.00, 7.95, 26.80, 18.40, 0.70, stone)
+    for fin_side in (-13.68, 13.68):
+        for fin_y in (-1.70, 3.70):
+            box("hotel_side_fin", fin_side, fin_y, 26.02, 0.14, 0.50, 35.75, bronze)
     for pier_x in (-12.35, 12.35):
         box("hotel_tower_end_pier", pier_x, 1.00, 22.10, 2.50, 18.40, 43.60, stone, bevel=0.02)
         box("hotel_tower_pier_bronze", pier_x, -8.28, 26.02, 0.50, 0.14, 35.75, bronze)
@@ -4572,7 +4575,7 @@ def build_hotel():
                     continue
                 tower_window(bx, face_y, win_z, 2.30, 2.15, face)
                 balcony(bx, face_y, sign, floor_base)
-            box("hotel_balcony_end_divider", -11.31, face_y + sign * 0.80, floor_base + 0.98, 0.09, 1.52, 1.80, bronze)
+            box("hotel_balcony_end_divider", -11.31, face_y + sign * 0.80, floor_base + 0.72, 0.09, 1.52, 1.18, bronze)
         for side_x, face in ((-13.60, "left"), (13.60, "right")):
             sign = -1.0 if face == "left" else 1.0
             for wy in (-4.40, 1.00, 6.40):
@@ -4599,6 +4602,14 @@ def build_hotel():
     box("hotel_roof_rail_back_top", 0.0, 9.55, 45.24, 26.10, 0.09, 0.07, bronze)
     cyl("hotel_beacon_mast", 0.0, 1.20, 48.35, 0.06, 0.90, bronze, vertices=8)
     sphere("hotel_beacon", 0.0, 1.20, 48.92, 0.30, 0.30, 0.30, light)
+    # Penthouse-roof plant and a tilted solar field break up the slab.
+    solar = MATS["SolarCell"]
+    for px in (-6.50, 6.50):
+        box("hotel_penthouse_plant", px, 3.60, 48.35, 3.20, 2.60, 0.90, frame, bevel=0.02)
+    for row_y in (-2.40, 0.60):
+        for panel_x in (-6.90, -3.45, 0.0, 3.45, 6.90):
+            rbox("hotel_solar_panel", panel_x, row_y, 48.28, 3.10, 2.00, 0.09, solar, rotation=(-0.32, 0.0, 0.0))
+            box("hotel_solar_stand", panel_x, row_y + 0.55, 48.02, 0.14, 0.14, 0.42, frame)
 
 
 def main():
