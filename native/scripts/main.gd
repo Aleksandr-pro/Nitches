@@ -388,7 +388,7 @@ func _run_smoke_checks() -> void:
 		failures.append("exported world data is empty: %s" % _world.build_error)
 	if int(stats.get("terrainVertices", 0)) < 9000:
 		failures.append("terrain stats are missing or too small")
-	if int(stats.get("roadEdges", 0)) < 35:
+	if int(stats.get("roadEdges", 0)) < 50:
 		failures.append("road stats are missing or too small")
 	if int(stats.get("buildings", 0)) < 45:
 		failures.append("building stats are missing or too small")
@@ -414,6 +414,12 @@ func _run_smoke_checks() -> void:
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("photoreal_models_0223", false)) or not bool(enhancement_stats.get("photoreal_park_furniture_0223", false)) or int(enhancement_stats.get("palm_date_triangles", 0)) < 15000 or int(enhancement_stats.get("palm_royal_triangles", 0)) < 11000 or int(enhancement_stats.get("grass_tuft_triangles", 0)) < 900 or int(enhancement_stats.get("flower_clump_triangles", 0)) < 3500 or int(enhancement_stats.get("ornamental_shrub_triangles", 0)) < 4200 or int(enhancement_stats.get("street_lamp_triangles", 0)) < 4500 or int(enhancement_stats.get("bus_shelter_triangles", 0)) < 7500 or int(enhancement_stats.get("park_bench_triangles", 0)) < 3500 or int(enhancement_stats.get("park_pergola_triangles", 0)) < 7000 or int(enhancement_stats.get("park_bench_models", 0)) < 34:
 		failures.append("0.2.23 photoreal model detail pass (palms/ground cover/lamps/shelters/park furniture) is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("district_infrastructure_0224", false)) or not bool(enhancement_stats.get("rounded_returns_0224", false)) or int(enhancement_stats.get("district_streets", 0)) < 6 or float(enhancement_stats.get("district_street_length_m", 0.0)) < 750.0 or int(enhancement_stats.get("palm_local_roads", 0)) < 3 or float(enhancement_stats.get("palm_local_length_m", 0.0)) < 90.0 or int(enhancement_stats.get("district_driveways", 0)) < 9 or int(enhancement_stats.get("district_hedges", 0)) < 14 or int(enhancement_stats.get("district_lamps", 0)) < 16 or int(enhancement_stats.get("district_street_trees", 0)) < 12 or int(enhancement_stats.get("district_palms", 0)) < 5 or int(enhancement_stats.get("district_benches", 0)) < 4 or int(enhancement_stats.get("district_roundabout", 0)) < 1 or int(enhancement_stats.get("district_mosque_plaza", 0)) < 1 or int(enhancement_stats.get("rounded_intersection_returns", 0)) < 80 or int(enhancement_stats.get("rounded_corner_curbs", 0)) < 400 or int(enhancement_stats.get("junctions_with_rounded_returns", 0)) < 25 or int(enhancement_stats.get("junction_edge_openings_0224", 0)) < 40 or int(enhancement_stats.get("junction_paint_breaks_0224", 0)) < 20 or int(enhancement_stats.get("guardrail_terminals", 0)) < 4 or int(enhancement_stats.get("guardrail_trimmed_subsegments", 0)) < 10 or float(enhancement_stats.get("guardrail_trim_start_m", 0.0)) < 13.0 or float(enhancement_stats.get("guardrail_min_alignment", 0.0)) < 0.99:
+		failures.append("0.2.24 district streets/rounded junctions/guardrail alignment pass is incomplete: %s" % str(enhancement_stats))
+	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
+	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
+	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
+		failures.append("0.2.24 South Villa District streets are not drivable asphalt: %s / %s" % [str(district_surface), str(crescent_surface)])
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
 		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("premium_villa_models", 0)) < 14 or not bool(enhancement_stats.get("premium_villa_fixed_scale", false)) or not bool(enhancement_stats.get("premium_villa_detail_pass", false)) or not bool(enhancement_stats.get("premium_villa_material_pass", false)) or not bool(enhancement_stats.get("premium_villa_site_pass", false)):
