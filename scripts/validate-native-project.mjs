@@ -49,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=26'), 'Native 0.2.23 must bump Android versionCode to 26');
-assert(preset.includes('version/name="0.2.23-native-alpha"'), 'Native version name must be 0.2.23-native-alpha');
+assert(preset.includes('version/code=27'), 'Native 0.2.24 must bump Android versionCode to 27');
+assert(preset.includes('version/name="0.2.24-native-alpha"'), 'Native version name must be 0.2.24-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -84,6 +84,12 @@ for (const marker of ['def build_park_bench():', 'def build_park_pergola():', '(
   assert(blenderScript.includes(marker), `Blender 0.2.23 park-model marker is missing: ${marker}`);
 }
 assert(syncScript.includes('park_bench.glb') && syncScript.includes('park_pergola.glb'), 'Native asset sync is missing the 0.2.23 park bench/pergola GLBs');
+// 0.2.24 districts/roads: synthetic local streets in the exported data,
+// rounded kerb returns, cross-road kerb/paint openings and guardrails
+// trimmed clear of the Corniche junctions.
+for (const marker of ['district_infrastructure_0224', '_build_district_infrastructure', '_build_rounded_intersection_returns', '_clearance_to_other_roads', 'rounded_intersection_returns', 'rounded_corner_curbs', 'junction_edge_openings_0224', 'junction_paint_breaks_0224', 'guardrail_trim_start_m', 'guardrail_terminals', 'guardrail_min_alignment']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.24 district/road marker is missing: ${marker}`);
+}
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
@@ -407,7 +413,10 @@ assert(data.schemaVersion === 1, 'Unexpected native world schema');
 assert(data.units === 'metres', 'Native world must use real metres');
 assert(data.terrain.heights.length === data.terrain.cols * data.terrain.rows, 'Terrain height count mismatch');
 assert(data.bounds.minX === 520 && data.bounds.maxX === 1500, 'RichTown X bounds changed unexpectedly');
-assert(data.roads.length >= 35, 'Too few RichTown road edges exported');
+assert(data.roads.length >= 50, 'Too few RichTown road edges exported');
+assert(data.roads.filter((r) => r.id.startsWith('rt-villa-')).length === 6, 'Native 0.2.24 must export 6 South Villa District streets');
+assert(data.roads.filter((r) => r.id.startsWith('rt-palm-local-')).length === 3, 'Native 0.2.24 must export 3 Palm Island local streets');
+assert(data.districts.some((d) => d.id === 'south-villa-district'), 'Native 0.2.24 South Villa District metadata is missing');
 assert(data.buildings.length >= 45, 'Too few RichTown buildings exported');
 assert(data.buildings.filter((b) => b.model === 'villa').length === 14, 'Expected 14 Blender villas');
 assert(data.buildings.filter((b) => b.model === 'glass_tower').length === 8, 'Expected 8 Blender glass towers');

@@ -140,6 +140,7 @@ var _dynamic_world: NativeDynamicWorld
 var _road_segment_starts: Array[Vector3] = []
 var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
+var _road_segment_ids: Array[String] = []
 var _road_segment_grid: Dictionary = {}
 var _multimesh_chunk_count := 0
 var _pending_batched_models: Dictionary = {}
@@ -199,6 +200,7 @@ func build_world() -> Dictionary:
 	_build_bus_shelters()
 	_build_benches()
 	_build_city_details()
+	_build_district_infrastructure()
 	_build_parks()
 	_flush_batched_models()
 	_build_reflection_probes()
@@ -336,6 +338,7 @@ func _build_road_surface_index() -> void:
 	_road_segment_starts.clear()
 	_road_segment_ends.clear()
 	_road_segment_half_widths.clear()
+	_road_segment_ids.clear()
 	_road_segment_grid.clear()
 	var grid_entries := 0
 	for road_variant in data.get("roads", []):
@@ -351,6 +354,7 @@ func _build_road_surface_index() -> void:
 			_road_segment_starts.append(a)
 			_road_segment_ends.append(b)
 			_road_segment_half_widths.append(half_width)
+			_road_segment_ids.append(String(road.get("id", "")))
 
 			# The old lookup scanned all 1085 road segments for every tyre,
 			# every physics tick. This uniform grid contains every segment
@@ -395,6 +399,38 @@ func _road_clearance_xz(point: Vector3) -> float:
 	var best_clearance := ROAD_GRID_QUERY_CLEARANCE_M
 	for index_variant in candidates:
 		var i := int(index_variant)
+		var clearance := _distance_to_segment_xz(point, _road_segment_starts[i], _road_segment_ends[i]) - _road_segment_half_widths[i]
+		best_clearance = minf(best_clearance, clearance)
+	return best_clearance
+
+
+## Clearance to every road *except* one named road.  0.2.24 uses this to
+## cut real openings in curbs, sidewalk slabs, gutters and lane paint
+## wherever another carriageway crosses or joins mid-segment; the old
+## endpoint-only junction trims could not see those intersections at
+## all, so kerbs ran straight across side-street mouths.
+func _clearance_to_other_roads(point: Vector3, current_id: String, current_direction: Vector3 = Vector3.ZERO) -> float:
+	if _road_segment_grid.is_empty():
+		return ROAD_GRID_QUERY_CLEARANCE_M
+	var candidates: Array = _road_segment_grid.get(_road_grid_cell(point.x, point.z), [])
+	var best_clearance := ROAD_GRID_QUERY_CLEARANCE_M
+	var flat_direction := current_direction
+	flat_direction.y = 0.0
+	var has_direction := flat_direction.length_squared() > 0.0001
+	if has_direction:
+		flat_direction = flat_direction.normalized()
+	for index_variant in candidates:
+		var i := int(index_variant)
+		if _road_segment_ids[i] == current_id:
+			continue
+		if has_direction:
+			# A collinear continuation under a different edge id is
+			# the same physical carriageway, not a crossing street:
+			# do not punch kerb/paint gaps at invisible chain seams.
+			var other_direction := _road_segment_ends[i] - _road_segment_starts[i]
+			other_direction.y = 0.0
+			if other_direction.length_squared() > 0.0001 and absf(flat_direction.dot(other_direction.normalized())) > 0.85:
+				continue
 		var clearance := _distance_to_segment_xz(point, _road_segment_starts[i], _road_segment_ends[i]) - _road_segment_half_widths[i]
 		best_clearance = minf(best_clearance, clearance)
 	return best_clearance
@@ -2212,6 +2248,7 @@ func _build_roads() -> void:
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false))
 
 	_build_intersection_pads(roads_root, asphalt_material)
+	_build_rounded_intersection_returns(roads_root, asphalt_material)
 	_build_road_edges(roads_root)
 	_build_road_markings(roads_root)
 	_build_road_details(roads_root)
@@ -2250,6 +2287,138 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 	_enhancement_stats["intersection_pads"] = transforms.size()
 
 
+
+## 0.2.24 rounded kerb returns.  Every exported carriageway is a straight
+## axial ribbon, so junctions used to meet as literal rectangles with
+## square 90-degree kerb corners.  For each real junction quadrant this
+## builds the missing turning geometry: a tangent quarter-arc of asphalt
+## between the two road edges plus short curb boxes that follow the arc.
+## Quadrant arms are probed against the road-surface index, so T-junctions
+## only receive returns on the side where both carriageways actually run.
+func _build_rounded_intersection_returns(parent: Node, asphalt_material: ShaderMaterial) -> void:
+	var specs: Array[Dictionary] = []
+	var vertical_roads := [
+		{"x": 560.0, "width": 11.0},
+		{"x": 760.0, "width": 22.0},
+		{"x": 930.0, "width": 24.0},
+	]
+	var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	for vertical_variant in vertical_roads:
+		var vertical: Dictionary = vertical_variant
+		for z_variant in cross_z:
+			var z_value := float(z_variant)
+			if is_equal_approx(float(vertical.get("x", 0.0)), 930.0) and is_equal_approx(z_value, 225.0):
+				continue # No east-west street reaches the Corniche at z=225.
+			specs.append({
+				"x": float(vertical.get("x", 760.0)),
+				"z": z_value,
+				"a": float(vertical.get("width", 12.0)) * 0.5,
+				"b": (16.0 if is_equal_approx(z_value, 225.0) else 13.0) * 0.5,
+			})
+	specs.append({"x": 930.0, "z": 80.0, "a": 12.0, "b": 5.0}) # Sail causeway T.
+	specs.append({"x": 1395.0, "z": -250.0, "a": 4.5, "b": 5.5}) # Palm trunk/fronds.
+	# South Villa District local junctions (0.2.24 synthetic streets).
+	for local_x in [638.0, 689.0]:
+		for local_z in [225.0, 286.0, 368.0]:
+			specs.append({"x": local_x, "z": local_z, "a": 4.0, "b": 4.5 if not is_equal_approx(local_z, 225.0) else 8.0})
+	specs.append({"x": 640.5, "z": 430.0, "a": 4.0, "b": 6.5})
+	specs.append({"x": 686.0, "z": 430.0, "a": 4.0, "b": 6.5})
+	for outer_x in [560.0, 760.0]:
+		for local_z in [286.0, 368.0]:
+			specs.append({"x": outer_x, "z": local_z, "a": 5.5 if is_equal_approx(outer_x, 560.0) else 11.0, "b": 4.5})
+
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var curb_transforms: Array[Transform3D] = []
+	var return_count := 0
+	var triangle_count := 0
+	var junctions_with_returns := 0
+	const ARC_STEPS := 5
+	for spec in specs:
+		var center := Vector3(_f(spec, "x"), 0.0, _f(spec, "z"))
+		var a := _f(spec, "a", 5.0)
+		var b := _f(spec, "b", 5.0)
+		var radius := clampf(minf(a, b) * 0.9, 3.2, 7.0)
+		var junction_had_return := false
+		for sx_variant in [-1.0, 1.0]:
+			var sx := float(sx_variant)
+			# The horizontal arm must really extend into this quadrant.
+			var h_probe := center + Vector3(sx * (a + radius + 3.0), 0.0, 0.0)
+			if _road_clearance_xz(h_probe) > 0.25:
+				continue
+			for sz_variant in [-1.0, 1.0]:
+				var sz := float(sz_variant)
+				var v_probe := center + Vector3(0.0, 0.0, sz * (b + radius + 3.0))
+				if _road_clearance_xz(v_probe) > 0.25:
+					continue
+				var arc_center := center + Vector3(sx * (a + radius), 0.0, sz * (b + radius))
+				var corner := center + Vector3(sx * a, 0.0, sz * b)
+				corner.y = height_at(corner.x, corner.z) + ROAD_SURFACE_OFFSET_M + 0.019
+				var arc_points: Array[Vector3] = []
+				for step in range(ARC_STEPS + 1):
+					var t := float(step) / float(ARC_STEPS)
+					# Quarter arc from the vertical-road edge tangent
+					# (a, b+R) to the horizontal-road edge tangent
+					# (a+R, b) in quadrant-local coordinates.
+					var angle := t * PI * 0.5
+					var offset := Vector3(-cos(angle) * radius * sx, 0.0, -sin(angle) * radius * sz)
+					var arc_point := arc_center + offset
+					arc_point.y = height_at(arc_point.x, arc_point.z) + ROAD_SURFACE_OFFSET_M + 0.019
+					arc_points.append(arc_point)
+				for step in range(ARC_STEPS):
+					var v0 := corner
+					var v1 := arc_points[step]
+					var v2 := arc_points[step + 1]
+					if (v1 - v0).cross(v2 - v0).y > 0.0:
+						var swap := v1
+						v1 = v2
+						v2 = swap
+					for vertex in [v0, v1, v2]:
+						tool.set_normal(Vector3.UP)
+						tool.set_uv(Vector2(vertex.x / 18.0, vertex.z / 18.0))
+						tool.add_vertex(vertex)
+					triangle_count += 1
+				for step in range(ARC_STEPS):
+					var p0 := arc_points[step]
+					var p1 := arc_points[step + 1]
+					var tangent := p1 - p0
+					tangent.y = 0.0
+					var tangent_length := tangent.length()
+					if tangent_length < 0.05:
+						continue
+					var mid := (p0 + p1) * 0.5
+					curb_transforms.append(make_transform(
+						Vector3(mid.x, height_at(mid.x, mid.z) + 0.145, mid.z),
+						atan2(tangent.x, tangent.z),
+						Vector3(0.26, 0.19, tangent_length + 0.05)
+					))
+				return_count += 1
+				junction_had_return = true
+		if junction_had_return:
+			junctions_with_returns += 1
+
+	var mesh := tool.commit()
+	if mesh != null:
+		var instance := _mesh_instance(parent, mesh, asphalt_material, Transform3D.IDENTITY, "RoundedIntersectionReturns", false)
+		instance.custom_aabb = WORLD_AABB
+	var curb_mesh := BoxMesh.new()
+	curb_mesh.size = Vector3.ONE
+	var curb_material := _create_concrete_material(
+		"road_curb_shader",
+		Color(0.37, 0.38, 0.37),
+		0.97,
+		0.72,
+		0.55,
+		0.48
+	)
+	curb_mesh.material = curb_material
+	_add_multimesh(parent, curb_mesh, curb_material, curb_transforms, "RoundedCornerCurbs", true)
+	_enhancement_stats["rounded_returns_0224"] = return_count > 0
+	_enhancement_stats["rounded_intersection_returns"] = return_count
+	_enhancement_stats["rounded_return_triangles"] = triangle_count
+	_enhancement_stats["rounded_corner_curbs"] = curb_transforms.size()
+	_enhancement_stats["junctions_with_rounded_returns"] = junctions_with_returns
+
 func _build_road_edges(parent: Node) -> void:
 	# 0.2.6 gives the carriageway a physical edge instead of a flat
 	# sidewalk ribbon lying below the asphalt: dark gutter, concrete curb
@@ -2263,6 +2432,7 @@ func _build_road_edges(parent: Node) -> void:
 	var boulevard_slab_transforms: Array[Transform3D] = []
 	var boulevard_granite_curb_transforms: Array[Transform3D] = []
 	var driveway_gaps := 0
+	var junction_opening_gaps := 0
 	var road_index := 0
 	var bridgeless_ids := ["rt-palm-1", "rt-sail-road", "rt-highway-1"]
 
@@ -2288,6 +2458,11 @@ func _build_road_edges(parent: Node) -> void:
 		var end_direction := points[points.size() - 1] - points[points.size() - 2]
 		var trim_start := float(_junction_info(points[0], road_id, start_direction).get("trim_m", 0.0))
 		var trim_end := float(_junction_info(points[points.size() - 1], road_id, end_direction).get("trim_m", 0.0))
+		# 0.2.24: kerbs/slabs now stop at the rounded-return tangent
+		# (roughly one return radius past the old square corner) instead
+		# of cutting straight across the new corner arc.
+		var edge_trim_start := trim_start + (3.6 if trim_start > 0.0 else 0.0)
+		var edge_trim_end := trim_end + (3.6 if trim_end > 0.0 else 0.0)
 		var distance_from_start := 0.0
 		for i in range(points.size() - 1):
 			var a := points[i]
@@ -2300,7 +2475,7 @@ func _build_road_edges(parent: Node) -> void:
 			var segment_end := distance_from_start
 			if length < 0.45:
 				continue
-			if segment_end <= trim_start + 0.5 or segment_start >= total_length - trim_end - 0.5:
+			if segment_end <= edge_trim_start + 0.5 or segment_start >= total_length - edge_trim_end - 0.5:
 				continue
 			var direction := segment / length
 			var side := Vector3(-direction.z, 0.0, direction.x)
@@ -2310,30 +2485,68 @@ func _build_road_edges(parent: Node) -> void:
 			var near_junction := (trim_start > 0.0 and segment_start < trim_start + 11.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 11.0)
 			for side_sign_variant in [-1.0, 1.0]:
 				var side_sign := float(side_sign_variant)
+				# 0.2.24 junction openings: test both segment ends and
+				# the midpoint of each edge element against every OTHER
+				# carriageway.  A side street joining mid-segment (all
+				# new district streets do) now cuts a clean mouth in
+				# the gutter/slab/curb instead of leaving a concrete
+				# bar across the turning path.
 				var gutter_offset := half_width - 0.22
 				var gutter_center: Vector3 = midpoint + side * side_sign * gutter_offset
-				gutter_transforms.append(make_transform(
-					Vector3(gutter_center.x, _road_surface_y(midpoint.y, gutter_offset, half_width, crown_scale) + 0.006, gutter_center.z),
-					yaw,
-					Vector3(0.60, 0.016, length + 0.05)
-				))
-
-				var slab_center: Vector3 = midpoint + side * side_sign * (half_width + 1.28)
-				var slab_transform := make_transform(
-					Vector3(slab_center.x, midpoint.y + 0.155, slab_center.z),
-					yaw,
-					Vector3(1.90, 0.15, length + 0.06)
+				var gutter_clearance := minf(
+					_clearance_to_other_roads(gutter_center, road_id, direction),
+					minf(
+						_clearance_to_other_roads(a + side * side_sign * gutter_offset, road_id, direction),
+						_clearance_to_other_roads(b + side * side_sign * gutter_offset, road_id, direction)
+					)
 				)
-				if is_boulevard:
-					boulevard_slab_transforms.append(slab_transform)
+				if gutter_clearance < 0.9:
+					junction_opening_gaps += 1
 				else:
-					slab_transforms.append(slab_transform)
+					gutter_transforms.append(make_transform(
+						Vector3(gutter_center.x, _road_surface_y(midpoint.y, gutter_offset, half_width, crown_scale) + 0.006, gutter_center.z),
+						yaw,
+						Vector3(0.60, 0.016, length + 0.05)
+					))
+
+				var slab_offset := half_width + 1.28
+				var slab_center: Vector3 = midpoint + side * side_sign * slab_offset
+				var slab_clearance := minf(
+					_clearance_to_other_roads(slab_center, road_id, direction),
+					minf(
+						_clearance_to_other_roads(a + side * side_sign * slab_offset, road_id, direction),
+						_clearance_to_other_roads(b + side * side_sign * slab_offset, road_id, direction)
+					)
+				)
+				if slab_clearance < 1.8:
+					junction_opening_gaps += 1
+				else:
+					var slab_transform := make_transform(
+						Vector3(slab_center.x, midpoint.y + 0.155, slab_center.z),
+						yaw,
+						Vector3(1.90, 0.15, length + 0.06)
+					)
+					if is_boulevard:
+						boulevard_slab_transforms.append(slab_transform)
+					else:
+						slab_transforms.append(slab_transform)
 
 				var driveway_roll := _hash01(road_index * 197 + i * 13, int(side_sign) * 37 + 101)
 				if driveway_roll < 0.07 and not near_junction and not is_boulevard:
 					driveway_gaps += 1
 					continue
-				var curb_center: Vector3 = midpoint + side * side_sign * (half_width + 0.20)
+				var curb_offset := half_width + 0.20
+				var curb_center: Vector3 = midpoint + side * side_sign * curb_offset
+				var curb_clearance := minf(
+					_clearance_to_other_roads(curb_center, road_id, direction),
+					minf(
+						_clearance_to_other_roads(a + side * side_sign * curb_offset, road_id, direction),
+						_clearance_to_other_roads(b + side * side_sign * curb_offset, road_id, direction)
+					)
+				)
+				if curb_clearance < 2.7:
+					junction_opening_gaps += 1
+					continue
 				var curb_transform := make_transform(
 					Vector3(curb_center.x, midpoint.y + 0.145, curb_center.z),
 					yaw,
@@ -2407,6 +2620,7 @@ func _build_road_edges(parent: Node) -> void:
 	_enhancement_stats["boulevard_granite_curbs"] = boulevard_granite_curb_transforms.size()
 	_enhancement_stats["boulevard_premium_sidewalk_slabs"] = boulevard_slab_transforms.size()
 	_enhancement_stats["driveway_curb_gaps"] = driveway_gaps
+	_enhancement_stats["junction_edge_openings_0224"] = junction_opening_gaps
 
 
 func _append_lane_arrow(transforms: Array, lane_center: Vector3, direction: Vector3, surface_y: float) -> void:
@@ -2450,6 +2664,7 @@ func _build_road_markings(parent: Node) -> void:
 	var tactile_transforms: Array[Transform3D] = []
 	var lane_arrow_count := 0
 	var boulevard_fresh_markings := 0
+	var junction_paint_breaks := 0
 	var road_index := 0
 
 	for road_variant in data.get("roads", []):
@@ -2505,6 +2720,14 @@ func _build_road_markings(parent: Node) -> void:
 			var crown_scale := _road_crown_scale(segment_start + length * 0.5, total_length, trim_start, trim_end)
 			var near_edge_break := (trim_start > 0.0 and segment_start < trim_start + 1.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 1.0)
 			var near_paint_break := (trim_start > 0.0 and segment_start < trim_start + 4.2) or (trim_end > 0.0 and segment_end > total_length - trim_end - 4.2)
+			# 0.2.24: a street crossing mid-segment is invisible to the
+			# endpoint trims above; without this test the double-yellow
+			# centreline and edge paint ran straight through the new
+			# district junctions.
+			if _clearance_to_other_roads(midpoint, road_id, direction) < 1.1:
+				near_edge_break = true
+				near_paint_break = true
+				junction_paint_breaks += 1
 
 			if not near_edge_break:
 				for edge_side_variant in [-1.0, 1.0]:
@@ -2806,6 +3029,7 @@ func _build_road_markings(parent: Node) -> void:
 	_enhancement_stats["bike_lane_segments"] = bike_transforms.size()
 	_enhancement_stats["tactile_paving"] = tactile_transforms.size()
 	_enhancement_stats["road_markings"] = stripe_total + edge_total + dash_total + center_total + arrow_total + parking_total
+	_enhancement_stats["junction_paint_breaks_0224"] = junction_paint_breaks
 
 
 func _build_road_details(parent: Node) -> void:
@@ -3111,33 +3335,90 @@ func _build_road_details(parent: Node) -> void:
 func _build_bridge_guardrails(parent: Node) -> void:
 	var post_transforms: Array[Transform3D] = []
 	var rail_transforms: Array[Transform3D] = []
+	var terminal_transforms: Array[Transform3D] = []
 	var bridge_ids := ["rt-palm-1", "rt-sail-road"]
+	var trimmed_subsegments := 0
+	var min_alignment := 1.0
+	var trim_start_min := 0.0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
-		if not bridge_ids.has(String(road.get("id", ""))):
+		var road_id := String(road.get("id", ""))
+		if not bridge_ids.has(road_id):
 			continue
 		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
 		var half_width := _f(road, "widthM", 12.0) * 0.5 - 0.38
-		for i in range(samples.size() - 1):
-			var a := _sample_point(samples[i])
-			var b := _sample_point(samples[i + 1])
-			var direction := b - a
-			direction.y = 0.0
-			if direction.length_squared() < 0.001:
-				continue
-			direction = direction.normalized()
-			var side_vector := Vector3(-direction.z, 0.0, direction.x)
-			var yaw := atan2(-direction.x, -direction.z)
-			var segment_length := a.distance_to(b)
-			for side in [-1.0, 1.0]:
-				var edge_a: Vector3 = a + side_vector * half_width * float(side) + Vector3.UP * 0.10
-				var edge_b: Vector3 = b + side_vector * half_width * float(side) + Vector3.UP * 0.10
-				if i % 2 == 0:
-					post_transforms.append(make_transform(edge_a + Vector3.UP * 0.43, yaw, Vector3(0.16, 0.86, 0.16)))
-				var centre: Vector3 = (edge_a + edge_b) * 0.5
-				_add_box_collider(centre + Vector3.UP * 0.45, Vector3(0.24, 0.92, segment_length + 0.05), yaw)
-				for rail_height in [0.52, 0.82]:
-					rail_transforms.append(make_transform(centre + Vector3.UP * rail_height, yaw, Vector3(0.09, 0.13, segment_length + 0.08)))
+		var points: Array[Vector3] = []
+		for sample in samples:
+			points.append(_sample_point(sample))
+		var total_length := 0.0
+		for i in range(points.size() - 1):
+			var flat := points[i + 1] - points[i]
+			flat.y = 0.0
+			total_length += flat.length()
+		# 0.2.24 fix for rails "across the road": both causeways start at
+		# the centre of the 24 m Corniche, and the old loop laid posts,
+		# rails AND their box colliders from sample zero -- the first
+		# ~13 m of guardrail physically crossed the Corniche driving
+		# lanes.  Rails now start one junction trim (crossing half
+		# width + 0.9 m) plus a 1.6 m safety flare from each end, with
+		# segments subdivided so the cut lands on the boundary instead
+		# of the next 5--9 m sample.
+		var start_trim := float(_junction_info(points[0], road_id, points[1] - points[0]).get("trim_m", 0.0))
+		var end_trim := float(_junction_info(points[points.size() - 1], road_id, points[points.size() - 1] - points[points.size() - 2]).get("trim_m", 0.0))
+		var guard_start := start_trim + (1.6 if start_trim > 0.0 else 0.0)
+		var guard_end := total_length - end_trim - (1.6 if end_trim > 0.0 else 0.0)
+		if guard_start > 0.0:
+			trim_start_min = guard_start if trim_start_min <= 0.0 else minf(trim_start_min, guard_start)
+		for side_variant in [-1.0, 1.0]:
+			var side := float(side_variant)
+			var kept_index := 0
+			var terminal_added := false
+			var distance_from_start := 0.0
+			for i in range(points.size() - 1):
+				var a := points[i]
+				var b := points[i + 1]
+				var direction := b - a
+				direction.y = 0.0
+				var segment_length := direction.length()
+				if segment_length < 0.001:
+					continue
+				direction /= segment_length
+				var side_vector := Vector3(-direction.z, 0.0, direction.x)
+				var yaw := atan2(-direction.x, -direction.z)
+				var subdivisions := maxi(1, int(ceil(segment_length / 2.5)))
+				for sub in range(subdivisions):
+					var sub_start := distance_from_start + segment_length * float(sub) / float(subdivisions)
+					var sub_end := distance_from_start + segment_length * float(sub + 1) / float(subdivisions)
+					if sub_start < guard_start or sub_end > guard_end:
+						trimmed_subsegments += 1
+						continue
+					var pa := a.lerp(b, float(sub) / float(subdivisions))
+					var pb := a.lerp(b, float(sub + 1) / float(subdivisions))
+					var sub_length := sub_end - sub_start
+					var edge_a: Vector3 = pa + side_vector * half_width * side + Vector3.UP * 0.10
+					var edge_b: Vector3 = pb + side_vector * half_width * side + Vector3.UP * 0.10
+					if kept_index % 2 == 0:
+						post_transforms.append(make_transform(edge_a + Vector3.UP * 0.43, yaw, Vector3(0.16, 0.86, 0.16)))
+					if not terminal_added and guard_start > 0.0:
+						# Flared yellow end shoe at the first kept post,
+						# offset outward so the rail line reads as a
+						# deliberate terminal, not a broken fence.
+						terminal_transforms.append(make_transform(
+							edge_a + side_vector * side * 0.12 + Vector3.UP * 0.55,
+							yaw,
+							Vector3(0.30, 0.68, 0.95)
+						))
+						terminal_added = true
+					var centre: Vector3 = (edge_a + edge_b) * 0.5
+					_add_box_collider(centre + Vector3.UP * 0.45, Vector3(0.24, 0.92, sub_length + 0.05), yaw)
+					for rail_height in [0.52, 0.82]:
+						rail_transforms.append(make_transform(centre + Vector3.UP * rail_height, yaw, Vector3(0.09, 0.13, sub_length + 0.08)))
+					var rail_axis := Basis(Vector3.UP, yaw).z
+					min_alignment = minf(min_alignment, absf(rail_axis.dot(direction)))
+					kept_index += 1
+				distance_from_start += segment_length
 
 	var metal := _prop_material("PropsMetal")
 	var post_mesh := BoxMesh.new()
@@ -3148,9 +3429,17 @@ func _build_bridge_guardrails(parent: Node) -> void:
 	rail_mesh.material = metal
 	_add_multimesh(parent, post_mesh, metal, post_transforms, "BridgeGuardrailPosts", true)
 	_add_multimesh(parent, rail_mesh, metal, rail_transforms, "BridgeGuardrails", true)
+	var terminal_material := _material("guardrail_terminal", "", "", Color(0.85, 0.62, 0.08), 0.55, 0.35)
+	var terminal_mesh := BoxMesh.new()
+	terminal_mesh.size = Vector3.ONE
+	terminal_mesh.material = terminal_material
+	_add_multimesh(parent, terminal_mesh, terminal_material, terminal_transforms, "BridgeGuardrailTerminals", true)
 	_enhancement_stats["guardrail_posts"] = post_transforms.size()
 	_enhancement_stats["guardrail_rails"] = rail_transforms.size()
-
+	_enhancement_stats["guardrail_terminals"] = terminal_transforms.size()
+	_enhancement_stats["guardrail_trimmed_subsegments"] = trimmed_subsegments
+	_enhancement_stats["guardrail_trim_start_m"] = trim_start_min
+	_enhancement_stats["guardrail_min_alignment"] = min_alignment
 
 func _get_gable_mesh() -> ArrayMesh:
 	if _gable_mesh != null:
@@ -7177,6 +7466,396 @@ func _park_place_furniture(ctx: Dictionary, spec: Dictionary) -> void:
 			(ctx["lamp_transforms"] as Array).append(make_transform(pos, _yaw_for_z_normal(Vector3(normal.x, 0.0, normal.y)), Vector3.ONE))
 			_add_cylinder_collider(pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
 
+
+
+## 0.2.24 South Villa District + Palm local streetscape.  The synthetic
+## district carriageways themselves come from the exported road data
+## (so asphalt, kerbs, markings, tyre surface and the minimap all see
+## them); this pass gives the existing villas an actual address:
+## paved driveways to the correct street edge, front hedges with a
+## driveway gap, street lamps, shade trees/palms, a mosque forecourt
+## in the deliberate gap in the west street, a mini-roundabout island
+## and a bus shelter.  Palm Island villas get the same driveway
+## treatment to their nearest carriageway.
+func _build_district_infrastructure() -> void:
+	var root := Node3D.new()
+	root.name = "DistrictInfrastructure"
+	add_child(root)
+
+	var paving_material := _create_premium_paving_material(
+		"terrain_premium_pavers_shader",
+		Color(0.84, 0.80, 0.70),
+		0.68,
+		0.140,
+		0.50
+	)
+	var hedge_material := _material(
+		"city_hedge",
+		"foliage.jpg",
+		"foliage_normal.jpg",
+		Color(0.42, 0.72, 0.33),
+		1.0,
+		0.0,
+		Vector3(0.35, 0.35, 0.35),
+		true
+	)
+	hedge_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+
+	var hedge_transforms: Array[Transform3D] = []
+	var lamp_transforms: Array[Transform3D] = []
+	var bench_transforms: Array[Transform3D] = []
+	var date_palm_transforms: Array[Transform3D] = []
+	var royal_palm_transforms: Array[Transform3D] = []
+	var tree_transforms: Array[Transform3D] = []
+	var flower_transforms: Array[Transform3D] = []
+	var shrub_transforms: Array[Transform3D] = []
+	var palm_driveway_transforms: Array[Transform3D] = []
+	var driveway_count := 0
+	var palm_driveway_count := 0
+
+	# Street inventory for smoke/stats.
+	var district_street_count := 0
+	var district_street_length := 0.0
+	var palm_local_count := 0
+	var palm_local_length := 0.0
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
+		var is_district := road_id.begins_with("rt-villa-")
+		var is_palm_local := road_id.begins_with("rt-palm-local-")
+		if not is_district and not is_palm_local:
+			continue
+		var samples: Array = road.get("samples", [])
+		var length_value := 0.0
+		for i in range(samples.size() - 1):
+			var pa := _sample_point(samples[i])
+			var pb := _sample_point(samples[i + 1])
+			length_value += Vector2(pb.x - pa.x, pb.z - pa.z).length()
+		if is_district:
+			district_street_count += 1
+			district_street_length += length_value
+		else:
+			palm_local_count += 1
+			palm_local_length += length_value
+
+	# --- South Villa District driveways, hedges and front gardens ---
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		if String(building.get("kind", "")) != "rt-villa":
+			continue
+		var centre := _item_position(building)
+		if centre.x < 560.0 or centre.x > 760.0 or centre.z < 225.0 or centre.z > 460.0:
+			continue
+		var w := _f(building, "w", 20.0)
+		var d := _f(building, "d", 15.0)
+		var from_x := 0.0
+		var to_x := 0.0
+		var front_x := 0.0
+		if centre.x < 635.0:
+			# West column faces the new west street (x=638 north of
+			# the mosque, x=640.5 south of it).
+			from_x = centre.x + w * 0.5
+			to_x = 634.0 if centre.z < 340.0 else 636.5
+			front_x = from_x + 2.0
+		elif centre.x < 680.0:
+			# Middle column faces west to the same street pair.
+			to_x = centre.x - w * 0.5
+			from_x = 642.0 if centre.z < 340.0 else 644.5
+			front_x = to_x - 2.0
+		else:
+			# East column faces the east local (x~689, chicane to
+			# x=694 around the pool at z=390).
+			var road_center_x := 689.0
+			if centre.z > 372.0 and centre.z < 408.0:
+				road_center_x = 694.0
+			elif centre.z >= 340.0:
+				road_center_x = 690.0
+			to_x = centre.x - w * 0.5
+			from_x = road_center_x + 4.0
+			front_x = to_x - 2.0
+		var min_x := minf(from_x, to_x)
+		var max_x := maxf(from_x, to_x)
+		if max_x - min_x < 2.0:
+			continue
+		# One exported pool sits in a front garden (x=627,z=389);
+		# jog that driveway to the north side of its plot instead
+		# of paving over the water.
+		var driveway_z := centre.z
+		for pool_variant in data.get("pools", []):
+			var pool: Dictionary = pool_variant
+			var pool_centre := _item_position(pool)
+			if pool_centre.x > min_x - 2.0 and pool_centre.x < max_x + 2.0 and absf(pool_centre.z - centre.z) < _f(pool, "d", 5.0) * 0.5 + 3.4:
+				driveway_z = centre.z - d * 0.5 + 3.0
+				break
+		var driveway_mesh := _make_paving_patch_mesh(min_x, max_x, driveway_z - 2.6, driveway_z + 2.6, 1.5, 0.075)
+		if driveway_mesh != null:
+			_mesh_instance(root, driveway_mesh, paving_material, Transform3D.IDENTITY, "DistrictDriveway", false)
+			driveway_count += 1
+		# Front hedge along the plot boundary, split at the driveway.
+		for span in [
+			[centre.z - d * 0.5, driveway_z - 3.4],
+			[driveway_z + 3.4, centre.z + d * 0.5],
+		]:
+			var span_min := float(span[0])
+			var span_max := float(span[1])
+			if span_max - span_min < 1.2:
+				continue
+			var mid_z := (span_min + span_max) * 0.5
+			hedge_transforms.append(make_transform(
+				Vector3(front_x, height_at(front_x, mid_z) + 0.42, mid_z),
+				0.0,
+				Vector3(0.70, 0.85, span_max - span_min)
+			))
+		# Front-garden flowers/shrubs flanking the driveway.
+		var garden_x := (min_x + max_x) * 0.5
+		for side_sign in [-1.0, 1.0]:
+			var flower_pos := Vector3(garden_x, 0.0, driveway_z + float(side_sign) * 4.1)
+			flower_pos.y = height_at(flower_pos.x, flower_pos.z) + 0.02
+			if _is_position_clear(flower_pos, 0.8, 1.2):
+				flower_transforms.append(make_transform(flower_pos, driveway_z * 0.37 + float(side_sign), Vector3.ONE * 1.05))
+			var shrub_pos := Vector3(front_x, 0.0, centre.z + float(side_sign) * (d * 0.5 - 1.2))
+			shrub_pos.y = height_at(shrub_pos.x, shrub_pos.z) + 0.02
+			if _is_position_clear(shrub_pos, 0.8, 0.8):
+				shrub_transforms.append(make_transform(shrub_pos, centre.x * 0.21 + float(side_sign) * 0.7, Vector3.ONE * 1.15))
+
+	# --- Mosque forecourt in the west-street gap (x=620, z=335) ---
+	var plaza_mesh := _make_paving_patch_mesh(596.0, 644.0, 318.0, 352.0, 2.0, 0.075)
+	var mosque_plaza := 0
+	if plaza_mesh != null:
+		_mesh_instance(root, plaza_mesh, paving_material, Transform3D.IDENTITY, "MosqueForecourt", false)
+		mosque_plaza = 1
+	for bench_pos_variant in [Vector2(600.0, 322.0), Vector2(600.0, 348.0), Vector2(641.0, 322.0), Vector2(641.0, 348.0)]:
+		var bench_pos2: Vector2 = bench_pos_variant
+		var bench_pos := Vector3(bench_pos2.x, height_at(bench_pos2.x, bench_pos2.y) + 0.09, bench_pos2.y)
+		var to_mosque := Vector3(620.0 - bench_pos.x, 0.0, 335.0 - bench_pos.z).normalized()
+		# Park-bench GLB seat front faces local -Z (see parks pass).
+		bench_transforms.append(make_transform(bench_pos, atan2(to_mosque.x, to_mosque.z) + PI, Vector3.ONE))
+
+	# --- Mini-roundabout island where the east local crosses z=368 ---
+	var roundabout_center := Vector3(690.0, 0.0, 368.0)
+	roundabout_center.y = height_at(roundabout_center.x, roundabout_center.z)
+	var island_mesh := CylinderMesh.new()
+	island_mesh.top_radius = 0.5
+	island_mesh.bottom_radius = 0.5
+	island_mesh.height = 1.0
+	island_mesh.radial_segments = 28
+	island_mesh.material = paving_material
+	_add_multimesh(
+		root,
+		island_mesh,
+		paving_material,
+		[make_transform(roundabout_center + Vector3(0.0, ROAD_SURFACE_OFFSET_M + 0.09, 0.0), 0.0, Vector3(6.0, 0.18, 6.0))],
+		"DistrictRoundaboutIsland",
+		false
+	)
+	var ring_curb_transforms: Array[Transform3D] = []
+	for i in 14:
+		var angle := TAU * float(i) / 14.0
+		var next_angle := TAU * float(i + 1) / 14.0
+		var p0 := roundabout_center + Vector3(cos(angle) * 3.15, 0.0, sin(angle) * 3.15)
+		var p1 := roundabout_center + Vector3(cos(next_angle) * 3.15, 0.0, sin(next_angle) * 3.15)
+		var tangent := p1 - p0
+		var mid := (p0 + p1) * 0.5
+		ring_curb_transforms.append(make_transform(
+			Vector3(mid.x, roundabout_center.y + 0.16, mid.z),
+			atan2(tangent.x, tangent.z),
+			Vector3(0.24, 0.20, tangent.length() + 0.05)
+		))
+	var ring_material := _create_concrete_material("road_curb_shader", Color(0.37, 0.38, 0.37), 0.97, 0.72, 0.55, 0.48)
+	_add_multimesh(root, unit_box, ring_material, ring_curb_transforms, "DistrictRoundaboutCurbs", true)
+	shrub_transforms.append(make_transform(roundabout_center + Vector3(0.0, ROAD_SURFACE_OFFSET_M + 0.18, 0.0), 0.4, Vector3.ONE * 1.25))
+	for i in 6:
+		var angle := TAU * float(i) / 6.0 + 0.3
+		var flower_pos := roundabout_center + Vector3(cos(angle) * 1.8, ROAD_SURFACE_OFFSET_M + 0.18, sin(angle) * 1.8)
+		flower_transforms.append(make_transform(flower_pos, angle * 1.7, Vector3.ONE * 0.95))
+
+	# --- District street lamps (data lamps only cover arterials) ---
+	var lamp_specs: Array[Dictionary] = []
+	var lamp_index := 0
+	for street_z in [286.0, 368.0]:
+		for x_value in range(575, 746, 34):
+			var side_offset := 5.8 if lamp_index % 2 == 0 else -5.8
+			lamp_specs.append({"x": float(x_value), "z": street_z + side_offset, "yaw": PI * 0.5})
+			lamp_index += 1
+	for z_value in range(240, 421, 34):
+		var west_center := 638.0 if float(z_value) < 340.0 else 640.5
+		var west_side := 5.3 if lamp_index % 2 == 0 else -5.3
+		lamp_specs.append({"x": west_center + west_side, "z": float(z_value), "yaw": 0.0})
+		lamp_index += 1
+		var east_center := 689.0
+		if float(z_value) > 372.0 and float(z_value) < 408.0:
+			east_center = 694.0
+		var east_side := -5.3 if lamp_index % 2 == 0 else 5.3
+		lamp_specs.append({"x": east_center + east_side, "z": float(z_value), "yaw": 0.0})
+		lamp_index += 1
+	for lamp_spec in lamp_specs:
+		var lamp_pos := Vector3(_f(lamp_spec, "x"), 0.0, _f(lamp_spec, "z"))
+		lamp_pos.y = height_at(lamp_pos.x, lamp_pos.z) + 0.02
+		if not _is_roadside_position_valid(lamp_pos):
+			continue
+		lamp_transforms.append(make_transform(lamp_pos, _f(lamp_spec, "yaw"), Vector3.ONE))
+		_add_cylinder_collider(lamp_pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
+
+	# --- Street trees and palms on the local verges ---
+	var verge_candidates: Array[Vector3] = []
+	var verge_index := 0
+	for street_z in [286.0, 368.0]:
+		for x_value in range(578, 746, 28):
+			var offset := 8.0 if verge_index % 2 == 0 else -8.0
+			verge_candidates.append(Vector3(float(x_value), 0.0, street_z + offset))
+			verge_index += 1
+	for z_value in range(242, 451, 28):
+		var west_center := 638.0 if float(z_value) < 340.0 else 640.5
+		var west_offset := -8.0 if verge_index % 2 == 0 else 8.0
+		verge_candidates.append(Vector3(west_center + west_offset, 0.0, float(z_value)))
+		verge_index += 1
+		if float(z_value) <= 426.0:
+			var east_center := 689.0
+			if float(z_value) > 372.0 and float(z_value) < 408.0:
+				east_center = 694.0
+			var east_offset := 8.0 if verge_index % 2 == 0 else -8.0
+			verge_candidates.append(Vector3(east_center + east_offset, 0.0, float(z_value)))
+			verge_index += 1
+	for crescent_pos in [Vector3(648.0, 0.0, 445.0), Vector3(662.0, 0.0, 446.0), Vector3(676.0, 0.0, 445.0)]:
+		verge_candidates.append(crescent_pos)
+	var accepted_verge: Array[Vector3] = []
+	for candidate_variant in verge_candidates:
+		var candidate: Vector3 = candidate_variant
+		candidate.y = height_at(candidate.x, candidate.z)
+		if candidate.y < 1.2 or not _is_position_clear(candidate, 2.2, 2.25):
+			continue
+		var too_close := false
+		for accepted in accepted_verge:
+			if Vector2(candidate.x - accepted.x, candidate.z - accepted.z).length() < 9.0:
+				too_close = true
+				break
+		if too_close:
+			continue
+		accepted_verge.append(candidate)
+		var accepted_index := accepted_verge.size() - 1
+		var yaw := _hash01(int(candidate.x) * 3 + 17, int(candidate.z) * 5 + 29) * TAU
+		if accepted_index % 3 == 2:
+			var palm_transform := make_transform(candidate + Vector3(0.0, -0.03, 0.0), yaw, Vector3.ONE * (0.92 + _hash01(accepted_index + 7, 41) * 0.18))
+			if accepted_index % 2 == 0:
+				date_palm_transforms.append(palm_transform)
+			else:
+				royal_palm_transforms.append(palm_transform)
+			_add_cylinder_collider(candidate + Vector3(0.0, 2.75, 0.0), 0.30, 5.5)
+		else:
+			tree_transforms.append(make_transform(candidate + Vector3(0.0, -0.04, 0.0), yaw, Vector3.ONE * 2.85 * (0.82 + _hash01(accepted_index + 3, 53) * 0.25)))
+			_add_cylinder_collider(candidate + Vector3(0.0, 1.4, 0.0), 0.38, 3.2)
+
+	# --- Palm Island villa/hotel driveways to nearest carriageway ---
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		var centre := _item_position(building)
+		if centre.x < 1200.0:
+			continue
+		if String(building.get("kind", "")) != "rt-villa" and centre.x < 1430.0:
+			continue
+		var best_point := Vector3.ZERO
+		var best_distance := INF
+		var best_half := 4.0
+		for road_variant in data.get("roads", []):
+			var road: Dictionary = road_variant
+			var samples: Array = road.get("samples", [])
+			var half_value := _f(road, "widthM", 9.0) * 0.5
+			for i in range(samples.size() - 1):
+				var pa := _sample_point(samples[i])
+				var pb := _sample_point(samples[i + 1])
+				var ab := Vector2(pb.x - pa.x, pb.z - pa.z)
+				var length_squared := ab.length_squared()
+				if length_squared <= 0.0001:
+					continue
+				var t := clampf(Vector2(centre.x - pa.x, centre.z - pa.z).dot(ab) / length_squared, 0.0, 1.0)
+				var closest := pa.lerp(pb, t)
+				var dist := Vector2(centre.x - closest.x, centre.z - closest.z).length()
+				if dist < best_distance:
+					best_distance = dist
+					best_point = closest
+					best_half = half_value
+		if best_distance == INF or best_distance > 48.0:
+			continue
+		var direction := best_point - centre
+		direction.y = 0.0
+		if direction.length_squared() < 0.0001:
+			continue
+		direction = direction.normalized()
+		var local_dir := Basis(Vector3.UP, -_f(building, "rotY")) * direction
+		var denom := maxf(absf(local_dir.x) / maxf(_f(building, "w", 20.0) * 0.5, 0.1), absf(local_dir.z) / maxf(_f(building, "d", 14.0) * 0.5, 0.1))
+		if denom <= 0.0001:
+			continue
+		var start_point: Vector3 = centre + direction * (1.0 / denom)
+		var end_point: Vector3 = best_point - direction * best_half
+		var driveway_length := Vector2(end_point.x - start_point.x, end_point.z - start_point.z).length()
+		if driveway_length < 1.5:
+			continue
+		var segments := maxi(1, int(ceil(driveway_length / 4.0)))
+		var driveway_yaw := atan2(direction.x, direction.z)
+		for seg in range(segments):
+			var seg_a := start_point.lerp(end_point, float(seg) / float(segments))
+			var seg_b := start_point.lerp(end_point, float(seg + 1) / float(segments))
+			var seg_mid := (seg_a + seg_b) * 0.5
+			var seg_y := maxf(height_at(seg_a.x, seg_a.z), height_at(seg_b.x, seg_b.z)) + 0.10
+			palm_driveway_transforms.append(make_transform(
+				Vector3(seg_mid.x, seg_y, seg_mid.z),
+				driveway_yaw,
+				Vector3(4.4, 0.12, driveway_length / float(segments) + 0.10)
+			))
+		palm_driveway_count += 1
+
+	# --- Submit batches ---
+	_add_multimesh(root, unit_box, hedge_material, hedge_transforms, "DistrictFrontHedges", true, -1.0, 240.0, 180.0)
+	if not palm_driveway_transforms.is_empty():
+		var palm_driveway_mesh := BoxMesh.new()
+		palm_driveway_mesh.size = Vector3.ONE
+		palm_driveway_mesh.material = paving_material
+		_add_multimesh(root, palm_driveway_mesh, paving_material, palm_driveway_transforms, "PalmIslandDriveways", false)
+	var lamps_built := _add_batched_model(root, "res://assets/props/street_lamp.glb", lamp_transforms, "DistrictStreetLamps")
+	var benches_built := _add_batched_model(root, "res://assets/props/park_bench.glb", bench_transforms, "DistrictBenches")
+	var date_built := _add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_palm_transforms, "DistrictDatePalms")
+	var royal_built := _add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_palm_transforms, "DistrictRoyalPalms")
+	if date_built:
+		_add_palm_far_proxy(root, "res://assets/vegetation/palm_date.glb", date_palm_transforms, "DistrictDatePalms")
+	if royal_built:
+		_add_palm_far_proxy(root, "res://assets/vegetation/palm_royal.glb", royal_palm_transforms, "DistrictRoyalPalms")
+	var flowers_built := _add_batched_model(root, "res://assets/vegetation/flower_clump.glb", flower_transforms, "DistrictFlowers")
+	var shrubs_built := _add_batched_model(root, "res://assets/vegetation/ornamental_shrub.glb", shrub_transforms, "DistrictShrubs")
+	if not tree_transforms.is_empty():
+		for part_name in ["tree2_bark", "tree2_foliage"]:
+			if _plant_parts.has(part_name):
+				var part: Dictionary = _plant_parts[part_name]
+				var source_mesh := part.get("mesh") as Mesh
+				var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+				_add_multimesh(root, source_mesh, part.get("material") as Material, tree_transforms, "District_%s" % part_name, part_name == "tree2_bark", 0.0, detail_end, 180.0)
+				if part_name == "tree2_foliage":
+					_add_foliage_far_proxy(root, source_mesh, tree_transforms, "DistrictTree2Foliage", 220.0, 650.0)
+	# One shelter on the district's east-west spine.
+	var shelter_pos := Vector3(660.0, height_at(660.0, 376.0) + 0.02, 376.0)
+	var shelter_built := _add_batched_model(root, "res://assets/props/bus_shelter.glb", [make_transform(shelter_pos, 0.0, Vector3.ONE)], "DistrictBusShelter")
+	if shelter_built:
+		_add_box_collider(shelter_pos + Vector3(0.0, 1.53, 0.0), Vector3(5.75, 3.06, 2.35), 0.0)
+		_enhancement_stats["bus_shelters"] = int(_enhancement_stats.get("bus_shelters", 0)) + 1
+
+	_enhancement_stats["district_infrastructure_0224"] = true
+	_enhancement_stats["district_streets"] = district_street_count
+	_enhancement_stats["district_street_length_m"] = snappedf(district_street_length, 0.1)
+	_enhancement_stats["palm_local_roads"] = palm_local_count
+	_enhancement_stats["palm_local_length_m"] = snappedf(palm_local_length, 0.1)
+	_enhancement_stats["district_driveways"] = driveway_count
+	_enhancement_stats["palm_driveways"] = palm_driveway_count
+	_enhancement_stats["district_hedges"] = hedge_transforms.size()
+	_enhancement_stats["district_lamps"] = lamp_transforms.size() if lamps_built else 0
+	_enhancement_stats["district_benches"] = bench_transforms.size() if benches_built else 0
+	_enhancement_stats["district_street_trees"] = tree_transforms.size()
+	_enhancement_stats["district_palms"] = (date_palm_transforms.size() if date_built else 0) + (royal_palm_transforms.size() if royal_built else 0)
+	_enhancement_stats["district_flowers"] = flower_transforms.size() if flowers_built else 0
+	_enhancement_stats["district_shrubs"] = shrub_transforms.size() if shrubs_built else 0
+	_enhancement_stats["district_roundabout"] = 1
+	_enhancement_stats["district_mosque_plaza"] = mosque_plaza
+	_enhancement_stats["district_bus_shelter"] = 1 if shelter_built else 0
 
 func _build_parks() -> void:
 	var root := Node3D.new()

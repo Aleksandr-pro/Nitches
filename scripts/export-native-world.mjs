@@ -99,6 +99,96 @@ function buildRoads() {
     .filter((edge) => edge.samples.length >= 2);
 }
 
+// ---------------------------------------------------------------------------
+// 0.2.24 district streets.  The exported master plan only had the coarse
+// 170--205 m arterial grid: whole villa blocks stood 40--80 m from the
+// nearest carriageway with no local street, driveway or frontage at all.
+// These native-only streets are threaded through the *existing* building
+// rows (every corridor below was checked against the exported building,
+// pool and landmark footprints):
+//
+//   * South Villa District (x 560..760, z 225..430): two new east-west
+//     streets in the clear bands between the villa rows (z=286 between
+//     the z~266 and z~306 rows, z=368 between the z~350 and z~389 rows),
+//     two north-south locals between the building columns (x=638, split
+//     around the mosque forecourt at x=620,z=335, and x~689 with a gentle
+//     eastward chicane around the pool at x=681,z=390), plus a rounded
+//     southern crescent that extends the built-up street network from
+//     z=430 to z~457.
+//   * Palm Island locals: the trunk is extended to the hotel frontage and
+//     short curved connectors finally give the western frond villas a street
+//     address instead of open grass.
+//
+// Points are Catmull-Rom sampled exactly like src/world/roadGraph.js, so
+// bends are genuine curves in the exported samples, not polylines.
+function catmullPoint(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return [
+    0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t
+      + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
+      + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+    0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t
+      + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
+      + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+  ];
+}
+
+function sampleDistrictPath(points, spacingM = 3.5) {
+  const samples = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const rough = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    const divisions = Math.max(1, Math.ceil(rough / spacingM));
+    for (let j = (i === 0 ? 0 : 1); j <= divisions; j += 1) {
+      const [x, z] = catmullPoint(p0, p1, p2, p3, j / divisions);
+      const prev = samples[samples.length - 1];
+      if (prev && Math.hypot(x - prev[0], z - prev[2]) < 0.05) continue;
+      samples.push([round(x), round(foundation.heightAt(x, z)), round(z)]);
+    }
+  }
+  return samples;
+}
+
+function districtRoad(id, name, widthM, points, speedLimitKmh = 30) {
+  return {
+    id,
+    name,
+    widthM,
+    lanes: 2,
+    speedLimitKmh,
+    samples: sampleDistrictPath(points),
+  };
+}
+
+function buildDistrictRoads() {
+  return [
+    // South Villa District grid (see header comment for the clear bands).
+    districtRoad('rt-villa-st-286', 'Villa District East-West 286', 9,
+      [[560, 286], [660, 286], [760, 286]]),
+    districtRoad('rt-villa-st-368', 'Villa District East-West 368', 9,
+      [[560, 368], [660, 368], [760, 368]]),
+    districtRoad('rt-villa-west-n', 'Villa District West (north)', 8,
+      [[638, 225], [638, 268], [638, 312]]),
+    districtRoad('rt-villa-west-s', 'Villa District West (south)', 8,
+      [[640.5, 358], [640.5, 394], [640.5, 430]]),
+    districtRoad('rt-villa-east', 'Villa District East', 8,
+      [[689, 225], [689, 300], [687, 345], [689, 364], [692, 378], [694, 390], [692, 402], [688, 416], [686, 430]]),
+    districtRoad('rt-villa-crescent', 'Villa District Southern Crescent', 8,
+      [[640.5, 430], [640.5, 443], [646, 452], [656, 457], [670, 457], [680, 452], [686, 443], [686, 430]]),
+    // Palm Island local connectors.
+    districtRoad('rt-palm-local-centre', 'Palm Island Hotel Frontage', 9,
+      [[1395, -250], [1411, -250], [1428, -250]], 40),
+    districtRoad('rt-palm-local-nw', 'Palm Island North-West Frond', 8,
+      [[1395, -345], [1379, -350], [1364, -352]], 30),
+    districtRoad('rt-palm-local-sw', 'Palm Island South-West Frond', 8,
+      [[1395, -155], [1381, -146], [1368, -136], [1359, -129]], 30),
+  ];
+}
+
 function distanceSquaredTo(item, x, z) {
   return (item.x - x) ** 2 + (item.z - z) ** 2;
 }
@@ -158,7 +248,10 @@ const world = {
     // along RichTown Boulevard towards the arch and downtown core.
     yaw: 0,
   },
-  districts: foundation.districts.filter((district) => district.x >= BOUNDS.minX),
+  districts: [
+    ...foundation.districts.filter((district) => district.x >= BOUNDS.minX),
+    { id: 'south-villa-district', name: 'South Villa District', x: 662, z: 340, radiusM: 145, biome: 'urban' },
+  ],
   zones: {
     marina: foundation.zones.marina,
     sea: foundation.zones.sea,
@@ -169,7 +262,7 @@ const world = {
     richtown: foundation.zones.richtown,
   },
   terrain: buildTerrain(),
-  roads: buildRoads(),
+  roads: [...buildRoads(), ...buildDistrictRoads()],
   buildings: buildBuildings(),
   landmarks: simpleFiltered(plan.landmarks, (item) => ({
     ...point(item),
