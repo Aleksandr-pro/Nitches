@@ -22,6 +22,8 @@ Props:
   * main_tower.glb    Building Model No.5: fixed-scale sculptural 148 m flagship tower
   * opera_house.glb   Building Model No.6: fixed-scale RichTown Opera
   * mosque.glb        Building Model No.7: fixed-scale RichTown Mosque
+  * grand_hotel.glb   Building Model No.8: fixed-scale beachfront grand hotel
+  * museum.glb        Building Model No.9: fixed-scale civic museum (central axis)
   * palm_date.glb / palm_royal.glb
                       botanically structured palms with curved segmented
                       trunks, individual pinnate leaflets and crown detail
@@ -179,6 +181,26 @@ def standard_mats():
     mat("HotelCurtain", (0.78, 0.71, 0.60), roughness=1.0)
     mat("HotelAccent", (0.03, 0.38, 0.40), roughness=0.60)
     mat("HotelLight", (1.0, 0.74, 0.42), roughness=0.32, emission=(1.0, 0.58, 0.24))
+    # Building Model No.9 is an original civic museum for the central
+    # axis (X665, Z-340): two-tone limestone panel rainscreen over a
+    # dark shadow-gap core, a full-height glazed atrium slot with a
+    # real stair and mezzanines behind bronze mullions, travertine
+    # plinth/plaza, black granite sculpture court detailing and a
+    # still reflecting pool.  Semantic separation lets Godot assign
+    # world-scale photographic PBR surfaces per material.
+    mat("MuseumStone", (0.74, 0.65, 0.51), roughness=0.90)
+    mat("MuseumStonePale", (0.81, 0.73, 0.60), roughness=0.90)
+    mat("MuseumCore", (0.28, 0.25, 0.21), roughness=0.96)
+    mat("MuseumBronze", (0.44, 0.29, 0.14), roughness=0.34, metallic=0.82)
+    mat("MuseumGlass", (0.10, 0.25, 0.31), roughness=0.07, metallic=0.15)
+    mat("MuseumInterior", (0.11, 0.08, 0.055), roughness=0.95)
+    mat("MuseumWhite", (0.90, 0.88, 0.83), roughness=0.85)
+    mat("MuseumGranite", (0.07, 0.075, 0.08), roughness=0.42, metallic=0.08)
+    mat("MuseumTravertine", (0.82, 0.74, 0.60), roughness=0.88)
+    mat("MuseumWater", (0.05, 0.40, 0.46), roughness=0.08, metallic=0.05)
+    mat("MuseumBannerTeal", (0.02, 0.32, 0.34), roughness=0.85)
+    mat("MuseumBannerOchre", (0.72, 0.42, 0.10), roughness=0.85)
+    mat("MuseumLight", (1.0, 0.74, 0.42), roughness=0.32, emission=(1.0, 0.58, 0.24))
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -4629,6 +4651,298 @@ def build_hotel():
             box("hotel_solar_stand", panel_x, row_y + 0.55, 48.02, 0.14, 0.14, 0.42, frame)
 
 
+def build_museum():
+    """Building Model No.9: an original civic museum for the central
+    RichTown axis (landmark rt-museum, X665 Z-340), replacing the
+    primitive metal torus on a marble slab.  A limestone panel
+    rainscreen (individual 3.0 x 1.95 m panels over a dark shadow-gap
+    core, two stone tones) wraps a 15.6 m gallery mass; a full-height
+    glazed atrium slot cuts the front with bronze mullions, two
+    mezzanine slabs and a real switchback stair visible behind the
+    glass.  A thin floating roof slab with a clerestory lantern,
+    travertine plinth plaza, reflecting pool, sculpture court,
+    exhibition banners and a serviced rear dock complete the parcel.
+    Authored envelope 54.0 x 38.0 m, 19.0 m to the lantern cap;
+    Blender -Y is the public front (fountain axis in game)."""
+    stone = MATS["MuseumStone"]
+    stone_pale = MATS["MuseumStonePale"]
+    core_mat = MATS["MuseumCore"]
+    bronze = MATS["MuseumBronze"]
+    glass = MATS["MuseumGlass"]
+    interior = MATS["MuseumInterior"]
+    white = MATS["MuseumWhite"]
+    granite = MATS["MuseumGranite"]
+    trav = MATS["MuseumTravertine"]
+    water = MATS["MuseumWater"]
+    banner_teal = MATS["MuseumBannerTeal"]
+    banner_ochre = MATS["MuseumBannerOchre"]
+    light = MATS["MuseumLight"]
+    frame = MATS["WindowFrame"]
+    dark = MATS["RoofDark"]
+    hedge = MATS["VillaHedge"]
+
+    def wedge(name, x, y, z, dx, dy, dz, material):
+        """Triangular ramp prism rising toward +Y (low edge at -Y)."""
+        obj = box(name, x, y, z, dx, dy, dz, material)
+        for v in obj.data.vertices:
+            if v.co.y < 0.0:
+                v.co.z = -dz * 0.5
+        obj.data.update()
+        return obj
+
+    def panel_wall(face, fixed, sign, cols, pitch, openings, rows=8, pitch_h=1.95, z_base=0.60):
+        length = cols * pitch
+        for c in range(cols):
+            centre = -length * 0.5 + pitch * (c + 0.5)
+            for r in range(rows):
+                zc = z_base + pitch_h * (r + 0.5)
+                skip = False
+                for (o_lo, o_hi, z_lo, z_hi) in openings:
+                    if o_lo <= centre <= o_hi and z_lo <= zc <= z_hi:
+                        skip = True
+                        break
+                if skip:
+                    continue
+                m = stone_pale if (c * 7 + r * 13) % 5 == 0 else stone
+                if face in ("front", "back"):
+                    box("museum_panel", centre, fixed + sign * 0.05, zc, pitch - 0.06, 0.10, pitch_h - 0.06, m)
+                else:
+                    box("museum_panel", fixed + sign * 0.05, centre, zc, 0.10, pitch - 0.06, pitch_h - 0.06, m)
+
+    def slit(face, fixed, sign, centre, z_lo=2.55, z_hi=14.25, width=1.04, pitch=3.04):
+        z_mid = (z_lo + z_hi) * 0.5
+        z_len = z_hi - z_lo
+        strip = (pitch - 0.06 - width) * 0.5
+        for sd in (-1.0, 1.0):
+            off = centre + sd * (width * 0.5 + strip * 0.5 + 0.01)
+            if face in ("front", "back"):
+                box("museum_slit_strip", off, fixed + sign * 0.05, z_mid, strip, 0.10, z_len, stone)
+            else:
+                box("museum_slit_strip", fixed + sign * 0.05, off, z_mid, 0.10, strip, z_len, stone)
+        if face in ("front", "back"):
+            box("museum_slit_interior", centre, fixed - sign * 0.30, z_mid, width - 0.04, 0.06, z_len - 0.04, interior)
+            box("museum_slit_glass", centre, fixed + sign * 0.015, z_mid, width, 0.05, z_len, glass)
+            box("museum_slit_head", centre, fixed + sign * 0.07, z_hi + 0.055, width + 0.24, 0.16, 0.11, bronze)
+            box("museum_slit_sill", centre, fixed + sign * 0.07, z_lo - 0.055, width + 0.24, 0.16, 0.11, bronze)
+        else:
+            box("museum_slit_interior", fixed - sign * 0.30, centre, z_mid, 0.06, width - 0.04, z_len - 0.04, interior)
+            box("museum_slit_glass", fixed + sign * 0.015, centre, z_mid, 0.05, width, z_len, glass)
+            box("museum_slit_head", fixed + sign * 0.07, centre, z_hi + 0.055, 0.16, width + 0.24, 0.11, bronze)
+            box("museum_slit_sill", fixed + sign * 0.07, centre, z_lo - 0.055, 0.16, width + 0.24, 0.11, bronze)
+
+    def punched_window(face, fixed, sign, centre, zc, w=1.70, h=1.55):
+        if face in ("front", "back"):
+            box("museum_win_frame", centre, fixed + sign * 0.045, zc, w + 0.16, 0.13, h + 0.16, frame)
+            box("museum_win_interior", centre, fixed - sign * 0.22, zc, w - 0.04, 0.05, h - 0.04, interior)
+            box("museum_win_glass", centre, fixed + sign * 0.085, zc, w, 0.04, h, glass)
+            box("museum_win_sill", centre, fixed + sign * 0.09, zc - h * 0.5 - 0.06, w + 0.30, 0.24, 0.09, trav)
+        else:
+            box("museum_win_frame", fixed + sign * 0.045, centre, zc, 0.13, w + 0.16, h + 0.16, frame)
+            box("museum_win_interior", fixed - sign * 0.22, centre, zc, 0.05, w - 0.04, h - 0.04, interior)
+            box("museum_win_glass", fixed + sign * 0.085, centre, zc, 0.04, w, h, glass)
+            box("museum_win_sill", fixed + sign * 0.09, centre, zc - h * 0.5 - 0.06, 0.24, w + 0.30, 0.09, trav)
+
+    # ---- travertine plinth plaza (two monumental steps) ---------------
+    box("museum_plinth_lower", 0.0, 0.0, 0.15, 54.00, 38.00, 0.30, granite, bevel=0.015)
+    box("museum_plinth_upper", 0.0, 0.0, 0.45, 50.00, 34.00, 0.30, trav, bevel=0.015)
+    for rx in (-13.5, 13.5):
+        wedge("museum_plaza_ramp", rx, -17.05, 0.31, 1.70, 3.90, 0.62, trav)
+        for sd in (-1.0, 1.0):
+            tube_between("museum_ramp_rail", (rx + sd * 0.78, -18.80, 0.85), (rx + sd * 0.78, -15.30, 1.45), 0.035, 0.035, bronze, vertices=8)
+            cyl("museum_ramp_rail_post", rx + sd * 0.78, -15.45, 1.02, 0.030, 0.84, bronze, vertices=8)
+
+    # ---- gallery mass: two side blocks + rear block around the atrium --
+    box("museum_block_left", -14.45, 1.00, 8.40, 16.70, 29.60, 15.60, core_mat, bevel=0.02)
+    box("museum_block_right", 14.45, 1.00, 8.40, 16.70, 29.60, 15.60, core_mat, bevel=0.02)
+    box("museum_block_rear", 0.0, 10.13, 8.40, 12.20, 4.25, 15.60, core_mat, bevel=0.02)
+    box("museum_atrium_header", 0.0, -13.55, 15.75, 12.20, 0.50, 0.90, bronze)
+
+    front_y = -13.80
+    back_y = 15.80
+    side_x = 22.80
+    # Front: atrium slot (centres -6.08..6.08) + 4 slit columns.
+    panel_wall("front", front_y, -1.0, 15, 3.04, [
+        (-6.10, 6.10, 0.0, 16.2),
+        (-12.80, -11.50, 2.40, 14.40), (11.50, 12.80, 2.40, 14.40),
+        (-18.90, -17.60, 2.40, 14.40), (17.60, 18.90, 2.40, 14.40),
+    ])
+    # Back: garden slot (centres -3.04..3.04), loading dock at +12.16,
+    # punched windows on two gallery levels.
+    back_openings = [(-3.10, 3.10, 0.0, 16.2), (11.50, 12.80, 0.0, 4.60)]
+    back_windows = []
+    for wc in (-21.28, -15.20, -9.12, 9.12, 15.20, 21.28):
+        for (wz_lo, wz_hi, wz_c) in ((4.40, 6.40, 5.48), (10.30, 12.30, 11.33)):
+            back_openings.append((wc - 0.70, wc + 0.70, wz_lo, wz_hi))
+            back_windows.append((wc, wz_c))
+    panel_wall("back", back_y, 1.0, 15, 3.04, back_openings)
+    for (wc, wz_c) in back_windows:
+        punched_window("back", back_y, 1.0, wc, wz_c)
+    # Sides: three slits per face + a ground-level cafe ribbon toward
+    # the front (local -Y end of each side wall).
+    for face, fixed, sign in (("left", -side_x, -1.0), ("right", side_x, 1.0)):
+        panel_wall(face, fixed, sign, 10, 2.96, [
+            (-8.05, -6.75, 2.40, 14.40), (0.85, 2.15, 2.40, 14.40), (6.75, 8.05, 2.40, 14.40),
+            (-14.90, -8.80, 0.00, 4.60),
+        ])
+        for sc in (-7.40, 1.48, 7.40):
+            slit(face, fixed, sign, sc, pitch=2.96)
+        box("museum_cafe_interior", fixed - sign * 0.30, -11.84, 2.55, 0.06, 5.80, 3.80, interior)
+        box("museum_cafe_glass", fixed + sign * 0.02, -11.84, 2.55, 0.05, 5.80, 3.80, glass)
+        for my in (-14.30, -12.85, -11.40, -9.95):
+            box("museum_cafe_mullion", fixed + sign * 0.06, my, 2.55, 0.07, 0.09, 3.80, bronze)
+        box("museum_cafe_head", fixed + sign * 0.07, -11.84, 4.52, 0.16, 6.10, 0.14, bronze)
+    for sc in (-18.24, -12.16, 12.16, 18.24):
+        slit("front", front_y, -1.0, sc)
+
+    # ---- atrium slot: glass curtain, mezzanines, stair, artwork --------
+    box("museum_atrium_floor", 0.0, -10.90, 0.66, 12.20, 5.80, 0.12, trav)
+    box("museum_atrium_backdrop", 0.0, -8.00, 8.40, 12.20, 0.30, 15.60, white)
+    box("museum_atrium_art_teal", -2.20, -8.22, 9.60, 6.40, 0.10, 4.60, banner_teal)
+    box("museum_atrium_art_ochre", 3.60, -8.22, 5.40, 3.00, 0.10, 5.20, banner_ochre)
+    for sx in (-6.05, 6.05):
+        box("museum_atrium_reveal", sx, -10.90, 8.40, 0.12, 5.80, 15.60, white)
+    glass_y = -13.25
+    box("museum_atrium_glass", 0.0, glass_y, 8.40, 12.20, 0.05, 15.60, glass)
+    for i in range(11):
+        mx = -6.10 + 1.22 * i
+        box("museum_atrium_mullion", mx, glass_y - 0.05, 8.40, 0.09, 0.07, 15.60, bronze)
+    for tz in (3.20, 5.80, 8.40, 11.00, 13.60):
+        box("museum_atrium_transom", 0.0, glass_y - 0.05, tz, 12.20, 0.07, 0.09, bronze)
+    for fx in (-6.55, 6.55):
+        box("museum_atrium_fin", fx, -13.62, 8.40, 0.85, 0.44, 15.60, bronze)
+    for mz in (6.00, 11.20):
+        box("museum_mezzanine", 0.0, -9.98, mz, 12.00, 3.65, 0.35, white)
+        box("museum_mezzanine_edge", 0.0, -11.83, mz, 12.00, 0.06, 0.35, bronze)
+        box("museum_mezzanine_balustrade", 0.0, -11.80, mz + 0.62, 12.00, 0.04, 0.90, glass)
+        box("museum_mezzanine_rail", 0.0, -11.80, mz + 1.10, 12.00, 0.07, 0.06, bronze)
+
+    def atrium_stair(z_from, z_to, x_from, direction):
+        steps = 30
+        rise = (z_to - z_from) / steps
+        tread = 0.30
+        for i in range(steps):
+            sx = x_from + direction * tread * (i + 0.5)
+            box("museum_stair_step", sx, -9.85, z_from + rise * (i + 0.5), tread + 0.02, 2.30, 0.16, white)
+        x_to = x_from + direction * tread * steps
+        for ry in (-10.92, -8.78):
+            tube_between("museum_stair_rail", (x_from, ry, z_from + 1.00), (x_to, ry, z_to + 1.00), 0.035, 0.035, bronze, vertices=8)
+
+    atrium_stair(0.72, 6.00, -5.60, 1.0)
+    atrium_stair(6.00, 11.20, 5.60, -1.0)
+    for lx in (-3.60, 0.0, 3.60):
+        cyl("museum_atrium_pendant_rod", lx, -11.20, 15.35, 0.025, 1.50, frame, vertices=8)
+        box("museum_atrium_pendant", lx, -11.20, 14.55, 2.60, 0.10, 0.10, light)
+
+    # Entrance doors, canopy and threshold at the atrium base.
+    for dx in (-3.65, 0.0, 3.65):
+        box("museum_door_frame", dx, glass_y - 0.03, 2.35, 2.20, 0.14, 3.40, bronze)
+        box("museum_door_glass", dx, glass_y - 0.06, 2.35, 1.96, 0.05, 3.16, glass)
+        for hx in (-0.14, 0.14):
+            tube_between("museum_door_handle", (dx + hx, glass_y - 0.16, 1.55), (dx + hx, glass_y - 0.16, 2.75), 0.028, 0.028, bronze, vertices=8)
+    box("museum_threshold", 0.0, -13.85, 0.66, 12.40, 0.90, 0.12, granite)
+    box("museum_canopy", 0.0, -15.15, 4.62, 13.20, 3.10, 0.16, white)
+    box("museum_canopy_edge", 0.0, -16.68, 4.62, 13.20, 0.08, 0.30, bronze)
+    for cxp in (-5.90, 5.90):
+        cyl("museum_canopy_column", cxp, -16.20, 2.57, 0.09, 3.94, bronze, vertices=12)
+
+    # Exhibition banners flanking the slot.
+    for bx, bmat in ((-8.90, banner_teal), (8.90, banner_ochre)):
+        tube_between("museum_banner_rod", (bx - 0.95, -14.05, 13.55), (bx + 0.95, -14.05, 13.55), 0.035, 0.035, bronze, vertices=8)
+        box("museum_banner", bx, -14.02, 10.55, 1.70, 0.06, 5.80, bmat)
+        box("museum_banner_bar", bx, -14.02, 7.60, 1.80, 0.08, 0.10, bronze)
+
+    # ---- rear garden slot, cafe depth and loading dock ------------------
+    box("museum_rear_backdrop", 0.0, 12.40, 8.40, 9.00, 0.30, 15.60, white)
+    box("museum_rear_floor", 0.0, 14.05, 0.66, 9.00, 3.40, 0.12, trav)
+    box("museum_rear_glass", 0.0, 15.30, 8.40, 9.00, 0.05, 15.60, glass)
+    for i in range(8):
+        mx = -4.50 + 1.285 * i
+        box("museum_rear_mullion", mx, 15.36, 8.40, 0.09, 0.07, 15.60, bronze)
+    for tz in (3.20, 8.40, 13.60):
+        box("museum_rear_transom", 0.0, 15.36, tz, 9.00, 0.07, 0.09, bronze)
+    for fx in (-4.95, 4.95):
+        box("museum_rear_fin", fx, 15.62, 8.40, 0.80, 0.42, 15.60, bronze)
+    box("museum_rear_counter", 0.0, 12.95, 1.30, 6.40, 0.70, 1.10, granite)
+    for tx in (-2.60, 0.0, 2.60):
+        cyl("museum_cafe_table_top", tx, 14.45, 1.48, 0.55, 0.05, white, vertices=16)
+        cyl("museum_cafe_table_leg", tx, 14.45, 1.08, 0.05, 0.75, bronze, vertices=8)
+    box("museum_rear_terrace", 0.0, 17.60, 0.55, 20.00, 2.60, 0.10, trav)
+    # Loading dock against the eastern rear bay.
+    box("museum_dock_recess", 12.16, 15.86, 2.30, 4.60, 0.10, 3.60, core_mat)
+    for i in range(7):
+        box("museum_dock_door_slat", 12.16, 15.93, 0.85 + 0.50 * i, 4.20, 0.07, 0.44, frame)
+    box("museum_dock_canopy", 12.16, 16.45, 4.35, 5.20, 1.30, 0.14, bronze)
+    box("museum_dock_platform", 12.16, 16.35, 0.55, 5.40, 1.10, 0.14, granite)
+    for bx2 in (9.90, 14.42):
+        cyl("museum_dock_bollard", bx2, 16.95, 1.00, 0.09, 0.85, frame, vertices=10)
+    box("museum_service_door", 17.50, 15.90, 1.75, 1.10, 0.10, 2.30, bronze)
+    for i in range(4):
+        box("museum_vent_louvre", -17.50, 15.90, 3.30 + 0.34 * i, 2.20, 0.08, 0.20, frame)
+
+    # ---- floating roof slab, clerestory lantern, roof plant -------------
+    box("museum_roof_slab", 0.0, 1.00, 16.48, 49.60, 33.60, 0.55, white, bevel=0.02)
+    box("museum_roof_fascia_f", 0.0, -15.82, 16.48, 49.60, 0.10, 0.36, bronze)
+    box("museum_roof_fascia_b", 0.0, 17.82, 16.48, 49.60, 0.10, 0.36, bronze)
+    box("museum_roof_fascia_l", -24.82, 1.00, 16.48, 0.10, 33.60, 0.36, bronze)
+    box("museum_roof_fascia_r", 24.82, 1.00, 16.48, 0.10, 33.60, 0.36, bronze)
+    box("museum_roof_light_slot_f", 0.0, -15.15, 16.18, 48.20, 0.14, 0.05, light)
+    box("museum_roof_light_slot_b", 0.0, 17.15, 16.18, 48.20, 0.14, 0.05, light)
+    box("museum_roof_field", 0.0, 1.00, 16.79, 45.00, 29.00, 0.06, dark)
+    box("museum_lantern_base", 0.0, 1.00, 16.95, 30.00, 9.00, 0.40, trav)
+    box("museum_lantern_glass_f", 0.0, -3.30, 17.90, 29.20, 0.06, 1.50, glass)
+    box("museum_lantern_glass_b", 0.0, 5.30, 17.90, 29.20, 0.06, 1.50, glass)
+    box("museum_lantern_glass_l", -14.60, 1.00, 17.90, 0.06, 8.60, 1.50, glass)
+    box("museum_lantern_glass_r", 14.60, 1.00, 17.90, 0.06, 8.60, 1.50, glass)
+    box("museum_lantern_core", 0.0, 1.00, 17.90, 28.60, 8.00, 1.50, interior)
+    for i in range(13):
+        mx = -14.60 + 2.433 * i
+        box("museum_lantern_mullion_f", mx, -3.36, 17.90, 0.08, 0.06, 1.50, bronze)
+        box("museum_lantern_mullion_b", mx, 5.36, 17.90, 0.08, 0.06, 1.50, bronze)
+    box("museum_lantern_cap", 0.0, 1.00, 18.83, 31.40, 10.40, 0.35, white, bevel=0.02)
+    box("museum_lantern_cap_edge", 0.0, -4.22, 18.83, 31.40, 0.08, 0.20, bronze)
+    for hx, hy in ((-18.0, 10.0), (-13.0, 10.0), (17.0, 10.5)):
+        box("museum_hvac", hx, hy, 17.45, 3.60, 2.20, 1.25, frame)
+        for i in range(4):
+            box("museum_hvac_louvre", hx, hy - 1.12, 17.10 + 0.26 * i, 3.30, 0.05, 0.14, dark)
+        cyl("museum_hvac_fan", hx, hy, 18.10, 0.55, 0.08, dark, vertices=16)
+    for i in range(9):
+        px = -20.0 + 5.0 * i
+        cyl("museum_roof_rail_post", px, 15.90, 17.30, 0.035, 1.05, bronze, vertices=8)
+    box("museum_roof_rail_top", 0.0, 15.90, 17.82, 40.40, 0.06, 0.06, bronze)
+    box("museum_roof_rail_mid", 0.0, 15.90, 17.32, 40.40, 0.05, 0.05, bronze)
+
+    # ---- plaza: reflecting pool, sculpture court, planters, totems ------
+    box("museum_pool_basin", -15.50, -15.35, 0.66, 17.00, 2.60, 0.12, granite)
+    box("museum_pool_water", -15.50, -15.35, 0.74, 16.50, 2.10, 0.05, water)
+    box("museum_pool_rim_f", -15.50, -16.73, 0.72, 17.00, 0.16, 0.24, granite)
+    box("museum_pool_rim_b", -15.50, -13.97, 0.72, 17.00, 0.16, 0.24, granite)
+    for ex in (-23.92, -7.08):
+        box("museum_pool_rim_e", ex, -15.35, 0.72, 0.16, 2.60, 0.24, granite)
+    for i in range(5):
+        box("museum_pool_step_stone", -21.50 + 3.0 * i, -15.35, 0.78, 1.30, 1.50, 0.07, trav)
+    # Sculpture court (east forecourt): sphere, crossed slabs, ring.
+    box("museum_plinth_a", 13.50, -15.40, 1.15, 1.30, 1.30, 1.10, granite)
+    sphere("museum_sculpture_sphere", 13.50, -15.40, 2.60, 1.75, 1.75, 1.75, bronze)
+    box("museum_plinth_b", 17.60, -15.90, 0.95, 1.50, 1.50, 0.70, granite)
+    rbox("museum_sculpture_slab_a", 17.60, -15.90, 2.35, 0.22, 1.70, 2.20, trav, rotation=(0.0, 0.42, 0.0))
+    rbox("museum_sculpture_slab_b", 17.60, -15.90, 2.30, 1.70, 0.22, 2.05, granite, rotation=(0.0, -0.35, 0.0))
+    box("museum_plinth_c", 21.40, -15.20, 1.00, 1.20, 1.20, 0.80, granite)
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.05, minor_radius=0.15, major_segments=30, minor_segments=10, location=(21.40, -15.20, 2.55))
+    ring = bpy.context.active_object
+    ring.name = "museum_sculpture_ring"
+    finish(ring, bronze, smooth=True)
+    for px in (-9.50, 9.50):
+        box("museum_planter", px, -16.30, 0.88, 6.00, 1.20, 0.55, granite)
+        box("museum_planter_hedge", px, -16.30, 1.28, 5.70, 0.95, 0.30, hedge)
+    for tx in (-11.50, 11.50):
+        box("museum_totem", tx, -18.30, 2.10, 0.55, 0.28, 3.60, granite)
+        box("museum_totem_band", tx, -18.46, 3.30, 0.57, 0.04, 0.85, bronze)
+        box("museum_totem_light", tx, -18.47, 1.70, 0.10, 0.03, 2.20, light)
+    for bx3 in (-20.0, -17.0, 17.0, 20.0):
+        cyl("museum_plaza_bollard", bx3, -18.55, 0.72, 0.07, 0.85, bronze, vertices=10)
+        cyl("museum_plaza_bollard_light", bx3, -18.55, 1.16, 0.073, 0.06, light, vertices=10)
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out_dir = argv[0] if argv else os.path.join(os.getcwd(), "props_out")
@@ -4649,6 +4963,7 @@ def main():
         (build_opera, "opera_house.glb"),
         (build_mosque, "mosque.glb"),
         (build_hotel, "grand_hotel.glb"),
+        (build_museum, "museum.glb"),
         (build_palm_date, "palm_date.glb"),
         (build_palm_royal, "palm_royal.glb"),
         (build_grass_tuft, "grass_tuft.glb"),
