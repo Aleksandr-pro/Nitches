@@ -4,6 +4,7 @@ props_out/glass_tower.glb: meshes=562 tris=12240 size=34.00x72.90x34.00m minY=0.
 props_out/grass_tuft.glb: meshes=2 tris=394 size=0.61x0.56x0.68m minY=0.01 mats=GrassBlade,GrassBladeDry
 props_out/hero_building.glb: meshes=1706 tris=30616 size=32.40x28.56x24.60m minY=0.00 mats=VillaGranite,HeroStone,HeroTrim,HeroPlaster,RoofDark,WindowFrame,VillaInterior,VillaCurtain,VillaGlass,LampGlow,HeroWood,VillaHedge,HeroMetal,VillaPavement,PropsMetal,SolarCell,VillaLawn,VillaMulch
 props_out/main_tower.glb: meshes=1462 tris=39820 size=50.00x148.00x42.00m minY=0.00 mats=VillaGranite,VillaPavement,MainStone,VillaInterior,MainGlass,WindowFrame,MainTrim,VillaMulch,VillaHedge,PropsMetal,VillaWood,MainMetal,LampGlow,RoofDark,MainSpandrel,VillaCurtain,MainWater,VillaLawn
+props_out/opera_house.glb: meshes=821 tris=42894 size=52.00x22.00x56.00m minY=-0.00 mats=VillaPavement,OperaGranite,VillaLimestone,OperaLight,OperaWater,OperaBronze,OperaStone,OperaInterior,WindowFrame,OperaGlass,RoofDark,PropsMetal,OperaWood,OperaCurtain,OperaShell,VillaMulch,VillaHedge,VillaLawn
 props_out/ornamental_shrub.glb: meshes=3 tris=2130 size=0.90x1.10x1.01m minY=0.01 mats=ShrubBranch,OrnamentalLeaf,ShrubBerry
 props_out/palm_date.glb: meshes=6 tris=11161 size=8.47x8.82x8.22m minY=-0.01 mats=PalmTrunk,PalmCrown,PalmLeaf,PalmLeafDry,PalmRachis,PalmFruit
 props_out/palm_royal.glb: meshes=4 tris=8001 size=8.09x10.18x7.77m minY=-0.00 mats=PalmTrunk,PalmCrownshaft,PalmLeaf,PalmRachis
