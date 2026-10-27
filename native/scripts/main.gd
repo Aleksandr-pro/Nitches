@@ -179,6 +179,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"time_toggle"):
 		_cycle_time()
 		get_viewport().set_input_as_handled()
+	elif OS.has_feature("pc") and event is InputEventKey:
+		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_F11:
+			_toggle_desktop_fullscreen()
+			get_viewport().set_input_as_handled()
+
+
+## 0.2.21 desktop parity: Windows/Linux run the identical game content,
+## physics and HUD as Android.  F11 is purely a window-management
+## shortcut for keyboards; it never changes gameplay state.
+func _toggle_desktop_fullscreen() -> void:
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
 func _cycle_camera() -> void:

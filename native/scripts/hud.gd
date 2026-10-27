@@ -24,6 +24,7 @@ var _state_label: Label
 var _nitro_bar: ProgressBar
 var _speed_panel: PanelContainer
 var _pedal_row: HBoxContainer
+var _desktop_hint_label: Label
 var _refresh_timer := 0.0
 var _fast_timer := 0.0
 var _build_error := ""
@@ -66,6 +67,7 @@ func get_smoke_state() -> Dictionary:
 		"speed_rect": _speed_panel.get_global_rect() if _speed_panel != null else Rect2(),
 		"pedal_rect": _pedal_row.get_global_rect() if _pedal_row != null else Rect2(),
 		"viewport_size": viewport_size,
+		"desktop_controls_hint": _desktop_hint_label != null,
 		"build_error": _build_error,
 	}
 
@@ -265,6 +267,20 @@ func _build_ui() -> void:
 	_make_touch_button(pedal_row, "ДРИФТ", "handbrake", Vector2(82.0, 80.0), Color(0.48, 0.22, 0.03))
 	_make_touch_button(pedal_row, "N₂O", "boost", Vector2(66.0, 80.0), Color(0.02, 0.45, 0.68))
 	_make_touch_button(pedal_row, "ГАЗ", "accelerate", Vector2(88.0, 80.0), Color(0.04, 0.48, 0.18))
+
+	# 0.2.21 desktop parity: PC builds show the exact same HUD, world and
+	# touch buttons (they stay mouse-clickable).  Only when the device has
+	# no touchscreen, add one bottom-centre line with the keyboard map so
+	# a laptop/desktop player does not have to guess the controls.
+	if not DisplayServer.is_touchscreen_available():
+		var hint_panel := _make_panel(root)
+		hint_panel.name = "DesktopControlsHint"
+		hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
+		_set_offsets(hint_panel, -280.0, -66.0, 280.0, -14.0)
+		_desktop_hint_label = _make_label(hint_panel, "WASD — ЕХАТЬ • SPACE — ДРИФТ • SHIFT — N₂O • C — КАМЕРА • T — ВРЕМЯ • R — СБРОС • F11 — ЭКРАН", 12, Color(0.86, 0.94, 1.0))
+		_desktop_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_desktop_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_desktop_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 
 func _update_static_labels() -> void:
