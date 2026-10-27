@@ -347,6 +347,8 @@ for (const marker of [
   'BoulevardStoneBenches',
   'boulevard_pool_decks',
   'BoulevardPoolDecks',
+  'boulevard_marina_deck_segments',
+  'BoulevardMarinaPromenadeDeck',
   'boulevard_frontage_infill',
   'boulevard_ground_cover',
   'PremiumPromenade_ScreenshotAxis',

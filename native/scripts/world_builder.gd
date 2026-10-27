@@ -417,6 +417,18 @@ func height_at(x: float, z: float) -> float:
 	return lerpf(lerpf(h00, h10, tx), lerpf(h01, h11, tx), tz)
 
 
+## Ground height for Boulevard furniture/planting.  East of the road at
+## Z=140..390 the exported 10 m height grid falls into the marina, but
+## the master-plan promenade is a raised quay at carriageway level.
+## `_build_premium_boulevard_details()` now builds that deck explicitly;
+## using raw `height_at()` there buried the east cafes/lawns roughly
+## 1-4 m below the road and was a major part of the empty spawn view.
+func _boulevard_ground_y(x: float, z: float) -> float:
+	if x >= 771.0 and x <= 790.0 and z >= 140.0 and z <= 390.0:
+		return height_at(760.0, z) - 0.18
+	return height_at(x, z)
+
+
 func find_nearest_road_transform(world_position: Vector3) -> Transform3D:
 	var best_point := Vector3(world_position.x, height_at(world_position.x, world_position.z) + 1.1, world_position.z)
 	var best_direction := Vector3(0.0, 0.0, -1.0)
@@ -4062,6 +4074,88 @@ func _build_infill_buildings(parent: Node) -> void:
 					"boulevardFrontage": boulevard_frontage,
 				})
 
+	# Targeted 0.2.19 Boulevard frontage.  The citywide 24 x 27 m search
+	# grid almost never lands in the narrow gaps between the exported
+	# Boulevard towers (the first CI smoke found only two qualifying
+	# parcels), so test a small deterministic set of real gaps on both
+	# faces.  These are still genuine infill buildings: every corner is
+	# checked against roads/exported buildings/pools/landmarks and
+	# against the generic infill accepted above.  East Z=150..380 is
+	# marina water and is deliberately left as the raised quay built by
+	# the premium Boulevard pass.
+	var targeted_frontage_specs: Array[Dictionary] = [
+		{"x": 710.0, "z": -364.0, "w": 20.0, "d": 16.0, "h": 30.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": -320.0, "w": 20.0, "d": 16.0, "h": 42.0, "facade": "glassTower"},
+		{"x": 710.0, "z": -232.0, "w": 20.0, "d": 16.0, "h": 36.0, "facade": "marbleTower"},
+		{"x": 710.0, "z": -180.0, "w": 20.0, "d": 14.0, "h": 48.0, "facade": "glassTower"},
+		{"x": 710.0, "z": 143.0, "w": 20.0, "d": 18.0, "h": 38.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": 242.0, "w": 20.0, "d": 14.0, "h": 30.0, "facade": "marbleTower"},
+		{"x": 710.0, "z": 287.0, "w": 20.0, "d": 16.0, "h": 34.0, "facade": "glassTower"},
+		{"x": 710.0, "z": 371.0, "w": 20.0, "d": 14.0, "h": 28.0, "facade": "hotelTower"},
+		{"x": 710.0, "z": 408.0, "w": 20.0, "d": 14.0, "h": 32.0, "facade": "goldTower"},
+		{"x": 804.0, "z": -366.0, "w": 20.0, "d": 16.0, "h": 30.0, "facade": "marbleTower"},
+		{"x": 804.0, "z": -320.0, "w": 20.0, "d": 16.0, "h": 44.0, "facade": "glassTower"},
+		{"x": 804.0, "z": -232.0, "w": 20.0, "d": 16.0, "h": 38.0, "facade": "hotelTower"},
+		{"x": 804.0, "z": -181.0, "w": 20.0, "d": 14.0, "h": 46.0, "facade": "glassTower"},
+		{"x": 804.0, "z": -128.0, "w": 20.0, "d": 14.0, "h": 34.0, "facade": "goldTower"},
+		{"x": 804.0, "z": 82.0, "w": 20.0, "d": 18.0, "h": 40.0, "facade": "glassTower"},
+		{"x": 804.0, "z": 120.0, "w": 20.0, "d": 18.0, "h": 32.0, "facade": "hotelTower"},
+	]
+	for targeted_spec in targeted_frontage_specs:
+		var targeted_x := _f(targeted_spec, "x")
+		var targeted_z := _f(targeted_spec, "z")
+		var targeted_w := _f(targeted_spec, "w", 20.0)
+		var targeted_d := _f(targeted_spec, "d", 16.0)
+		var targeted_y := height_at(targeted_x, targeted_z)
+		if targeted_y < 1.55:
+			continue
+		var targeted_valid := true
+		var targeted_min_height := INF
+		var targeted_max_height := -INF
+		for targeted_corner in [
+			Vector3(targeted_x - targeted_w * 0.5, 0.0, targeted_z - targeted_d * 0.5),
+			Vector3(targeted_x + targeted_w * 0.5, 0.0, targeted_z - targeted_d * 0.5),
+			Vector3(targeted_x - targeted_w * 0.5, 0.0, targeted_z + targeted_d * 0.5),
+			Vector3(targeted_x + targeted_w * 0.5, 0.0, targeted_z + targeted_d * 0.5),
+		]:
+			var targeted_corner_height := height_at(targeted_corner.x, targeted_corner.z)
+			targeted_min_height = minf(targeted_min_height, targeted_corner_height)
+			targeted_max_height = maxf(targeted_max_height, targeted_corner_height)
+			if _road_clearance_xz(targeted_corner) < 2.7 or not _is_position_clear(targeted_corner, 1.2, 0.0):
+				targeted_valid = false
+				break
+		if not targeted_valid or targeted_max_height - targeted_min_height > 1.1:
+			continue
+		for existing_frontage in accepted:
+			if absf(targeted_x - _f(existing_frontage, "x")) < (targeted_w + _f(existing_frontage, "w")) * 0.5 + 3.0 and absf(targeted_z - _f(existing_frontage, "z")) < (targeted_d + _f(existing_frontage, "d")) * 0.5 + 3.0:
+				targeted_valid = false
+				break
+		if not targeted_valid:
+			continue
+		for landmark_variant in data.get("landmarks", []):
+			var landmark: Dictionary = landmark_variant
+			var landmark_pos := _item_position(landmark)
+			var safe_radius := maxf(_f(landmark, "r", 26.0), 26.0) + maxf(targeted_w, targeted_d) * 0.55
+			if Vector2(targeted_x - landmark_pos.x, targeted_z - landmark_pos.z).length() < safe_radius:
+				targeted_valid = false
+				break
+		if not targeted_valid:
+			continue
+		accepted.append({
+			"x": targeted_x,
+			"y": targeted_y,
+			"z": targeted_z,
+			"w": targeted_w,
+			"d": targeted_d,
+			"h": _f(targeted_spec, "h", 30.0),
+			"roofH": 0.0,
+			"rotY": 0.0,
+			"kind": "rt-infill",
+			"model": "generic",
+			"facade": String(targeted_spec.get("facade", "glassTower")),
+			"boulevardFrontage": true,
+		})
+
 	_infill_buildings = accepted
 	_enhancement_stats["infill_buildings"] = accepted.size()
 	var boulevard_frontage_count := 0
@@ -5156,7 +5250,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				continue
 			if is_equal_approx(curb_x, 706.2) and center_z >= 15.0 and center_z <= 31.0:
 				continue
-			var y := height_at(curb_x, center_z) + 0.08
+			var y := _boulevard_ground_y(curb_x, center_z) + 0.08
 			promenade_curb_transforms.append(make_transform(Vector3(curb_x, y, center_z), 0.0, Vector3(0.22, 0.16, 2.05)))
 	# Flat black-granite inlays subdivide the remaining stone into formal
 	# walking rooms.  They follow terrain in 4 m bites and remain one
@@ -5165,7 +5259,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var band_z := float(z) + 2.0
 		for band_x in [716.5, 728.2, 736.8, 777.8, 782.8, 788.0]:
 			promenade_curb_transforms.append(make_transform(
-				Vector3(float(band_x), height_at(float(band_x), band_z) + 0.082, band_z),
+				Vector3(float(band_x), _boulevard_ground_y(float(band_x), band_z) + 0.082, band_z),
 				0.0,
 				Vector3(0.34, 0.035, 3.90)
 			))
@@ -5173,14 +5267,14 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for x in range(708, 744, 4):
 			var west_band_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(west_band_x, height_at(west_band_x, float(band_z)) + 0.082, float(band_z)),
+				Vector3(west_band_x, _boulevard_ground_y(west_band_x, float(band_z)) + 0.082, float(band_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.44)
 			))
 		for x in range(776, 790, 4):
 			var east_band_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(east_band_x, height_at(east_band_x, float(band_z)) + 0.082, float(band_z)),
+				Vector3(east_band_x, _boulevard_ground_y(east_band_x, float(band_z)) + 0.082, float(band_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.44)
 			))
@@ -5188,7 +5282,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for x in range(682, 744, 4):
 			var axis_x := float(x) + 2.0
 			promenade_curb_transforms.append(make_transform(
-				Vector3(axis_x, height_at(axis_x, float(axis_z)) + 0.090, float(axis_z)),
+				Vector3(axis_x, _boulevard_ground_y(axis_x, float(axis_z)) + 0.090, float(axis_z)),
 				0.0,
 				Vector3(3.90, 0.035, 0.48)
 			))
@@ -5213,7 +5307,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for reference_x in [743.8, 776.2, 788.8]:
 			var reference_x_value := float(reference_x)
 			promenade_curb_transforms.append(make_transform(
-				Vector3(reference_x_value, height_at(reference_x_value, reference_z) + 0.080, reference_z),
+				Vector3(reference_x_value, _boulevard_ground_y(reference_x_value, reference_z) + 0.080, reference_z),
 				0.0,
 				Vector3(0.22, 0.15, 4.05)
 			))
@@ -5231,11 +5325,37 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		for transverse_x in [734.0, 738.0, 742.0, 778.0, 782.0, 786.0]:
 			var transverse_x_value := float(transverse_x)
 			promenade_curb_transforms.append(make_transform(
-				Vector3(transverse_x_value, height_at(transverse_x_value, transverse_z) + 0.082, transverse_z),
+				Vector3(transverse_x_value, _boulevard_ground_y(transverse_x_value, transverse_z) + 0.082, transverse_z),
 				0.0,
 				Vector3(3.90, 0.035, 0.44)
 			))
 	_add_multimesh(parent, curb_mesh, granite, promenade_curb_transforms, "PremiumGraniteEdging", false)
+
+	# East marina quay, Z=140..390.  The height grid falls from the road
+	# into marina water immediately east of X=771, so a flat object at
+	# local terrain height is buried on its west side and floating on
+	# its east side.  Build the intended raised stone promenade deck in
+	# road-following segments, finish its water edge with a granite
+	# quay wall, and give the deck real box collision.  All east-side
+	# 0.2.19 planting/furniture/cafes in this district use
+	# `_boulevard_ground_y()` and therefore sit on this deck.
+	var marina_deck_transforms: Array[Transform3D] = []
+	var marina_quay_transforms: Array[Transform3D] = []
+	for deck_z in range(145, 390, 10):
+		var deck_center_z := float(deck_z)
+		var deck_y := _boulevard_ground_y(780.5, deck_center_z)
+		var deck_center := Vector3(780.5, deck_y - 0.175, deck_center_z)
+		var deck_size := Vector3(19.0, 0.35, 10.45)
+		marina_deck_transforms.append(make_transform(deck_center, 0.0, deck_size))
+		_add_box_collider(deck_center, deck_size)
+		marina_quay_transforms.append(make_transform(
+			Vector3(789.7, deck_y - 2.70, deck_center_z),
+			0.0,
+			Vector3(0.70, 5.40, 10.45)
+		))
+	_add_multimesh(parent, curb_mesh, pavers, marina_deck_transforms, "BoulevardMarinaPromenadeDeck", true)
+	_add_multimesh(parent, curb_mesh, granite, marina_quay_transforms, "BoulevardMarinaQuayWall", true)
+	_enhancement_stats["boulevard_marina_deck_segments"] = marina_deck_transforms.size()
 
 	# Large formal lawn rooms replace the eight small 3.35 m strips from
 	# the first boulevard pass.  West rooms occupy both the cafe band and
@@ -5324,7 +5444,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var island_spec := lawn_island_specs[island_index]
 		var island_size := Vector2(island_spec.z, island_spec.w)
 		var center := Vector3(island_spec.x, 0.0, island_spec.y)
-		center.y = height_at(center.x, center.z)
+		center.y = _boulevard_ground_y(center.x, center.z)
 		if not _is_boulevard_rect_clear(center, island_size, 0.85):
 			continue
 		accepted_lawn_islands += 1
@@ -5441,7 +5561,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var palm_z := _f(palm, "z")
 		if palm_z < -430.0 or palm_z > 430.0 or minf(absf(palm_x - 745.5), absf(palm_x - 774.5)) > 1.0:
 			continue
-		palm_bed_centers.append(Vector3(palm_x, height_at(palm_x, palm_z), palm_z))
+		palm_bed_centers.append(Vector3(palm_x, _boulevard_ground_y(palm_x, palm_z), palm_z))
 
 	var extra_date_palm_transforms: Array = []
 	var extra_palm_specs: Array[Vector2] = [
@@ -5455,10 +5575,10 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	]
 	for extra_index in extra_palm_specs.size():
 		var extra_spec := extra_palm_specs[extra_index]
-		var extra_base := Vector3(extra_spec.x, height_at(extra_spec.x, extra_spec.y) - 0.03, extra_spec.y)
+		var extra_base := Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y) - 0.03, extra_spec.y)
 		if not _is_position_clear(extra_base, 2.0, 3.0):
 			continue
-		palm_bed_centers.append(Vector3(extra_spec.x, height_at(extra_spec.x, extra_spec.y), extra_spec.y))
+		palm_bed_centers.append(Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y), extra_spec.y))
 		extra_date_palm_transforms.append(make_transform(
 			extra_base,
 			_hash01(extra_index * 37 + 91, extra_index * 41 + 17) * TAU,
@@ -5563,7 +5683,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				continue
 			var lamp_x := 746.9 if is_west_side else 773.1
 			var road_direction := 1.0 if is_west_side else -1.0
-			var lamp_base := Vector3(lamp_x, height_at(lamp_x, side_z), side_z)
+			var lamp_base := Vector3(lamp_x, _boulevard_ground_y(lamp_x, side_z), side_z)
 			modern_lamp_poles.append(make_transform(lamp_base + Vector3(0.0, 2.80, 0.0), 0.0, Vector3.ONE))
 			modern_lamp_arms.append(make_transform(
 				lamp_base + Vector3(road_direction * 0.78, 5.62, 0.0),
@@ -5588,7 +5708,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 				# Benches sit on the stone side of the planting band and
 				# look across the hedge/palms to the carriageway.
 				var bench_x := 739.0 if is_west_side else 783.0
-				var bench_center := Vector3(bench_x, height_at(bench_x, side_z), side_z)
+				var bench_center := Vector3(bench_x, _boulevard_ground_y(bench_x, side_z), side_z)
 				stone_bench_transforms.append(make_transform(
 					bench_center + Vector3(0.0, 0.38, 0.0),
 					0.0,
@@ -5704,7 +5824,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	for cafe_spec in cafe_specs:
 		var facing := _f(cafe_spec, "facing", 1.0)
 		var base := Vector3(_f(cafe_spec, "x"), 0.0, _f(cafe_spec, "z"))
-		base.y = height_at(base.x, base.z)
+		base.y = _boulevard_ground_y(base.x, base.z)
 		# The reusable GLB is 11.42 x 9.02 m in plan.  Check the whole
 		# footprint, not only its centre, against exported/infill buildings.
 		if not _is_boulevard_rect_clear(base, Vector2(11.6, 9.2), 0.55):
@@ -5765,7 +5885,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var arcade_z := _f(arcade, "z")
 		var arcade_length := _f(arcade, "length", 24.0)
 		var arcade_facing := _f(arcade, "facing", 1.0)
-		var arcade_base := Vector3(front_x, height_at(front_x, arcade_z), arcade_z)
+		var arcade_base := Vector3(front_x, _boulevard_ground_y(front_x, arcade_z), arcade_z)
 		var column_probe := arcade_base + Vector3(arcade_facing * 2.8, 0.0, 0.0)
 		if not _is_position_clear(column_probe, 0.55, 2.4):
 			continue
@@ -5813,14 +5933,14 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		sign_transforms.append(make_transform(Vector3(front_x + arcade_facing * 0.22, arcade_base.y + 3.02, arcade_z), 0.0, Vector3(0.12, 0.50, arcade_length * 0.58)))
 		for planter_index in panel_count:
 			var arcade_planter_z := arcade_z - arcade_length * 0.5 + panel_width * (float(planter_index) + 0.5)
-			var arcade_planter_center := Vector3(front_x + arcade_facing * 3.35, height_at(front_x + arcade_facing * 3.35, arcade_planter_z) + 0.24, arcade_planter_z)
+			var arcade_planter_center := Vector3(front_x + arcade_facing * 3.35, _boulevard_ground_y(front_x + arcade_facing * 3.35, arcade_planter_z) + 0.24, arcade_planter_z)
 			counter_transforms.append(make_transform(arcade_planter_center, 0.0, Vector3(0.65, 0.46, 2.45)))
 			boulevard_shrub_transforms.append(make_transform(arcade_planter_center + Vector3(0.0, 0.25, 0.0), float(arcade_index * 3 + planter_index) * 0.63, Vector3.ONE * 0.84))
 		if bool(arcade.get("tables", false)):
 			var table_offsets := [-10.0, -6.0, -2.0, 2.0, 6.0, 10.0] if arcade_length >= 24.0 else [-6.0, -2.0, 2.0, 6.0]
 			for table_offset_z in table_offsets:
 				var arcade_table_center := Vector3(front_x + arcade_facing * 1.55, 0.0, arcade_z + float(table_offset_z))
-				arcade_table_center.y = height_at(arcade_table_center.x, arcade_table_center.z)
+				arcade_table_center.y = _boulevard_ground_y(arcade_table_center.x, arcade_table_center.z)
 				table_top_transforms.append(make_transform(arcade_table_center + Vector3(0.0, 0.82, 0.0), 0.0, Vector3(1.38, 0.10, 1.38)))
 				table_leg_transforms.append(make_transform(arcade_table_center + Vector3(0.0, 0.43, 0.0), 0.0, Vector3(0.35, 0.76, 0.35)))
 				for arcade_chair_index in 3:
@@ -5916,6 +6036,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		and modern_lamp_count >= 55
 		and stone_bench_count >= 25
 		and boulevard_pool_deck_count >= 3
+		and int(_enhancement_stats.get("boulevard_marina_deck_segments", 0)) >= 20
 		and int(_enhancement_stats.get("boulevard_date_palms", 0)) >= 60
 		and int(_enhancement_stats.get("boulevard_frontage_infill", 0)) >= 8
 	)
