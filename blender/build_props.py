@@ -26,6 +26,8 @@ Props:
                       trunks, individual pinnate leaflets and crown detail
   * grass_tuft.glb / flower_clump.glb / ornamental_shrub.glb
                       geometric ground-cover models (no flat alpha cards)
+  * park_bench.glb / park_pergola.glb
+                      cast-iron/timber bench and stone/timber park pergola
 """
 import math
 import os
@@ -551,57 +553,407 @@ def export(out_dir, filename):
 
 
 # --------------------------------------------------------------------------- #
-# enclosed air-conditioned bus shelter: 5.4 x 2.0 m, 2.75 m tall
+# enclosed air-conditioned bus shelter: 5.75 x 2.35 m, 3.06 m tall.
+# 0.2.23 photoreal pass: the previous 816-triangle shell becomes a real
+# framed glazing system -- segmented tempered panes with mullions and
+# gaskets, two sliding glass doors per long face (tracks, pull handles,
+# seals, motion sensors), a standing-seam roof with drip rails, a solar
+# array with individual cells and bus bars, a louvred rooftop AC unit
+# with a bladed fan, ceiling LED strips, interior vent slats, a slatted
+# bench on three cast frames with visible fixings and a lit timetable
+# case.  The exact outer envelope (5.75 x 2.35 x 3.06 m) is unchanged so
+# the native colliders and placements from earlier releases stay exact.
 # --------------------------------------------------------------------------- #
 def build_shelter():
     metal = MATS["PropsMetal"]
     glass = MATS["PropsGlass"]
     wood = MATS["PropsWood"]
     dark = MATS["RoofDark"]
+    glow = MATS["LampGlow"]
+    solar = MATS["SolarCell"]
 
-    box("base", 0, 0, 0.06, 5.4, 2.0, 0.12, dark)
+    # Raised platform with anti-slip nosings and a drainage slot each end.
+    box("shelter_platform", 0, 0, 0.060, 5.45, 2.05, 0.12, dark, bevel=0.012)
+    for strip_index in range(7):
+        box("shelter_antislip", -2.10 + strip_index * 0.70, 0, 0.124,
+            0.34, 1.86, 0.010, metal)
+    for sx in (-2.62, 2.62):
+        box("shelter_drain", sx, 0, 0.122, 0.10, 1.80, 0.008, dark)
+
+    # Four square corner posts on base plates with anchor bolts.
     for sx in (-2.55, 2.55):
         for sy in (-0.88, 0.88):
-            cyl("post", sx, sy, 1.32, 0.055, 2.4, metal)
-    # roof slab + fascia + rooftop AC unit
-    box("roof", 0, 0, 2.62, 5.75, 2.35, 0.13, metal, bevel=0.03)
-    box("fascia", 0, 0, 2.5, 5.5, 2.1, 0.1, metal)
-    box("ac", -1.7, 0, 2.86, 1.3, 0.8, 0.34, metal, bevel=0.02)
-    cyl("ac_fan", -1.7, 0, 3.04, 0.26, 0.04, dark, vertices=18)
-    # glazed long sides with a central door gap on BOTH faces (enclosed stop)
-    for sy in (-0.9, 0.9):
-        for sx in (-1.65, 1.65):
-            box("glass_long", sx, sy, 1.28, 2.05, 0.05, 2.15, glass)
-        for sx in (-0.62, 0.62):
-            box("door_frame", sx, sy, 1.28, 0.07, 0.07, 2.15, metal)
-        box("header", 0, sy, 2.4, 5.2, 0.06, 0.14, metal)
-    # glazed short sides
+            box("shelter_post", sx, sy, 1.340, 0.11, 0.11, 2.44, metal, bevel=0.014)
+            box("shelter_post_plate", sx, sy, 0.135, 0.22, 0.22, 0.03, metal, bevel=0.008)
+            for bx in (-0.07, 0.07):
+                for by in (-0.07, 0.07):
+                    cyl("shelter_post_bolt", sx + bx, sy + by, 0.16, 0.014, 0.025,
+                        dark, vertices=6)
+
+    # Roof build-up: soffit, main slab, drip rails and standing seams.
+    box("shelter_soffit", 0, 0, 2.520, 5.55, 2.15, 0.08, metal, bevel=0.012)
+    box("shelter_roof", 0, 0, 2.640, 5.75, 2.35, 0.12, metal, bevel=0.025)
+    for sy in (-1.125, 1.125):
+        box("shelter_drip_rail", 0, sy, 2.575, 5.62, 0.05, 0.045, dark)
+    for seam_y in (-0.90, -0.45, 0.0, 0.45, 0.90):
+        box("shelter_roof_seam", 0, seam_y, 2.712, 5.58, 0.035, 0.024, dark)
+
+    # Rooftop solar array: framed panel, 18 individual cells, bus bars.
+    box("shelter_solar_frame", 1.25, 0, 2.725, 2.45, 1.30, 0.045, dark, bevel=0.010)
+    for cell_x in range(6):
+        for cell_y in range(3):
+            box("shelter_solar_cell", 0.27 + cell_x * 0.392, -0.405 + cell_y * 0.405,
+                2.752, 0.35, 0.36, 0.012, solar)
+    for bar_y in (-0.60, -0.20, 0.20, 0.60):
+        box("shelter_solar_busbar", 1.25, bar_y, 2.756, 2.36, 0.018, 0.014, metal)
+
+    # Rooftop AC unit with louvres, service panel and a bladed fan.
+    box("shelter_ac_body", -1.70, 0, 2.860, 1.30, 0.80, 0.34, metal, bevel=0.020)
+    box("shelter_ac_panel", -1.70, -0.412, 2.860, 1.05, 0.022, 0.26, dark)
+    for louvre_index in range(6):
+        box("shelter_ac_louvre", -1.70, -0.428, 2.755 + louvre_index * 0.042,
+            0.95, 0.012, 0.020, metal)
+    cyl("shelter_ac_fan_ring", -1.70, 0, 3.040, 0.27, 0.035, dark, vertices=24)
+    cyl("shelter_ac_fan_hub", -1.70, 0, 3.047, 0.070, 0.022, metal, vertices=16)
+    for blade_index in range(5):
+        blade_angle = blade_index * math.tau / 5.0
+        rbox("shelter_ac_fan_blade",
+             -1.70 + math.cos(blade_angle) * 0.145,
+             math.sin(blade_angle) * 0.145, 3.045,
+             0.20, 0.075, 0.012, metal, rotation=(0.0, 0.0, blade_angle))
+
+    # Long glazed faces: two framed panes per side bay, bottom and mid
+    # rails, header and rubber gaskets, with a central sliding doorway.
+    for sy in (-0.92, 0.92):
+        outward = 1.0 if sy > 0.0 else -1.0
+        box("shelter_bottom_rail", 0, sy, 0.235, 5.20, 0.085, 0.190, metal, bevel=0.010)
+        box("shelter_header", 0, sy, 2.415, 5.20, 0.075, 0.150, metal, bevel=0.008)
+        for bay_centre in (-1.67, 1.67):
+            for pane_offset in (-0.495, 0.495):
+                box("shelter_pane_long", bay_centre + pane_offset, sy, 1.310,
+                    0.92, 0.035, 1.98, glass)
+            box("shelter_midrail", bay_centre, sy, 1.120, 1.98, 0.055, 0.060, metal)
+            for gasket_offset in (-0.995, 0.0, 0.995):
+                box("shelter_gasket_long", bay_centre + gasket_offset, sy, 1.310,
+                    0.028, 0.060, 2.02, dark)
+        for mullion_x in (-2.62, -1.67, -0.68, 0.68, 1.67, 2.62):
+            box("shelter_mullion_long", mullion_x, sy, 1.310, 0.070, 0.085, 2.10,
+                metal, bevel=0.008)
+        # Sliding door pair: glass leaves, seals, pulls, track and sensor.
+        box("shelter_door_track", 0, sy, 2.360, 1.36, 0.100, 0.110, dark)
+        box("shelter_door_guide", 0, sy, 0.130, 1.36, 0.070, 0.020, dark)
+        for door_x in (-0.315, 0.315):
+            box("shelter_door_leaf", door_x, sy, 1.250, 0.59, 0.040, 2.05, glass)
+            box("shelter_door_seal_v", door_x * 2.0, sy, 1.250, 0.022, 0.055, 2.05, dark)
+            box("shelter_door_seal_top", door_x, sy, 2.260, 0.59, 0.055, 0.030, dark)
+            box("shelter_door_kick", door_x, sy + outward * 0.028, 0.330,
+                0.50, 0.012, 0.16, metal)
+            cyl("shelter_door_pull", door_x * 0.30, sy + outward * 0.075, 1.150,
+                0.016, 0.78, metal, vertices=10)
+            for mount_z in (0.820, 1.480):
+                cyl("shelter_door_pull_mount", door_x * 0.30, sy + outward * 0.040,
+                    mount_z, 0.012, 0.075, metal, vertices=8,
+                    rotation=(math.pi / 2.0, 0.0, 0.0))
+        box("shelter_door_sensor", 0, sy + outward * 0.055, 2.315,
+            0.18, 0.045, 0.060, dark, bevel=0.008)
+        box("shelter_door_sensor_eye", 0, sy + outward * 0.080, 2.300,
+            0.07, 0.012, 0.025, glow)
+
+    # Short glazed ends with a centre mullion and corner gaskets.
     for sx in (-2.62, 2.62):
-        box("glass_side", sx, 0, 1.28, 0.05, 1.72, 2.15, glass)
-    # bench + info panel inside
-    box("bench_seat", 0, -0.48, 0.62, 3.6, 0.45, 0.08, wood, bevel=0.015)
-    box("bench_back", 0, -0.72, 0.98, 3.6, 0.06, 0.5, wood)
-    for sx in (-1.5, 1.5):
-        box("bench_leg", sx, -0.48, 0.31, 0.08, 0.42, 0.5, metal)
-    box("info_panel", 2.28, 0.45, 1.35, 0.08, 0.9, 1.5, glass)
+        box("shelter_bottom_rail_end", sx, 0, 0.235, 0.085, 1.76, 0.190, metal, bevel=0.010)
+        box("shelter_header_end", sx, 0, 2.415, 0.075, 1.76, 0.150, metal, bevel=0.008)
+        box("shelter_midrail_end", sx, 0, 1.120, 0.055, 1.76, 0.060, metal)
+        for pane_y in (-0.445, 0.445):
+            box("shelter_pane_end", sx, pane_y, 1.310, 0.035, 0.82, 1.98, glass)
+        for gasket_y in (-0.88, 0.0, 0.88):
+            box("shelter_mullion_end", sx, gasket_y, 1.310, 0.070, 0.070, 2.10,
+                metal, bevel=0.008)
+
+    # Interior ceiling lights and the AC supply vent.
+    for strip_y in (-0.52, 0.52):
+        box("shelter_led_housing", 0, strip_y, 2.470, 4.70, 0.110, 0.030, dark)
+        box("shelter_led_strip", 0, strip_y, 2.452, 4.55, 0.075, 0.012, glow)
+    box("shelter_vent_body", -1.20, 0, 2.455, 1.15, 0.55, 0.045, metal)
+    for vent_index in range(6):
+        box("shelter_vent_slat", -1.20, -0.205 + vent_index * 0.082, 2.428,
+            1.02, 0.028, 0.010, dark)
+
+    # Slatted bench on three cast frames; every slat is bolted to a frame.
+    seat_ys = (-0.700, -0.605, -0.510, -0.415, -0.320)
+    for slat_y in seat_ys:
+        box("shelter_bench_seat_slat", 0, slat_y, 0.615, 3.80, 0.075, 0.045,
+            wood, bevel=0.008)
+    for back_z in (0.840, 1.010, 1.180):
+        box("shelter_bench_back_slat", 0, -0.745, back_z, 3.80, 0.045, 0.090,
+            wood, bevel=0.008)
+    for frame_x in (-1.65, 0.0, 1.65):
+        box("shelter_bench_frame_front", frame_x, -0.335, 0.365, 0.070, 0.070, 0.47,
+            metal, bevel=0.010)
+        box("shelter_bench_frame_rear", frame_x, -0.715, 0.720, 0.070, 0.070, 1.18,
+            metal, bevel=0.010)
+        box("shelter_bench_frame_foot", frame_x, -0.510, 0.145, 0.090, 0.52, 0.035,
+            metal, bevel=0.008)
+        box("shelter_bench_frame_seatrail", frame_x, -0.510, 0.575, 0.060, 0.48, 0.045,
+            metal, bevel=0.008)
+        for slat_y in seat_ys:
+            cyl("shelter_bench_bolt", frame_x, slat_y, 0.642, 0.011, 0.012,
+                dark, vertices=6)
+
+    # Lit timetable case with printed rows behind glass.
+    box("shelter_info_frame", 2.30, 0.48, 1.350, 0.070, 0.95, 1.50, metal, bevel=0.012)
+    box("shelter_info_back", 2.265, 0.48, 1.350, 0.020, 0.82, 1.36, dark)
+    box("shelter_info_glass", 2.345, 0.48, 1.350, 0.015, 0.82, 1.36, glass)
+    box("shelter_info_header", 2.282, 0.48, 1.940, 0.012, 0.66, 0.14, glow)
+    for row_index in range(8):
+        box("shelter_info_row", 2.280, 0.265, 1.760 - row_index * 0.115,
+            0.010, 0.34, 0.035, glow)
+        box("shelter_info_row_time", 2.280, 0.680, 1.760 - row_index * 0.115,
+            0.010, 0.16, 0.035, glow)
 
 
 # --------------------------------------------------------------------------- #
-# street lamp: tapered pole, two arms along the road axis, 6.55 m tall
+# street lamp: tapered fluted pole, two swept arms along the road axis,
+# 6.63 m tall.  0.2.23 photoreal pass replaces the 560-triangle prop
+# with a bolted flange base and anchor bolts, an access door with a
+# handle and screws, sectional pole collars, multi-segment swept arms
+# with drooping power cables and die-cast LED heads (cooling fins,
+# reflector tray, lens, gasket, corner screws and a photocell).
+# The outer envelope (0.48 x 4.90 m footprint, 6.63 m tall) is kept so
+# the native placements/colliders remain exact.
 # --------------------------------------------------------------------------- #
 def build_lamp():
     metal = MATS["PropsMetal"]
     glow = MATS["LampGlow"]
-    cyl("base", 0, 0, 0.3, 0.24, 0.6, metal, vertices=16)
-    cone("pole", 0, 0, 3.35, 0.14, 0.075, 6.1, metal, vertices=14)
-    cyl("collar", 0, 0, 6.15, 0.11, 0.16, metal)
+    dark = MATS["RoofDark"]
+
+    # Bolted flange base: chamfered plinth, flange disc, tapered door
+    # housing, four hex anchor bolts and the collar into the pole.
+    box("lamp_plinth", 0, 0, 0.040, 0.48, 0.48, 0.080, dark, bevel=0.015)
+    cyl("lamp_flange", 0, 0, 0.130, 0.270, 0.100, metal, vertices=24)
+    cone("lamp_base_body", 0, 0, 0.475, 0.240, 0.165, 0.550, metal, vertices=24)
+    cyl("lamp_base_collar", 0, 0, 0.790, 0.180, 0.080, metal, vertices=24)
+    for bx in (-0.185, 0.185):
+        for by in (-0.185, 0.185):
+            cyl("lamp_anchor_bolt", bx, by, 0.195, 0.026, 0.050, dark, vertices=6)
+            cyl("lamp_anchor_washer", bx, by, 0.175, 0.040, 0.012, metal, vertices=12)
+
+    # Access door on the +X face with handle, hinges and corner screws.
+    box("lamp_access_door", 0.195, 0, 0.520, 0.030, 0.240, 0.420, metal, bevel=0.008)
+    box("lamp_access_gasket", 0.182, 0, 0.520, 0.012, 0.262, 0.442, dark)
+    box("lamp_access_handle", 0.225, -0.070, 0.520, 0.035, 0.030, 0.120, dark, bevel=0.006)
+    for hinge_z in (0.380, 0.660):
+        box("lamp_access_hinge", 0.205, 0.125, hinge_z, 0.025, 0.025, 0.080, dark)
+    for screw_y in (-0.095, 0.095):
+        for screw_z in (0.345, 0.695):
+            cyl("lamp_access_screw", 0.214, screw_y, screw_z, 0.009, 0.012,
+                dark, vertices=6, rotation=(0.0, math.pi / 2.0, 0.0))
+
+    # Tapered sectional pole with slip-joint collars and a maker's plate.
+    cone("lamp_pole", 0, 0, 3.660, 0.145, 0.072, 5.720, metal, vertices=24)
+    for collar_z, collar_r in ((2.100, 0.126), (4.000, 0.101), (5.700, 0.082)):
+        cyl("lamp_pole_collar", 0, 0, collar_z, collar_r, 0.090, metal, vertices=24)
+        cyl("lamp_pole_groove", 0, 0, collar_z - 0.060, collar_r - 0.004, 0.020,
+            dark, vertices=24)
+    box("lamp_maker_plate", -0.118, 0, 2.450, 0.012, 0.120, 0.180, dark)
+    cyl("lamp_top_cap", 0, 0, 6.555, 0.076, 0.070, metal, vertices=20)
+    sphere("lamp_finial", 0, 0, 6.595, 0.070, 0.070, 0.070, metal)
+
     for s in (-1, 1):
-        # swept arm along +/-Y (road axis after Y-up export), slight rise
-        cyl("arm", 0, s * 1.0, 6.34, 0.045, 2.1, metal,
-            rotation=(math.pi / 2 - s * 0.1, 0, 0))
-        box("head", 0, s * 1.95, 6.5, 0.36, 1.0, 0.16, metal, bevel=0.045)
-        box("glow", 0, s * 1.95, 6.41, 0.27, 0.82, 0.04, glow)
-    cyl("finial", 0, 0, 6.52, 0.05, 0.22, metal)
+        # Swept arm along +/-Y (road axis after Y-up export), built from
+        # five tapered tube segments so the rise reads as a real curve.
+        arm_points = (
+            (0.0, s * 0.050, 6.280),
+            (0.0, s * 0.550, 6.410),
+            (0.0, s * 1.150, 6.480),
+            (0.0, s * 1.700, 6.500),
+            (0.0, s * 2.180, 6.480),
+        )
+        arm_radii = (0.064, 0.058, 0.052, 0.047, 0.042)
+        for segment_index in range(len(arm_points) - 1):
+            tube_between("lamp_arm", arm_points[segment_index],
+                         arm_points[segment_index + 1],
+                         arm_radii[segment_index], arm_radii[segment_index + 1],
+                         metal, vertices=14)
+        # Drooping power cable from the pole collar into the head.
+        cable_points = (
+            (0.055, s * 0.100, 6.360),
+            (0.070, s * 0.750, 6.330),
+            (0.060, s * 1.400, 6.380),
+            (0.040, s * 1.850, 6.440),
+        )
+        for segment_index in range(len(cable_points) - 1):
+            tube_between("lamp_cable", cable_points[segment_index],
+                         cable_points[segment_index + 1], 0.011, 0.011,
+                         dark, vertices=8)
+
+        head_y = s * 1.920
+        # Die-cast LED head: housing, bonnet, cooling fins, end caps.
+        box("lamp_head", 0, head_y, 6.430, 0.380, 1.060, 0.165, metal, bevel=0.040)
+        box("lamp_head_bonnet", 0, head_y, 6.535, 0.300, 0.900, 0.060, metal, bevel=0.022)
+        for fin_index in range(7):
+            box("lamp_head_fin", 0, head_y + s * (-0.360 + fin_index * 0.120), 6.560,
+                0.340, 0.032, 0.070, metal, bevel=0.006)
+        for cap_offset in (-0.545, 0.545):
+            box("lamp_head_endcap", 0, head_y + s * cap_offset, 6.430,
+                0.330, 0.045, 0.140, dark, bevel=0.012)
+        # Underside reflector tray, gasket, lens and corner screws.
+        box("lamp_head_reflector", 0, head_y, 6.340, 0.300, 0.900, 0.022, dark)
+        box("lamp_head_gasket", 0, head_y, 6.326, 0.272, 0.842, 0.010, metal)
+        box("lamp_head_lens", 0, head_y, 6.318, 0.240, 0.780, 0.018, glow)
+        for screw_x in (-0.120, 0.120):
+            for screw_offset in (-0.390, 0.390):
+                cyl("lamp_head_screw", screw_x, head_y + s * screw_offset, 6.322,
+                    0.011, 0.014, dark, vertices=6)
+    # Photocell on the +Y head only, as on real twin-arm columns.
+    cyl("lamp_photocell_base", 0, 1.660, 6.580, 0.038, 0.030, dark, vertices=14)
+    cyl("lamp_photocell", 0, 1.660, 6.608, 0.032, 0.040, metal, vertices=14)
+
+
+# --------------------------------------------------------------------------- #
+# park bench (0.2.23): 2.40 m cast-iron and hardwood bench that replaces
+# the flat stone slabs the 0.2.22 parks used.  Two cast side frames with
+# feet, legs, reclined back posts and curved armrests carry five seat
+# slats and four back slats; every slat-to-frame joint has a hex bolt.
+# Origin at ground centre, seat length along Blender X.
+# --------------------------------------------------------------------------- #
+def build_park_bench():
+    metal = MATS["PropsMetal"]
+    wood = MATS["PropsWood"]
+    dark = MATS["RoofDark"]
+
+    seat_ys = (-0.215, -0.108, 0.000, 0.108, 0.215)
+    for slat_y in seat_ys:
+        box("park_bench_seat_slat", 0, slat_y, 0.455, 2.40, 0.088, 0.045,
+            wood, bevel=0.009)
+    # Reclined back: four slats tilted 12 degrees from vertical.
+    back_tilt = 0.21
+    for back_index in range(4):
+        back_z = 0.615 + back_index * 0.115
+        back_y = -0.300 - (back_z - 0.455) * math.tan(back_tilt)
+        rbox("park_bench_back_slat", 0, back_y, back_z, 2.40, 0.045, 0.088,
+             wood, rotation=(back_tilt, 0.0, 0.0), bevel=0.009)
+
+    for frame_x in (-1.060, 1.060):
+        # Feet with pads, front leg, back post continuing into the back
+        # support, seat rail and a three-segment curved armrest.
+        box("park_bench_foot", frame_x, -0.020, 0.035, 0.085, 0.720, 0.070,
+            metal, bevel=0.012)
+        for pad_y in (-0.300, 0.260):
+            cyl("park_bench_foot_pad", frame_x, pad_y, 0.080, 0.034, 0.025,
+                dark, vertices=12)
+            cyl("park_bench_anchor", frame_x, pad_y, 0.078, 0.013, 0.022,
+                metal, vertices=6)
+        box("park_bench_leg_front", frame_x, 0.235, 0.260, 0.075, 0.085, 0.390,
+            metal, bevel=0.012)
+        rbox("park_bench_back_post", frame_x, -0.315, 0.540, 0.075, 0.085, 0.980,
+             metal, rotation=(back_tilt, 0.0, 0.0), bevel=0.012)
+        box("park_bench_seat_rail", frame_x, 0.000, 0.425, 0.065, 0.600, 0.045,
+            metal, bevel=0.008)
+        arm_points = (
+            (frame_x, -0.300, 0.655),
+            (frame_x, -0.100, 0.700),
+            (frame_x, 0.120, 0.705),
+            (frame_x, 0.285, 0.660),
+        )
+        for segment_index in range(len(arm_points) - 1):
+            tube_between("park_bench_armrest", arm_points[segment_index],
+                         arm_points[segment_index + 1], 0.030, 0.030,
+                         metal, vertices=12)
+        tube_between("park_bench_arm_support", (frame_x, 0.235, 0.455),
+                     (frame_x, 0.265, 0.655), 0.022, 0.022, metal, vertices=10)
+        sphere("park_bench_arm_knob", frame_x, 0.295, 0.655, 0.068, 0.068, 0.068, metal)
+        # Rosette medallion bolted to the outer face of the front leg.
+        outer_x = frame_x + (0.045 if frame_x > 0.0 else -0.045)
+        cyl("park_bench_medallion", outer_x, 0.235, 0.260, 0.038, 0.018,
+            dark, vertices=16, rotation=(0.0, math.pi / 2.0, 0.0))
+        cyl("park_bench_medallion_boss", outer_x, 0.235, 0.260, 0.016, 0.028,
+            metal, vertices=10, rotation=(0.0, math.pi / 2.0, 0.0))
+        for slat_y in seat_ys:
+            cyl("park_bench_seat_bolt", frame_x, slat_y, 0.482, 0.012, 0.012,
+                dark, vertices=6)
+        for back_index in range(4):
+            back_z = 0.615 + back_index * 0.115
+            back_y = -0.300 - (back_z - 0.455) * math.tan(back_tilt) + 0.030
+            cyl("park_bench_back_bolt", frame_x, back_y, back_z, 0.012, 0.040,
+                dark, vertices=6, rotation=(math.pi / 2.0 - back_tilt, 0.0, 0.0))
+
+    # Centre stretcher ties the two frames together under the seat.
+    cyl("park_bench_stretcher", 0, 0.235, 0.180, 0.026, 2.120, metal,
+        vertices=12, rotation=(0.0, math.pi / 2.0, 0.0))
+
+
+# --------------------------------------------------------------------------- #
+# park pergola (0.2.23): hexagonal stone-and-timber pergola, 11.5 m
+# across the rafter tails and 3.84 m tall, replacing the box-built museum
+# pergola from 0.2.22.  Six tapered round columns on stepped plinths
+# with collars and capitals carry a hexagonal ring of through-tenoned
+# beams, six radial rafters and two hexagonal purlin rings around a
+# central hub with a ball finial.  Column centres sit
+# at r=5.2 m, angles 30deg + k*60deg, exactly where the 0.2.22 native
+# colliders already are.
+# --------------------------------------------------------------------------- #
+def build_park_pergola():
+    stone = MATS["VillaStone"]
+    wood = MATS["PropsWood"]
+    metal = MATS["PropsMetal"]
+
+    column_radius = 5.2
+    column_positions = []
+    for column_index in range(6):
+        angle = math.pi / 6.0 + column_index * math.tau / 6.0
+        cx = math.cos(angle) * column_radius
+        cy = math.sin(angle) * column_radius
+        column_positions.append((cx, cy))
+        # Stepped square plinth, round foot moulding, tapered shaft,
+        # necking collar, capital block and a loose stone bench block
+        # between each pair of feet comes from the native side; here we
+        # keep the structure itself complete and self-supporting.
+        box("pergola_plinth_low", cx, cy, 0.110, 0.860, 0.860, 0.220, stone, bevel=0.015)
+        box("pergola_plinth_high", cx, cy, 0.300, 0.700, 0.700, 0.180, stone, bevel=0.012)
+        cyl("pergola_foot_ring", cx, cy, 0.430, 0.340, 0.090, stone, vertices=24)
+        cone("pergola_column", cx, cy, 1.720, 0.295, 0.245, 2.500, stone, vertices=24)
+        cyl("pergola_necking", cx, cy, 3.000, 0.275, 0.070, stone, vertices=24)
+        box("pergola_capital", cx, cy, 3.100, 0.680, 0.680, 0.150, stone, bevel=0.012)
+        box("pergola_abacus", cx, cy, 3.205, 0.800, 0.800, 0.070, stone, bevel=0.010)
+
+    # Hexagonal ring beams between neighbouring capitals, ends
+    # projecting 0.35 m past each column centre with a chamfered tip.
+    for beam_index in range(6):
+        x1, y1 = column_positions[beam_index]
+        x2, y2 = column_positions[(beam_index + 1) % 6]
+        mx, my = (x1 + x2) * 0.5, (y1 + y2) * 0.5
+        yaw = math.atan2(y2 - y1, x2 - x1)
+        rbox("pergola_ring_beam", mx, my, 3.340, column_radius + 0.70, 0.160, 0.200,
+             wood, rotation=(0.0, 0.0, yaw), bevel=0.012)
+        rbox("pergola_ring_beam_lower", mx, my, 3.225, column_radius + 0.30, 0.120, 0.050,
+             wood, rotation=(0.0, 0.0, yaw), bevel=0.008)
+
+    # Six radial rafters run from the central hub to each column and
+    # project 0.55 m past the ring as eaves tails -- the clean radial
+    # geometry of a real hexagonal pergola.
+    for rafter_index in range(6):
+        angle = math.pi / 6.0 + rafter_index * math.tau / 6.0
+        rbox("pergola_rafter", math.cos(angle) * 2.750, math.sin(angle) * 2.750, 3.500,
+             6.00, 0.140, 0.170, wood, rotation=(0.0, 0.0, angle), bevel=0.010)
+
+    # Two hexagonal purlin rings tie the radial rafters together and
+    # throw the ring shadows that make the shade structure read.
+    for ring_radius, ring_z in ((3.60, 3.610), (1.80, 3.610)):
+        for side_index in range(6):
+            angle1 = math.pi / 6.0 + side_index * math.tau / 6.0
+            angle2 = math.pi / 6.0 + (side_index + 1) * math.tau / 6.0
+            x1, y1 = math.cos(angle1) * ring_radius, math.sin(angle1) * ring_radius
+            x2, y2 = math.cos(angle2) * ring_radius, math.sin(angle2) * ring_radius
+            yaw = math.atan2(y2 - y1, x2 - x1)
+            rbox("pergola_purlin", (x1 + x2) * 0.5, (y1 + y2) * 0.5, ring_z,
+                 ring_radius + 0.10, 0.075, 0.055, wood,
+                 rotation=(0.0, 0.0, yaw), bevel=0.006)
+
+    # Central hub where the radial rafters meet, with a ball finial.
+    cyl("pergola_hub", 0, 0, 3.560, 0.300, 0.180, wood, vertices=24)
+    cyl("pergola_finial_stem", 0, 0, 3.680, 0.035, 0.090, metal, vertices=12)
+    sphere("pergola_finial_ball", 0, 0, 3.760, 0.150, 0.150, 0.150, metal)
 
 
 # --------------------------------------------------------------------------- #
@@ -3134,12 +3486,12 @@ def _palm_frond(builders, base, azimuth, length, elevation, droop, rng,
     p1 = base + initial * (length * 0.38)
     p2 = base + outward * (length * 0.78) + up * (math.sin(elevation) * length * 0.62 - droop * length * 0.34)
     p3 = base + outward * length + up * (math.sin(elevation) * length * 0.74 - droop * length)
-    points = cubic_points(p0, p1, p2, p3, 9)
+    points = cubic_points(p0, p1, p2, p3, 11)
     radii = []
     for index in range(len(points)):
         t = index / float(len(points) - 1)
         radii.append(0.050 * ((1.0 - t) ** 0.72) + 0.007)
-    builder_tube(builders["rachis"], points, radii, sides=4, uv_v_scale=0.45,
+    builder_tube(builders["rachis"], points, radii, sides=5, uv_v_scale=0.45,
                  cap_start=False, cap_end=True)
 
     leaf_builder = builders["dry"] if dry else builders["leaf"]
@@ -3178,8 +3530,8 @@ def _palm_frond(builders, base, azimuth, length, elevation, droop, rng,
             )
     if spines:
         spine_builder = builders["rachis"]
-        for spine_index in range(7):
-            t = 0.055 + 0.018 * float(spine_index)
+        for spine_index in range(9):
+            t = 0.050 + 0.015 * float(spine_index)
             attachment = cubic_point(p0, p1, p2, p3, t)
             tangent = cubic_tangent(p0, p1, p2, p3, t)
             for sign in (-1.0, 1.0):
@@ -3197,20 +3549,20 @@ def _palm_fruit_cluster(builders, origin, azimuth, rng):
     up = Vector((0.0, 0.0, 1.0))
     main_end = origin + outward * 0.34 - up * 0.42
     builder_tube(builders["rachis"], [origin, origin + outward * 0.16 - up * 0.13, main_end],
-                 [0.026, 0.021, 0.015], sides=4, cap_start=False)
-    for branch_index in range(5):
-        spread = (float(branch_index) - 2.0) * 0.16
+                 [0.026, 0.021, 0.015], sides=5, cap_start=False)
+    for branch_index in range(6):
+        spread = (float(branch_index) - 2.5) * 0.14
         end = main_end + side * spread + outward * rng.uniform(0.02, 0.13) - up * rng.uniform(0.30, 0.46)
         points = [main_end, (main_end + end) * 0.5 + outward * 0.035, end]
         builder_tube(builders["rachis"], points, [0.010, 0.008, 0.005], sides=4,
                      cap_start=False)
-        for fruit_index in range(7):
-            t = 0.20 + 0.76 * (fruit_index / 6.0)
+        for fruit_index in range(8):
+            t = 0.18 + 0.78 * (fruit_index / 7.0)
             centre = points[0].lerp(points[-1], t)
             centre += side * rng.uniform(-0.018, 0.018) + outward * rng.uniform(-0.014, 0.020)
             builder_ellipsoid(
                 builders["fruit"], centre,
-                (0.020, 0.019, 0.030), segments=5,
+                (0.020, 0.019, 0.030), segments=6,
                 yaw=rng.random() * math.tau, pitch=rng.uniform(-0.25, 0.25), rings=1,
             )
 
@@ -3226,7 +3578,7 @@ def _build_palm_variant(name, species):
     p1 = Vector((lean * 0.07, lean * 0.02, trunk_height * 0.35))
     p2 = Vector((lean * 0.42, lean * 0.10, trunk_height * 0.72))
     p3 = Vector((lean, lean * 0.18, trunk_height))
-    trunk_points = cubic_points(p0, p1, p2, p3, 29)
+    trunk_points = cubic_points(p0, p1, p2, p3, 37)
     trunk_radii = []
     for index in range(len(trunk_points)):
         t = index / float(len(trunk_points) - 1)
@@ -3249,13 +3601,13 @@ def _build_palm_variant(name, species):
             return 1.0 + 0.052 * boot * (1.0 - 0.28 * t) + 0.020 * rib
         return 1.0 + 0.018 * math.sin(height * 21.0) + 0.006 * math.sin(angle * 10.0 + height)
 
-    builder_tube(builders["trunk"], trunk_points, trunk_radii, sides=13,
+    builder_tube(builders["trunk"], trunk_points, trunk_radii, sides=16,
                  uv_u_repeat=3.0, uv_v_scale=0.52, radius_variation=trunk_variation)
     crown_base = trunk_points[-1]
     crown_points = []
     crown_radii = []
-    for index in range(6):
-        t = index / 5.0
+    for index in range(8):
+        t = index / 7.0
         crown_points.append(Vector((crown_base.x + 0.08 * t, crown_base.y + 0.015 * t,
                                     crown_base.z - 0.08 + crown_length * t)))
         crown_radii.append(0.295 - 0.105 * (t ** 1.25) if is_date else 0.275 - 0.090 * (t ** 1.15))
@@ -3263,11 +3615,11 @@ def _build_palm_variant(name, species):
     def crown_variation(_index, angle, _t):
         return 1.0 + (0.030 * math.sin(angle * 15.0) if is_date else 0.008 * math.sin(angle * 9.0))
 
-    builder_tube(builders["crown"], crown_points, crown_radii, sides=13,
+    builder_tube(builders["crown"], crown_points, crown_radii, sides=16,
                  uv_u_repeat=2.0, uv_v_scale=0.75, radius_variation=crown_variation,
                  cap_start=False)
     crown_centre = crown_points[-1] + Vector((0.0, 0.0, 0.06))
-    frond_count = 28 if is_date else 24
+    frond_count = 32 if is_date else 29
     for frond_index in range(frond_count):
         tier = frond_index / float(max(frond_count - 1, 1))
         azimuth = frond_index * 2.399963 + rng.uniform(-0.055, 0.055)
@@ -3286,17 +3638,17 @@ def _build_palm_variant(name, species):
             length = (3.95 if is_date else 3.75) * rng.uniform(0.94, 1.05)
             droop = rng.uniform(0.60, 0.94)
         _palm_frond(builders, base, azimuth, length, elevation, droop, rng,
-                    leaflet_pairs=17 if is_date else 19,
+                    leaflet_pairs=21 if is_date else 24,
                     leaflet_length=0.48 if is_date else 0.54,
                     spines=is_date)
     if is_date:
-        for dry_index in range(7):
-            azimuth = dry_index * (math.tau / 7.0) + 0.33
+        for dry_index in range(9):
+            azimuth = dry_index * (math.tau / 9.0) + 0.33
             outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
             base = crown_centre + outward * 0.09 - Vector((0.0, 0.0, 0.24))
             _palm_frond(builders, base, azimuth, rng.uniform(2.0, 2.45),
                         rng.uniform(-0.18, 0.02), rng.uniform(0.92, 1.12), rng,
-                        leaflet_pairs=10, leaflet_length=0.40, dry=True)
+                        leaflet_pairs=12, leaflet_length=0.40, dry=True)
         for azimuth in (0.55, 2.45):
             outward = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
             _palm_fruit_cluster(builders, crown_centre + outward * 0.20 - Vector((0.0, 0.0, 0.28)), azimuth, rng)
@@ -3322,62 +3674,145 @@ def build_palm_royal():
 
 
 def build_grass_tuft():
+    # 0.2.23: 88 four-station folded blades (was 54 three-station),
+    # each leaning along its own quadratic arc, plus broad clover-like
+    # basal leaves and seeded heads.  All geometry stays merged into
+    # the same two semantic materials, so the native wind materials,
+    # 52 m detail range and far proxies are unchanged.
     rng = random.Random(1717)
     builders = {"leaf": MeshBuilder(), "dry": MeshBuilder()}
-    for blade_index in range(54):
+    for blade_index in range(88):
         azimuth = rng.random() * math.tau
         radius = 0.27 * math.sqrt(rng.random())
         base = Vector((math.cos(azimuth) * radius, math.sin(azimuth) * radius, 0.008))
         height = 0.18 + 0.34 * (rng.random() ** 0.72)
         lean_angle = rng.random() * math.tau
         lean = Vector((math.cos(lean_angle), math.sin(lean_angle), 0.0)) * rng.uniform(0.035, 0.145)
-        centres = [base, base + lean * 0.34 + Vector((0.0, 0.0, height * 0.48)),
-                   base + lean + Vector((0.0, 0.0, height))]
-        builder = builders["dry"] if blade_index % 9 == 0 else builders["leaf"]
-        builder_folded_leaf(builder, centres, [0.0125, 0.0085, 0.0],
+        centres = [
+            base,
+            base + lean * 0.14 + Vector((0.0, 0.0, height * 0.30)),
+            base + lean * 0.46 + Vector((0.0, 0.0, height * 0.62)),
+            base + lean + Vector((0.0, 0.0, height)),
+        ]
+        builder = builders["dry"] if rng.random() < 0.13 else builders["leaf"]
+        builder_folded_leaf(builder, centres, [0.0130, 0.0110, 0.0070, 0.0],
                             Vector((-lean.y, lean.x, 0.0)), fold_ratio=0.28,
                             uv_v_offset=rng.uniform(0.0, 0.4))
         if blade_index % 8 == 0:
             builder_ellipsoid(builders["dry"], centres[-1] + Vector((0.0, 0.0, 0.018)),
-                              (0.008, 0.008, 0.036), segments=5,
+                              (0.008, 0.008, 0.036), segments=6,
                               yaw=lean_angle, pitch=rng.uniform(-0.18, 0.18), rings=1)
+    # Low broad leaves break the silhouette at the tuft's base so a
+    # lawn edge does not read as identical vertical spikes.
+    for _ in range(10):
+        azimuth = rng.random() * math.tau
+        direction = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+        base = direction * (0.10 * rng.random()) + Vector((0.0, 0.0, 0.012))
+        length = rng.uniform(0.09, 0.16)
+        centres = [
+            base,
+            base + direction * (length * 0.42) + Vector((0.0, 0.0, 0.020)),
+            base + direction * (length * 0.78) + Vector((0.0, 0.0, 0.026)),
+            base + direction * length + Vector((0.0, 0.0, 0.014)),
+        ]
+        builder_folded_leaf(builders["leaf"], centres, [0.006, 0.024, 0.020, 0.0],
+                            Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.20,
+                            uv_v_offset=rng.uniform(0.0, 0.35))
     builders["leaf"].build("grass_tuft_blades", MATS["GrassBlade"], smooth=True)
     builders["dry"].build("grass_tuft_dry_blades", MATS["GrassBladeDry"], smooth=True)
 
 
 def build_flower_clump():
+    # 0.2.23: a real bedding plant instead of a sparse rosette -- 48
+    # four-station basal leaves, 20 open flowers with 8 outer petals,
+    # 5 inner petals, domed centres, sepals and stem leaves, plus 6
+    # closed buds.  Parts stay merged into the existing six semantic
+    # materials so native batching/ranges are untouched.
     rng = random.Random(1731)
     leaf_builder = MeshBuilder()
     stem_builder = MeshBuilder()
     centre_builder = MeshBuilder()
     petal_builders = [MeshBuilder(), MeshBuilder(), MeshBuilder()]
-    for leaf_index in range(32):
+    for leaf_index in range(48):
         azimuth = rng.random() * math.tau
         direction = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
-        base = direction * (0.05 * rng.random()) + Vector((0.0, 0.0, 0.018))
-        length = rng.uniform(0.16, 0.30)
-        centres = [base, base + direction * (length * 0.52) + Vector((0.0, 0.0, rng.uniform(0.018, 0.045))),
-                   base + direction * length + Vector((0.0, 0.0, rng.uniform(0.004, 0.025)))]
-        builder_folded_leaf(leaf_builder, centres, [0.010, 0.036, 0.0],
+        base = direction * (0.06 * rng.random()) + Vector((0.0, 0.0, 0.018))
+        length = rng.uniform(0.16, 0.32)
+        centres = [
+            base,
+            base + direction * (length * 0.34) + Vector((0.0, 0.0, rng.uniform(0.014, 0.034))),
+            base + direction * (length * 0.68) + Vector((0.0, 0.0, rng.uniform(0.020, 0.048))),
+            base + direction * length + Vector((0.0, 0.0, rng.uniform(0.004, 0.026))),
+        ]
+        builder_folded_leaf(leaf_builder, centres, [0.010, 0.030, 0.037, 0.0],
                             Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.22)
-    for flower_index in range(15):
+    for flower_index in range(20):
         azimuth = rng.random() * math.tau
         radius = 0.30 * math.sqrt(rng.random())
         base = Vector((math.cos(azimuth) * radius * 0.45, math.sin(azimuth) * radius * 0.45, 0.015))
         head = Vector((math.cos(azimuth) * radius, math.sin(azimuth) * radius, rng.uniform(0.25, 0.52)))
         midpoint = base.lerp(head, 0.52) + Vector((rng.uniform(-0.025, 0.025), rng.uniform(-0.025, 0.025), 0.0))
-        builder_tube(stem_builder, [base, midpoint, head], [0.009, 0.007, 0.005], sides=4,
+        builder_tube(stem_builder, [base, midpoint, head], [0.009, 0.007, 0.005], sides=6,
                      cap_start=False)
+        # One small stem leaf halfway up the pedicel.
+        stem_leaf_angle = rng.random() * math.tau
+        stem_leaf_dir = Vector((math.cos(stem_leaf_angle), math.sin(stem_leaf_angle), 0.0))
+        builder_folded_leaf(
+            leaf_builder,
+            [midpoint, midpoint + stem_leaf_dir * 0.045 + Vector((0.0, 0.0, 0.016)),
+             midpoint + stem_leaf_dir * 0.095 + Vector((0.0, 0.0, 0.006))],
+            [0.005, 0.022, 0.0],
+            Vector((-stem_leaf_dir.y, stem_leaf_dir.x, 0.0)), fold_ratio=0.20)
         builder_ellipsoid(centre_builder, head + Vector((0.0, 0.0, 0.010)),
-                          (0.019, 0.019, 0.014), segments=6, rings=2)
+                          (0.019, 0.019, 0.014), segments=8, rings=2)
         petal_builder = petal_builders[flower_index % len(petal_builders)]
-        for petal_index in range(6):
-            petal_angle = petal_index * math.tau / 6.0 + rng.uniform(-0.08, 0.08)
+        # Green sepals cup the flower from below before the petals open.
+        for sepal_index in range(4):
+            sepal_angle = sepal_index * math.tau / 4.0 + rng.uniform(-0.10, 0.10)
+            direction = Vector((math.cos(sepal_angle), math.sin(sepal_angle), 0.0))
+            builder_folded_leaf(
+                leaf_builder,
+                [head - Vector((0.0, 0.0, 0.006)),
+                 head + direction * 0.028 - Vector((0.0, 0.0, 0.010)),
+                 head + direction * 0.058 - Vector((0.0, 0.0, 0.004))],
+                [0.004, 0.014, 0.0],
+                Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.18)
+        for petal_index in range(8):
+            petal_angle = petal_index * math.tau / 8.0 + rng.uniform(-0.06, 0.06)
             direction = Vector((math.cos(petal_angle), math.sin(petal_angle), 0.0))
             centres = [head, head + direction * 0.038 + Vector((0.0, 0.0, 0.010)),
-                       head + direction * 0.080 + Vector((0.0, 0.0, 0.003))]
+                       head + direction * 0.082 + Vector((0.0, 0.0, 0.003))]
             builder_folded_leaf(petal_builder, centres, [0.004, 0.018, 0.0],
                                 Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.16)
+        for petal_index in range(5):
+            petal_angle = petal_index * math.tau / 5.0 + 0.31 + rng.uniform(-0.06, 0.06)
+            direction = Vector((math.cos(petal_angle), math.sin(petal_angle), 0.0))
+            centres = [head + Vector((0.0, 0.0, 0.006)),
+                       head + direction * 0.024 + Vector((0.0, 0.0, 0.016)),
+                       head + direction * 0.048 + Vector((0.0, 0.0, 0.012))]
+            builder_folded_leaf(petal_builder, centres, [0.003, 0.013, 0.0],
+                                Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.14)
+    # Closed buds on shorter pedicels between the open flowers.
+    for bud_index in range(6):
+        azimuth = rng.random() * math.tau
+        radius = 0.24 * math.sqrt(rng.random())
+        base = Vector((math.cos(azimuth) * radius * 0.5, math.sin(azimuth) * radius * 0.5, 0.015))
+        head = Vector((math.cos(azimuth) * radius, math.sin(azimuth) * radius, rng.uniform(0.20, 0.38)))
+        midpoint = base.lerp(head, 0.5) + Vector((rng.uniform(-0.02, 0.02), rng.uniform(-0.02, 0.02), 0.0))
+        builder_tube(stem_builder, [base, midpoint, head], [0.008, 0.006, 0.004], sides=6,
+                     cap_start=False)
+        builder_ellipsoid(petal_builders[bud_index % len(petal_builders)],
+                          head + Vector((0.0, 0.0, 0.026)), (0.017, 0.017, 0.032),
+                          segments=7, rings=2, yaw=rng.random() * math.tau)
+        for sepal_index in range(3):
+            sepal_angle = sepal_index * math.tau / 3.0 + rng.uniform(-0.12, 0.12)
+            direction = Vector((math.cos(sepal_angle), math.sin(sepal_angle), 0.0))
+            builder_folded_leaf(
+                leaf_builder,
+                [head, head + direction * 0.020 + Vector((0.0, 0.0, 0.018)),
+                 head + direction * 0.032 + Vector((0.0, 0.0, 0.042))],
+                [0.004, 0.012, 0.0],
+                Vector((-direction.y, direction.x, 0.0)), fold_ratio=0.16)
     leaf_builder.build("flower_clump_leaves", MATS["FlowerLeaf"], smooth=True)
     stem_builder.build("flower_clump_stems", MATS["FlowerLeaf"], smooth=True)
     centre_builder.build("flower_clump_centres", MATS["FlowerCentre"], smooth=True)
@@ -3392,8 +3827,8 @@ def build_ornamental_shrub():
     berry_builder = MeshBuilder()
     leaf_points = []
     queue = []
-    for primary_index in range(5):
-        azimuth = primary_index * math.tau / 5.0 + 0.41
+    for primary_index in range(6):
+        azimuth = primary_index * math.tau / 6.0 + 0.41
         direction = Vector((math.cos(azimuth) * 0.48, math.sin(azimuth) * 0.48, 1.0)).normalized()
         queue.append((Vector((0.0, 0.0, 0.025)), direction, rng.uniform(0.34, 0.46), 0.026, 0))
     while queue:
@@ -3403,8 +3838,8 @@ def build_ornamental_shrub():
         end = start + direction * length + bend * 0.45
         end.z = max(end.z, 0.055)
         builder_tube(branch_builder, [start, midpoint, end],
-                     [radius, radius * 0.74, radius * 0.46], sides=4, cap_start=False)
-        for t in (0.38, 0.66, 0.92):
+                     [radius, radius * 0.74, radius * 0.46], sides=6, cap_start=False)
+        for t in (0.30, 0.52, 0.74, 0.94):
             leaf_points.append(start.lerp(end, t))
         if depth < 2:
             for _ in range(2):
@@ -3413,7 +3848,7 @@ def build_ornamental_shrub():
                 queue.append((end, child.normalized(), length * rng.uniform(0.62, 0.78),
                               radius * 0.62, depth + 1))
     for point in leaf_points:
-        for _ in range(2):
+        for _ in range(3):
             direction = _random_direction(rng, -0.05)
             length = rng.uniform(0.105, 0.205)
             centres = [point, point + direction * (length * 0.52) + Vector((0.0, 0.0, 0.012)),
@@ -3421,10 +3856,14 @@ def build_ornamental_shrub():
             width_hint = Vector((-direction.y, direction.x, 0.18))
             builder_folded_leaf(leaf_builder, centres, [0.008, rng.uniform(0.024, 0.040), 0.0],
                                 width_hint, fold_ratio=0.30, uv_v_offset=rng.uniform(0.0, 0.45))
-        if rng.random() < 0.20:
+        if rng.random() < 0.16:
             berry_centre = point + _random_direction(rng, 0.0) * 0.055
             builder_ellipsoid(berry_builder, berry_centre, (0.018, 0.018, 0.021),
-                              segments=5, rings=1)
+                              segments=7, rings=2)
+            if rng.random() < 0.35:
+                builder_ellipsoid(berry_builder,
+                                  berry_centre + _random_direction(rng, 0.0) * 0.034,
+                                  (0.015, 0.015, 0.018), segments=6, rings=2)
     branch_builder.build("ornamental_shrub_branches", MATS["ShrubBranch"], smooth=True)
     leaf_builder.build("ornamental_shrub_leaves", MATS["OrnamentalLeaf"], smooth=True)
     if berry_builder.faces:
@@ -3440,6 +3879,8 @@ def main():
     for build, filename in (
         (build_shelter, "bus_shelter.glb"),
         (build_lamp, "street_lamp.glb"),
+        (build_park_bench, "park_bench.glb"),
+        (build_park_pergola, "park_pergola.glb"),
         (build_traffic_signal_short, "traffic_signal_short.glb"),
         (build_traffic_signal_long, "traffic_signal_long.glb"),
         (build_hero, "hero_building.glb"),

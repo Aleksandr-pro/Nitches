@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
           grep -q '\[props\] done ->' blender-props.log
-          for file in bus_shelter.glb street_lamp.glb traffic_signal_short.glb traffic_signal_long.glb hero_building.glb townhouse.glb villa.glb glass_tower.glb main_tower.glb opera_house.glb palm_date.glb palm_royal.glb grass_tuft.glb flower_clump.glb ornamental_shrub.glb; do
+          for file in bus_shelter.glb street_lamp.glb park_bench.glb park_pergola.glb traffic_signal_short.glb traffic_signal_long.glb hero_building.glb townhouse.glb villa.glb glass_tower.glb main_tower.glb opera_house.glb palm_date.glb palm_royal.glb grass_tuft.glb flower_clump.glb ornamental_shrub.glb; do
             if [ ! -s "props_out/$file" ]; then
               echo "::error::Missing expected Blender output: $file"
               exit 1
