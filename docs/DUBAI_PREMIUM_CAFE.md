@@ -14,12 +14,14 @@ The model uses named material groups (`CafeTravertine`, `CafeLimestone`, `CafeBr
 
 ## Current RichTown placement
 
-`NativeWorldBuilder._build_premium_boulevard_details()` instances the asset three times at approximately:
+`NativeWorldBuilder._build_premium_boulevard_details()` instances the asset five times at approximately:
 
-- `(718, terrain height, -67)`
-- `(718, terrain height, -20)`
-- `(718, terrain height, 27)`
+- `(718, terrain height, -67)` — west side, yaw `0`
+- `(718, terrain height, -20)` — west side, yaw `0`
+- `(718, terrain height, 27)` — west side, yaw `0`
+- `(782, terrain height, -58)` — east side, yaw `PI`
+- `(782, terrain height, 18)` — east side, yaw `PI`
 
-The model is offset upward by 5.5 cm to sit just above the promenade paving. At yaw `0`, its terrace points toward the existing RichTown Boulevard at `X=760`. Its footprint remains west of the existing palm row near `X=745.5`, and the northern cafe stays clear of the crossing near `Z=60`. Each interior shell gets a static collision box; terrace seating stays decorative.
+The model is offset upward by 5.5 cm to sit just above the promenade paving. At yaw `0`, its terrace points toward RichTown Boulevard at `X=760`; the east-side copies use yaw `PI` so their terraces face the same carriageway. The full 11.6 × 9.2 m placement rectangle is checked against exported and generated buildings before an instance is accepted. Each interior shell gets a static collision box; terrace seating stays decorative.
 
 A future world builder can reuse the model at any clear plot by staging the asset and adding a transform with the same origin/orientation contract. Use `_add_batched_model(parent, "res://assets/props/dubai_premium_cafe.glb", transforms, "DubaiPremiumCafes")` to batch multiple copies.
