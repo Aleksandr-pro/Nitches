@@ -1,0 +1,254 @@
+# Native Godot desktop build (Windows + Linux).  Since 0.2.21 the PC
+# builds export the *identical* native game as Android: same world data,
+# same physics, same HUD and the same Mobile renderer.  The only
+# platform additions are keyboard-first input (already in the vehicle
+# controller), an F11 fullscreen toggle and a keys hint shown when no
+# touchscreen exists.  This workflow proves parity by running the same
+# strict --native-smoke three times: on the source project and on the
+# exported Linux binary itself.
+name: Build Native Godot Desktop (Windows/Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - 'native/**'
+      - 'scripts/export-native-world.mjs'
+      - 'scripts/sync-native-assets.mjs'
+      - 'scripts/generate_dubai_premium_cafe.py'
+      - 'scripts/validate-native-project.mjs'
+      - 'scripts/check-lfs-assets.mjs'
+      - 'src/world/realWorld.js'
+      - 'src/assets/models/**'
+      - 'src/assets/textures/realworld/**'
+      - 'public/assets/models/**'
+      - '.github/workflows/native-godot-desktop.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-godot-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: '4.7.2'
+  GODOT_STATUS: 'stable'
+  PROJECT_PATH: native
+  WINDOWS_EXE: native/build/windows/NitchesHorizonNative.exe
+  LINUX_BIN: native/build/linux/NitchesHorizonNative.x86_64
+
+jobs:
+  build-native-desktop:
+    name: Godot 4 native desktop (Windows/Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (LFS runtime model is pulled explicitly)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch and verify the Mustang LFS model
+        run: |
+          set -euo pipefail
+          git lfs version
+          git lfs install --local
+          git lfs pull --include="public/assets/models/**" --exclude=""
+          git lfs ls-files
+          node scripts/check-lfs-assets.mjs
+
+      - name: Generate native world data and stage Godot assets
+        run: |
+          set -euo pipefail
+          node scripts/export-native-world.mjs
+          node scripts/sync-native-assets.mjs
+          node scripts/validate-native-project.mjs --require-assets
+
+      - name: Cache Godot editor and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nitches-godot/${{ env.GODOT_VERSION }}
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}-linux-x86_64-v1
+
+      - name: Download official Godot editor and export templates
+        run: |
+          set -euo pipefail
+          GODOT_DIR="$HOME/.cache/nitches-godot/$GODOT_VERSION"
+          GODOT_BIN="$GODOT_DIR/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$GODOT_DIR" "$TEMPLATE_DIR"
+
+          if [ ! -x "$GODOT_BIN" ]; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-editor.zip" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -q -o "$RUNNER_TEMP/godot-editor.zip" -d "$GODOT_DIR"
+            chmod +x "$GODOT_BIN"
+          fi
+
+          if ! ls "$TEMPLATE_DIR"/windows_release*.exe >/dev/null 2>&1 || ! ls "$TEMPLATE_DIR"/linux_release* >/dev/null 2>&1; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-templates.tpz" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            rm -rf "$RUNNER_TEMP/godot-templates"
+            mkdir -p "$RUNNER_TEMP/godot-templates"
+            unzip -q -o "$RUNNER_TEMP/godot-templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+            cp -a "$RUNNER_TEMP/godot-templates/templates/." "$TEMPLATE_DIR/"
+          fi
+
+          "$GODOT_BIN" --headless --version
+          ls -lh "$TEMPLATE_DIR"
+          ls "$TEMPLATE_DIR"/windows_release*.exe
+          ls "$TEMPLATE_DIR"/linux_release*
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Import Godot project and run strict source smoke test
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-logs"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" --import --quit \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/import.log"
+          timeout 120 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            -- --native-smoke 2>&1 | tee "$RUNNER_TEMP/native-logs/source-smoke.log"
+          grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/source-smoke.log"
+          if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/source-smoke.log"; then
+            echo "Native source smoke reported a fatal runtime problem" >&2
+            exit 1
+          fi
+
+      - name: Export Windows and Linux desktop builds
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$WINDOWS_EXE")" "$(dirname "$LINUX_BIN")"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-release Windows build/windows/NitchesHorizonNative.exe \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/export-windows.log"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-release Linux build/linux/NitchesHorizonNative.x86_64 \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/export-linux.log"
+          test -s "$WINDOWS_EXE"
+          test -s "$LINUX_BIN"
+          chmod +x "$LINUX_BIN"
+          ls -lh "$WINDOWS_EXE" "$LINUX_BIN"
+
+      - name: Verify desktop binaries and run exported Linux binary smoke
+        run: |
+          set -euo pipefail
+          # Windows: real PE executable with the embedded game pack.
+          test "$(head -c 2 "$WINDOWS_EXE")" = "MZ"
+          test "$(stat -c%s "$WINDOWS_EXE")" -gt 50000000
+          # Linux: real ELF executable.
+          test "$(od -An -tx1 -N4 "$LINUX_BIN" | tr -d ' \n')" = "7f454c46"
+          test "$(stat -c%s "$LINUX_BIN")" -gt 50000000
+          # The exported Linux game itself must boot the identical world
+          # and pass the same strict smoke as the Android build.
+          timeout 180 "$LINUX_BIN" --headless -- --native-smoke \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/linux-binary-smoke.log"
+          grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/linux-binary-smoke.log"
+          if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/linux-binary-smoke.log"; then
+            echo "Exported Linux binary reported a fatal runtime problem" >&2
+            exit 1
+          fi
+
+      - name: Publish native smoke diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          log_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "native-logs"
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          markers = (
+              "[native] RichTown build stats:",
+              "[native-smoke]",
+              "SCRIPT ERROR",
+              "ERROR:",
+              "Native world",
+              "Mustang GLB",
+              "Native texture is missing",
+              "Native model is missing",
+          )
+
+          def annotation_escape(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("\n## Native Godot desktop smoke diagnostics\n\n")
+              if not log_dir.exists():
+                  summary.write("No native smoke logs were produced.\n")
+              for log_path in sorted(log_dir.glob("*.log")):
+                  lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                  selected = [line for line in lines if any(marker in line for marker in markers)]
+                  if not selected:
+                      selected = lines[-40:]
+                  summary.write(f"### {log_path.name}\n\n```text\n")
+                  summary.write("\n".join(selected[-80:]))
+                  summary.write("\n```\n\n")
+                  for line in selected:
+                      if "[native-smoke] FAIL" in line or "SCRIPT ERROR" in line or "Native world" in line:
+                          print(f"::error title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
+                      elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line:
+                          print(f"::notice title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
+          PY
+
+      - name: Package desktop ZIPs (install-and-play)
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/PC-README.txt" <<'EOF'
+          Nitches Horizon Native 0.2.21 — ПК-версия (та же игра, что на телефоне)
+
+          ЗАПУСК
+          Windows: запустите NitchesHorizonNative.exe. Сборка не подписана,
+          поэтому SmartScreen может один раз показать предупреждение —
+          «Подробнее» -> «Выполнить в любом случае».
+          Linux: запустите NitchesHorizonNative.x86_64 (при необходимости
+          выполните: chmod +x NitchesHorizonNative.x86_64).
+
+          УПРАВЛЕНИЕ
+          W/A/S/D или стрелки — газ/руль/тормоз
+          SPACE — ручник/дрифт, SHIFT — нитро (N2O)
+          C — камера, T — время суток, R — сброс на дорогу
+          F11 — полный экран. Сенсорные кнопки на экране тоже нажимаются мышью.
+
+          ТРЕБОВАНИЯ: 64-битная Windows 10/11 или Linux, видеокарта с Vulkan.
+          EOF
+          cp "$RUNNER_TEMP/PC-README.txt" "native/build/windows/PC-README.txt"
+          cp "$RUNNER_TEMP/PC-README.txt" "native/build/linux/PC-README.txt"
+          (cd native/build/windows && zip -9 -r "$GITHUB_WORKSPACE/NitchesHorizonNative-windows.zip" .)
+          (cd native/build/linux && zip -9 -r "$GITHUB_WORKSPACE/NitchesHorizonNative-linux.zip" .)
+          ls -lh "$GITHUB_WORKSPACE"/NitchesHorizonNative-*.zip
+          sha256sum "$GITHUB_WORKSPACE"/NitchesHorizonNative-*.zip | tee "$RUNNER_TEMP/desktop-sha256.txt"
+          {
+            echo "## Native desktop builds"
+            echo ""
+            echo '```text'
+            cat "$RUNNER_TEMP/desktop-sha256.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Windows desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-windows
+          path: NitchesHorizonNative-windows.zip
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload Linux desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-linux
+          path: NitchesHorizonNative-linux.zip
+          retention-days: 90
+          if-no-files-found: error
