@@ -4159,7 +4159,15 @@ def build_mosque():
     # Western mihrab projection with a half-dome cap.
     box("mosque_mihrab_projection", -14.65, 0.0, 4.85, 1.35, 8.40, 8.55, stone)
     box("mosque_mihrab_trim", -15.36, 0.0, 7.15, 0.12, 8.75, 0.28, limestone)
-    sphere("mosque_mihrab_half_dome", -14.65, 0.0, 9.35, 2.15, 8.20, 2.60, dome_mat)
+    # A small cupola crowns the mihrab bay.  The first CI render used
+    # a full flattened ellipsoid here; its lower half bulged through
+    # the west wall as a turquoise oval "eye", so the cap is now a
+    # drum-and-dome turret that only rises above the bay roofline.
+    cyl("mosque_mihrab_cupola_drum", -14.65, 0.0, 9.55, 1.05, 0.85, stone, vertices=16)
+    torus("mosque_mihrab_cupola_cornice", -14.65, 0.0, 9.98, 1.08, 0.070, limestone)
+    sphere("mosque_mihrab_cupola_dome", -14.65, 0.0, 10.28, 2.30, 2.30, 1.55, dome_mat)
+    cyl("mosque_mihrab_cupola_finial", -14.65, 0.0, 11.18, 0.030, 0.55, brass, vertices=8)
+    sphere("mosque_mihrab_cupola_orb", -14.65, 0.0, 11.32, 0.20, 0.20, 0.20, brass)
     arch_window_x(-15.32, 0.0, 4.45, width=2.15, height=4.65, screen=True)
 
     # --- Grand eastern pishtaq / iwan portal. ---
