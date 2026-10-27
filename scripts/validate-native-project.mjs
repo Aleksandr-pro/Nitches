@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -22,6 +22,7 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
   readText('scripts/hud.gd'),
+  readText('scripts/minimap.gd'),
   readText('scripts/dynamic_world.gd'),
   readText('scripts/speed_post.gd'),
   readText('scripts/arcade_car.gd'),
@@ -48,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=24'), 'Native 0.2.21 must bump Android versionCode to 24');
-assert(preset.includes('version/name="0.2.21-native-alpha"'), 'Native version name must be 0.2.21-native-alpha');
+assert(preset.includes('version/code=25'), 'Native 0.2.22 must bump Android versionCode to 25');
+assert(preset.includes('version/name="0.2.22-native-alpha"'), 'Native version name must be 0.2.22-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -69,6 +70,11 @@ const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudS
 for (const marker of ['DesktopControlsHint', 'is_touchscreen_available', 'KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
+// 0.2.22 RichTown parks: Central Park, Museum Garden, Corniche Palmetum.
+for (const marker of ['PARK_SPECS', '_build_parks', 'parks_0222', 'RichTown Central Park', 'Museum Garden', 'Corniche Palmetum', 'central_park_fountain_garden', 'museum_garden_pergola', 'beach_palmetum_rondel', '_is_in_park', 'get_park_rects', '_park_plant_oak_grove', '_park_plant_palm_grove', '_park_plant_parterre']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.22 parks marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('get_park_rects'), 'Minimap must draw the 0.2.22 RichTown parks');
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');

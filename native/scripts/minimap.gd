@@ -37,6 +37,7 @@ func get_feature_counts() -> Dictionary:
 		"roads": (_data.get("roads", []) as Array).size(),
 		"buildings": (_data.get("buildings", []) as Array).size(),
 		"landmarks": (_data.get("landmarks", []) as Array).size(),
+		"parks": _world.get_park_rects().size() if _world != null else 0,
 	}
 
 
@@ -81,6 +82,12 @@ func _draw() -> void:
 	_draw_zone("palmIsland", Color(0.25, 0.58, 0.32, 0.42))
 	_draw_zone("sailIsland", Color(0.25, 0.58, 0.32, 0.42))
 	_draw_zone("rtPlaza", Color(0.72, 0.72, 0.70, 0.34))
+	if _world != null:
+		for rect_variant in _world.get_park_rects():
+			var park_rect: Rect2 = rect_variant
+			var park_top_left := _map_point(park_rect.position.x, park_rect.position.y + park_rect.size.y)
+			var park_bottom_right := _map_point(park_rect.position.x + park_rect.size.x, park_rect.position.y)
+			draw_rect(Rect2(park_top_left, park_bottom_right - park_top_left), Color(0.16, 0.62, 0.24, 0.55), true)
 
 	for building_variant in _data.get("buildings", []):
 		var building: Dictionary = building_variant

@@ -206,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/PC-README.txt" <<'EOF'
-          Nitches Horizon Native 0.2.21 — ПК-версия (та же игра, что на телефоне)
+          Nitches Horizon Native 0.2.22 — ПК-версия (та же игра, что на телефоне)
 
           ЗАПУСК
           Windows: запустите NitchesHorizonNative.exe. Сборка не подписана,

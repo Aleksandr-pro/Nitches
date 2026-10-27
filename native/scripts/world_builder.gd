@@ -25,6 +25,90 @@ const ROAD_GRID_QUERY_CLEARANCE_M := 10.0
 const ROAD_SURFACE_OFFSET_M := 0.095
 const ROAD_CROWN_M := 0.045
 
+## 0.2.22 designed parks (see _build_parks).  Rects use Rect2 with the
+## second axis as world Z.  The same table drives terrain class,
+## infill exclusion, ground-cover exclusion and the minimap, so the
+## parks stay consistent everywhere.
+const PARK_SPECS := [
+	{
+		"id": "central",
+		"label": "RichTown Central Park",
+		"rect": Rect2(580.0, -98.0, 100.0, 146.0),
+		"axis_x": 630.0,
+		"axis_z": 23.0,
+		"axis_half": 4.0,
+		"focal": Vector2(665.0, -25.0),
+		"focal_radius": 19.0,
+		"focal_kind": "fountain",
+		"perimeter": "oak",
+		"alleys": "both",
+		"extra_paths": [Rect2(659.0, -9.0, 12.0, 32.0)],
+		"diagonals": [
+			{"a": Vector2(630.0, 23.0), "b": Vector2(592.0, -86.0), "w": 4.5},
+			{"a": Vector2(648.0, -38.0), "b": Vector2(592.0, -86.0), "w": 4.0},
+			{"a": Vector2(630.0, 23.0), "b": Vector2(594.0, 40.0), "w": 4.0},
+		],
+		"zones": [
+			{"rect": Rect2(586.0, -92.0, 38.0, 62.0), "pattern": "oak_grove"},
+			{"rect": Rect2(586.0, -24.0, 38.0, 41.0), "pattern": "parterre"},
+			{"rect": Rect2(636.0, -92.0, 38.0, 40.0), "pattern": "palm_grove"},
+			{"rect": Rect2(636.0, -47.0, 38.0, 64.0), "pattern": "parterre"},
+			{"rect": Rect2(586.0, 29.0, 38.0, 13.0), "pattern": "palm_grove"},
+			{"rect": Rect2(636.0, 29.0, 38.0, 13.0), "pattern": "open_lawn"},
+		],
+	},
+	{
+		"id": "museum",
+		"label": "Museum Garden",
+		"rect": Rect2(576.0, -374.0, 64.0, 66.0),
+		"axis_x": 608.0,
+		"axis_z": -341.0,
+		"axis_half": 3.0,
+		"focal": Vector2(608.0, -341.0),
+		"focal_radius": 8.5,
+		"focal_kind": "pergola",
+		"perimeter": "oak",
+		"alleys": "ew",
+		"extra_paths": [Rect2(599.0, -350.0, 18.0, 18.0)],
+		"diagonals": [
+			{"a": Vector2(608.0, -341.0), "b": Vector2(584.0, -366.0), "w": 3.5},
+			{"a": Vector2(608.0, -341.0), "b": Vector2(632.0, -316.0), "w": 3.5},
+		],
+		"zones": [
+			{"rect": Rect2(582.0, -368.0, 22.0, 22.0), "pattern": "parterre"},
+			{"rect": Rect2(612.0, -368.0, 22.0, 22.0), "pattern": "oak_grove"},
+			{"rect": Rect2(582.0, -336.0, 22.0, 22.0), "pattern": "palm_grove"},
+			{"rect": Rect2(612.0, -336.0, 22.0, 22.0), "pattern": "open_lawn"},
+		],
+	},
+	{
+		"id": "beach",
+		"label": "Corniche Palmetum",
+		"rect": Rect2(946.0, -150.0, 60.0, 110.0),
+		"axis_x": 976.0,
+		"axis_z": -95.0,
+		"axis_half": 3.5,
+		"focal": Vector2(976.0, -95.0),
+		"focal_radius": 10.0,
+		"focal_kind": "rondel",
+		"perimeter": "palm",
+		"alleys": "ns",
+		"sea_benches": true,
+		"cross_z": [[-122.5, 2.0], [-67.5, 2.0]],
+		"extra_paths": [Rect2(964.0, -107.0, 24.0, 24.0)],
+		"zones": [
+			{"rect": Rect2(952.0, -144.0, 20.0, 19.0), "pattern": "palm_grove"},
+			{"rect": Rect2(980.0, -144.0, 20.0, 19.0), "pattern": "open_lawn"},
+			{"rect": Rect2(952.0, -120.0, 20.0, 21.0), "pattern": "open_lawn"},
+			{"rect": Rect2(980.0, -120.0, 20.0, 21.0), "pattern": "palm_grove"},
+			{"rect": Rect2(952.0, -91.0, 20.0, 21.0), "pattern": "palm_grove"},
+			{"rect": Rect2(980.0, -91.0, 20.0, 21.0), "pattern": "open_lawn"},
+			{"rect": Rect2(952.0, -65.0, 20.0, 19.0), "pattern": "open_lawn"},
+			{"rect": Rect2(980.0, -65.0, 20.0, 19.0), "pattern": "palm_grove"},
+		],
+	},
+]
+
 var data: Dictionary = {}
 var spawn_transform := Transform3D.IDENTITY
 var time_of_day := "day"
@@ -115,6 +199,7 @@ func build_world() -> Dictionary:
 	_build_bus_shelters()
 	_build_benches()
 	_build_city_details()
+	_build_parks()
 	_flush_batched_models()
 	_build_reflection_probes()
 	_build_world_bounds()
@@ -138,6 +223,24 @@ func has_world_data() -> bool:
 
 func get_enhancement_stats() -> Dictionary:
 	return _enhancement_stats.duplicate(true)
+
+
+func get_park_rects() -> Array:
+	var rects: Array = []
+	for spec_variant in PARK_SPECS:
+		var spec: Dictionary = spec_variant
+		rects.append(spec.get("rect", Rect2()))
+	return rects
+
+
+func _is_in_park(x: float, z: float, pad: float = 0.0) -> bool:
+	for spec_variant in PARK_SPECS:
+		var spec: Dictionary = spec_variant
+		var rect: Rect2 = spec.get("rect", Rect2())
+		if x >= rect.position.x - pad and x <= rect.position.x + rect.size.x + pad and z >= rect.position.y - pad and z <= rect.position.y + rect.size.y + pad:
+			return true
+	return false
+
 
 
 func get_dynamic_world_state() -> Dictionary:
@@ -1762,6 +1865,8 @@ func _hash01(ix: int, iz: int) -> float:
 
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
+	if _is_in_park(x, z):
+		return "grass"
 	var in_focus_promenade := z >= -100.0 and z <= 52.0 and ((x >= 682.0 and x <= 744.0) or (x >= 776.0 and x <= 790.0))
 	var in_boulevard_promenade := z >= -430.0 and z <= 430.0 and ((x >= 730.0 and x < 749.0) or (x > 771.0 and x <= 790.0))
 	var in_promenade := in_focus_promenade or in_boulevard_promenade
@@ -4056,6 +4161,8 @@ func _build_infill_buildings(parent: Node) -> void:
 				var z := float(grid_z) + (_hash01(ix * 7 + 4, iz * 11 + 3) - 0.5) * 8.0
 				if _in_zone(x, z, "rtPlaza"):
 					continue
+				if _is_in_park(x, z, 18.0):
+					continue
 
 				var w := 15.0 + _hash01(ix, iz) * 9.0
 				var d := 13.0 + _hash01(iz, ix) * 8.0
@@ -4192,6 +4299,8 @@ func _build_infill_buildings(parent: Node) -> void:
 		var targeted_z := _f(targeted_spec, "z")
 		var targeted_w := _f(targeted_spec, "w", 20.0)
 		var targeted_d := _f(targeted_spec, "d", 16.0)
+		if _is_in_park(targeted_x, targeted_z, 16.0):
+			continue
 		var targeted_y := height_at(targeted_x, targeted_z)
 		if targeted_y < 1.55:
 			continue
@@ -5076,6 +5185,8 @@ func _is_soft_ground_cover_surface(candidate: Vector3, allow_sand: bool = false)
 	if candidate.y < 1.02:
 		return false
 	if _in_zone(candidate.x, candidate.z, "sea") or _in_zone(candidate.x, candidate.z, "marina"):
+		return false
+	if _is_in_park(candidate.x, candidate.z):
 		return false
 	var slope := maxf(
 		absf(height_at(candidate.x + 1.2, candidate.z) - candidate.y),
@@ -6476,6 +6587,875 @@ func _build_benches() -> void:
 			var leg_offset := bench_basis * Vector3(side, 0.24, 0.0)
 			_add_box(root, Vector3(0.12, 0.48, 0.55), position_value + leg_offset, metal, yaw, "BenchLeg")
 		_add_box_collider(position_value + Vector3(0.0, 0.55, 0.0), Vector3(2.3, 1.1, 0.8), yaw)
+
+
+## 0.2.22 RichTown parks: three designed green rooms instead of leftover
+## empty terrain.  The Central Park turns the exported rtPlaza into a
+## formal garden around the existing fountain (its east-west axis at
+## Z=23 continues the Boulevard screenshot axis), the Museum Garden is a
+## quiet parterre/pergola square west of the museum torus and the
+## Corniche Palmetum is an irrigated palm park on the beach.  Layouts
+## are planned, not scattered: perimeter promenades, main axes with
+## palm alleys, diagonal alleys, lawn panels, clipped-hedge flower
+## parterres, oak groves and palm clusters on white-pebble beds.  All
+## planting reuses the batched plant-pack/palm/ground-cover systems, so
+## the density costs a handful of MultiMesh chunks per park, not nodes.
+func _make_diagonal_path_mesh(a: Vector2, b: Vector2, width: float, step_m: float = 2.5, lift_m: float = 0.092) -> ArrayMesh:
+	var axis := b - a
+	var length := axis.length()
+	if length < 2.0:
+		return null
+	var dir := axis / length
+	var side := Vector2(-dir.y, dir.x) * (width * 0.5)
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var columns := maxi(1, ceili(length / step_m))
+	for i in columns:
+		var c0 := a + axis * (float(i) / float(columns))
+		var c1 := a + axis * (float(i + 1) / float(columns))
+		var corners: Array[Vector2] = [c0 - side, c1 - side, c1 + side, c0 + side]
+		var pts: Array[Vector3] = []
+		for corner in corners:
+			pts.append(Vector3(corner.x, height_at(corner.x, corner.y) + lift_m, corner.y))
+		for vertex in [pts[0], pts[1], pts[2], pts[0], pts[2], pts[3]]:
+			_terrain_vertex(tool, vertex)
+	tool.index()
+	tool.generate_normals()
+	tool.generate_tangents()
+	return tool.commit()
+
+
+func _park_dist_to_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 <= 0.0001:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+func _park_on_path(ctx: Dictionary, p: Vector2, pad: float) -> bool:
+	for rect_variant in ctx.get("path_rects", []):
+		var r: Rect2 = rect_variant
+		if r.grow(pad).has_point(p):
+			return true
+	for seg_variant in ctx.get("diagonals", []):
+		var seg: Dictionary = seg_variant
+		if _park_dist_to_segment(p, seg.get("a", Vector2.ZERO), seg.get("b", Vector2.ZERO)) < float(seg.get("w", 4.0)) * 0.5 + pad:
+			return true
+	return false
+
+
+func _park_accept_large(ctx: Dictionary, pos: Vector3, min_spacing: float, ignore_focal: bool = false) -> bool:
+	var p := Vector2(pos.x, pos.z)
+	if _park_on_path(ctx, p, 0.9):
+		return false
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	if not ignore_focal and p.distance_to(focal) < float(ctx.get("focal_radius", 10.0)) + 2.0:
+		return false
+	if pos.y < 0.55:
+		return false
+	if not _is_position_clear(pos, 1.2, 3.2):
+		return false
+	var accepted: Array = ctx.get("accepted_large", [])
+	for other_variant in accepted:
+		var other: Vector2 = other_variant
+		if p.distance_squared_to(other) < min_spacing * min_spacing:
+			return false
+	accepted.append(p)
+	ctx["accepted_large"] = accepted
+	return true
+
+
+func _park_accept_small(ctx: Dictionary, pos: Vector3) -> bool:
+	var p := Vector2(pos.x, pos.z)
+	if _park_on_path(ctx, p, 0.30):
+		return false
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	if p.distance_to(focal) < float(ctx.get("focal_radius", 10.0)) + 0.4:
+		return false
+	return pos.y > 0.45
+
+
+func _park_add_oak(ctx: Dictionary, pos: Vector3, yaw: float, s: float) -> void:
+	(ctx["oak_transforms"] as Array).append(make_transform(pos + Vector3(0.0, -0.04, 0.0), yaw, Vector3.ONE * (2.85 * s)))
+	_add_cylinder_collider(pos + Vector3(0.0, 1.4, 0.0), 0.38, 3.2)
+
+
+func _park_add_palm(ctx: Dictionary, pos: Vector3, yaw: float, royal: bool, s: float) -> void:
+	var uniform := (0.78 if royal else 0.80) * s
+	var key := "royal_transforms" if royal else "date_transforms"
+	(ctx[key] as Array).append(make_transform(pos + Vector3(0.0, -0.03, 0.0), yaw, Vector3(uniform, uniform * 1.03, uniform)))
+	_add_cylinder_collider(pos + Vector3(0.0, 3.0, 0.0), 0.34, 6.2)
+
+
+func _park_add_bench(ctx: Dictionary, pos: Vector3, yaw: float) -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	(ctx["bench_transforms"] as Array).append(make_transform(pos + basis * Vector3(0.0, 0.46, 0.0), yaw, Vector3(2.4, 0.16, 0.62)))
+	for side in [-0.85, 0.85]:
+		(ctx["bench_transforms"] as Array).append(make_transform(pos + basis * Vector3(float(side), 0.23, 0.0), yaw, Vector3(0.45, 0.46, 0.55)))
+	_add_box_collider(pos + Vector3(0.0, 0.3, 0.0), Vector3(2.4, 0.6, 0.7), yaw)
+	ctx["bench_count"] = int(ctx.get("bench_count", 0)) + 1
+
+
+func _park_scatter(ctx: Dictionary, zone: Rect2, key: String, density_per_m2: float, seed_base: int, min_scale: float, max_scale: float, margin: float = 1.2) -> void:
+	var desired := int(round(zone.size.x * zone.size.y * density_per_m2))
+	if desired <= 0:
+		return
+	var accepted := 0
+	for attempt in desired * 7:
+		if accepted >= desired:
+			break
+		var seed := seed_base + attempt * 131
+		var px := zone.position.x + margin + _hash01(seed * 3 + 11, seed * 5 + 71) * maxf(zone.size.x - margin * 2.0, 0.5)
+		var pz := zone.position.y + margin + _hash01(seed * 7 + 31, seed * 11 + 97) * maxf(zone.size.y - margin * 2.0, 0.5)
+		var candidate := Vector3(px, height_at(px, pz) + 0.045, pz)
+		if not _park_accept_small(ctx, candidate):
+			continue
+		var width_scale := lerpf(min_scale, max_scale, _hash01(seed * 13 + 17, seed * 17 + 43))
+		var height_scale := lerpf(min_scale, max_scale, _hash01(seed * 19 + 23, seed * 23 + 59))
+		(ctx[key] as Array).append(make_transform(candidate, _hash01(seed * 29 + 3, seed * 31 + 13) * TAU, Vector3(width_scale, height_scale, width_scale)))
+		accepted += 1
+
+
+func _park_scatter_bushes(ctx: Dictionary, zone: Rect2, density_per_m2: float, seed_base: int) -> void:
+	var desired := int(round(zone.size.x * zone.size.y * density_per_m2))
+	if desired <= 0:
+		return
+	var part_names: Array[String] = ["bush_round_foliage", "shrub_cone_foliage", "fan_foliage"]
+	var accepted := 0
+	for attempt in desired * 7:
+		if accepted >= desired:
+			break
+		var seed := seed_base + attempt * 149
+		var px := zone.position.x + 1.4 + _hash01(seed * 3 + 11, seed * 5 + 71) * maxf(zone.size.x - 2.8, 0.5)
+		var pz := zone.position.y + 1.4 + _hash01(seed * 7 + 31, seed * 11 + 97) * maxf(zone.size.y - 2.8, 0.5)
+		var candidate := Vector3(px, height_at(px, pz) + 0.02, pz)
+		if not _park_accept_small(ctx, candidate):
+			continue
+		var part_name := part_names[accepted % part_names.size()]
+		var target_height := 1.45 if part_name == "bush_round_foliage" else (2.25 if part_name == "shrub_cone_foliage" else 1.25)
+		var source_height := 0.77 if part_name == "bush_round_foliage" else (1.65 if part_name == "shrub_cone_foliage" else 0.60)
+		var scale_value := target_height / source_height * (0.85 + _hash01(seed * 13 + 17, seed * 17 + 43) * 0.4)
+		(ctx["bush_" + part_name] as Array).append(make_transform(candidate, _hash01(seed * 29 + 3, seed * 31 + 13) * TAU, Vector3.ONE * scale_value))
+		accepted += 1
+
+
+func _park_plant_oak_grove(ctx: Dictionary, zone: Rect2, seed_base: int) -> void:
+	var spacing := 11.5
+	var margin := 4.5
+	var ix := 0
+	var x := zone.position.x + margin
+	while x <= zone.position.x + zone.size.x - margin + 0.1:
+		var iz := 0
+		var z := zone.position.y + margin + (float(ix % 2) * spacing * 0.5)
+		while z <= zone.position.y + zone.size.y - margin + 0.1:
+			var seed := seed_base + ix * 101 + iz * 17
+			var px := x + (_hash01(seed * 3 + 7, seed * 5 + 13) - 0.5) * 4.6
+			var pz := z + (_hash01(seed * 7 + 19, seed * 11 + 23) - 0.5) * 4.6
+			var pos := Vector3(px, height_at(px, pz), pz)
+			if _park_accept_large(ctx, pos, 6.0):
+				_park_add_oak(ctx, pos, _hash01(seed * 13 + 3, seed * 17 + 5) * TAU, 0.92 + _hash01(seed * 19 + 11, seed * 23 + 7) * 0.30)
+			iz += 1
+			z += spacing
+		ix += 1
+		x += spacing
+	_park_scatter(ctx, zone, "grass_transforms", 0.16, seed_base + 5000, 0.85, 1.55)
+	_park_scatter(ctx, zone, "flower_transforms", 0.016, seed_base + 7000, 0.80, 1.30)
+	_park_scatter_bushes(ctx, zone, 0.014, seed_base + 9000)
+
+
+func _park_plant_palm_grove(ctx: Dictionary, zone: Rect2, seed_base: int) -> void:
+	var spacing := 15.5 if minf(zone.size.x, zone.size.y) >= 30.0 else 12.0
+	var margin := 5.5
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	var focal_radius := float(ctx.get("focal_radius", 10.0))
+	var ix := 0
+	var x := zone.position.x + margin
+	while x <= zone.position.x + zone.size.x - margin + 0.1:
+		var iz := 0
+		var z := zone.position.y + margin + (float(ix % 2) * spacing * 0.5)
+		while z <= zone.position.y + zone.size.y - margin + 0.1:
+			var seed := seed_base + ix * 111 + iz * 19
+			var centre := Vector3(x, height_at(x, z), z)
+			if _park_accept_large(ctx, centre, 5.5):
+				(ctx["pebble_transforms"] as Array).append(make_transform(centre + Vector3(0.0, 0.06, 0.0), 0.0, Vector3(3.4, 1.0, 3.4)))
+				var base_angle := _hash01(seed * 3 + 7, seed * 5 + 11) * TAU
+				_park_add_palm(ctx, centre, base_angle * 1.31, ix % 2 == 1, 1.02)
+				for member in 3:
+					var ang := base_angle + TAU * float(member) / 3.0
+					var mp := Vector3(centre.x + cos(ang) * 2.4, 0.0, centre.z + sin(ang) * 2.4)
+					mp.y = height_at(mp.x, mp.z)
+					if _park_on_path(ctx, Vector2(mp.x, mp.z), 0.7):
+						continue
+					if Vector2(mp.x, mp.z).distance_to(focal) < focal_radius + 1.5:
+						continue
+					_park_add_palm(ctx, mp, _hash01(seed * 13 + member * 7, seed * 17 + member * 3) * TAU, member == 2 and ix % 2 == 0, 0.94 + _hash01(seed * 19 + member, seed * 23 + member) * 0.16)
+					(ctx["accepted_large"] as Array).append(Vector2(mp.x, mp.z))
+			iz += 1
+			z += spacing
+		ix += 1
+		x += spacing
+	_park_scatter(ctx, zone, "grass_transforms", 0.12, seed_base + 5000, 0.85, 1.55)
+	_park_scatter(ctx, zone, "shrub_transforms", 0.010, seed_base + 7000, 0.84, 1.40)
+	_park_scatter_bushes(ctx, zone, 0.008, seed_base + 9000)
+
+
+func _park_plant_parterre(ctx: Dictionary, zone: Rect2, seed_base: int, park_root: Node, mulch_material: Material, park_id: String, zone_index: int) -> void:
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	var focal_radius := float(ctx.get("focal_radius", 10.0))
+	var beds: Array[Rect2] = []
+	var inner := zone.grow(-5.0)
+	if inner.size.x > 10.0 and inner.size.y > 10.0:
+		var half_x := inner.size.x * 0.5
+		var half_z := inner.size.y * 0.5
+		beds.append(Rect2(inner.position.x, inner.position.y, half_x - 2.0, half_z - 2.0))
+		beds.append(Rect2(inner.position.x + half_x + 2.0, inner.position.y + half_z + 2.0, half_x - 2.0, half_z - 2.0))
+	for bed_i in beds.size():
+		var bed: Rect2 = beds[bed_i]
+		var bed_mesh := _make_paving_patch_mesh(bed.position.x, bed.position.x + bed.size.x, bed.position.y, bed.position.y + bed.size.y, 2.0, 0.068)
+		if bed_mesh != null:
+			_mesh_instance(park_root, bed_mesh, mulch_material, Transform3D.IDENTITY, "ParkFlowerBed_%s_%d_%d" % [park_id, zone_index, bed_i], false)
+			ctx["flower_bed_area_m2"] = float(ctx.get("flower_bed_area_m2", 0.0)) + bed.size.x * bed.size.y
+		_park_scatter(ctx, bed, "flower_transforms", 0.50, seed_base + bed_i * 3000 + 11000, 0.80, 1.30, 0.7)
+		_park_scatter(ctx, bed, "shrub_transforms", 0.045, seed_base + bed_i * 3000 + 13000, 0.84, 1.35, 0.9)
+	var corner_inset := 3.4
+	var corners: Array[Vector2] = [
+		Vector2(zone.position.x + corner_inset, zone.position.y + corner_inset),
+		Vector2(zone.position.x + zone.size.x - corner_inset, zone.position.y + corner_inset),
+		Vector2(zone.position.x + corner_inset, zone.position.y + zone.size.y - corner_inset),
+		Vector2(zone.position.x + zone.size.x - corner_inset, zone.position.y + zone.size.y - corner_inset),
+	]
+	for ci in corners.size():
+		var cp := corners[ci]
+		if _park_on_path(ctx, cp, 0.4):
+			continue
+		if cp.distance_to(focal) < focal_radius + 1.0:
+			continue
+		var cpos := Vector3(cp.x, height_at(cp.x, cp.y), cp.y)
+		var ball_scale := 1.30
+		(ctx["topiary_ball_transforms"] as Array).append(make_transform(cpos + Vector3(0.0, 0.56 * ball_scale + 0.04, 0.0), float(ci) * 0.7, Vector3.ONE * ball_scale))
+	if zone.size.x > 26.0 and zone.size.y > 26.0:
+		var cc := zone.get_center()
+		if not _park_on_path(ctx, cc, 0.4) and cc.distance_to(focal) >= focal_radius + 1.0:
+			var cpos := Vector3(cc.x, height_at(cc.x, cc.y), cc.y)
+			(ctx["topiary_cone_transforms"] as Array).append(make_transform(cpos + Vector3(0.0, 0.82, 0.0), 0.0, Vector3.ONE * 1.05))
+	_park_scatter(ctx, zone, "grass_transforms", 0.10, seed_base + 5000, 0.85, 1.45)
+	_park_scatter_bushes(ctx, zone, 0.006, seed_base + 9000)
+
+
+func _park_add_hedge_border(ctx: Dictionary, zone: Rect2) -> void:
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	var focal_radius := float(ctx.get("focal_radius", 10.0))
+	var edges: Array = [
+		{"a": Vector2(zone.position.x, zone.position.y + 0.6), "b": Vector2(zone.position.x + zone.size.x, zone.position.y + 0.6)},
+		{"a": Vector2(zone.position.x, zone.position.y + zone.size.y - 0.6), "b": Vector2(zone.position.x + zone.size.x, zone.position.y + zone.size.y - 0.6)},
+		{"a": Vector2(zone.position.x + 0.6, zone.position.y), "b": Vector2(zone.position.x + 0.6, zone.position.y + zone.size.y)},
+		{"a": Vector2(zone.position.x + zone.size.x - 0.6, zone.position.y), "b": Vector2(zone.position.x + zone.size.x - 0.6, zone.position.y + zone.size.y)},
+	]
+	for edge_variant in edges:
+		var edge: Dictionary = edge_variant
+		var a: Vector2 = edge.get("a", Vector2.ZERO)
+		var b: Vector2 = edge.get("b", Vector2.ZERO)
+		var length := a.distance_to(b)
+		var dir := (b - a) / maxf(length, 0.01)
+		var horizontal := absf(dir.x) > 0.5
+		var mid := (a + b) * 0.5
+		var d := 2.1
+		while d <= length - 2.0:
+			var p := a + dir * d
+			d += 4.2
+			if p.distance_to(mid) < 3.4:
+				continue
+			if _park_on_path(ctx, p, 0.15):
+				continue
+			if p.distance_to(focal) < focal_radius + 0.8:
+				continue
+			var size := Vector3(3.9, 0.85, 0.95) if horizontal else Vector3(0.95, 0.85, 3.9)
+			(ctx["hedge_transforms"] as Array).append(make_transform(Vector3(p.x, height_at(p.x, p.y) + 0.45, p.y), 0.0, size))
+			ctx["hedge_length_m"] = float(ctx.get("hedge_length_m", 0.0)) + 3.9
+
+
+func _park_plant_open_lawn(ctx: Dictionary, zone: Rect2, seed_base: int) -> void:
+	var spots: Array[Vector2] = [Vector2(0.30, 0.35), Vector2(0.68, 0.62), Vector2(0.46, 0.82)]
+	for si in spots.size():
+		var f := spots[si]
+		var px := zone.position.x + zone.size.x * f.x
+		var pz := zone.position.y + zone.size.y * f.y
+		var pos := Vector3(px, height_at(px, pz), pz)
+		if _park_accept_large(ctx, pos, 6.0):
+			var yaw := _hash01(seed_base + si * 43, si * 29 + 7) * TAU
+			if si == 1:
+				_park_add_palm(ctx, pos, yaw, false, 1.02)
+			else:
+				_park_add_oak(ctx, pos, yaw, 1.02)
+	_park_scatter(ctx, zone, "grass_transforms", 0.20, seed_base + 5000, 0.85, 1.55)
+	_park_scatter(ctx, zone, "flower_transforms", 0.020, seed_base + 7000, 0.80, 1.30)
+	_park_scatter_bushes(ctx, zone, 0.010, seed_base + 9000)
+	_park_scatter(ctx, zone, "shrub_transforms", 0.008, seed_base + 11000, 0.84, 1.40)
+
+
+func _park_plant_perimeter(ctx: Dictionary, spec: Dictionary, seed_base: int) -> void:
+	var kind := String(spec.get("perimeter", "none"))
+	if kind == "none":
+		return
+	var rect: Rect2 = spec.get("rect", Rect2())
+	var inset := 7.6
+	var x0 := rect.position.x + inset
+	var x1 := rect.position.x + rect.size.x - inset
+	var z0 := rect.position.y + inset
+	var z1 := rect.position.y + rect.size.y - inset
+	var step := 13.5 if kind == "oak" else 14.5
+	var points: Array[Vector2] = []
+	var t := 0.0
+	while t <= (x1 - x0) + 0.1:
+		points.append(Vector2(x0 + t, z0))
+		points.append(Vector2(x0 + t, z1))
+		t += step
+	t = step
+	while t <= (z1 - z0) - step * 0.4:
+		points.append(Vector2(x0, z0 + t))
+		points.append(Vector2(x1, z0 + t))
+		t += step
+	for i in points.size():
+		var p := points[i]
+		var seed := seed_base + i * 37
+		var px := p.x + (_hash01(seed * 3 + 5, seed * 7 + 11) - 0.5) * 1.6
+		var pz := p.y + (_hash01(seed * 11 + 3, seed * 13 + 7) - 0.5) * 1.6
+		var pos := Vector3(px, height_at(px, pz), pz)
+		if not _park_accept_large(ctx, pos, 5.5):
+			continue
+		var yaw := _hash01(seed * 17 + 3, seed * 19 + 5) * TAU
+		if kind == "oak":
+			_park_add_oak(ctx, pos, yaw, 0.95 + _hash01(seed * 23 + 7, seed * 29 + 11) * 0.25)
+		else:
+			_park_add_palm(ctx, pos, yaw, i % 3 == 0, 0.95 + _hash01(seed * 23 + 7, seed * 29 + 11) * 0.20)
+
+
+func _park_plant_alleys(ctx: Dictionary, spec: Dictionary, seed_base: int) -> void:
+	var mode := String(spec.get("alleys", "none"))
+	if mode == "none":
+		return
+	var rect: Rect2 = spec.get("rect", Rect2())
+	var axis_x := float(spec.get("axis_x", 0.0))
+	var axis_z := float(spec.get("axis_z", 0.0))
+	var half := float(spec.get("axis_half", 3.5))
+	var index := 0
+	if mode == "both" or mode == "ns":
+		for side in [-1.0, 1.0]:
+			var x := axis_x + float(side) * (half + 1.9)
+			var z := rect.position.y + 11.0
+			while z <= rect.position.y + rect.size.y - 11.0 + 0.1:
+				if absf(z - axis_z) > half + 5.0:
+					var pos := Vector3(x, height_at(x, z), z)
+					if _park_accept_large(ctx, pos, 5.5):
+						_park_add_palm(ctx, pos, _hash01(seed_base + index * 41, index * 23 + 7) * TAU, index % 4 == 3, 0.98)
+					index += 1
+				z += 13.5
+	if mode == "both" or mode == "ew":
+		for side in [-1.0, 1.0]:
+			var z := axis_z + float(side) * (half + 1.9)
+			var x := rect.position.x + 11.0
+			while x <= rect.position.x + rect.size.x - 11.0 + 0.1:
+				if absf(x - axis_x) > half + 5.0:
+					var pos := Vector3(x, height_at(x, z), z)
+					if _park_accept_large(ctx, pos, 5.5):
+						_park_add_palm(ctx, pos, _hash01(seed_base + index * 41, index * 23 + 7) * TAU, index % 4 == 3, 0.98)
+					index += 1
+				x += 13.5
+
+
+func _park_build_focal(ctx: Dictionary, spec: Dictionary, seed_base: int) -> void:
+	var focal: Vector2 = spec.get("focal", Vector2.ZERO)
+	var kind := String(spec.get("focal_kind", ""))
+	match kind:
+		"fountain":
+			var ring := 0
+			for i in 32:
+				var ang := TAU * float(i) / 32.0
+				var r := 17.6 + _hash01(seed_base + i * 31, i * 17 + 3) * 0.9
+				var p := focal + Vector2(cos(ang), sin(ang)) * r
+				if _park_on_path(ctx, p, 0.25):
+					continue
+				var pos := Vector3(p.x, height_at(p.x, p.y) + 0.04, p.y)
+				var s := 0.95 + _hash01(seed_base + i * 37, i * 19 + 5) * 0.35
+				(ctx["flower_transforms"] as Array).append(make_transform(pos, ang * 1.7, Vector3.ONE * s))
+				ring += 1
+			for i in 8:
+				var ang := TAU * (float(i) + 0.5) / 8.0
+				var p := focal + Vector2(cos(ang), sin(ang)) * 21.0
+				if _park_on_path(ctx, p, 0.3):
+					continue
+				var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+				(ctx["topiary_ball_transforms"] as Array).append(make_transform(pos + Vector3(0.0, 0.95, 0.0), ang, Vector3.ONE * 1.65))
+			ctx["focal_done"] = ring >= 20
+		"pergola":
+			var centre := Vector3(focal.x, height_at(focal.x, focal.y), focal.y)
+			var stone: Array = ctx["pergola_stone_transforms"]
+			var wood: Array = ctx["pergola_wood_transforms"]
+			var column_points: Array[Vector3] = []
+			for i in 6:
+				var ang := TAU * float(i) / 6.0 + PI / 6.0
+				var cp := centre + Vector3(cos(ang) * 5.2, 0.0, sin(ang) * 5.2)
+				cp.y = height_at(cp.x, cp.z)
+				column_points.append(cp)
+				stone.append(make_transform(cp + Vector3(0.0, 1.55, 0.0), ang, Vector3(0.5, 3.1, 0.5)))
+				stone.append(make_transform(cp + Vector3(0.0, 0.18, 0.0), ang, Vector3(0.85, 0.36, 0.85)))
+				_add_cylinder_collider(cp + Vector3(0.0, 1.55, 0.0), 0.4, 3.1)
+			for i in 6:
+				var a := column_points[i]
+				var b := column_points[(i + 1) % 6]
+				var mid := (a + b) * 0.5
+				var dir := b - a
+				dir.y = 0.0
+				wood.append(make_transform(Vector3(mid.x, centre.y + 3.22, mid.z), _yaw_for_x_direction(dir.normalized()), Vector3(dir.length() + 0.5, 0.26, 0.22)))
+			for i in 3:
+				var ang := PI * float(i) / 3.0 + PI / 6.0
+				var dir := Vector3(cos(ang), 0.0, sin(ang))
+				wood.append(make_transform(centre + Vector3(0.0, 3.45, 0.0), _yaw_for_x_direction(dir), Vector3(11.6, 0.2, 0.18)))
+			stone.append(make_transform(centre + Vector3(0.0, 0.10, 0.0), 0.0, Vector3(4.6, 0.2, 4.6)))
+			for i in 4:
+				var ang := TAU * (float(i) + 0.5) / 4.0
+				var bp := centre + Vector3(cos(ang) * 3.3, 0.0, sin(ang) * 3.3)
+				bp.y = height_at(bp.x, bp.z) + 0.10
+				_park_add_bench(ctx, bp, _yaw_for_x_direction(Vector3(-sin(ang), 0.0, cos(ang))))
+			var flower_ring := 0
+			for i in 24:
+				var ang := TAU * float(i) / 24.0
+				var p := focal + Vector2(cos(ang), sin(ang)) * 13.8
+				var pos := Vector3(p.x, height_at(p.x, p.y) + 0.04, p.y)
+				if not _park_accept_small(ctx, pos):
+					continue
+				(ctx["flower_transforms"] as Array).append(make_transform(pos, ang * 1.7, Vector3.ONE * (0.9 + _hash01(seed_base + i * 37, i * 19 + 5) * 0.3)))
+				flower_ring += 1
+			for i in 8:
+				var ang := TAU * (float(i) + 0.25) / 8.0
+				var p := focal + Vector2(cos(ang), sin(ang)) * 14.5
+				var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+				if _park_accept_large(ctx, pos, 5.0, true):
+					_park_add_palm(ctx, pos, ang * 1.3, true, 0.92)
+			for corner_sign in [Vector2(-9.8, -9.8), Vector2(9.8, -9.8), Vector2(-9.8, 9.8), Vector2(9.8, 9.8)]:
+				var corner_p: Vector2 = focal + corner_sign
+				if _park_on_path(ctx, corner_p, 0.3):
+					continue
+				var corner_pos := Vector3(corner_p.x, height_at(corner_p.x, corner_p.y), corner_p.y)
+				(ctx["topiary_ball_transforms"] as Array).append(make_transform(corner_pos + Vector3(0.0, 0.78, 0.0), 0.4, Vector3.ONE * 1.35))
+			ctx["focal_done"] = column_points.size() == 6 and flower_ring >= 10
+		"rondel":
+			var ring_palms := 0
+			for i in 8:
+				var ang := TAU * (float(i) + 0.5) / 8.0
+				var p := focal + Vector2(cos(ang), sin(ang)) * 9.2
+				var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+				_park_add_palm(ctx, pos, ang * 1.9, true, 1.0)
+				(ctx["pebble_transforms"] as Array).append(make_transform(pos + Vector3(0.0, 0.10, 0.0), 0.0, Vector3(1.9, 1.0, 1.9)))
+				(ctx["accepted_large"] as Array).append(p)
+				ring_palms += 1
+			for i in 4:
+				var ang := TAU * float(i) / 4.0 + PI / 4.0
+				var tp := Vector3(focal.x + cos(ang) * 11.5, 0.0, focal.y + sin(ang) * 11.5)
+				tp.y = height_at(tp.x, tp.z)
+				(ctx["topiary_ball_transforms"] as Array).append(make_transform(tp + Vector3(0.0, 0.72, 0.0), ang, Vector3.ONE * 1.20))
+			for i in 6:
+				var ang := TAU * float(i) / 6.0 + PI / 6.0
+				var bp := Vector3(focal.x + cos(ang) * 6.0, 0.0, focal.y + sin(ang) * 6.0)
+				bp.y = height_at(bp.x, bp.z) + 0.08
+				_park_add_bench(ctx, bp, _yaw_for_x_direction(Vector3(-sin(ang), 0.0, cos(ang))))
+			for i in 20:
+				var ang := TAU * float(i) / 20.0
+				var p := focal + Vector2(cos(ang), sin(ang)) * 13.2
+				var pos := Vector3(p.x, height_at(p.x, p.y) + 0.04, p.y)
+				if not _park_accept_small(ctx, pos):
+					continue
+				(ctx["flower_transforms"] as Array).append(make_transform(pos, ang * 1.7, Vector3.ONE * (0.9 + _hash01(seed_base + i * 37, i * 19 + 5) * 0.3)))
+			ctx["focal_done"] = ring_palms >= 7
+
+
+func _park_place_furniture(ctx: Dictionary, spec: Dictionary) -> void:
+	var rect: Rect2 = spec.get("rect", Rect2())
+	var axis_x := float(spec.get("axis_x", 0.0))
+	var axis_z := float(spec.get("axis_z", 0.0))
+	var half := float(spec.get("axis_half", 3.5))
+	var focal: Vector2 = ctx.get("focal", Vector2.ZERO)
+	var focal_radius := float(ctx.get("focal_radius", 10.0))
+	var bench_index := 0
+	var bz := rect.position.y + 15.0
+	while bz <= rect.position.y + rect.size.y - 13.0:
+		if absf(bz - axis_z) > half + 6.0:
+			var side := 1.0 if bench_index % 2 == 0 else -1.0
+			var p := Vector2(axis_x + side * (half + 1.15), bz)
+			if not _park_on_path(ctx, p, 0.55) and p.distance_to(focal) > focal_radius + 1.5:
+				_park_add_bench(ctx, Vector3(p.x, height_at(p.x, p.y), p.y), PI * 0.5)
+			bench_index += 1
+		bz += 17.0
+	var bx := rect.position.x + 15.0
+	while bx <= rect.position.x + rect.size.x - 13.0:
+		if absf(bx - axis_x) > half + 6.0:
+			var side := 1.0 if bench_index % 2 == 0 else -1.0
+			var p := Vector2(bx, axis_z + side * (half + 1.15))
+			if not _park_on_path(ctx, p, 0.55) and p.distance_to(focal) > focal_radius + 1.5:
+				_park_add_bench(ctx, Vector3(p.x, height_at(p.x, p.y), p.y), 0.0)
+			bench_index += 1
+		bx += 17.0
+	if bool(spec.get("sea_benches", false)):
+		var sz := rect.position.y + 13.0
+		while sz <= rect.position.y + rect.size.y - 11.0:
+			var p := Vector2(rect.position.x + rect.size.x - 4.4, sz)
+			if not _park_on_path(ctx, p, 0.55) and p.distance_to(focal) > focal_radius + 1.5:
+				_park_add_bench(ctx, Vector3(p.x, height_at(p.x, p.y), p.y), PI * 0.5)
+			sz += 18.0
+	var lamp_index := 0
+	var lz := rect.position.y + 13.0
+	while lz <= rect.position.y + rect.size.y - 11.0:
+		if absf(lz - axis_z) > half + 6.0:
+			var side := -1.0 if lamp_index % 2 == 0 else 1.0
+			var p := Vector2(axis_x + side * (half + 1.3), lz)
+			if not _park_on_path(ctx, p, 0.5) and p.distance_to(focal) > focal_radius + 1.0:
+				var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+				(ctx["lamp_transforms"] as Array).append(make_transform(pos, _yaw_for_z_normal(Vector3(-side, 0.0, 0.0)), Vector3.ONE))
+				_add_cylinder_collider(pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
+			lamp_index += 1
+		lz += 22.0
+	var lx := rect.position.x + 13.0
+	while lx <= rect.position.x + rect.size.x - 11.0:
+		if absf(lx - axis_x) > half + 6.0:
+			var side := 1.0 if lamp_index % 2 == 0 else -1.0
+			var p := Vector2(lx, axis_z + side * (half + 1.3))
+			if not _park_on_path(ctx, p, 0.5) and p.distance_to(focal) > focal_radius + 1.0:
+				var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+				(ctx["lamp_transforms"] as Array).append(make_transform(pos, _yaw_for_z_normal(Vector3(0.0, 0.0, -side)), Vector3.ONE))
+				_add_cylinder_collider(pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
+			lamp_index += 1
+		lx += 22.0
+	# Benches and lamps also line the perimeter promenade (the axis
+	# furniture above is sparse where diagonals and crossings intervene).
+	var min_x := rect.position.x
+	var min_z := rect.position.y
+	var max_x := rect.position.x + rect.size.x
+	var max_z := rect.position.y + rect.size.y
+	var sides: Array = [
+		{"a": Vector2(min_x + 6.3, min_z + 6.3), "b": Vector2(max_x - 6.3, min_z + 6.3), "yaw": 0.0, "n": Vector2(0.0, -1.0)},
+		{"a": Vector2(min_x + 6.3, max_z - 6.3), "b": Vector2(max_x - 6.3, max_z - 6.3), "yaw": 0.0, "n": Vector2(0.0, 1.0)},
+		{"a": Vector2(min_x + 6.3, min_z + 6.3), "b": Vector2(min_x + 6.3, max_z - 6.3), "yaw": PI * 0.5, "n": Vector2(-1.0, 0.0)},
+		{"a": Vector2(max_x - 6.3, min_z + 6.3), "b": Vector2(max_x - 6.3, max_z - 6.3), "yaw": PI * 0.5, "n": Vector2(1.0, 0.0)},
+	]
+	for side_variant in sides:
+		var side_spec: Dictionary = side_variant
+		var a: Vector2 = side_spec.get("a", Vector2.ZERO)
+		var b: Vector2 = side_spec.get("b", Vector2.ZERO)
+		var normal: Vector2 = side_spec.get("n", Vector2.ZERO)
+		var side_length := a.distance_to(b)
+		var dir := (b - a) / maxf(side_length, 0.01)
+		var bd := 8.0
+		while bd <= side_length - 6.0:
+			var p := a + dir * bd
+			bd += 23.0
+			if _park_on_path(ctx, p, 0.55) or p.distance_to(focal) <= focal_radius + 1.5:
+				continue
+			_park_add_bench(ctx, Vector3(p.x, height_at(p.x, p.y), p.y), float(side_spec.get("yaw", 0.0)))
+		var ld := 19.0
+		while ld <= side_length - 6.0:
+			var p := a + dir * ld
+			ld += 31.0
+			if _park_on_path(ctx, p, 0.5) or p.distance_to(focal) <= focal_radius + 1.0:
+				continue
+			var pos := Vector3(p.x, height_at(p.x, p.y), p.y)
+			(ctx["lamp_transforms"] as Array).append(make_transform(pos, _yaw_for_z_normal(Vector3(normal.x, 0.0, normal.y)), Vector3.ONE))
+			_add_cylinder_collider(pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
+
+
+func _build_parks() -> void:
+	var root := Node3D.new()
+	root.name = "RichTownParks"
+	add_child(root)
+	_load_plant_parts()
+
+	var lawn_material := _material("park_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.52, 0.74, 0.38), 0.96, 0.0, Vector3(0.55, 0.55, 0.55), true)
+	lawn_material.normal_scale = 0.82
+	var path_material := _create_premium_paving_material("park_path_pavers_shader", Color(0.86, 0.82, 0.72), 0.70, 0.135, 0.48)
+	var axis_material := _create_premium_paving_material("park_axis_pavers_shader", Color(0.60, 0.58, 0.53), 0.74, 0.120, 0.44)
+	var pebble_material := _material("park_white_pebbles", "user_sand_beach_white.jpg", "user_sand_rippled_normal.jpg", Color(0.98, 0.97, 0.93), 0.94, 0.0, Vector3(1.65, 1.65, 1.65), true)
+	pebble_material.normal_scale = 0.72
+	var mulch_material := _prop_material("VillaMulch")
+	var hedge_material := _prop_material("VillaHedge")
+	var topiary_material := _material("park_topiary", "foliage.jpg", "foliage_normal.jpg", Color(0.24, 0.47, 0.23), 0.92, 0.0, Vector3(0.85, 0.85, 0.85), true)
+	topiary_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var pebble_mesh := CylinderMesh.new()
+	pebble_mesh.top_radius = 1.0
+	pebble_mesh.bottom_radius = 1.0
+	pebble_mesh.height = 0.08
+	pebble_mesh.radial_segments = 20
+	var topiary_ball_mesh := SphereMesh.new()
+	topiary_ball_mesh.radius = 0.55
+	topiary_ball_mesh.height = 1.12
+	topiary_ball_mesh.radial_segments = 18
+	topiary_ball_mesh.rings = 10
+	var topiary_cone_mesh := CylinderMesh.new()
+	topiary_cone_mesh.top_radius = 0.08
+	topiary_cone_mesh.bottom_radius = 0.58
+	topiary_cone_mesh.height = 1.55
+	topiary_cone_mesh.radial_segments = 14
+
+	var total_parks := 0
+	var total_area := 0.0
+	var total_lawn_area := 0.0
+	var total_path_area := 0.0
+	var total_trees := 0
+	var total_palms := 0
+	var total_bushes := 0
+	var total_ground_cover := 0
+	var total_bed_area := 0.0
+	var total_hedge_length := 0.0
+	var total_benches := 0
+	var total_lamps := 0
+	var total_topiary := 0
+
+	for park_index in PARK_SPECS.size():
+		var spec: Dictionary = PARK_SPECS[park_index]
+		var park_id := String(spec.get("id", "park"))
+		var rect: Rect2 = spec.get("rect", Rect2())
+		var focal_kind := String(spec.get("focal_kind", ""))
+		var park_root := Node3D.new()
+		park_root.name = "Park_%s" % park_id
+		root.add_child(park_root)
+		total_parks += 1
+		total_area += rect.size.x * rect.size.y
+
+		var ctx: Dictionary = {
+			"id": park_id,
+			"rect": rect,
+			"focal": spec.get("focal", Vector2.ZERO),
+			"focal_radius": float(spec.get("focal_radius", 10.0)),
+			"path_rects": [],
+			"diagonals": spec.get("diagonals", []),
+			"accepted_large": [],
+			"oak_transforms": [],
+			"date_transforms": [],
+			"royal_transforms": [],
+			"bush_bush_round_foliage": [],
+			"bush_shrub_cone_foliage": [],
+			"bush_fan_foliage": [],
+			"grass_transforms": [],
+			"flower_transforms": [],
+			"shrub_transforms": [],
+			"hedge_transforms": [],
+			"topiary_ball_transforms": [],
+			"topiary_cone_transforms": [],
+			"pebble_transforms": [],
+			"bench_transforms": [],
+			"lamp_transforms": [],
+			"pergola_stone_transforms": [],
+			"pergola_wood_transforms": [],
+			"bench_count": 0,
+			"hedge_length_m": 0.0,
+			"flower_bed_area_m2": 0.0,
+			"focal_done": false,
+		}
+
+		var min_x := rect.position.x
+		var min_z := rect.position.y
+		var max_x := rect.position.x + rect.size.x
+		var max_z := rect.position.y + rect.size.y
+		var axis_x := float(spec.get("axis_x", (min_x + max_x) * 0.5))
+		var axis_z := float(spec.get("axis_z", (min_z + max_z) * 0.5))
+		var axis_half := float(spec.get("axis_half", 3.5))
+
+		var path_rects: Array = ctx["path_rects"]
+		var path_styles: Array = []
+		path_rects.append(Rect2(min_x + 2.2, min_z + 2.2, 3.2, rect.size.y - 4.4))
+		path_styles.append("perimeter")
+		path_rects.append(Rect2(max_x - 5.4, min_z + 2.2, 3.2, rect.size.y - 4.4))
+		path_styles.append("perimeter")
+		path_rects.append(Rect2(min_x + 5.4, min_z + 2.2, rect.size.x - 10.8, 3.2))
+		path_styles.append("perimeter")
+		path_rects.append(Rect2(min_x + 5.4, max_z - 5.4, rect.size.x - 10.8, 3.2))
+		path_styles.append("perimeter")
+		path_rects.append(Rect2(axis_x - axis_half, min_z + 2.2, axis_half * 2.0, rect.size.y - 4.4))
+		path_styles.append("axis")
+		path_rects.append(Rect2(min_x + 2.2, axis_z - axis_half, rect.size.x - 4.4, axis_half * 2.0))
+		path_styles.append("axis")
+		for cross_variant in spec.get("cross_z", []):
+			var cross: Array = cross_variant
+			path_rects.append(Rect2(min_x + 2.2, float(cross[0]) - float(cross[1]), rect.size.x - 4.4, float(cross[1]) * 2.0))
+			path_styles.append("cross")
+		for extra_variant in spec.get("extra_paths", []):
+			path_rects.append(extra_variant)
+			path_styles.append("extra")
+
+		for path_i in path_rects.size():
+			var pr: Rect2 = path_rects[path_i]
+			var style := String(path_styles[path_i])
+			var lift := 0.070
+			var mat: Material = path_material
+			match style:
+				"axis":
+					lift = 0.084
+					mat = axis_material
+				"cross":
+					lift = 0.076
+				"extra":
+					lift = 0.100
+					if focal_kind == "rondel":
+						mat = pebble_material
+			var path_mesh := _make_paving_patch_mesh(pr.position.x, pr.position.x + pr.size.x, pr.position.y, pr.position.y + pr.size.y, 2.5, lift)
+			if path_mesh != null:
+				_mesh_instance(park_root, path_mesh, mat, Transform3D.IDENTITY, "ParkPath_%s_%d" % [park_id, path_i], false)
+			total_path_area += pr.size.x * pr.size.y
+
+		var diagonals: Array = spec.get("diagonals", [])
+		for diag_i in diagonals.size():
+			var diag: Dictionary = diagonals[diag_i]
+			var diag_mesh := _make_diagonal_path_mesh(diag.get("a", Vector2.ZERO), diag.get("b", Vector2.ZERO), float(diag.get("w", 4.0)))
+			if diag_mesh != null:
+				_mesh_instance(park_root, diag_mesh, axis_material, Transform3D.IDENTITY, "ParkDiagonal_%s_%d" % [park_id, diag_i], false)
+
+		var z_bands: Array = [Vector2(axis_z - axis_half, axis_z + axis_half)]
+		for cross_variant in spec.get("cross_z", []):
+			var cross: Array = cross_variant
+			z_bands.append(Vector2(float(cross[0]) - float(cross[1]), float(cross[0]) + float(cross[1])))
+		z_bands.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+		var z_intervals: Array = []
+		var z_cursor := min_z + 5.4
+		for band_variant in z_bands:
+			var band: Vector2 = band_variant
+			if band.x > z_cursor + 4.0:
+				z_intervals.append(Vector2(z_cursor, band.x))
+			z_cursor = maxf(z_cursor, band.y)
+		if max_z - 5.4 > z_cursor + 4.0:
+			z_intervals.append(Vector2(z_cursor, max_z - 5.4))
+		var x_intervals: Array = [Vector2(min_x + 5.4, axis_x - axis_half), Vector2(axis_x + axis_half, max_x - 5.4)]
+		var lawn_i := 0
+		for xi_variant in x_intervals:
+			var xi: Vector2 = xi_variant
+			if xi.y - xi.x < 6.0:
+				continue
+			for zi_variant in z_intervals:
+				var zi: Vector2 = zi_variant
+				if zi.y - zi.x < 6.0:
+					continue
+				var lawn_mesh := _make_paving_patch_mesh(xi.x, xi.y, zi.x, zi.y, 2.5, 0.052)
+				if lawn_mesh != null:
+					_mesh_instance(park_root, lawn_mesh, lawn_material, Transform3D.IDENTITY, "ParkLawn_%s_%d" % [park_id, lawn_i], false)
+					total_lawn_area += (xi.y - xi.x) * (zi.y - zi.x)
+				lawn_i += 1
+
+		var seed_base := 220000 + park_index * 100000
+		_park_plant_perimeter(ctx, spec, seed_base)
+		_park_plant_alleys(ctx, spec, seed_base + 20000)
+		var zones: Array = spec.get("zones", [])
+		for zone_i in zones.size():
+			var zone_spec: Dictionary = zones[zone_i]
+			var zone: Rect2 = zone_spec.get("rect", Rect2())
+			var pattern := String(zone_spec.get("pattern", "open_lawn"))
+			var zone_seed := seed_base + 30000 + zone_i * 5000
+			match pattern:
+				"oak_grove":
+					_park_plant_oak_grove(ctx, zone, zone_seed)
+				"palm_grove":
+					_park_plant_palm_grove(ctx, zone, zone_seed)
+					_park_add_hedge_border(ctx, zone)
+				"parterre":
+					_park_plant_parterre(ctx, zone, zone_seed, park_root, mulch_material, park_id, zone_i)
+					_park_add_hedge_border(ctx, zone)
+				_:
+					_park_plant_open_lawn(ctx, zone, zone_seed)
+		_park_build_focal(ctx, spec, seed_base + 80000)
+		_park_place_furniture(ctx, spec)
+
+		var oak_transforms: Array = ctx["oak_transforms"]
+		var oaks_built := false
+		if not oak_transforms.is_empty():
+			for part_name in ["tree2_bark", "tree2_foliage"]:
+				if _plant_parts.has(part_name):
+					var part: Dictionary = _plant_parts[part_name]
+					var source_mesh := part.get("mesh") as Mesh
+					var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+					oaks_built = _add_multimesh(park_root, source_mesh, part.get("material") as Material, oak_transforms, "ParkOaks_%s_%s" % [park_id, part_name], part_name == "tree2_bark", 0.0, detail_end, 180.0) or oaks_built
+					if part_name == "tree2_foliage":
+						_add_foliage_far_proxy(park_root, source_mesh, oak_transforms, "ParkOaks_%s_%s" % [park_id, part_name], 220.0, 650.0)
+		total_trees += oak_transforms.size() if oaks_built else 0
+
+		var park_bush_count := 0
+		for part_name in ["bush_round_foliage", "shrub_cone_foliage", "fan_foliage"]:
+			var bush_transforms: Array = ctx.get("bush_" + part_name, [])
+			if bush_transforms.is_empty() or not _plant_parts.has(part_name):
+				continue
+			var part: Dictionary = _plant_parts[part_name]
+			var source_mesh := part.get("mesh") as Mesh
+			if _add_multimesh(park_root, source_mesh, part.get("material") as Material, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], false, 0.0, 180.0, 180.0):
+				park_bush_count += bush_transforms.size()
+				_add_foliage_far_proxy(park_root, source_mesh, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], 160.0, 420.0)
+		total_bushes += park_bush_count
+
+		var date_transforms: Array = ctx["date_transforms"]
+		var royal_transforms: Array = ctx["royal_transforms"]
+		var date_built := _add_batched_model(park_root, "res://assets/vegetation/palm_date.glb", date_transforms, "ParkDatePalms")
+		var royal_built := _add_batched_model(park_root, "res://assets/vegetation/palm_royal.glb", royal_transforms, "ParkRoyalPalms")
+		var park_palm_count := (date_transforms.size() if date_built else 0) + (royal_transforms.size() if royal_built else 0)
+		total_palms += park_palm_count
+		if date_built:
+			_enhancement_stats["date_palms"] = int(_enhancement_stats.get("date_palms", 0)) + date_transforms.size()
+		if royal_built:
+			_enhancement_stats["royal_palms"] = int(_enhancement_stats.get("royal_palms", 0)) + royal_transforms.size()
+		if park_palm_count > 0:
+			_enhancement_stats["detailed_palms"] = int(_enhancement_stats.get("detailed_palms", 0)) + park_palm_count
+
+		var grass_transforms: Array = ctx["grass_transforms"]
+		var flower_transforms: Array = ctx["flower_transforms"]
+		var shrub_transforms: Array = ctx["shrub_transforms"]
+		if _add_batched_model(park_root, "res://assets/vegetation/grass_tuft.glb", grass_transforms, "ParkGrassTufts"):
+			total_ground_cover += grass_transforms.size()
+		if _add_batched_model(park_root, "res://assets/vegetation/flower_clump.glb", flower_transforms, "ParkFlowerClumps"):
+			total_ground_cover += flower_transforms.size()
+		if _add_batched_model(park_root, "res://assets/vegetation/ornamental_shrub.glb", shrub_transforms, "ParkOrnamentalShrubs"):
+			total_ground_cover += shrub_transforms.size()
+
+		if _add_multimesh(park_root, unit_box, hedge_material, ctx["hedge_transforms"], "ParkClippedHedges_%s" % park_id, false, 0.0, 320.0, 180.0):
+			total_hedge_length += float(ctx.get("hedge_length_m", 0.0))
+		var park_topiary_count := 0
+		if _add_multimesh(park_root, topiary_ball_mesh, topiary_material, ctx["topiary_ball_transforms"], "ParkTopiaryBalls_%s" % park_id, false, 0.0, 260.0, 180.0):
+			park_topiary_count += (ctx["topiary_ball_transforms"] as Array).size()
+		if _add_multimesh(park_root, topiary_cone_mesh, topiary_material, ctx["topiary_cone_transforms"], "ParkTopiaryCones_%s" % park_id, false, 0.0, 260.0, 180.0):
+			park_topiary_count += (ctx["topiary_cone_transforms"] as Array).size()
+		total_topiary += park_topiary_count
+		_add_multimesh(park_root, pebble_mesh, pebble_material, ctx["pebble_transforms"], "ParkPalmPebbleBeds_%s" % park_id, false, 0.0, 220.0, 180.0)
+		if _add_multimesh(park_root, unit_box, path_material, ctx["bench_transforms"], "ParkStoneBenches_%s" % park_id, true, -1.0, 220.0, 180.0):
+			total_benches += int(ctx.get("bench_count", 0))
+		var lamp_transforms: Array = ctx["lamp_transforms"]
+		if _add_batched_model(park_root, "res://assets/props/street_lamp.glb", lamp_transforms, "ParkLamps"):
+			total_lamps += lamp_transforms.size()
+		var pergola_built := false
+		if not (ctx["pergola_stone_transforms"] as Array).is_empty():
+			pergola_built = _add_multimesh(park_root, unit_box, _prop_material("VillaStone"), ctx["pergola_stone_transforms"], "MuseumPergolaStone", true, 0.0, 300.0, 180.0)
+			_add_multimesh(park_root, unit_box, _prop_material("VillaWood"), ctx["pergola_wood_transforms"], "MuseumPergolaWood", true, 0.0, 300.0, 180.0)
+			ctx["focal_done"] = bool(ctx.get("focal_done", false)) and pergola_built
+
+		total_bed_area += float(ctx.get("flower_bed_area_m2", 0.0))
+		match park_id:
+			"central":
+				_enhancement_stats["central_park_fountain_garden"] = bool(ctx.get("focal_done", false))
+			"museum":
+				_enhancement_stats["museum_garden_pergola"] = bool(ctx.get("focal_done", false))
+			"beach":
+				_enhancement_stats["beach_palmetum_rondel"] = bool(ctx.get("focal_done", false))
+
+	_enhancement_stats["parks_0222"] = total_parks >= 3 and total_trees > 0 and total_palms > 0
+	_enhancement_stats["parks"] = total_parks
+	_enhancement_stats["park_area_m2"] = total_area
+	_enhancement_stats["park_lawn_area_m2"] = total_lawn_area
+	_enhancement_stats["park_path_area_m2"] = total_path_area
+	_enhancement_stats["park_trees"] = total_trees
+	_enhancement_stats["park_palms"] = total_palms
+	_enhancement_stats["park_bushes"] = total_bushes
+	_enhancement_stats["park_ground_cover"] = total_ground_cover
+	_enhancement_stats["park_flower_bed_area_m2"] = total_bed_area
+	_enhancement_stats["park_hedge_length_m"] = total_hedge_length
+	_enhancement_stats["park_benches"] = total_benches
+	_enhancement_stats["park_lamps"] = total_lamps
+	_enhancement_stats["park_topiary"] = total_topiary
 
 
 func _build_world_bounds() -> void:
