@@ -700,8 +700,10 @@ func _run_screenshot_tour() -> void:
 func _capture_screenshot(shot: Dictionary) -> bool:
 	var shot_started_ms := Time.get_ticks_msec()
 	var shot_name := String(shot.get("name", "shot"))
-	_time_index = maxi(TIME_MODES.find(String(shot.get("time", "day"))), 0)
-	_apply_time_mode()
+	var wanted_time_index := maxi(TIME_MODES.find(String(shot.get("time", "day"))), 0)
+	if wanted_time_index != _time_index:
+		_time_index = wanted_time_index
+		_apply_time_mode()
 	if _hud != null:
 		_hud.visible = bool(shot.get("hud", false))
 

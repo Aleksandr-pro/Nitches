@@ -68,6 +68,7 @@ for (const marker of ['--export-release Windows', '--export-release Linux', '--n
 for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_screenshot', '[native-screenshots] DONE']) {
   assert(mainScript.includes(marker), `Visual-audit screenshot tour marker is missing: ${marker}`);
 }
+assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
 const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
 for (const marker of ['DesktopControlsHint', 'is_touchscreen_available', 'KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {

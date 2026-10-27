@@ -123,14 +123,15 @@ jobs:
           export VK_ICD_FILENAMES="$ICD"
           export LIBGL_ALWAYS_SOFTWARE=1
           timeout 1800 xvfb-run -a -s "-screen 0 960x540x24 +render" \
-            "$GODOT_BIN" --path "$PROJECT_PATH" \
+            stdbuf -oL -eL "$GODOT_BIN" --path "$PROJECT_PATH" \
             --resolution 960x540 \
             --rendering-driver vulkan \
+            --rendering-method mobile \
             --audio-driver Dummy \
             -- --native-screenshots="$GITHUB_WORKSPACE/$SHOT_DIR" \
             2>&1 | tee "$RUNNER_TEMP/native-logs/screenshots.log"
           grep -F "[native-screenshots] DONE" "$RUNNER_TEMP/native-logs/screenshots.log"
-          if grep -E "SCRIPT ERROR|\[native-screenshots\] FAIL" "$RUNNER_TEMP/native-logs/screenshots.log"; then
+          if grep -E "SCRIPT ERROR|SHADER ERROR|\[native-screenshots\] FAIL" "$RUNNER_TEMP/native-logs/screenshots.log"; then
             echo "Screenshot tour reported a runtime problem" >&2
             exit 1
           fi
