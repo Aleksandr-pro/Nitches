@@ -49,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=28'), 'Native 0.2.25 must bump Android versionCode to 28');
-assert(preset.includes('version/name="0.2.25-native-alpha"'), 'Native version name must be 0.2.25-native-alpha');
+assert(preset.includes('version/code=29'), 'Native 0.2.26 must bump Android versionCode to 29');
+assert(preset.includes('version/name="0.2.26-native-alpha"'), 'Native version name must be 0.2.26-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -128,6 +128,11 @@ assert(blenderScript.includes('def build_mosque():') && blenderScript.includes('
 assert(syncScript.includes('mosque.glb') && worldScript.includes('res://assets/buildings/mosque.glb'), 'Native 0.2.25 must stage and load the RichTown Mosque GLB');
 for (const marker of ['premium_mosque_built', 'premium_mosque_fixed_scale', 'premium_mosque_detail_pass', 'premium_mosque_material_pass', 'premium_mosque_site_pass', 'premium_mosque_fronts_east', 'RichTownMosque', 'mosque_glass_physical', 'mosque_dome_copper', 'mosque_glazed_tile']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.25 mosque marker is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_hotel():') && blenderScript.includes('(build_hotel, \"grand_hotel.glb\")'), 'Blender Building Model No.8 grand hotel builder/export is missing');
+assert(syncScript.includes('grand_hotel.glb') && worldScript.includes('res://assets/buildings/grand_hotel.glb'), 'Native 0.2.26 must stage and load the Grand Hotel GLB');
+for (const marker of ['premium_hotel_models', 'premium_hotel_fixed_scale', 'premium_hotel_detail_pass', 'premium_hotel_material_pass', 'premium_hotel_site_pass', 'premium_hotel_fronts_corniche', 'BlenderGrandHotels', 'hotel_glass_physical', 'hotel_travertine', 'hotel_pool_water']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.26 grand hotel marker is missing: ${marker}`);
 }
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
@@ -448,6 +453,12 @@ const mosqueBytes = await readFile('src/assets/models/props/mosque.glb');
 assert(mosqueBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Mosque source is an LFS pointer or corrupt GLB');
 const mosqueLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-mosque');
 assert(mosqueLandmark && mosqueLandmark.x === 620 && mosqueLandmark.z === 335 && mosqueLandmark.h === 30, 'RichTown Mosque landmark must stay at X620 Z335 with the authored 30 m height');
+const hotelInfo = await stat('src/assets/models/props/grand_hotel.glb');
+assert(hotelInfo.size > 1_000_000, 'Native 0.2.26 Grand Hotel GLB is unexpectedly small');
+const hotelBytes = await readFile('src/assets/models/props/grand_hotel.glb');
+assert(hotelBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Grand Hotel source is an LFS pointer or corrupt GLB');
+const grandHotelParcels = data.buildings.filter((b) => b.kind === 'rt-hotel' && b.h > 38 && b.w >= 33 && b.w <= 36 && b.d >= 25 && b.d <= 28);
+assert(grandHotelParcels.length === 3 && grandHotelParcels.every((b) => b.x === 892), 'Building Model No.8 must land on exactly the three tall 34x26 Corniche parcels at X892');
 
 if (requireAssets) {
   const required = [
@@ -459,6 +470,7 @@ if (requireAssets) {
     'assets/buildings/townhouse.glb',
     'assets/buildings/opera_house.glb',
     'assets/buildings/mosque.glb',
+    'assets/buildings/grand_hotel.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
     'assets/props/park_bench.glb',

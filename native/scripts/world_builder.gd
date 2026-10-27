@@ -1807,6 +1807,83 @@ func _prop_material(material_name: String) -> Material:
 			mosque_light.emission = Color(1.0, 0.55, 0.20)
 			_register_night_material(mosque_light, 0.0, 0.10, 0.62)
 			return mosque_light
+		"HotelStone":
+			# Building Model No.8: travertine podium/end piers at world
+			# scale; the colonnade rhythm is Blender geometry.
+			var hotel_stone := _material("hotel_travertine", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.90, 0.83, 0.70), 0.86, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			hotel_stone.normal_scale = 1.0
+			hotel_stone.metallic_specular = 0.52
+			return hotel_stone
+		"HotelPlaster":
+			var hotel_plaster := _material("hotel_plaster", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.94, 0.90, 0.82), 0.90, 0.0, Vector3(0.20, 0.20, 0.20), true)
+			hotel_plaster.normal_scale = 0.85
+			hotel_plaster.metallic_specular = 0.44
+			return hotel_plaster
+		"HotelBronze":
+			var hotel_bronze := _material("hotel_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.40, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			hotel_bronze.normal_scale = 0.72
+			hotel_bronze.metallic_specular = 0.96
+			hotel_bronze.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return hotel_bronze
+		"HotelGlass":
+			# Reflective physical glazing over the inhabited interior
+			# layers, calibrated like the mosque/storefront glass.
+			return _create_curtain_wall_material(
+				"hotel_glass_physical",
+				false,
+				Color(0.018, 0.052, 0.078),
+				Color(0.055, 0.118, 0.160),
+				Color(0.245, 0.234, 0.210),
+				Color(0.100, 0.068, 0.036),
+				3.10,
+				1.75,
+				6.0,
+				0.62
+			)
+		"HotelInterior":
+			var hotel_interior := _material("hotel_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.160, 0.120, 0.088), 0.96, 0.0, Vector3(0.40, 0.40, 0.40), true)
+			hotel_interior.metallic_specular = 0.22
+			hotel_interior.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return hotel_interior
+		"HotelGranite":
+			var hotel_granite := _material("hotel_black_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.42, 0.44, 0.46), 0.36, 0.08, Vector3(0.26, 0.26, 0.26), true)
+			hotel_granite.normal_scale = 0.95
+			hotel_granite.metallic_specular = 0.86
+			hotel_granite.clearcoat_enabled = true
+			hotel_granite.clearcoat = 0.32
+			hotel_granite.clearcoat_roughness = 0.24
+			return hotel_granite
+		"HotelWood":
+			var hotel_wood := _material("hotel_teak", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.85, 0.62, 0.38), 0.80, 0.0, Vector3(0.30, 0.30, 0.30), true)
+			hotel_wood.normal_scale = 1.05
+			hotel_wood.metallic_specular = 0.46
+			return hotel_wood
+		"HotelWater":
+			var hotel_water := _material("hotel_pool_water", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.30, 0.62, 0.72, 0.96), 0.075, 0.0, Vector3(0.55, 0.55, 0.55), true)
+			hotel_water.normal_scale = 0.42
+			hotel_water.metallic_specular = 1.0
+			hotel_water.clearcoat_enabled = true
+			hotel_water.clearcoat = 0.90
+			hotel_water.clearcoat_roughness = 0.045
+			hotel_water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			return hotel_water
+		"HotelCurtain":
+			var hotel_curtain := _material("hotel_curtain_linen", "cafe_linen.jpg", "cafe_linen_normal.png", Color(0.88, 0.80, 0.66), 1.0, 0.0, Vector3(2.50, 2.50, 2.50), true)
+			hotel_curtain.normal_scale = 0.55
+			hotel_curtain.metallic_specular = 0.20
+			hotel_curtain.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return hotel_curtain
+		"HotelAccent":
+			var hotel_accent := _material("hotel_accent_teal", "", "", Color(0.05, 0.42, 0.45), 0.58, 0.0)
+			hotel_accent.metallic_specular = 0.40
+			hotel_accent.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return hotel_accent
+		"HotelLight":
+			var hotel_light := _material("hotel_warm_light", "", "", Color(1.0, 0.72, 0.40), 0.32, 0.0)
+			hotel_light.emission_enabled = true
+			hotel_light.emission = Color(1.0, 0.57, 0.22)
+			_register_night_material(hotel_light, 0.0, 0.10, 0.62)
+			return hotel_light
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -3902,6 +3979,8 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "RichTownOpera"
 	if path.ends_with("mosque.glb"):
 		return "RichTownMosque"
+	if path.ends_with("grand_hotel.glb"):
+		return "BlenderGrandHotels"
 	if path.ends_with("street_lamp.glb"):
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
@@ -3952,6 +4031,8 @@ func _batched_model_base_range(path: String) -> float:
 	if path.ends_with("hero_building.glb"):
 		return 260.0
 	if path.ends_with("glass_tower.glb"):
+		return 340.0
+	if path.ends_with("grand_hotel.glb"):
 		return 340.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
 		return 390.0
@@ -4112,6 +4193,13 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		specs = [
 			{"size": Vector3(34.00, 6.00, 34.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
 			{"size": Vector3(25.00, 66.90, 25.00), "center": Vector3(0.0, 39.45, 0.0), "material": _facade_material("glassTower", 72.9), "name": "Shaft"},
+		]
+	elif path.ends_with("grand_hotel.glb"):
+		proxy_end = 1350.0
+		specs = [
+			{"size": Vector3(32.00, 7.20, 22.00), "center": Vector3(0.0, 3.60, 0.0), "material": _prop_material("HotelStone"), "name": "Podium"},
+			{"size": Vector3(25.60, 36.30, 17.20), "center": Vector3(0.0, 25.75, -1.0), "material": _prop_material("HotelPlaster"), "name": "Shaft"},
+			{"size": Vector3(19.60, 3.40, 13.20), "center": Vector3(0.0, 46.10, -1.2), "material": _prop_material("HotelStone"), "name": "Crown"},
 		]
 	if specs.is_empty():
 		return
@@ -4286,6 +4374,8 @@ func _build_buildings() -> void:
 	var townhouse_transforms: Array[Transform3D] = []
 	var hero_items: Array[Dictionary] = []
 	var hero_transforms: Array[Transform3D] = []
+	var hotel_items: Array[Dictionary] = []
+	var hotel_transforms: Array[Transform3D] = []
 
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
@@ -4344,6 +4434,29 @@ func _build_buildings() -> void:
 				Vector3(0.0, 0.0, 0.047)
 			))
 			_add_box_collider(position_value + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), yaw)
+		elif kind == "rt-hotel" and h > 38.0 and w >= 33.0 and w <= 36.0 and d >= 25.0 and d <= 28.0:
+			# Building Model No.8 is one finished beachfront grand
+			# hotel measuring exactly 33.60 x 26.00 m and 49.07 m high
+			# (GLB AABB centre x/z = 0.0 / 0.0), authored for the three
+			# 34 x 26 m Corniche parcels on the X892 strip whose data
+			# heights (42/46/54 m) previously produced plain textured
+			# boxes.  Fixed scale keeps its 3.25 m guest floors,
+			# balconies and porte-cochere true at all three parcels.
+			# The exported rotY faces the authored entrance west,
+			# away from the X930 corniche road; a grand hotel must
+			# present its porte-cochere to the road (and its front
+			# balconies to the sea), so No.8 turns 180 degrees on
+			# the same rectangular parcel.
+			var hotel_yaw := yaw + PI
+			hotel_items.append(building)
+			hotel_transforms.append(_centered_model_transform(
+				position_value,
+				hotel_yaw,
+				Vector3.ONE,
+				Vector3.ZERO
+			))
+			_add_box_collider(position_value + Vector3(0.0, 3.80, 0.0), Vector3(32.40, 7.60, 22.40), hotel_yaw)
+			_add_box_collider(position_value + Vector3(0.0, 25.75, 0.0) + Basis(Vector3.UP, hotel_yaw) * Vector3(0.0, 0.0, -1.0), Vector3(26.80, 36.50, 18.40), hotel_yaw)
 		elif kind == "rt-hotel" and h >= 15.0 and h <= 38.0 and w <= 55.0 and d <= 38.0:
 			# Building Model No.3 is a finished podium residential/hotel
 			# block measuring exactly 32.40 x 24.60 m and 28.56 m high
@@ -4377,6 +4490,10 @@ func _build_buildings() -> void:
 	var premium_hero_built := _add_batched_model(buildings_root, "res://assets/buildings/hero_building.glb", hero_transforms, "BlenderHeroBuildings")
 	if not premium_hero_built:
 		for item in hero_items:
+			_add_generic_building(buildings_root, item)
+	var premium_hotel_built := _add_batched_model(buildings_root, "res://assets/buildings/grand_hotel.glb", hotel_transforms, "BlenderGrandHotels")
+	if not premium_hotel_built:
+		for item in hotel_items:
 			_add_generic_building(buildings_root, item)
 	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
 	_enhancement_stats["hero_building_models"] = hero_transforms.size()
@@ -4414,6 +4531,29 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_glass_detail_pass"] = premium_glass_built
 	_enhancement_stats["premium_glass_material_pass"] = premium_glass_built and _materials.has("tower_glass_physical") and _materials.has("tower_spandrel") and _materials.has("tower_stone") and _materials.has("tower_trim") and _materials.has("tower_metal")
 	_enhancement_stats["premium_glass_site_pass"] = premium_glass_built and _materials.has("villa_pavement") and _materials.has("villa_lawn") and _materials.has("villa_hedge")
+	# The 0.2.26 smoke proves the same chain for Building Model No.8:
+	# the grand-hotel GLB in the export must be the fixed-scale
+	# 33.60 x 26.00 x 49.07 m design with its dedicated Hotel*
+	# materials resolved to Godot PBR materials.
+	var premium_hotel_triangles := 0
+	var premium_hotel_parts := 0
+	if premium_hotel_built:
+		var hotel_parts := _get_model_parts("res://assets/buildings/grand_hotel.glb")
+		premium_hotel_parts = hotel_parts.size()
+		for hotel_part_variant in hotel_parts:
+			var hotel_part: Dictionary = hotel_part_variant
+			premium_hotel_triangles += _mesh_triangle_count(hotel_part.get("mesh") as Mesh)
+	_enhancement_stats["premium_hotel_models"] = hotel_transforms.size() if premium_hotel_built else 0
+	_enhancement_stats["premium_hotel_fixed_scale"] = premium_hotel_built
+	_enhancement_stats["premium_hotel_detail_pass"] = premium_hotel_built and premium_hotel_triangles >= 30000 and premium_hotel_parts >= 10
+	_enhancement_stats["premium_hotel_material_pass"] = premium_hotel_built and _materials.has("hotel_travertine") and _materials.has("hotel_bronze") and _materials.has("hotel_glass_physical") and _materials.has("hotel_black_granite") and _materials.has("hotel_pool_water")
+	_enhancement_stats["premium_hotel_site_pass"] = premium_hotel_built and _materials.has("hotel_teak") and _materials.has("hotel_warm_light") and _materials.has("hotel_accent_teal")
+	_enhancement_stats["premium_hotel_triangles"] = premium_hotel_triangles
+	_enhancement_stats["premium_hotel_model_parts"] = premium_hotel_parts
+	_enhancement_stats["premium_hotel_fronts_corniche"] = premium_hotel_built
+	_enhancement_stats["premium_hotel_height_m"] = 49.07
+	_enhancement_stats["premium_hotel_width_m"] = 33.60
+	_enhancement_stats["premium_hotel_depth_m"] = 26.00
 	_build_infill_buildings(buildings_root)
 
 
