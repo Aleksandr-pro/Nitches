@@ -50,8 +50,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=32'), 'Native 0.2.29 must bump Android versionCode to 32');
-assert(preset.includes('version/name="0.2.29-native-alpha"'), 'Native version name must be 0.2.29-native-alpha');
+assert(preset.includes('version/code=33'), 'Native 0.2.30 must bump Android versionCode to 33');
+assert(preset.includes('version/name="0.2.30-native-alpha"'), 'Native version name must be 0.2.30-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -139,6 +139,9 @@ assert(blenderScript.includes('def build_museum():') && blenderScript.includes('
 assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/buildings/museum.glb'), 'Native 0.2.29 must stage and load the Museum GLB');
 for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
+}
+for (const marker of ['directional_streaming_0230', 'update_streaming', '_streaming_tick', '_register_collider', 'streaming_colliders_total', 'STREAM_HIDE_BEHIND_M']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.30 directional-streaming marker is missing: ${marker}`);
 }
 for (const marker of ['class_name NativeMainMenu', 'play_requested', 'nitches_profile.cfg', 'get_spec_sheet', 'SPEC_TORQUE_NM', 'menu_requested', '_update_menu_camera']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.29 main-menu/spec marker is missing: ${marker}`);
