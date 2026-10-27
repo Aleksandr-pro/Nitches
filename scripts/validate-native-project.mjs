@@ -47,8 +47,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=22'), 'Native 0.2.19 must bump Android versionCode to 22');
-assert(preset.includes('version/name="0.2.19-native-alpha"'), 'Native version name must be 0.2.19-native-alpha');
+assert(preset.includes('version/code=23'), 'Native 0.2.20 must bump Android versionCode to 23');
+assert(preset.includes('version/name="0.2.20-native-alpha"'), 'Native version name must be 0.2.20-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -78,6 +78,11 @@ for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.gl
 assert(syncScript.includes('user_sand_beach_white.jpg'), 'Native asset sync is missing the 0.2.18 white-pebble texture');
 for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def build_grass_tuft():', 'def build_flower_clump():', 'def build_ornamental_shrub():']) {
   assert(blenderScript.includes(marker), `Blender vegetation builder is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_opera():') && blenderScript.includes('(build_opera, "opera_house.glb")'), 'Blender Building Model No.6 opera builder/export is missing');
+assert(syncScript.includes('opera_house.glb') && worldScript.includes('res://assets/buildings/opera_house.glb'), 'Native 0.2.20 must stage and load the RichTown Opera GLB');
+for (const marker of ['premium_opera_built', 'premium_opera_fixed_scale', 'premium_opera_detail_pass', 'premium_opera_material_pass', 'premium_opera_site_pass', 'premium_opera_fronts_boulevard', 'RichTownOpera', 'opera_glass_physical', 'opera_shell_ceramic']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.20 opera marker is missing: ${marker}`);
 }
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
@@ -383,6 +388,12 @@ assert(data.spawn.x === 760 && data.spawn.z === 330, 'Unexpected native spawn po
 
 const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
 assert(detailedCafeInfo.size > 2_500_000, 'Native 0.2.19 must use the detailed 2.86 MB PR #61 Dubai Premium Cafe, not the earlier lightweight GLB');
+const operaInfo = await stat('src/assets/models/props/opera_house.glb');
+assert(operaInfo.size > 250_000, 'Native 0.2.20 RichTown Opera GLB is unexpectedly small');
+const operaBytes = await readFile('src/assets/models/props/opera_house.glb');
+assert(operaBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Opera source is an LFS pointer or corrupt GLB');
+const operaLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-opera');
+assert(operaLandmark && operaLandmark.x === 820 && operaLandmark.z === 25 && operaLandmark.h === 22, 'RichTown Opera landmark must stay at X820 Z25 with the authored 22 m height');
 
 if (requireAssets) {
   const required = [
@@ -392,6 +403,7 @@ if (requireAssets) {
     'assets/buildings/main_tower.glb',
     'assets/buildings/hero_building.glb',
     'assets/buildings/townhouse.glb',
+    'assets/buildings/opera_house.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
     'assets/props/traffic_signal_short.glb',

@@ -336,6 +336,14 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 	for landmark_variant in data.get("landmarks", []):
 		var landmark: Dictionary = landmark_variant
 		var center := _item_position(landmark)
+		# Building Model No.6 has a rectangular 56 x 52 m world parcel
+		# after its Boulevard-facing yaw.  The generic landmark circle
+		# is only 14 m for this data row, which would let infill corners
+		# and roadside props land on the opera forecourt/service yard.
+		if String(landmark.get("kind", "")) == "rt-opera":
+			if absf(point.x - center.x) <= 28.0 + building_padding and absf(point.z - center.z) <= 26.0 + building_padding:
+				return false
+			continue
 		var radius := maxf(_f(landmark, "r", 18.0), 14.0) + building_padding
 		if Vector2(point.x - center.x, point.z - center.z).length_squared() < radius * radius:
 			return false
@@ -1497,6 +1505,82 @@ func _prop_material(material_name: String) -> Material:
 			main_water.clearcoat = 1.0
 			main_water.clearcoat_roughness = 0.06
 			return main_water
+		"OperaShell":
+			# Building Model No.6: glazed ceramic shell panels.  Marble
+			# micro-veining is only a fine ceramic grain at this world
+			# scale; the pleats, panel ribs and movement joints are real
+			# Blender geometry on the merged parametric vaults.
+			var opera_shell := _material("opera_shell_ceramic", "user_marble_tiles.jpg", "user_marble_tiles_normal.jpg", Color(0.94, 0.89, 0.79), 0.46, 0.04, Vector3(0.20, 0.20, 0.20), true)
+			opera_shell.normal_scale = 0.65
+			opera_shell.metallic_specular = 0.72
+			opera_shell.clearcoat_enabled = true
+			opera_shell.clearcoat = 0.28
+			opera_shell.clearcoat_roughness = 0.28
+			opera_shell.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return opera_shell
+		"OperaStone":
+			var opera_stone := _material("opera_travertine", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.86, 0.78, 0.64), 0.88, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			opera_stone.normal_scale = 1.15
+			opera_stone.metallic_specular = 0.48
+			return opera_stone
+		"OperaBronze":
+			var opera_bronze := _material("opera_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.38, 0.18), 0.34, 0.82, Vector3(0.45, 0.45, 0.45), true)
+			opera_bronze.metallic_specular = 0.95
+			return opera_bronze
+		"OperaGlass":
+			# The curved foyer and shell lunettes use the same reflective
+			# physical coating as the towers, calibrated more transparent
+			# so the modelled balconies, stairs and crimson curtain read
+			# through the glass instead of becoming an opaque blue sheet.
+			return _create_curtain_wall_material(
+				"opera_glass_physical",
+				false,
+				Color(0.020, 0.055, 0.072),
+				Color(0.060, 0.115, 0.145),
+				Color(0.250, 0.238, 0.214),
+				Color(0.110, 0.072, 0.038),
+				3.60,
+				3.00,
+				6.0,
+				0.56
+			)
+		"OperaInterior":
+			var opera_interior := _material("opera_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.160, 0.120, 0.090), 0.96, 0.0, Vector3(0.40, 0.40, 0.40), true)
+			opera_interior.metallic_specular = 0.22
+			return opera_interior
+		"OperaWood":
+			var opera_wood := _material("opera_oak", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.78, 0.48, 0.26), 0.76, 0.0, Vector3(0.36, 0.36, 0.36), true)
+			opera_wood.normal_scale = 1.10
+			opera_wood.metallic_specular = 0.46
+			return opera_wood
+		"OperaGranite":
+			var opera_granite := _material("opera_black_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.42, 0.44, 0.46), 0.36, 0.08, Vector3(0.26, 0.26, 0.26), true)
+			opera_granite.normal_scale = 0.95
+			opera_granite.metallic_specular = 0.86
+			opera_granite.clearcoat_enabled = true
+			opera_granite.clearcoat = 0.32
+			opera_granite.clearcoat_roughness = 0.24
+			return opera_granite
+		"OperaCurtain":
+			var opera_curtain := _material("opera_curtain_velvet", "cafe_linen.jpg", "cafe_linen_normal.png", Color(0.42, 0.050, 0.070), 0.98, 0.0, Vector3(2.50, 2.50, 2.50), true)
+			opera_curtain.normal_scale = 0.55
+			opera_curtain.metallic_specular = 0.20
+			return opera_curtain
+		"OperaWater":
+			var opera_water := _material("opera_reflecting_water", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.30, 0.62, 0.72, 0.96), 0.075, 0.0, Vector3(0.55, 0.55, 0.55), true)
+			opera_water.normal_scale = 0.42
+			opera_water.metallic_specular = 1.0
+			opera_water.clearcoat_enabled = true
+			opera_water.clearcoat = 0.90
+			opera_water.clearcoat_roughness = 0.045
+			opera_water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			return opera_water
+		"OperaLight":
+			var opera_light := _material("opera_warm_light", "", "", Color(1.0, 0.70, 0.36), 0.32, 0.0)
+			opera_light.emission_enabled = true
+			opera_light.emission = Color(1.0, 0.55, 0.20)
+			_register_night_material(opera_light, 0.0, 0.10, 0.62)
+			return opera_light
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -3199,7 +3283,7 @@ func _multimesh_visual_range(node_name: String) -> float:
 	# proxies in their builders; small street furniture simply retires
 	# once it is only a few pixels high. The unique 148 m flagship is
 	# never range-hidden and relies on generated mesh LOD instead.
-	if key.contains("main148mtower"):
+	if key.contains("main148mtower") or key.contains("richtownopera"):
 		return 0.0
 	if key.contains("blendervillas") or key.contains("blendertownhouses"):
 		return 210.0
@@ -3330,6 +3414,8 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "BlenderGlassTowers"
 	if path.ends_with("main_tower.glb"):
 		return "Main148mTower"
+	if path.ends_with("opera_house.glb"):
+		return "RichTownOpera"
 	if path.ends_with("street_lamp.glb"):
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
@@ -4492,10 +4578,52 @@ func _build_landmarks() -> void:
 				_add_box(root, Vector3(42.0, 3.0, 16.0), pos + Vector3(0.0, 1.5, 0.0), marble)
 				_add_box_collider(pos + Vector3(0.0, 9.0, 0.0), Vector3(40.0, 18.0, 10.0))
 			"rt-opera":
-				_add_box(root, Vector3(48.0, 6.0, 28.0), pos + Vector3(0.0, 3.0, 0.0), marble)
-				for i in 3:
-					_add_sphere(root, 11.0 - float(i) * 1.4, h, pos + Vector3(-14.0 + float(i) * 14.0, 6.0 + h * 0.24, 0.0), sand)
-				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(48.0, h, 28.0))
+				# Building Model No.6 is a fixed-scale 52.00 x 56.00 m
+				# civic parcel and exactly 22.00 m high.  Blender -Y is
+				# the public front; -PI/2 turns that curved foyer west
+				# toward RichTown Boulevard (x=760), leaving the fly
+				# tower and loading dock on the eastern service side.
+				# The primitive marble box and three sand spheres are gone.
+				var opera_path := "res://assets/buildings/opera_house.glb"
+				var opera_parts := _get_model_parts(opera_path)
+				var opera_triangles := 0
+				var opera_aabb := AABB()
+				var opera_has_aabb := false
+				for opera_part_variant in opera_parts:
+					var opera_part: Dictionary = opera_part_variant
+					var opera_mesh := opera_part.get("mesh") as Mesh
+					if opera_mesh == null:
+						continue
+					opera_triangles += _mesh_triangle_count(opera_mesh)
+					var opera_part_aabb := opera_mesh.get_aabb()
+					opera_aabb = opera_part_aabb if not opera_has_aabb else opera_aabb.merge(opera_part_aabb)
+					opera_has_aabb = true
+				var opera_size := opera_aabb.size if opera_has_aabb else Vector3.ZERO
+				var opera_yaw := -PI * 0.5
+				var opera_transform := _centered_model_transform(pos, opera_yaw, Vector3.ONE, Vector3.ZERO)
+				var opera_built := _add_batched_model(root, opera_path, [opera_transform], "RichTownOpera")
+				_enhancement_stats["premium_opera_built"] = opera_built
+				_enhancement_stats["premium_opera_fixed_scale"] = opera_built and opera_has_aabb and absf(opera_size.x - 52.0) <= 0.25 and absf(opera_size.y - 22.0) <= 0.20 and absf(opera_size.z - 56.0) <= 0.25
+				_enhancement_stats["premium_opera_detail_pass"] = opera_built and opera_parts.size() >= 14 and opera_triangles >= 18000
+				_enhancement_stats["premium_opera_material_pass"] = opera_built and _materials.has("opera_shell_ceramic") and _materials.has("opera_travertine") and _materials.has("opera_bronze") and _materials.has("opera_glass_physical") and _materials.has("opera_interior") and _materials.has("opera_oak") and _materials.has("opera_black_granite") and _materials.has("opera_curtain_velvet") and _materials.has("opera_reflecting_water") and _materials.has("opera_warm_light")
+				_enhancement_stats["premium_opera_site_pass"] = opera_built and _materials.has("villa_pavement") and _materials.has("villa_limestone") and _materials.has("villa_lawn") and _materials.has("villa_hedge") and _materials.has("villa_mulch")
+				_enhancement_stats["premium_opera_model_parts"] = opera_parts.size()
+				_enhancement_stats["premium_opera_triangles"] = opera_triangles
+				_enhancement_stats["premium_opera_width_m"] = opera_size.x
+				_enhancement_stats["premium_opera_height_m"] = opera_size.y
+				_enhancement_stats["premium_opera_depth_m"] = opera_size.z
+				_enhancement_stats["premium_opera_fronts_boulevard"] = opera_built and absf(opera_yaw + PI * 0.5) <= 0.001
+				if not opera_built:
+					_add_box(root, Vector3(48.0, 6.0, 28.0), pos + Vector3(0.0, 3.0, 0.0), marble)
+					for i in 3:
+						_add_sphere(root, 11.0 - float(i) * 1.4, h, pos + Vector3(-14.0 + float(i) * 14.0, 6.0 + h * 0.24, 0.0), sand)
+				var opera_basis := Basis(Vector3.UP, opera_yaw)
+				_add_box_collider(pos + Vector3(0.0, 0.25, 0.0), Vector3(52.0, 0.50, 56.0), opera_yaw)
+				_add_box_collider(pos + opera_basis * Vector3(0.0, 11.0, 2.0), Vector3(46.70, 22.00, 36.70), opera_yaw)
+				_add_box_collider(pos + opera_basis * Vector3(0.0, 10.10, 14.50), Vector3(25.55, 20.20, 10.55), opera_yaw)
+				_add_box_collider(pos + opera_basis * Vector3(0.0, 0.45, -21.55), Vector3(39.00, 0.90, 3.82), opera_yaw)
+				_add_box_collider(pos + opera_basis * Vector3(0.0, 0.80, -25.65), Vector3(10.50, 1.60, 0.60), opera_yaw)
+				_add_cylinder_collider(pos + opera_basis * Vector3(-20.20, 2.50, -22.40), 1.55, 5.00)
 			"rt-mosque":
 				_add_box(root, Vector3(34.0, 13.0, 30.0), pos + Vector3(0.0, 6.5, 0.0), sand)
 				_add_sphere(root, 11.5, 19.0, pos + Vector3(0.0, 15.0, 0.0), marble)
