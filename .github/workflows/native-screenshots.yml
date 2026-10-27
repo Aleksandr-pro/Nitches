@@ -1,0 +1,161 @@
+# Visual-audit screenshots from the real game.
+#
+# The shipped Godot scene carries a `--native-screenshots` mode (see
+# `native/scripts/main.gd`): it drives its own camera through authored
+# RichTown viewpoints, saves real rendered PNG frames and quits.  This
+# workflow runs that mode on a virtual X display with Mesa lavapipe
+# (software Vulkan), so every native delivery can be checked with
+# actual in-game screenshots instead of smoke logs alone.  It is a
+# separate workflow on purpose: a flaky software-renderer run can
+# never block the Android/desktop game builds.
+name: Native Game Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    paths:
+      - 'native/**'
+      - 'scripts/export-native-world.mjs'
+      - 'scripts/sync-native-assets.mjs'
+      - 'scripts/generate_dubai_premium_cafe.py'
+      - 'src/world/realWorld.js'
+      - 'src/assets/models/**'
+      - 'src/assets/textures/realworld/**'
+      - 'public/assets/models/**'
+      - '.github/workflows/native-screenshots.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: '4.7.2'
+  GODOT_STATUS: 'stable'
+  PROJECT_PATH: native
+  SHOT_DIR: screenshots
+
+jobs:
+  screenshots:
+    name: Render in-game screenshots (software Vulkan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout (LFS runtime model is pulled explicitly)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch and verify the Mustang LFS model
+        run: |
+          set -euo pipefail
+          git lfs version
+          git lfs install --local
+          git lfs pull --include="public/assets/models/**" --exclude=""
+          git lfs ls-files
+          node scripts/check-lfs-assets.mjs
+
+      - name: Generate native world data and stage Godot assets
+        run: |
+          set -euo pipefail
+          node scripts/export-native-world.mjs
+          node scripts/sync-native-assets.mjs
+          node scripts/validate-native-project.mjs --require-assets
+
+      - name: Install virtual display and software Vulkan (Mesa lavapipe)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb mesa-vulkan-drivers libvulkan1 vulkan-tools \
+            libxcursor1 libxinerama1 libxrandr2 libxi6 libxext6 \
+            libxrender1 libxfixes3 libgl1 libasound2t64
+          ls /usr/share/vulkan/icd.d/
+          vulkaninfo --summary || true
+
+      - name: Cache Godot editor and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/nitches-godot/${{ env.GODOT_VERSION }}
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_STATUS }}-linux-x86_64-v1
+
+      - name: Download official Godot editor
+        run: |
+          set -euo pipefail
+          GODOT_DIR="$HOME/.cache/nitches-godot/$GODOT_VERSION"
+          GODOT_BIN="$GODOT_DIR/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          mkdir -p "$GODOT_DIR"
+          if [ ! -x "$GODOT_BIN" ]; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-editor.zip" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -q -o "$RUNNER_TEMP/godot-editor.zip" -d "$GODOT_DIR"
+            chmod +x "$GODOT_BIN"
+          fi
+          "$GODOT_BIN" --headless --version
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Import Godot project
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-logs"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" --import --quit \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/import.log"
+
+      - name: Run the in-game screenshot tour (Xvfb + lavapipe)
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/$SHOT_DIR"
+          ICD="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
+          echo "Using lavapipe ICD: $ICD"
+          export VK_ICD_FILENAMES="$ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          timeout 1500 xvfb-run -a -s "-screen 0 1280x720x24 +render" \
+            "$GODOT_BIN" --path "$PROJECT_PATH" \
+            --resolution 1280x720 \
+            --rendering-driver vulkan \
+            --audio-driver Dummy \
+            -- --native-screenshots="$GITHUB_WORKSPACE/$SHOT_DIR" \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/screenshots.log"
+          grep -F "[native-screenshots] DONE" "$RUNNER_TEMP/native-logs/screenshots.log"
+          if grep -E "SCRIPT ERROR|\[native-screenshots\] FAIL" "$RUNNER_TEMP/native-logs/screenshots.log"; then
+            echo "Screenshot tour reported a runtime problem" >&2
+            exit 1
+          fi
+          ls -lh "$GITHUB_WORKSPACE/$SHOT_DIR"
+          count="$(find "$GITHUB_WORKSPACE/$SHOT_DIR" -name '*.png' | wc -l)"
+          echo "PNG screenshots: $count"
+          test "$count" -ge 8
+
+      - name: Collect diagnostics next to the screenshots
+        if: always()
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/$SHOT_DIR"
+          cp -f "$RUNNER_TEMP/native-logs/screenshots.log" "$GITHUB_WORKSPACE/$SHOT_DIR/screenshot-run.log" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP/native-logs/import.log" "$GITHUB_WORKSPACE/$SHOT_DIR/import.log" 2>/dev/null || true
+          {
+            echo "## In-game screenshots"
+            echo ""
+            ls -1 "$GITHUB_WORKSPACE/$SHOT_DIR" || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-screenshots
+          path: screenshots/
+          retention-days: 90
+          if-no-files-found: warn
