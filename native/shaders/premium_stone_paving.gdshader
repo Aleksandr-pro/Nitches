@@ -53,11 +53,32 @@ vec3 sample_stone_albedo(vec2 plane) {
 	vec2 uv_b = vec2(plane.y, -plane.x) * texture_scale * 0.781 + vec2(0.317, 0.673);
 	vec3 a = texture(stone_texture, uv_a).rgb;
 	vec3 b = texture(stone_texture, uv_b).rgb;
-	float blend = smoothstep(0.28, 0.72, value_noise(plane * 0.061 + 17.3));
-	vec3 colour = mix(a, b, blend * 0.46);
+	float blend = smoothstep(0.38, 0.68, value_noise(plane * 0.061 + 17.3));
+	// 0.2.19: the second orientation is now only a low-contrast breaker.
+	// The 0.2.18 46% cross-fade washed the photographed joints into one
+	// cream field at the phone's 42% render scale.
+	vec3 colour = mix(a, b, blend * 0.18);
 	float fine = texture(fine_texture, plane * 1.37).r;
-	colour *= 0.88 + 0.20 * fine;
+	colour *= 0.84 + 0.26 * fine;
 	return colour;
+}
+
+float formal_slab_joint(vec2 plane) {
+	// Large 3.0 x 1.5 m granite slabs.  World alignment is deliberate:
+	// the joints reinforce the boulevard's longitudinal perspective and
+	// remain legible after mobile downscaling without becoming small
+	// bathroom tiles.
+	vec2 slab_size = vec2(3.0, 1.5);
+	vec2 grid = plane / slab_size;
+	vec2 cell_position = fract(grid);
+	vec2 edge_distance = min(cell_position, vec2(1.0) - cell_position) * slab_size;
+	float nearest_edge = min(edge_distance.x, edge_distance.y);
+	float aa = max(fwidth(nearest_edge) * 1.35, 0.006);
+	return 1.0 - smoothstep(0.018, 0.018 + aa, nearest_edge);
+}
+
+float formal_slab_id(vec2 plane) {
+	return hash12(floor(plane / vec2(3.0, 1.5)) + vec2(41.7, 9.3));
 }
 
 vec3 sample_stone_normal(vec2 plane) {
@@ -83,13 +104,18 @@ void fragment() {
 	float polished_wear = smoothstep(0.72, 0.96, value_noise(plane * vec2(0.077, 0.29) + 29.0));
 	colour *= 1.0 - polished_wear * 0.055;
 
+	float slab_id = formal_slab_id(plane);
+	colour *= 0.94 + slab_id * 0.11;
+	float slab_joint = formal_slab_joint(plane);
+	colour *= 1.0 - slab_joint * 0.24;
+
 	ALBEDO = colour;
 	if (use_textures) {
 		NORMAL_MAP = sample_stone_normal(plane);
 		NORMAL_MAP_DEPTH = normal_strength;
 	}
-	ROUGHNESS = clamp(base_roughness - polished_wear * 0.09 + (footpath_variation - 0.5) * 0.045, 0.52, 0.96);
+	ROUGHNESS = clamp(base_roughness - polished_wear * 0.09 + (footpath_variation - 0.5) * 0.045 + slab_joint * 0.10, 0.52, 0.96);
+	AO = 1.0 - slab_joint * 0.16;
 	METALLIC = 0.0;
 	SPECULAR = 0.38;
-	AO = 1.0;
 }
