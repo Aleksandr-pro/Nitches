@@ -4690,10 +4690,10 @@ def build_museum():
         obj.data.update()
         return obj
 
-    def panel_wall(face, fixed, sign, cols, pitch, openings, rows=8, pitch_h=1.95, z_base=0.60):
+    def panel_wall(face, fixed, sign, cols, pitch, openings, rows=8, pitch_h=1.95, z_base=0.60, centre_offset=0.0):
         length = cols * pitch
         for c in range(cols):
-            centre = -length * 0.5 + pitch * (c + 0.5)
+            centre = centre_offset - length * 0.5 + pitch * (c + 0.5)
             for r in range(rows):
                 zc = z_base + pitch_h * (r + 0.5)
                 skip = False
@@ -4732,7 +4732,7 @@ def build_museum():
 
     def punched_window(face, fixed, sign, centre, zc, w=1.70, h=1.55):
         if face in ("front", "back"):
-            box("museum_win_frame", centre, fixed + sign * 0.045, zc, w + 0.16, 0.13, h + 0.16, frame)
+            box("museum_win_frame", centre, fixed + sign * 0.045, zc, w + 0.16, 0.13, h + 0.16, bronze)
             box("museum_win_interior", centre, fixed - sign * 0.22, zc, w - 0.04, 0.05, h - 0.04, interior)
             box("museum_win_glass", centre, fixed + sign * 0.085, zc, w, 0.04, h, glass)
             box("museum_win_sill", centre, fixed + sign * 0.09, zc - h * 0.5 - 0.06, w + 0.30, 0.24, 0.09, trav)
@@ -4781,16 +4781,16 @@ def build_museum():
     # the front (local -Y end of each side wall).
     for face, fixed, sign in (("left", -side_x, -1.0), ("right", side_x, 1.0)):
         panel_wall(face, fixed, sign, 10, 2.96, [
-            (-8.05, -6.75, 2.40, 14.40), (0.85, 2.15, 2.40, 14.40), (6.75, 8.05, 2.40, 14.40),
-            (-14.90, -8.80, 0.00, 4.60),
-        ])
-        for sc in (-7.40, 1.48, 7.40):
+            (-7.05, -5.75, 2.40, 14.40), (1.85, 3.15, 2.40, 14.40), (7.75, 9.05, 2.40, 14.40),
+            (-13.90, -7.80, 0.00, 4.60),
+        ], centre_offset=1.0)
+        for sc in (-6.40, 2.48, 8.40):
             slit(face, fixed, sign, sc, pitch=2.96)
-        box("museum_cafe_interior", fixed - sign * 0.30, -11.84, 2.55, 0.06, 5.80, 3.80, interior)
-        box("museum_cafe_glass", fixed + sign * 0.02, -11.84, 2.55, 0.05, 5.80, 3.80, glass)
-        for my in (-14.30, -12.85, -11.40, -9.95):
+        box("museum_cafe_interior", fixed - sign * 0.30, -10.84, 2.55, 0.06, 5.80, 3.80, interior)
+        box("museum_cafe_glass", fixed + sign * 0.02, -10.84, 2.55, 0.05, 5.80, 3.80, glass)
+        for my in (-13.30, -11.85, -10.40, -8.95):
             box("museum_cafe_mullion", fixed + sign * 0.06, my, 2.55, 0.07, 0.09, 3.80, bronze)
-        box("museum_cafe_head", fixed + sign * 0.07, -11.84, 4.52, 0.16, 6.10, 0.14, bronze)
+        box("museum_cafe_head", fixed + sign * 0.07, -10.84, 4.52, 0.16, 6.10, 0.14, bronze)
     for sc in (-18.24, -12.16, 12.16, 18.24):
         slit("front", front_y, -1.0, sc)
 
@@ -4845,11 +4845,20 @@ def build_museum():
     for cxp in (-5.90, 5.90):
         cyl("museum_canopy_column", cxp, -16.20, 2.57, 0.09, 3.94, bronze, vertices=12)
 
-    # Exhibition banners flanking the slot.
+    # Exhibition banners flanking the slot: cloth on a pale backing
+    # plate with bronze standoffs, so they read as banners, not slits.
     for bx, bmat in ((-8.90, banner_teal), (8.90, banner_ochre)):
-        tube_between("museum_banner_rod", (bx - 0.95, -14.05, 13.55), (bx + 0.95, -14.05, 13.55), 0.035, 0.035, bronze, vertices=8)
-        box("museum_banner", bx, -14.02, 10.55, 1.70, 0.06, 5.80, bmat)
-        box("museum_banner_bar", bx, -14.02, 7.60, 1.80, 0.08, 0.10, bronze)
+        box("museum_banner_backing", bx, -13.98, 9.60, 2.15, 0.05, 6.30, white)
+        box("museum_banner", bx, -14.03, 9.60, 1.85, 0.05, 5.90, bmat)
+        tube_between("museum_banner_rod", (bx - 1.10, -14.08, 12.72), (bx + 1.10, -14.08, 12.72), 0.035, 0.035, bronze, vertices=8)
+        box("museum_banner_bar", bx, -14.03, 6.58, 1.95, 0.08, 0.10, bronze)
+        for ax in (-0.85, 0.85):
+            tube_between("museum_banner_arm", (bx + ax, -13.90, 12.72), (bx + ax, -14.10, 12.72), 0.028, 0.028, bronze, vertices=8)
+    # Entrance pylons marking the axis.
+    for tx in (-7.80, 7.80):
+        box("museum_entry_pylon", tx, -16.35, 2.70, 0.62, 0.34, 4.20, granite)
+        box("museum_entry_pylon_light", tx, -16.54, 3.40, 0.12, 0.03, 2.60, light)
+        box("museum_entry_pylon_cap", tx, -16.35, 4.86, 0.70, 0.42, 0.12, bronze)
 
     # ---- rear garden slot, cafe depth and loading dock ------------------
     box("museum_rear_backdrop", 0.0, 12.40, 8.40, 9.00, 0.30, 15.60, white)
@@ -4879,12 +4888,27 @@ def build_museum():
     for i in range(4):
         box("museum_vent_louvre", -17.50, 15.90, 3.30 + 0.34 * i, 2.20, 0.08, 0.20, frame)
 
+    # Granite base band around the gallery mass.
+    box("museum_base_band_f_l", -14.90, -13.88, 1.05, 15.80, 0.12, 0.90, granite)
+    box("museum_base_band_f_r", 14.90, -13.88, 1.05, 15.80, 0.12, 0.90, granite)
+    box("museum_base_band_b_l", -14.10, 15.88, 1.05, 17.40, 0.12, 0.90, granite)
+    box("museum_base_band_b_m", 7.60, 15.88, 1.05, 4.40, 0.12, 0.90, granite)
+    box("museum_base_band_b_r", 18.65, 15.88, 1.05, 8.30, 0.12, 0.90, granite)
+    box("museum_base_band_l", -22.88, 1.00, 1.05, 0.12, 29.60, 0.90, granite)
+    box("museum_base_band_r", 22.88, 1.00, 1.05, 0.12, 29.60, 0.90, granite)
+
     # ---- floating roof slab, clerestory lantern, roof plant -------------
     box("museum_roof_slab", 0.0, 1.00, 16.48, 49.60, 33.60, 0.55, white, bevel=0.02)
     box("museum_roof_fascia_f", 0.0, -15.82, 16.48, 49.60, 0.10, 0.36, bronze)
     box("museum_roof_fascia_b", 0.0, 17.82, 16.48, 49.60, 0.10, 0.36, bronze)
     box("museum_roof_fascia_l", -24.82, 1.00, 16.48, 0.10, 33.60, 0.36, bronze)
     box("museum_roof_fascia_r", 24.82, 1.00, 16.48, 0.10, 33.60, 0.36, bronze)
+    box("museum_frieze_f_l", -15.20, -13.94, 15.52, 15.20, 0.08, 0.55, bronze)
+    box("museum_frieze_f_r", 15.20, -13.94, 15.52, 15.20, 0.08, 0.55, bronze)
+    box("museum_frieze_b_l", -13.70, 15.94, 15.52, 18.20, 0.08, 0.55, bronze)
+    box("museum_frieze_b_r", 13.70, 15.94, 15.52, 18.20, 0.08, 0.55, bronze)
+    box("museum_frieze_l", -22.94, 1.00, 15.52, 0.08, 29.60, 0.55, bronze)
+    box("museum_frieze_r", 22.94, 1.00, 15.52, 0.08, 29.60, 0.55, bronze)
     box("museum_roof_light_slot_f", 0.0, -15.15, 16.18, 48.20, 0.14, 0.05, light)
     box("museum_roof_light_slot_b", 0.0, 17.15, 16.18, 48.20, 0.14, 0.05, light)
     box("museum_roof_field", 0.0, 1.00, 16.79, 45.00, 29.00, 0.06, dark)
@@ -4927,13 +4951,16 @@ def build_museum():
     rbox("museum_sculpture_slab_a", 17.60, -15.90, 2.35, 0.22, 1.70, 2.20, trav, rotation=(0.0, 0.42, 0.0))
     rbox("museum_sculpture_slab_b", 17.60, -15.90, 2.30, 1.70, 0.22, 2.05, granite, rotation=(0.0, -0.35, 0.0))
     box("museum_plinth_c", 21.40, -15.20, 1.00, 1.20, 1.20, 0.80, granite)
-    bpy.ops.mesh.primitive_torus_add(major_radius=1.05, minor_radius=0.15, major_segments=30, minor_segments=10, location=(21.40, -15.20, 2.55))
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.25, minor_radius=0.16, major_segments=32, minor_segments=10, location=(21.40, -15.20, 2.90))
     ring = bpy.context.active_object
     ring.name = "museum_sculpture_ring"
     finish(ring, bronze, smooth=True)
-    for px in (-9.50, 9.50):
-        box("museum_planter", px, -16.30, 0.88, 6.00, 1.20, 0.55, granite)
-        box("museum_planter_hedge", px, -16.30, 1.28, 5.70, 0.95, 0.30, hedge)
+    for bxp in (11.00, 19.00):
+        box("museum_front_bench_top", bxp, -14.55, 1.02, 2.40, 0.55, 0.14, trav)
+        for fx in (-0.90, 0.90):
+            box("museum_front_bench_foot", bxp + fx, -14.55, 0.82, 0.18, 0.48, 0.42, granite)
+    for cxp in (-20.00, -11.00):
+        box("museum_pool_seat", cxp, -18.25, 0.58, 0.55, 0.55, 0.55, granite)
     for tx in (-11.50, 11.50):
         box("museum_totem", tx, -18.30, 2.10, 0.55, 0.28, 3.60, granite)
         box("museum_totem_band", tx, -18.46, 3.30, 0.57, 0.04, 0.85, bronze)
@@ -4941,6 +4968,19 @@ def build_museum():
     for bx3 in (-20.0, -17.0, 17.0, 20.0):
         cyl("museum_plaza_bollard", bx3, -18.55, 0.72, 0.07, 0.85, bronze, vertices=10)
         cyl("museum_plaza_bollard_light", bx3, -18.55, 1.16, 0.073, 0.06, light, vertices=10)
+    # Side aprons: long planter hedges, stone benches and clipped trees
+    # so the flanks are furnished, not empty travertine.
+    for sx in (-24.35, 24.35):
+        box("museum_side_planter", sx, 1.00, 0.85, 1.00, 26.00, 0.50, granite)
+        box("museum_side_hedge", sx, 1.00, 1.22, 0.78, 25.60, 0.34, hedge)
+        for by in (-6.0, 8.0):
+            box("museum_side_bench_top", sx * 0.965, by, 1.02, 0.55, 2.30, 0.14, trav)
+            for fy in (-0.85, 0.85):
+                box("museum_side_bench_foot", sx * 0.965, by + fy, 0.82, 0.48, 0.18, 0.42, granite)
+        for ty in (-13.00, 15.00):
+            box("museum_tree_planter", sx, ty, 0.95, 1.50, 1.50, 0.70, granite)
+            cyl("museum_tree_trunk", sx, ty, 1.75, 0.07, 1.00, frame, vertices=8)
+            sphere("museum_tree_crown", sx, ty, 2.95, 2.10, 2.10, 2.00, hedge)
 
 
 def main():
