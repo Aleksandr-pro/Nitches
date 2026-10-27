@@ -405,6 +405,11 @@ func _run_smoke_checks() -> void:
 	var promenade_surface := _world.get_surface_at(Vector3(738.0, 4.0, 23.0))
 	if String(promenade_surface.get("kind", "")) != "plaza":
 		failures.append("spawn-side RichTown promenade is not classified as premium stone: %s" % str(promenade_surface))
+	if not bool(enhancement_stats.get("parks_0222", false)) or int(enhancement_stats.get("parks", 0)) < 3 or float(enhancement_stats.get("park_area_m2", 0.0)) < 22000.0 or float(enhancement_stats.get("park_lawn_area_m2", 0.0)) < 9000.0 or int(enhancement_stats.get("park_trees", 0)) < 38 or int(enhancement_stats.get("park_palms", 0)) < 70 or int(enhancement_stats.get("park_bushes", 0)) < 55 or int(enhancement_stats.get("park_ground_cover", 0)) < 1600 or float(enhancement_stats.get("park_hedge_length_m", 0.0)) < 420.0 or int(enhancement_stats.get("park_benches", 0)) < 34 or int(enhancement_stats.get("park_lamps", 0)) < 18 or int(enhancement_stats.get("park_topiary", 0)) < 14 or not bool(enhancement_stats.get("central_park_fountain_garden", false)) or not bool(enhancement_stats.get("museum_garden_pergola", false)) or not bool(enhancement_stats.get("beach_palmetum_rondel", false)):
+		failures.append("0.2.22 RichTown parks (Central Park/Museum Garden/Corniche Palmetum) pass is incomplete: %s" % str(enhancement_stats))
+	var park_surface := _world.get_surface_at(Vector3(610.0, 4.0, -60.0))
+	if String(park_surface.get("kind", "")) != "grass":
+		failures.append("Central Park lawn is not classified as grass: %s" % str(park_surface))
 	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
@@ -516,7 +521,7 @@ func _run_smoke_checks() -> void:
 
 	var hud_state := _hud.get_smoke_state()
 	var minimap_counts: Dictionary = hud_state.get("minimap_counts", {})
-	if int(minimap_counts.get("roads", 0)) < 35 or int(minimap_counts.get("buildings", 0)) < 45:
+	if int(minimap_counts.get("roads", 0)) < 35 or int(minimap_counts.get("buildings", 0)) < 45 or int(minimap_counts.get("parks", 0)) < 3:
 		failures.append("minimap did not receive complete world data: %s" % str(minimap_counts))
 	var performance_text := String(hud_state.get("performance_text", ""))
 	if performance_text.is_empty() or performance_text == "FPS —" or performance_text.contains("WORLD DATA ERROR"):
