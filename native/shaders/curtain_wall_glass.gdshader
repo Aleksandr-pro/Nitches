@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_alpha_prepass, cull_back;
+render_mode blend_mix, depth_prepass_alpha, cull_back;
 
 // Native 0.2.17 environment-reflective curtain-wall glass.  The
 // 0.2.16 phone result swung too far the other way: a 0.62 metallic

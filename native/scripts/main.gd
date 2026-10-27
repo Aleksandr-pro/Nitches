@@ -26,6 +26,9 @@ var _time_index := 0
 var _smoke_mode := false
 var _smoke_frames := 0
 var _smoke_completed := false
+var _screenshot_mode := false
+var _screenshot_dir := ""
+var _screenshot_free_camera := false
 var render_quality_state := {}
 var _render_scale := 1.0
 var _render_quality_accumulated_time := 0.0
@@ -40,7 +43,8 @@ var _camera_smoothing_initialized := false
 
 func _ready() -> void:
 	_smoke_mode = OS.get_cmdline_user_args().has("--native-smoke") or OS.get_cmdline_args().has("--native-smoke")
-	Engine.max_fps = 60
+	_parse_screenshot_request()
+	Engine.max_fps = 0 if _screenshot_mode else 60
 	if OS.has_feature("android"):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_configure_render_quality(true)
@@ -76,6 +80,8 @@ func _ready() -> void:
 	_apply_time_mode()
 	_update_camera(0.0, true)
 	print("[native] Nitches Horizon Godot alpha is ready")
+	if _screenshot_mode:
+		_run_screenshot_tour()
 
 
 func _configure_render_quality(initial: bool) -> void:
@@ -231,8 +237,13 @@ func _process(delta: float) -> void:
 	_update_adaptive_render_quality(delta)
 	if _camera != null and not _camera.is_current():
 		_camera.make_current()
-	_update_camera(delta, _snap_camera)
-	_snap_camera = false
+	if _screenshot_mode and _screenshot_free_camera:
+		# The screenshot tour owns the camera for the current shot; the
+		# follow rig must not fight the authored viewpoint.
+		pass
+	else:
+		_update_camera(delta, _snap_camera)
+		_snap_camera = false
 	if _smoke_mode and not _smoke_completed:
 		_smoke_frames += 1
 		if _smoke_frames >= 90:
@@ -580,3 +591,176 @@ func _finish_smoke(failures: Array[String]) -> void:
 	for failure in failures:
 		push_error("[native-smoke] FAIL: %s" % failure)
 	get_tree().quit(2)
+
+
+## ---------------------------------------------------------------------
+## Visual-audit screenshot tour (`--native-screenshots[=<dir>]`).
+##
+## The same shipped game scene drives its own camera through authored
+## viewpoints of RichTown, saves real rendered PNG frames and quits.
+## CI (`.github/workflows/native-screenshots.yml`) runs it on a virtual
+## display with software Vulkan, so every delivery can be checked with
+## actual in-game screenshots instead of logs alone.  The mode is inert
+## unless the command-line flag (or the NITCHES_SCREENSHOT_DIR fallback
+## used together with the flag) is present; normal players never see it.
+## Camera/target Y values are metres above the terrain at that XZ.
+func _parse_screenshot_request() -> void:
+	var args: Array[String] = []
+	for arg in OS.get_cmdline_user_args():
+		args.append(arg)
+	for arg in OS.get_cmdline_args():
+		args.append(arg)
+	for arg in args:
+		if arg == "--native-screenshots":
+			_screenshot_mode = true
+		elif arg.begins_with("--native-screenshots="):
+			_screenshot_mode = true
+			_screenshot_dir = arg.trim_prefix("--native-screenshots=")
+	if not _screenshot_mode:
+		return
+	if _screenshot_dir.is_empty():
+		_screenshot_dir = OS.get_environment("NITCHES_SCREENSHOT_DIR")
+	if _screenshot_dir.is_empty():
+		_screenshot_dir = "user://screenshots"
+	if _screenshot_dir.begins_with("res://") or _screenshot_dir.begins_with("user://"):
+		_screenshot_dir = ProjectSettings.globalize_path(_screenshot_dir)
+	print("[native-screenshots] mode enabled, output dir: ", _screenshot_dir)
+
+
+func _run_screenshot_tour() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	# CI renders on Mesa lavapipe (software Vulkan): MSAA is the one
+	# full-screen cost that changes almost nothing for a visual audit,
+	# so swap it for FXAA in this mode only.  Shipped quality settings
+	# on real devices are untouched.
+	var viewport := get_viewport()
+	viewport.msaa_3d = Viewport.MSAA_DISABLED
+	viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+	print("[native-screenshots] adapter=%s vendor=%s" % [
+		RenderingServer.get_video_adapter_name(),
+		RenderingServer.get_video_adapter_vendor(),
+	])
+	# Software rendering in CI produces very slow frames; let each one
+	# advance physics far enough for the car to settle on its wheels.
+	Engine.max_physics_steps_per_frame = 60
+	var make_err := DirAccess.make_dir_recursive_absolute(_screenshot_dir)
+	if make_err != OK and not DirAccess.dir_exists_absolute(_screenshot_dir):
+		push_error("[native-screenshots] FAIL: cannot create output dir %s (error %d)" % [_screenshot_dir, make_err])
+		get_tree().quit(1)
+		return
+
+	var shots: Array[Dictionary] = [
+		{
+			"name": "01_spawn_gameplay", "time": "day", "hud": true,
+			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
+		},
+		{
+			"name": "02_mosque_east", "time": "day", "vehicle": "hide",
+			"camera": Vector3(678.0, 13.0, 366.0), "target": Vector3(622.0, 11.0, 335.0),
+		},
+		{
+			"name": "03_mosque_street", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(655.0, 0.0, 335.0),
+			"camera": Vector3(670.0, 2.4, 358.0), "target": Vector3(628.0, 9.0, 336.0),
+		},
+		{
+			"name": "04_opera_boulevard", "time": "day", "vehicle": "hide",
+			"camera": Vector3(768.0, 9.0, 72.0), "target": Vector3(820.0, 9.0, 25.0),
+		},
+		{
+			"name": "05_boulevard_cafe", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(740.0, 0.0, 30.0),
+			"camera": Vector3(724.0, 2.6, 68.0), "target": Vector3(758.0, 4.5, 6.0),
+		},
+		{
+			"name": "06_main_tower", "time": "day", "vehicle": "hide",
+			"camera": Vector3(552.0, 26.0, -64.0), "target": Vector3(665.0, 58.0, -170.0),
+		},
+		{
+			"name": "07_central_park_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(548.0, 15.0, 2.0), "target": Vector3(622.0, 3.0, -68.0),
+		},
+		{
+			"name": "08_city_aerial_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(430.0, 165.0, 240.0), "target": Vector3(730.0, 8.0, -30.0),
+		},
+	]
+
+	# Warm-up: import/runtime LOD, reflection probes and visibility
+	# ranges all settle over the first rendered frames.
+	for i in range(4):
+		await RenderingServer.frame_post_draw
+
+	var saved := 0
+	for shot in shots:
+		if await _capture_screenshot(shot):
+			saved += 1
+	print("[native-screenshots] DONE saved=%d/%d dir=%s" % [saved, shots.size(), _screenshot_dir])
+	get_tree().quit(0 if saved == shots.size() else 1)
+
+
+func _capture_screenshot(shot: Dictionary) -> bool:
+	var shot_started_ms := Time.get_ticks_msec()
+	var shot_name := String(shot.get("name", "shot"))
+	var wanted_time_index := maxi(TIME_MODES.find(String(shot.get("time", "day"))), 0)
+	if wanted_time_index != _time_index:
+		_time_index = wanted_time_index
+		_apply_time_mode()
+	if _hud != null:
+		_hud.visible = bool(shot.get("hud", false))
+
+	match String(shot.get("vehicle", "hide")):
+		"spawn":
+			_vehicle.visible = true
+			_vehicle.reset_to_transform(_world.spawn_transform)
+		"road":
+			_vehicle.visible = true
+			var anchor: Vector3 = shot.get("vehicle_at", Vector3.ZERO)
+			_vehicle.reset_to_transform(_world.find_nearest_road_transform(anchor))
+		_:
+			_vehicle.visible = false
+
+	if bool(shot.get("gameplay_camera", false)):
+		_screenshot_free_camera = false
+		_camera_mode = CAMERA_CHASE
+		_snap_camera = true
+	else:
+		_screenshot_free_camera = true
+		var cam_spec: Vector3 = shot.get("camera", Vector3.ZERO)
+		var target_spec: Vector3 = shot.get("target", Vector3.ZERO)
+		var cam_pos := Vector3(
+			cam_spec.x,
+			_world.height_at(cam_spec.x, cam_spec.z) + cam_spec.y,
+			cam_spec.z
+		)
+		var target := Vector3(
+			target_spec.x,
+			_world.height_at(target_spec.x, target_spec.z) + target_spec.y,
+			target_spec.z
+		)
+		_camera.fov = float(shot.get("fov", 55.0))
+		_camera.h_offset = 0.0
+		_camera.v_offset = 0.0
+		_camera.global_position = cam_pos
+		if cam_pos.distance_squared_to(target) > 0.01:
+			_camera.look_at(target, Vector3.UP)
+		print("[native-screenshots] %s camera=%s target=%s" % [shot_name, str(cam_pos), str(target)])
+
+	var frames := int(shot.get("frames", 3))
+	for i in range(frames):
+		await RenderingServer.frame_post_draw
+
+	var image := get_viewport().get_texture().get_image()
+	if image == null or image.is_empty():
+		push_error("[native-screenshots] FAIL: empty viewport image for %s" % shot_name)
+		return false
+	var path := _screenshot_dir.path_join(shot_name + ".png")
+	var err := image.save_png(path)
+	if err != OK:
+		push_error("[native-screenshots] FAIL: save_png(%s) error %d" % [path, err])
+		return false
+	print("[native-screenshots] SAVED %s (%dx%d) in %.1fs" % [
+		path, image.get_width(), image.get_height(),
+		float(Time.get_ticks_msec() - shot_started_ms) / 1000.0,
+	])
+	return true
