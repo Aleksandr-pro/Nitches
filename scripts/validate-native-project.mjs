@@ -49,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=27'), 'Native 0.2.24 must bump Android versionCode to 27');
-assert(preset.includes('version/name="0.2.24-native-alpha"'), 'Native version name must be 0.2.24-native-alpha');
+assert(preset.includes('version/code=28'), 'Native 0.2.25 must bump Android versionCode to 28');
+assert(preset.includes('version/name="0.2.25-native-alpha"'), 'Native version name must be 0.2.25-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -118,6 +118,11 @@ assert(blenderScript.includes('def build_opera():') && blenderScript.includes('(
 assert(syncScript.includes('opera_house.glb') && worldScript.includes('res://assets/buildings/opera_house.glb'), 'Native 0.2.20 must stage and load the RichTown Opera GLB');
 for (const marker of ['premium_opera_built', 'premium_opera_fixed_scale', 'premium_opera_detail_pass', 'premium_opera_material_pass', 'premium_opera_site_pass', 'premium_opera_fronts_boulevard', 'RichTownOpera', 'opera_glass_physical', 'opera_shell_ceramic']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.20 opera marker is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_mosque():') && blenderScript.includes('(build_mosque, "mosque.glb")'), 'Blender Building Model No.7 mosque builder/export is missing');
+assert(syncScript.includes('mosque.glb') && worldScript.includes('res://assets/buildings/mosque.glb'), 'Native 0.2.25 must stage and load the RichTown Mosque GLB');
+for (const marker of ['premium_mosque_built', 'premium_mosque_fixed_scale', 'premium_mosque_detail_pass', 'premium_mosque_material_pass', 'premium_mosque_site_pass', 'premium_mosque_fronts_east', 'RichTownMosque', 'mosque_glass_physical', 'mosque_dome_copper', 'mosque_glazed_tile']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.25 mosque marker is missing: ${marker}`);
 }
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
@@ -432,6 +437,12 @@ const operaBytes = await readFile('src/assets/models/props/opera_house.glb');
 assert(operaBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Opera source is an LFS pointer or corrupt GLB');
 const operaLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-opera');
 assert(operaLandmark && operaLandmark.x === 820 && operaLandmark.z === 25 && operaLandmark.h === 22, 'RichTown Opera landmark must stay at X820 Z25 with the authored 22 m height');
+const mosqueInfo = await stat('src/assets/models/props/mosque.glb');
+assert(mosqueInfo.size > 1_000_000, 'Native 0.2.25 RichTown Mosque GLB is unexpectedly small');
+const mosqueBytes = await readFile('src/assets/models/props/mosque.glb');
+assert(mosqueBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Mosque source is an LFS pointer or corrupt GLB');
+const mosqueLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-mosque');
+assert(mosqueLandmark && mosqueLandmark.x === 620 && mosqueLandmark.z === 335 && mosqueLandmark.h === 30, 'RichTown Mosque landmark must stay at X620 Z335 with the authored 30 m height');
 
 if (requireAssets) {
   const required = [
@@ -442,6 +453,7 @@ if (requireAssets) {
     'assets/buildings/hero_building.glb',
     'assets/buildings/townhouse.glb',
     'assets/buildings/opera_house.glb',
+    'assets/buildings/mosque.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
     'assets/props/park_bench.glb',

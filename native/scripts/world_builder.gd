@@ -483,6 +483,14 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 			if absf(point.x - center.x) <= 28.0 + building_padding and absf(point.z - center.z) <= 26.0 + building_padding:
 				return false
 			continue
+		# Building Model No.7 occupies a rectangular 38.4 x 36.0 m
+		# terrace; its data radius is 0 (14 m generic floor), which
+		# would let district trees/props spawn inside the prayer-hall
+		# corners and side arcades.
+		if String(landmark.get("kind", "")) == "rt-mosque":
+			if absf(point.x - center.x) <= 19.2 + building_padding and absf(point.z - center.z) <= 18.0 + building_padding:
+				return false
+			continue
 		var radius := maxf(_f(landmark, "r", 18.0), 14.0) + building_padding
 		if Vector2(point.x - center.x, point.z - center.z).length_squared() < radius * radius:
 			return false
@@ -1720,6 +1728,85 @@ func _prop_material(material_name: String) -> Material:
 			opera_light.emission = Color(1.0, 0.55, 0.20)
 			_register_night_material(opera_light, 0.0, 0.10, 0.62)
 			return opera_light
+		"MosqueStone":
+			# Building Model No.7: warm carved sandstone at world scale;
+			# the piers, seams and arch orders are Blender geometry.
+			var mosque_stone := _material("mosque_sandstone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.88, 0.79, 0.62), 0.92, 0.0, Vector3(0.16, 0.16, 0.16), true)
+			mosque_stone.normal_scale = 1.05
+			mosque_stone.metallic_specular = 0.46
+			return mosque_stone
+		"MosqueLimestone":
+			var mosque_limestone := _material("mosque_limestone", "user_travertine.jpg", "user_travertine_normal.jpg", Color(0.92, 0.84, 0.68), 0.86, 0.0, Vector3(0.18, 0.18, 0.18), true)
+			mosque_limestone.normal_scale = 1.05
+			mosque_limestone.metallic_specular = 0.52
+			return mosque_limestone
+		"MosqueDome":
+			# Patinated turquoise copper: brushed-metal microtexture,
+			# near-metallic reflections and a clearcoat sheen over the
+			# real lathed onion profile and brass rib geometry.
+			var mosque_dome := _material("mosque_dome_copper", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.52, 0.55), 0.34, 0.68, Vector3(0.30, 0.30, 0.30), true)
+			mosque_dome.normal_scale = 0.72
+			mosque_dome.metallic_specular = 0.96
+			mosque_dome.clearcoat_enabled = true
+			mosque_dome.clearcoat = 0.38
+			mosque_dome.clearcoat_roughness = 0.22
+			mosque_dome.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return mosque_dome
+		"MosqueBrass":
+			var mosque_brass := _material("mosque_brass", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.66, 0.42, 0.18), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			mosque_brass.normal_scale = 0.72
+			mosque_brass.metallic_specular = 0.96
+			mosque_brass.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return mosque_brass
+		"MosqueGlass":
+			# Reflective physical glazing calibrated transparent enough
+			# for the dark iwan/interior reveals behind the arches.
+			return _create_curtain_wall_material(
+				"mosque_glass_physical",
+				false,
+				Color(0.018, 0.055, 0.070),
+				Color(0.055, 0.120, 0.145),
+				Color(0.250, 0.238, 0.214),
+				Color(0.110, 0.074, 0.038),
+				3.20,
+				1.80,
+				7.0,
+				0.60
+			)
+		"MosqueInterior":
+			var mosque_interior := _material("mosque_interior", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.150, 0.112, 0.082), 0.96, 0.0, Vector3(0.40, 0.40, 0.40), true)
+			mosque_interior.metallic_specular = 0.22
+			mosque_interior.cull_mode = BaseMaterial3D.CULL_DISABLED
+			return mosque_interior
+		"MosqueWood":
+			var mosque_wood := _material("mosque_cedar", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.74, 0.46, 0.24), 0.78, 0.0, Vector3(0.36, 0.36, 0.36), true)
+			mosque_wood.normal_scale = 1.10
+			mosque_wood.metallic_specular = 0.46
+			return mosque_wood
+		"MosqueTile":
+			# Glazed turquoise tile: mosaic texture at small world scale
+			# with a hard clearcoat so bands read ceramic, not paint.
+			var mosque_tile := _material("mosque_glazed_tile", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.10, 0.58, 0.62), 0.22, 0.04, Vector3(0.55, 0.55, 0.55), true)
+			mosque_tile.normal_scale = 0.62
+			mosque_tile.metallic_specular = 0.92
+			mosque_tile.clearcoat_enabled = true
+			mosque_tile.clearcoat = 0.72
+			mosque_tile.clearcoat_roughness = 0.10
+			return mosque_tile
+		"MosqueGranite":
+			var mosque_granite := _material("mosque_black_granite", "user_black_granite.jpg", "user_black_granite_normal.jpg", Color(0.42, 0.44, 0.46), 0.36, 0.08, Vector3(0.26, 0.26, 0.26), true)
+			mosque_granite.normal_scale = 0.95
+			mosque_granite.metallic_specular = 0.86
+			mosque_granite.clearcoat_enabled = true
+			mosque_granite.clearcoat = 0.32
+			mosque_granite.clearcoat_roughness = 0.24
+			return mosque_granite
+		"MosqueLight":
+			var mosque_light := _material("mosque_warm_light", "", "", Color(1.0, 0.70, 0.36), 0.32, 0.0)
+			mosque_light.emission_enabled = true
+			mosque_light.emission = Color(1.0, 0.55, 0.20)
+			_register_night_material(mosque_light, 0.0, 0.10, 0.62)
+			return mosque_light
 		"FacadeStone":
 			return _material("prop_facade_stone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.82, 0.79, 0.72), 0.92, 0.0, Vector3(0.14, 0.14, 0.14), true)
 		"FacadeWoodSlat":
@@ -3680,7 +3767,7 @@ func _multimesh_visual_range(node_name: String) -> float:
 	# proxies in their builders; small street furniture simply retires
 	# once it is only a few pixels high. The unique 148 m flagship is
 	# never range-hidden and relies on generated mesh LOD instead.
-	if key.contains("main148mtower") or key.contains("richtownopera"):
+	if key.contains("main148mtower") or key.contains("richtownopera") or key.contains("richtownmosque"):
 		return 0.0
 	if key.contains("blendervillas") or key.contains("blendertownhouses"):
 		return 210.0
@@ -3813,6 +3900,8 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "Main148mTower"
 	if path.ends_with("opera_house.glb"):
 		return "RichTownOpera"
+	if path.ends_with("mosque.glb"):
+		return "RichTownMosque"
 	if path.ends_with("street_lamp.glb"):
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
@@ -5048,13 +5137,58 @@ func _build_landmarks() -> void:
 				_add_box_collider(pos + opera_basis * Vector3(0.0, 0.80, -25.65), Vector3(10.50, 1.60, 0.60), opera_yaw)
 				_add_cylinder_collider(pos + opera_basis * Vector3(-20.20, 2.50, -22.40), 1.55, 5.00)
 			"rt-mosque":
-				_add_box(root, Vector3(34.0, 13.0, 30.0), pos + Vector3(0.0, 6.5, 0.0), sand)
-				_add_sphere(root, 11.5, 19.0, pos + Vector3(0.0, 15.0, 0.0), marble)
+				# Building Model No.7 is a finished fixed-scale mosque
+				# measuring 38.40 x 36.00 m and exactly 30.00 m to the
+				# minaret finials.  Blender +X is the eastern pishtaq
+				# front, so at yaw 0 the portal faces the South Villa
+				# District street gap and forecourt built in 0.2.24.
+				# The sand box, plain sphere and two bare cylinders
+				# are gone.
+				var mosque_path := "res://assets/buildings/mosque.glb"
+				var mosque_parts := _get_model_parts(mosque_path)
+				var mosque_triangles := 0
+				var mosque_aabb := AABB()
+				var mosque_has_aabb := false
+				for mosque_part_variant in mosque_parts:
+					var mosque_part: Dictionary = mosque_part_variant
+					var mosque_mesh := mosque_part.get("mesh") as Mesh
+					if mosque_mesh == null:
+						continue
+					mosque_triangles += _mesh_triangle_count(mosque_mesh)
+					var mosque_part_aabb := mosque_mesh.get_aabb()
+					mosque_aabb = mosque_part_aabb if not mosque_has_aabb else mosque_aabb.merge(mosque_part_aabb)
+					mosque_has_aabb = true
+				var mosque_size := mosque_aabb.size if mosque_has_aabb else Vector3.ZERO
+				var mosque_center := mosque_aabb.get_center() if mosque_has_aabb else Vector3.ZERO
+				mosque_center.y = 0.0
+				var mosque_transform := _centered_model_transform(pos, 0.0, Vector3.ONE, mosque_center)
+				var mosque_built := _add_batched_model(root, mosque_path, [mosque_transform], "RichTownMosque")
+				_enhancement_stats["premium_mosque_built"] = mosque_built
+				_enhancement_stats["premium_mosque_fixed_scale"] = mosque_built and mosque_has_aabb and absf(mosque_size.x - 38.40) <= 0.25 and absf(mosque_size.y - 30.00) <= 0.20 and absf(mosque_size.z - 36.00) <= 0.25
+				_enhancement_stats["premium_mosque_detail_pass"] = mosque_built and mosque_parts.size() >= 10 and mosque_triangles >= 30000
+				_enhancement_stats["premium_mosque_material_pass"] = mosque_built and _materials.has("mosque_sandstone") and _materials.has("mosque_limestone") and _materials.has("mosque_dome_copper") and _materials.has("mosque_brass") and _materials.has("mosque_glass_physical") and _materials.has("mosque_interior") and _materials.has("mosque_cedar") and _materials.has("mosque_glazed_tile") and _materials.has("mosque_black_granite") and _materials.has("mosque_warm_light")
+				_enhancement_stats["premium_mosque_site_pass"] = mosque_built and _materials.has("mosque_black_granite") and _materials.has("mosque_limestone") and _materials.has("mosque_warm_light")
+				_enhancement_stats["premium_mosque_model_parts"] = mosque_parts.size()
+				_enhancement_stats["premium_mosque_triangles"] = mosque_triangles
+				_enhancement_stats["premium_mosque_width_m"] = mosque_size.x
+				_enhancement_stats["premium_mosque_height_m"] = mosque_size.y
+				_enhancement_stats["premium_mosque_depth_m"] = mosque_size.z
+				_enhancement_stats["premium_mosque_fronts_east"] = mosque_built
+				if not mosque_built:
+					_add_box(root, Vector3(34.0, 13.0, 30.0), pos + Vector3(0.0, 6.5, 0.0), sand)
+					_add_sphere(root, 11.5, 19.0, pos + Vector3(0.0, 15.0, 0.0), marble)
+					for side in [-1.0, 1.0]:
+						var fallback_minaret_pos := pos + Vector3(19.0 * side, h * 0.5, 0.0)
+						_add_cylinder(root, 1.4, h, fallback_minaret_pos, sand, 0.0, 14)
+				_add_box_collider(pos + Vector3(0.0, 0.25, 0.0), Vector3(38.40, 0.50, 36.00))
+				_add_box_collider(pos + Vector3(0.0, 6.60, 0.0), Vector3(28.00, 13.20, 32.00))
+				_add_box_collider(pos + Vector3(16.10, 9.20, 0.0), Vector3(4.40, 18.40, 16.20))
+				_add_box_collider(pos + Vector3(-14.70, 4.60, 0.0), Vector3(1.60, 9.20, 8.60))
 				for side in [-1.0, 1.0]:
-					var minaret_pos := pos + Vector3(19.0 * side, h * 0.5, 0.0)
-					_add_cylinder(root, 1.4, h, minaret_pos, sand, 0.0, 14)
-					_add_cylinder_collider(minaret_pos, 1.6, h)
-				_add_box_collider(pos + Vector3(0.0, 8.0, 0.0), Vector3(34.0, 16.0, 30.0))
+					_add_box_collider(pos + Vector3(1.0, 2.80, 16.90 * side), Vector3(24.50, 5.60, 2.30))
+					_add_box_collider(pos + Vector3(-16.55, 3.00, 13.50 * side), Vector3(5.30, 6.00, 5.30))
+					_add_cylinder_collider(pos + Vector3(-16.55, 15.00, 13.50 * side), 1.45, 30.00)
+
 			"rt-twist":
 				var tiers := 8
 				var tier_h := h / float(tiers)
@@ -7626,7 +7760,7 @@ func _build_district_infrastructure() -> void:
 	if plaza_mesh != null:
 		_mesh_instance(root, plaza_mesh, paving_material, Transform3D.IDENTITY, "MosqueForecourt", false)
 		mosque_plaza = 1
-	for bench_pos_variant in [Vector2(600.0, 322.0), Vector2(600.0, 348.0), Vector2(641.0, 322.0), Vector2(641.0, 348.0)]:
+	for bench_pos_variant in [Vector2(598.0, 322.0), Vector2(598.0, 348.0), Vector2(642.0, 322.0), Vector2(642.0, 348.0)]:
 		var bench_pos2: Vector2 = bench_pos_variant
 		var bench_pos := Vector3(bench_pos2.x, height_at(bench_pos2.x, bench_pos2.y) + 0.09, bench_pos2.y)
 		var to_mosque := Vector3(620.0 - bench_pos.x, 0.0, 335.0 - bench_pos.z).normalized()
