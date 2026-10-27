@@ -612,7 +612,13 @@ func find_nearest_road_transform(world_position: Vector3) -> Transform3D:
 
 
 func make_transform(position_value: Vector3, yaw: float = 0.0, scale_value: Vector3 = Vector3.ONE) -> Transform3D:
-	return Transform3D(Basis(Vector3.UP, yaw).scaled(scale_value), position_value)
+	# 0.2.27: Basis.scaled() multiplies matrix ROWS = a GLOBAL (parent-
+	# space) scale, so at yaw +/-90deg a box long local Z ended up
+	# long in WORLD Z -- bridge guardrail sections rendered ACROSS the
+	# east-west causeways (user screenshots 27.10) and every rotated
+	# far-proxies got its footprint swapped.  scaled_local() multiplies
+	# COLUMNS = the authored local axes every caller intended.
+	return Transform3D(Basis(Vector3.UP, yaw).scaled_local(scale_value), position_value)
 
 
 func _apply_sky_mode(mode: String) -> void:
@@ -1166,7 +1172,7 @@ func _create_curtain_wall_material(
 	material.set_shader_parameter("smoke_glass_color", smoke_color)
 	material.set_shader_parameter("blind_color", blind_tint)
 	material.set_shader_parameter("warm_interior_color", warm_interior)
-	material.set_shader_parameter("cool_interior_color", Color(0.034, 0.068, 0.092))
+	material.set_shader_parameter("cool_interior_color", Color(0.075, 0.130, 0.175))
 	material.set_shader_parameter("sky_reflection_color", Color(0.30, 0.53, 0.86))
 	material.set_shader_parameter("ground_reflection_color", Color(0.16, 0.155, 0.135))
 	material.set_shader_parameter("environment_tint_strength", 0.19)
@@ -1192,6 +1198,9 @@ func _create_curtain_wall_material(
 	_enhancement_stats["curtain_wall_reflective_coating_0216"] = true
 	_enhancement_stats["curtain_wall_environment_reflection_0217"] = true
 	_enhancement_stats["curtain_wall_clearcoat_removed"] = true
+	_enhancement_stats["curtain_wall_reflective_glass_0227"] = true
+	var smoke_luminance := 0.2126 * smoke_color.r + 0.7152 * smoke_color.g + 0.0722 * smoke_color.b
+	_enhancement_stats["glass_smoke_luminance_min_0227"] = minf(float(_enhancement_stats.get("glass_smoke_luminance_min_0227", smoke_luminance)), smoke_luminance)
 	_enhancement_stats["curtain_wall_detail_fade_start_m"] = 90.0
 	_enhancement_stats["curtain_wall_detail_fade_end_m"] = 300.0
 	_enhancement_stats["building_visual_ranges_0215"] = true
@@ -1242,10 +1251,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_glass_tower_physical",
 			true,
-			Color(0.018, 0.052, 0.082),
-			Color(0.052, 0.112, 0.158),
+			Color(0.105, 0.185, 0.275),
+			Color(0.215, 0.345, 0.490),
 			Color(0.235, 0.225, 0.200),
-			Color(0.088, 0.061, 0.038),
+			Color(0.150, 0.104, 0.065),
 			3.30,
 			1.75,
 			7.0,
@@ -1255,10 +1264,10 @@ func _facade_material(facade: String, height: float) -> Material:
 		return _create_curtain_wall_material(
 			"facade_bronze_tower_physical",
 			true,
-			Color(0.065, 0.043, 0.019),
-			Color(0.128, 0.085, 0.041),
+			Color(0.185, 0.118, 0.052),
+			Color(0.355, 0.232, 0.112),
 			Color(0.270, 0.225, 0.170),
-			Color(0.105, 0.073, 0.044),
+			Color(0.178, 0.124, 0.075),
 			3.30,
 			1.85,
 			9.0,
@@ -1369,10 +1378,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"prop_storefront_glass_physical",
 				false,
-				Color(0.018, 0.052, 0.082),
-				Color(0.052, 0.112, 0.158),
+				Color(0.105, 0.185, 0.275),
+				Color(0.215, 0.345, 0.490),
 				Color(0.235, 0.225, 0.200),
-				Color(0.088, 0.061, 0.038),
+				Color(0.150, 0.104, 0.065),
 				2.70,
 				1.45,
 				4.0,
@@ -1584,10 +1593,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"tower_glass_physical",
 				false,
-				Color(0.018, 0.052, 0.082),
-				Color(0.052, 0.112, 0.158),
+				Color(0.105, 0.185, 0.275),
+				Color(0.215, 0.345, 0.490),
 				Color(0.235, 0.225, 0.200),
-				Color(0.088, 0.061, 0.038),
+				Color(0.150, 0.104, 0.065),
 				3.45,
 				1.85,
 				2.0,
@@ -1620,10 +1629,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"main_glass_physical",
 				false,
-				Color(0.020, 0.058, 0.090),
-				Color(0.058, 0.120, 0.168),
+				Color(0.110, 0.195, 0.288),
+				Color(0.225, 0.358, 0.505),
 				Color(0.240, 0.230, 0.205),
-				Color(0.092, 0.064, 0.040),
+				Color(0.156, 0.109, 0.068),
 				3.42,
 				1.60,
 				5.0,
@@ -1682,10 +1691,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"opera_glass_physical",
 				false,
-				Color(0.020, 0.055, 0.072),
-				Color(0.060, 0.115, 0.145),
+				Color(0.108, 0.182, 0.252),
+				Color(0.220, 0.335, 0.452),
 				Color(0.250, 0.238, 0.214),
-				Color(0.110, 0.072, 0.038),
+				Color(0.187, 0.122, 0.065),
 				3.60,
 				3.00,
 				6.0,
@@ -1764,10 +1773,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"mosque_glass_physical",
 				false,
-				Color(0.018, 0.055, 0.070),
-				Color(0.055, 0.120, 0.145),
+				Color(0.105, 0.185, 0.255),
+				Color(0.212, 0.340, 0.460),
 				Color(0.250, 0.238, 0.214),
-				Color(0.110, 0.074, 0.038),
+				Color(0.187, 0.126, 0.065),
 				3.20,
 				1.80,
 				7.0,
@@ -1831,10 +1840,10 @@ func _prop_material(material_name: String) -> Material:
 			return _create_curtain_wall_material(
 				"hotel_glass_physical",
 				false,
-				Color(0.018, 0.052, 0.078),
-				Color(0.055, 0.118, 0.160),
+				Color(0.102, 0.180, 0.262),
+				Color(0.205, 0.332, 0.472),
 				Color(0.245, 0.234, 0.210),
-				Color(0.100, 0.068, 0.036),
+				Color(0.170, 0.116, 0.061),
 				3.10,
 				1.75,
 				6.0,
@@ -3579,7 +3588,9 @@ func _build_bridge_guardrails(parent: Node) -> void:
 					_add_box_collider(centre + Vector3.UP * 0.45, Vector3(0.24, 0.92, sub_length + 0.05), yaw)
 					for rail_height in [0.52, 0.82]:
 						rail_transforms.append(make_transform(centre + Vector3.UP * rail_height, yaw, Vector3(0.09, 0.13, sub_length + 0.08)))
-					var rail_axis := Basis(Vector3.UP, yaw).z
+					# Measure the real rendered axis (post scaled_local),
+					# not the unscaled yaw basis that hid the 0.2.24 bug.
+					var rail_axis := make_transform(Vector3.ZERO, yaw, Vector3(0.09, 0.13, sub_length + 0.08)).basis.z.normalized()
 					min_alignment = minf(min_alignment, absf(rail_axis.dot(direction)))
 					kept_index += 1
 				distance_from_start += segment_length
@@ -3598,6 +3609,7 @@ func _build_bridge_guardrails(parent: Node) -> void:
 	terminal_mesh.size = Vector3.ONE
 	terminal_mesh.material = terminal_material
 	_add_multimesh(parent, terminal_mesh, terminal_material, terminal_transforms, "BridgeGuardrailTerminals", true)
+	_enhancement_stats["guardrail_local_axis_0227"] = true
 	_enhancement_stats["guardrail_posts"] = post_transforms.size()
 	_enhancement_stats["guardrail_rails"] = rail_transforms.size()
 	_enhancement_stats["guardrail_terminals"] = terminal_transforms.size()
@@ -7136,7 +7148,7 @@ func _build_reflection_probes() -> void:
 		# energy relative to Forward+.  At 1.24 the near-metallic
 		# main-tower panes clipped toward white; 0.62 keeps the same
 		# box-projected district image under the dark tinted F0.
-		probe.intensity = 0.62
+		probe.intensity = 0.68
 		probe.max_distance = 240.0
 		probe.mesh_lod_threshold = 0.65
 		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
@@ -7152,7 +7164,7 @@ func _build_reflection_probes() -> void:
 	_enhancement_stats["tall_reflection_probes"] = tall_probe_count
 	_enhancement_stats["reflection_probe_max_distance"] = 240.0
 	_enhancement_stats["reflection_probe_box_projection"] = true
-	_enhancement_stats["reflection_probe_intensity"] = 0.62
+	_enhancement_stats["reflection_probe_intensity"] = 0.68
 	_enhancement_stats["reflection_probe_mobile_calibration_0217"] = true
 
 
