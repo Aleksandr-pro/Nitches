@@ -1,12 +1,7 @@
 props_out/bus_shelter.glb: meshes=26 tris=816 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,PropsGlass,PropsWood
-props_out/flower_clump.glb: meshes=6 tris=1392 size=0.65x0.46x0.69m minY=0.01 mats=FlowerLeaf,FlowerCentre,FlowerCoral,FlowerWhite,FlowerYellow
 props_out/glass_tower.glb: meshes=562 tris=12240 size=34.00x72.90x34.00m minY=0.00 mats=VillaGranite,TowerStone,TowerTrim,VillaInterior,TowerGlass,WindowFrame,TowerMetal,LampGlow,TowerSpandrel,VillaWood,PropsMetal,VillaPavement,RoofDark,VillaCurtain,VillaHedge,VillaLawn,VillaMulch
-props_out/grass_tuft.glb: meshes=2 tris=394 size=0.61x0.56x0.68m minY=0.01 mats=GrassBlade,GrassBladeDry
 props_out/hero_building.glb: meshes=1706 tris=30616 size=32.40x28.56x24.60m minY=0.00 mats=VillaGranite,HeroStone,HeroTrim,HeroPlaster,RoofDark,WindowFrame,VillaInterior,VillaCurtain,VillaGlass,LampGlow,HeroWood,VillaHedge,HeroMetal,VillaPavement,PropsMetal,SolarCell,VillaLawn,VillaMulch
 props_out/main_tower.glb: meshes=1462 tris=39820 size=50.00x148.00x42.00m minY=0.00 mats=VillaGranite,VillaPavement,MainStone,VillaInterior,MainGlass,WindowFrame,MainTrim,VillaMulch,VillaHedge,PropsMetal,VillaWood,MainMetal,LampGlow,RoofDark,MainSpandrel,VillaCurtain,MainWater,VillaLawn
-props_out/ornamental_shrub.glb: meshes=3 tris=2130 size=0.90x1.10x1.01m minY=0.01 mats=ShrubBranch,OrnamentalLeaf,ShrubBerry
-props_out/palm_date.glb: meshes=6 tris=11161 size=8.47x8.82x8.22m minY=-0.01 mats=PalmTrunk,PalmCrown,PalmLeaf,PalmLeafDry,PalmRachis,PalmFruit
-props_out/palm_royal.glb: meshes=4 tris=8001 size=8.09x10.18x7.77m minY=-0.00 mats=PalmTrunk,PalmCrownshaft,PalmLeaf,PalmRachis
 props_out/street_lamp.glb: meshes=10 tris=560 size=0.48x6.63x4.90m minY=0.00 mats=PropsMetal,LampGlow
 props_out/townhouse.glb: meshes=972 tris=17024 size=18.87x11.05x16.37m minY=0.00 mats=VillaGranite,TownTrim,TownRoof,WindowFrame,TownStone,TownPlaster,TownGarage,VillaGlass,LampGlow,VillaPavement,VillaInterior,VillaCurtain,PropsMetal,VillaWood,TownDoor,VillaHedge,RoofDark,VillaDeck,VillaLawn,VillaMulch,TownDoorAccent,SolarCell
 props_out/traffic_signal_long.glb: meshes=92 tris=10916 size=8.05x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
