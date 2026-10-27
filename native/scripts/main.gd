@@ -429,6 +429,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.24 district streets/rounded junctions/guardrail alignment pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("curtain_wall_reflective_glass_0227", false)) or float(enhancement_stats.get("glass_smoke_luminance_min_0227", 0.0)) < 0.24 or not bool(enhancement_stats.get("guardrail_local_axis_0227", false)):
 		failures.append("0.2.27 reflective glass/guardrail local-axis pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("paving_variety_0228", false)) or not bool(enhancement_stats.get("paving_running_bond_0228", false)):
+		failures.append("0.2.28 paving variety pass is incomplete: %s" % str(enhancement_stats))
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
