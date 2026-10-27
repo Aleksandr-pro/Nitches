@@ -3923,6 +3923,65 @@ def build_mosque():
         obj.name = name
         return finish(obj, material, smooth=True)
 
+    # Semicircular arch caps are extruded half-discs grouped by material.
+    # Full cylinder discs were rejected in visual audit: their lower
+    # halves turned every arched window into an oval medallion and the
+    # iwan into a huge tilted disc across the portal.
+    arch_builders = {
+        "limestone": MeshBuilder(),
+        "glass": MeshBuilder(),
+        "brass": MeshBuilder(),
+        "interior": MeshBuilder(),
+    }
+
+    def add_half_disc_x(builder, centre_x, centre_y, centre_z, radius, thickness, sign):
+        segments = 16
+        x_back = centre_x - sign * thickness * 0.5
+        x_front = centre_x + sign * thickness * 0.5
+        back_centre = builder.add_vertex(Vector((x_back, centre_y, centre_z)))
+        front_centre = builder.add_vertex(Vector((x_front, centre_y, centre_z)))
+        back_points = []
+        front_points = []
+        for index in range(segments + 1):
+            angle = math.pi * float(index) / float(segments)
+            py = centre_y + math.cos(angle) * radius
+            pz = centre_z + math.sin(angle) * radius
+            back_points.append(builder.add_vertex(Vector((x_back, py, pz))))
+            front_points.append(builder.add_vertex(Vector((x_front, py, pz))))
+        for index in range(segments):
+            if sign >= 0.0:
+                builder.tri(front_centre, front_points[index], front_points[index + 1])
+                builder.tri(back_centre, back_points[index + 1], back_points[index])
+            else:
+                builder.tri(front_centre, front_points[index + 1], front_points[index])
+                builder.tri(back_centre, back_points[index], back_points[index + 1])
+            builder.quad(back_points[index], front_points[index], front_points[index + 1], back_points[index + 1])
+        builder.quad(back_points[0], back_points[-1], front_points[-1], front_points[0])
+
+    def add_half_disc_y(builder, centre_x, centre_y, centre_z, radius, thickness, sign):
+        segments = 16
+        y_back = centre_y - sign * thickness * 0.5
+        y_front = centre_y + sign * thickness * 0.5
+        back_centre = builder.add_vertex(Vector((centre_x, y_back, centre_z)))
+        front_centre = builder.add_vertex(Vector((centre_x, y_front, centre_z)))
+        back_points = []
+        front_points = []
+        for index in range(segments + 1):
+            angle = math.pi * float(index) / float(segments)
+            px = centre_x + math.cos(angle) * radius
+            pz = centre_z + math.sin(angle) * radius
+            back_points.append(builder.add_vertex(Vector((px, y_back, pz))))
+            front_points.append(builder.add_vertex(Vector((px, y_front, pz))))
+        for index in range(segments):
+            if sign >= 0.0:
+                builder.tri(front_centre, front_points[index + 1], front_points[index])
+                builder.tri(back_centre, back_points[index], back_points[index + 1])
+            else:
+                builder.tri(front_centre, front_points[index], front_points[index + 1])
+                builder.tri(back_centre, back_points[index + 1], back_points[index])
+            builder.quad(back_points[index], back_points[index + 1], front_points[index + 1], front_points[index])
+        builder.quad(back_points[0], front_points[0], front_points[-1], back_points[-1])
+
     def arch_window_x(face_x, centre_y, centre_z, width=1.70, height=3.60, screen=False):
         sign = 1.0 if face_x >= 0.0 else -1.0
         outer_x = face_x + sign * 0.055
@@ -3932,12 +3991,10 @@ def build_mosque():
             0.07, width + 0.08, height + 0.08, interior)
         box("mosque_window_glass_x", outer_x + sign * 0.085, centre_y, centre_z,
             0.05, width, height, mosque_glass)
-        cyl("mosque_window_arch_frame_x", outer_x, centre_y, centre_z + height * 0.5,
-            (width + 0.26) * 0.5, 0.12, limestone, vertices=18,
-            rotation=(0.0, math.pi * 0.5, 0.0))
-        cyl("mosque_window_arch_glass_x", outer_x + sign * 0.085, centre_y,
-            centre_z + height * 0.5, width * 0.5, 0.055, mosque_glass,
-            vertices=18, rotation=(0.0, math.pi * 0.5, 0.0))
+        add_half_disc_x(arch_builders["limestone"], outer_x, centre_y,
+                        centre_z + height * 0.5, (width + 0.26) * 0.5, 0.12, sign)
+        add_half_disc_x(arch_builders["glass"], outer_x + sign * 0.085, centre_y,
+                        centre_z + height * 0.5, width * 0.5, 0.055, sign)
         box("mosque_window_mullion_x", outer_x + sign * 0.115, centre_y, centre_z,
             0.045, 0.085, height, brass)
         box("mosque_window_transom_x", outer_x + sign * 0.115, centre_y,
@@ -3961,12 +4018,10 @@ def build_mosque():
             width + 0.08, 0.07, height + 0.08, interior)
         box("mosque_window_glass_y", centre_x, outer_y + sign * 0.085, centre_z,
             width, 0.05, height, mosque_glass)
-        cyl("mosque_window_arch_frame_y", centre_x, outer_y, centre_z + height * 0.5,
-            (width + 0.26) * 0.5, 0.12, limestone, vertices=18,
-            rotation=(math.pi * 0.5, 0.0, 0.0))
-        cyl("mosque_window_arch_glass_y", centre_x, outer_y + sign * 0.085,
-            centre_z + height * 0.5, width * 0.5, 0.055, mosque_glass,
-            vertices=18, rotation=(math.pi * 0.5, 0.0, 0.0))
+        add_half_disc_y(arch_builders["limestone"], centre_x, outer_y,
+                        centre_z + height * 0.5, (width + 0.26) * 0.5, 0.12, sign)
+        add_half_disc_y(arch_builders["glass"], centre_x, outer_y + sign * 0.085,
+                        centre_z + height * 0.5, width * 0.5, 0.055, sign)
         box("mosque_window_mullion_y", centre_x, outer_y + sign * 0.115, centre_z,
             0.085, 0.045, height, brass)
         box("mosque_window_transom_y", centre_x, outer_y + sign * 0.115,
@@ -4047,18 +4102,18 @@ def build_mosque():
     box("mosque_terrace_inlay_east", 18.05, 0.0, 0.635, 0.22, 15.5, 0.025, tile)
     for joint_y in (-12.0, -6.0, 6.0, 12.0):
         box("mosque_terrace_joint", 16.5, joint_y, 0.632, 3.2, 0.07, 0.018, granite)
-    for step_index, (step_x, step_top) in enumerate(((18.45, 0.50), (18.82, 0.34), (19.08, 0.18))):
+    for step_index, (step_x, step_top) in enumerate(((18.45, 0.50), (18.82, 0.34), (19.07, 0.18))):
         box("mosque_east_step", step_x, 0.0, step_top * 0.5,
             0.42 - step_index * 0.08, 10.5, step_top, limestone)
     for side_sign in (-1.0, 1.0):
-        box("mosque_step_cheek", 18.55, side_sign * 5.55, 0.42, 1.35, 0.28, 0.84, granite)
+        box("mosque_step_cheek", 18.525, side_sign * 5.55, 0.42, 1.35, 0.28, 0.84, granite)
         box("mosque_step_light", 18.78, side_sign * 5.36, 0.72, 0.07, 0.09, 0.12, mosque_light)
 
     # --- Prayer hall mass, cornice, stone piers and masonry seams. ---
     box("mosque_hall", 0.0, 0.0, 6.52, 28.00, 32.00, 11.80, stone)
     box("mosque_hall_plinth", 0.0, 0.0, 1.02, 28.35, 32.35, 0.80, granite)
     box("mosque_hall_cornice", 0.0, 0.0, 12.68, 28.75, 32.75, 0.54, limestone)
-    box("mosque_hall_roof", 0.0, 0.0, 13.10, 28.25, 32.25, 0.30, roof_dark)
+    box("mosque_hall_roof", 0.0, 0.0, 13.10, 28.25, 32.25, 0.30, stone)
     box("mosque_hall_parapet_trim", 0.0, 0.0, 12.32, 28.45, 32.45, 0.18, brass)
     for seam_z in (3.10, 5.90, 8.70):
         box("mosque_hall_seam_east", 14.035, 0.0, seam_z, 0.07, 31.7, 0.065, frame)
@@ -4132,12 +4187,9 @@ def build_mosque():
 
     # Recessed iwan: dark vault reveal, arch orders and corbel rows.
     box("mosque_iwan_reveal", 18.16, 0.0, 7.10, 0.14, 10.40, 11.75, interior)
-    cyl("mosque_iwan_arch_outer", 18.25, 0.0, 12.98, 5.35, 0.20, limestone,
-        vertices=28, rotation=(0.0, math.pi * 0.5, 0.0))
-    cyl("mosque_iwan_arch_brass", 18.31, 0.0, 12.98, 5.02, 0.10, brass,
-        vertices=28, rotation=(0.0, math.pi * 0.5, 0.0))
-    cyl("mosque_iwan_arch_inner", 18.24, 0.0, 12.98, 4.72, 0.12, interior,
-        vertices=28, rotation=(0.0, math.pi * 0.5, 0.0))
+    add_half_disc_x(arch_builders["limestone"], 18.25, 0.0, 12.98, 5.35, 0.20, 1.0)
+    add_half_disc_x(arch_builders["brass"], 18.31, 0.0, 12.98, 5.02, 0.10, 1.0)
+    add_half_disc_x(arch_builders["interior"], 18.24, 0.0, 12.98, 4.72, 0.12, 1.0)
     for row_index, row_z in enumerate((10.65, 11.45, 12.25)):
         count = 9 - row_index * 2
         for cell_index in range(count):
@@ -4182,9 +4234,8 @@ def build_mosque():
         for bay_x in (-8.0, -4.0, 0.0, 4.0, 8.0):
             box("mosque_arcade_beam", bay_x, side_sign * 17.42, 4.48,
                 3.45, 0.18, 0.62, limestone)
-            cyl("mosque_arcade_arch", bay_x, side_sign * 17.43, 4.18,
-                1.55, 0.10, interior, vertices=18,
-                rotation=(math.pi * 0.5, 0.0, 0.0))
+            add_half_disc_y(arch_builders["interior"], bay_x, side_sign * 17.43,
+                            2.92, 1.25, 0.10, side_sign)
             arch_window_y(bay_x, side_sign * 17.50, 2.45, width=1.45, height=2.55, screen=True)
         for slat_index in range(13):
             box("mosque_side_roof_slat", -10.8 + slat_index * 1.8, side_sign * 16.95, 5.34,
@@ -4260,14 +4311,13 @@ def build_mosque():
 
     # --- Two 30 m minarets at the western corners. ---
     for side_sign in (-1.0, 1.0):
-        cx = -16.70
+        cx = -16.55
         cy = side_sign * 13.50
         box("mosque_minaret_base", cx, cy, 2.90, 5.00, 5.00, 5.80, stone)
-        box("mosque_minaret_base_plinth", cx, cy, 0.82, 5.35, 5.35, 0.55, granite)
+        box("mosque_minaret_base_plinth", cx, cy, 0.82, 5.30, 5.30, 0.55, granite)
         box("mosque_minaret_base_cornice", cx, cy, 5.92, 5.30, 5.30, 0.28, limestone)
         box("mosque_minaret_door", cx + 2.54, cy, 2.15, 0.10, 1.05, 2.80, mosque_wood)
-        cyl("mosque_minaret_door_arch", cx + 2.55, cy, 3.55, 0.62, 0.10, limestone,
-            vertices=14, rotation=(0.0, math.pi * 0.5, 0.0))
+        add_half_disc_x(arch_builders["limestone"], cx + 2.55, cy, 3.55, 0.62, 0.10, 1.0)
         box("mosque_minaret_base_tile", cx + 2.53, cy, 4.72, 0.07, 3.60, 0.62, tile)
         cone("mosque_minaret_transition", cx, cy, 6.85, 2.15, 1.28, 1.75, limestone, vertices=8)
         cyl("mosque_minaret_shaft", cx, cy, 14.55, 1.24, 14.10, stone, vertices=20)
@@ -4315,6 +4365,10 @@ def build_mosque():
                 0.30, 0.30, 0.42, brass)
             sphere("mosque_terrace_lantern_globe", lantern_x, lantern_y, 1.18,
                    0.22, 0.22, 0.30, mosque_light)
+    arch_builders["limestone"].build("mosque_arch_caps_limestone", limestone, smooth=False)
+    arch_builders["glass"].build("mosque_arch_caps_glass", mosque_glass, smooth=False)
+    arch_builders["brass"].build("mosque_arch_caps_brass", brass, smooth=False)
+    arch_builders["interior"].build("mosque_arch_caps_interior", interior, smooth=False)
 
 
 # --------------------------------------------------------------------------- #
