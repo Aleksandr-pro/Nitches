@@ -49,8 +49,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=25'), 'Native 0.2.22 must bump Android versionCode to 25');
-assert(preset.includes('version/name="0.2.22-native-alpha"'), 'Native version name must be 0.2.22-native-alpha');
+assert(preset.includes('version/code=26'), 'Native 0.2.23 must bump Android versionCode to 26');
+assert(preset.includes('version/name="0.2.23-native-alpha"'), 'Native version name must be 0.2.23-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -75,6 +75,15 @@ for (const marker of ['PARK_SPECS', '_build_parks', 'parks_0222', 'RichTown Cent
   assert(combinedRuntime.includes(marker), `Native 0.2.22 parks marker is missing: ${marker}`);
 }
 assert(minimapScript.includes('get_park_rects'), 'Minimap must draw the 0.2.22 RichTown parks');
+// 0.2.23 photoreal model detail pass: denser palms/ground cover and
+// fully modelled street/park furniture with per-model triangle stats.
+for (const marker of ['photoreal_models_0223', 'photoreal_park_furniture_0223', 'street_lamp_triangles', 'bus_shelter_triangles', 'park_bench_triangles', 'park_pergola_triangles', 'park_bench_models', 'BlenderParkBenches', 'BlenderParkPergola', 'res://assets/props/park_bench.glb', 'res://assets/props/park_pergola.glb']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.23 photoreal-model marker is missing: ${marker}`);
+}
+for (const marker of ['def build_park_bench():', 'def build_park_pergola():', '(build_park_bench, "park_bench.glb")', '(build_park_pergola, "park_pergola.glb")']) {
+  assert(blenderScript.includes(marker), `Blender 0.2.23 park-model marker is missing: ${marker}`);
+}
+assert(syncScript.includes('park_bench.glb') && syncScript.includes('park_pergola.glb'), 'Native asset sync is missing the 0.2.23 park bench/pergola GLBs');
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
@@ -426,6 +435,8 @@ if (requireAssets) {
     'assets/buildings/opera_house.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
+    'assets/props/park_bench.glb',
+    'assets/props/park_pergola.glb',
     'assets/props/traffic_signal_short.glb',
     'assets/props/traffic_signal_long.glb',
     'assets/props/dubai_premium_cafe.glb',

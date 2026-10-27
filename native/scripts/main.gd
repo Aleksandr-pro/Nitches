@@ -412,6 +412,8 @@ func _run_smoke_checks() -> void:
 		failures.append("Central Park lawn is not classified as grass: %s" % str(park_surface))
 	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("photoreal_models_0223", false)) or not bool(enhancement_stats.get("photoreal_park_furniture_0223", false)) or int(enhancement_stats.get("palm_date_triangles", 0)) < 15000 or int(enhancement_stats.get("palm_royal_triangles", 0)) < 11000 or int(enhancement_stats.get("grass_tuft_triangles", 0)) < 900 or int(enhancement_stats.get("flower_clump_triangles", 0)) < 3500 or int(enhancement_stats.get("ornamental_shrub_triangles", 0)) < 4200 or int(enhancement_stats.get("street_lamp_triangles", 0)) < 4500 or int(enhancement_stats.get("bus_shelter_triangles", 0)) < 7500 or int(enhancement_stats.get("park_bench_triangles", 0)) < 3500 or int(enhancement_stats.get("park_pergola_triangles", 0)) < 7000 or int(enhancement_stats.get("park_bench_models", 0)) < 34:
+		failures.append("0.2.23 photoreal model detail pass (palms/ground cover/lamps/shelters/park furniture) is incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
 		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("premium_villa_models", 0)) < 14 or not bool(enhancement_stats.get("premium_villa_fixed_scale", false)) or not bool(enhancement_stats.get("premium_villa_detail_pass", false)) or not bool(enhancement_stats.get("premium_villa_material_pass", false)) or not bool(enhancement_stats.get("premium_villa_site_pass", false)):

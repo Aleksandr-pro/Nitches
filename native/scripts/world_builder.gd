@@ -3372,9 +3372,12 @@ func _get_model_parts(path: String) -> Array:
 				"material": _model_part_material(material_name, mesh) if is_vegetation_model else _prop_material(material_name),
 				"material_name": material_name,
 			})
-	if is_vegetation_model:
+	var is_photoreal_prop_0223 := path.ends_with("street_lamp.glb") or path.ends_with("bus_shelter.glb") or path.ends_with("park_bench.glb") or path.ends_with("park_pergola.glb")
+	if is_vegetation_model or is_photoreal_prop_0223:
 		var triangle_key := "%s_triangles" % path.get_file().trim_suffix(".glb")
 		_enhancement_stats[triangle_key] = model_triangle_count
+		if model_triangle_count > 0:
+			_enhancement_stats["photoreal_models_0223"] = true
 	_model_parts_cache[path] = parts
 	return parts
 
@@ -3525,6 +3528,10 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
 		return "BlenderBusShelters"
+	if path.ends_with("park_bench.glb"):
+		return "BlenderParkBenches"
+	if path.ends_with("park_pergola.glb"):
+		return "BlenderParkPergola"
 	if path.ends_with("palm_date.glb"):
 		return "BlenderDatePalms"
 	if path.ends_with("palm_royal.glb"):
@@ -3578,6 +3585,10 @@ func _batched_model_base_range(path: String) -> float:
 		return 72.0
 	if path.ends_with("ornamental_shrub.glb"):
 		return 105.0
+	if path.ends_with("park_bench.glb"):
+		return 220.0
+	if path.ends_with("park_pergola.glb"):
+		return 320.0
 	return 0.0
 
 
@@ -3590,9 +3601,19 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 			return 150.0
 		return 220.0
 	if path.ends_with("street_lamp.glb"):
+		if key.contains("roofdark"):
+			return 160.0
 		return 180.0 if key.contains("glow") else 240.0
 	if path.ends_with("bus_shelter.glb"):
+		if key.contains("solar"):
+			return 170.0
+		if key.contains("glow"):
+			return 180.0
 		return 200.0 if key.contains("glass") else 260.0
+	if path.ends_with("park_bench.glb"):
+		return 150.0 if key.contains("roofdark") else 220.0
+	if path.ends_with("park_pergola.glb"):
+		return 220.0 if key.contains("propsmetal") else 320.0
 
 	var base_range := _batched_model_base_range(path)
 	if base_range <= 0.0:
@@ -3630,6 +3651,10 @@ func _batched_model_chunk_size(path: String) -> float:
 		return 55.0
 	if path.ends_with("ornamental_shrub.glb"):
 		return 70.0
+	if path.ends_with("park_bench.glb"):
+		return 120.0
+	if path.ends_with("park_pergola.glb"):
+		return 220.0
 	return 180.0
 
 
@@ -6690,11 +6715,11 @@ func _park_add_palm(ctx: Dictionary, pos: Vector3, yaw: float, royal: bool, s: f
 
 
 func _park_add_bench(ctx: Dictionary, pos: Vector3, yaw: float) -> void:
-	var basis := Basis(Vector3.UP, yaw)
-	(ctx["bench_transforms"] as Array).append(make_transform(pos + basis * Vector3(0.0, 0.46, 0.0), yaw, Vector3(2.4, 0.16, 0.62)))
-	for side in [-0.85, 0.85]:
-		(ctx["bench_transforms"] as Array).append(make_transform(pos + basis * Vector3(float(side), 0.23, 0.0), yaw, Vector3(0.45, 0.46, 0.55)))
-	_add_box_collider(pos + Vector3(0.0, 0.3, 0.0), Vector3(2.4, 0.6, 0.7), yaw)
+	# 0.2.23: one cast-iron/hardwood Blender bench per seat.  The GLB
+	# seat front faces local -Z after Y-up export, so the extra PI turn
+	# keeps focal benches facing their fountain/pergola/rondel centre.
+	(ctx["bench_transforms"] as Array).append(make_transform(pos + Vector3(0.0, 0.030, 0.0), yaw + PI, Vector3.ONE))
+	_add_box_collider(pos + Vector3(0.0, 0.45, 0.0), Vector3(2.4, 0.95, 0.85), yaw)
 	ctx["bench_count"] = int(ctx.get("bench_count", 0)) + 1
 
 
@@ -6992,27 +7017,16 @@ func _park_build_focal(ctx: Dictionary, spec: Dictionary, seed_base: int) -> voi
 		"pergola":
 			var centre := Vector3(focal.x, height_at(focal.x, focal.y), focal.y)
 			var stone: Array = ctx["pergola_stone_transforms"]
-			var wood: Array = ctx["pergola_wood_transforms"]
 			var column_points: Array[Vector3] = []
 			for i in 6:
 				var ang := TAU * float(i) / 6.0 + PI / 6.0
 				var cp := centre + Vector3(cos(ang) * 5.2, 0.0, sin(ang) * 5.2)
 				cp.y = height_at(cp.x, cp.z)
 				column_points.append(cp)
-				stone.append(make_transform(cp + Vector3(0.0, 1.55, 0.0), ang, Vector3(0.5, 3.1, 0.5)))
-				stone.append(make_transform(cp + Vector3(0.0, 0.18, 0.0), ang, Vector3(0.85, 0.36, 0.85)))
 				_add_cylinder_collider(cp + Vector3(0.0, 1.55, 0.0), 0.4, 3.1)
-			for i in 6:
-				var a := column_points[i]
-				var b := column_points[(i + 1) % 6]
-				var mid := (a + b) * 0.5
-				var dir := b - a
-				dir.y = 0.0
-				wood.append(make_transform(Vector3(mid.x, centre.y + 3.22, mid.z), _yaw_for_x_direction(dir.normalized()), Vector3(dir.length() + 0.5, 0.26, 0.22)))
-			for i in 3:
-				var ang := PI * float(i) / 3.0 + PI / 6.0
-				var dir := Vector3(cos(ang), 0.0, sin(ang))
-				wood.append(make_transform(centre + Vector3(0.0, 3.45, 0.0), _yaw_for_x_direction(dir), Vector3(11.6, 0.2, 0.18)))
+			# 0.2.23: the whole hexagonal structure is one Blender GLB
+			# whose six columns land exactly on the colliders above.
+			(ctx["pergola_model_transforms"] as Array).append(make_transform(centre + Vector3(0.0, 0.04, 0.0), 0.0, Vector3.ONE))
 			stone.append(make_transform(centre + Vector3(0.0, 0.10, 0.0), 0.0, Vector3(4.6, 0.2, 4.6)))
 			for i in 4:
 				var ang := TAU * (float(i) + 0.5) / 4.0
@@ -7249,6 +7263,7 @@ func _build_parks() -> void:
 			"lamp_transforms": [],
 			"pergola_stone_transforms": [],
 			"pergola_wood_transforms": [],
+			"pergola_model_transforms": [],
 			"bench_count": 0,
 			"hedge_length_m": 0.0,
 			"flower_bed_area_m2": 0.0,
@@ -7422,15 +7437,15 @@ func _build_parks() -> void:
 			park_topiary_count += (ctx["topiary_cone_transforms"] as Array).size()
 		total_topiary += park_topiary_count
 		_add_multimesh(park_root, pebble_mesh, pebble_material, ctx["pebble_transforms"], "ParkPalmPebbleBeds_%s" % park_id, false, 0.0, 220.0, 180.0)
-		if _add_multimesh(park_root, unit_box, path_material, ctx["bench_transforms"], "ParkStoneBenches_%s" % park_id, true, -1.0, 220.0, 180.0):
+		if _add_batched_model(park_root, "res://assets/props/park_bench.glb", ctx["bench_transforms"], "ParkBenches"):
 			total_benches += int(ctx.get("bench_count", 0))
 		var lamp_transforms: Array = ctx["lamp_transforms"]
 		if _add_batched_model(park_root, "res://assets/props/street_lamp.glb", lamp_transforms, "ParkLamps"):
 			total_lamps += lamp_transforms.size()
 		var pergola_built := false
-		if not (ctx["pergola_stone_transforms"] as Array).is_empty():
-			pergola_built = _add_multimesh(park_root, unit_box, _prop_material("VillaStone"), ctx["pergola_stone_transforms"], "MuseumPergolaStone", true, 0.0, 300.0, 180.0)
-			_add_multimesh(park_root, unit_box, _prop_material("VillaWood"), ctx["pergola_wood_transforms"], "MuseumPergolaWood", true, 0.0, 300.0, 180.0)
+		if not (ctx["pergola_model_transforms"] as Array).is_empty():
+			pergola_built = _add_batched_model(park_root, "res://assets/props/park_pergola.glb", ctx["pergola_model_transforms"], "MuseumPergola")
+			_add_multimesh(park_root, unit_box, _prop_material("VillaStone"), ctx["pergola_stone_transforms"], "MuseumPergolaCentrePlinth", true, 0.0, 300.0, 180.0)
 			ctx["focal_done"] = bool(ctx.get("focal_done", false)) and pergola_built
 
 		total_bed_area += float(ctx.get("flower_bed_area_m2", 0.0))
@@ -7454,6 +7469,8 @@ func _build_parks() -> void:
 	_enhancement_stats["park_flower_bed_area_m2"] = total_bed_area
 	_enhancement_stats["park_hedge_length_m"] = total_hedge_length
 	_enhancement_stats["park_benches"] = total_benches
+	_enhancement_stats["park_bench_models"] = total_benches
+	_enhancement_stats["photoreal_park_furniture_0223"] = total_benches >= 34 and bool(_enhancement_stats.get("museum_garden_pergola", false))
 	_enhancement_stats["park_lamps"] = total_lamps
 	_enhancement_stats["park_topiary"] = total_topiary
 
