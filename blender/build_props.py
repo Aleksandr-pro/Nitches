@@ -20,6 +20,7 @@ Props:
   * villa.glb         Building Model No.1: detailed fixed-scale modern villa
   * glass_tower.glb   Building Model No.4: fixed-scale glass district tower
   * main_tower.glb    Building Model No.5: fixed-scale sculptural 148 m flagship tower
+  * opera_house.glb   Building Model No.6: fixed-scale RichTown Opera
   * palm_date.glb / palm_royal.glb
                       botanically structured palms with curved segmented
                       trunks, individual pinnate leaflets and crown detail
@@ -130,6 +131,20 @@ def standard_mats():
     mat("MainTrim", (0.78, 0.68, 0.48), roughness=0.38, metallic=0.45)
     mat("MainMetal", (0.12, 0.14, 0.16), roughness=0.40, metallic=0.75)
     mat("MainWater", (0.05, 0.28, 0.36), roughness=0.05, metallic=0.10)
+    # Building Model No.6 is a ceramic-shell opera house.  Its warm
+    # white pleated vaults, travertine podium, bronze structure and
+    # inhabited glass foyer remain physically separated in the GLB so
+    # Godot can assign real-metre photographic PBR materials to each.
+    mat("OperaShell", (0.88, 0.83, 0.74), roughness=0.42, metallic=0.05)
+    mat("OperaStone", (0.72, 0.64, 0.50), roughness=0.88)
+    mat("OperaBronze", (0.48, 0.29, 0.13), roughness=0.34, metallic=0.82)
+    mat("OperaGlass", (0.12, 0.28, 0.34), roughness=0.06, metallic=0.12)
+    mat("OperaInterior", (0.10, 0.07, 0.045), roughness=0.94)
+    mat("OperaWood", (0.42, 0.22, 0.10), roughness=0.78)
+    mat("OperaGranite", (0.055, 0.06, 0.065), roughness=0.42, metallic=0.10)
+    mat("OperaCurtain", (0.34, 0.025, 0.04), roughness=0.98)
+    mat("OperaWater", (0.05, 0.24, 0.32), roughness=0.06, metallic=0.08)
+    mat("OperaLight", (1.0, 0.72, 0.38), roughness=0.32, emission=(1.0, 0.55, 0.20))
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -2501,6 +2516,531 @@ def build_main_tower():
         box("main_rear_hedge", rear_planter_x, 19.05, 0.99, 1.95, 0.48, 0.32, hedge, bevel=0.045)
 
 # --------------------------------------------------------------------------- #
+# Building Model No.6: RichTown Opera.  The fixed parcel is 52 x 56 m and
+# the finial is exactly 22.00 m above the lot.  Blender -Y is the public
+# west front after the native landmark yaw: a curved, inhabited glass
+# foyer sits below three pleated ceramic shell vaults, while the fly
+# tower, loading dock and service yard occupy the rear (+Y).  The design
+# is original: three interlocking dhow-sail shells stand on a tall
+# travertine podium rather than copying an existing opera house.
+# --------------------------------------------------------------------------- #
+def build_opera():
+    shell_mat = MATS["OperaShell"]
+    stone = MATS["OperaStone"]
+    limestone = MATS["VillaLimestone"]
+    bronze = MATS["OperaBronze"]
+    opera_glass = MATS["OperaGlass"]
+    interior = MATS["OperaInterior"]
+    opera_wood = MATS["OperaWood"]
+    opera_granite = MATS["OperaGranite"]
+    curtain = MATS["OperaCurtain"]
+    opera_water = MATS["OperaWater"]
+    opera_light = MATS["OperaLight"]
+    pavement = MATS["VillaPavement"]
+    lawn = MATS["VillaLawn"]
+    hedge = MATS["VillaHedge"]
+    mulch = MATS["VillaMulch"]
+    frame = MATS["WindowFrame"]
+    metal = MATS["PropsMetal"]
+    roof_dark = MATS["RoofDark"]
+
+    def side_window(face_x, centre_y, centre_z, depth=2.45, height=3.35):
+        side_sign = 1.0 if face_x >= 0.0 else -1.0
+        outer_x = face_x + side_sign * 0.055
+        box("opera_side_window_frame", outer_x, centre_y, centre_z, 0.11, depth + 0.22, height + 0.22, bronze)
+        box("opera_side_window_glass", outer_x + side_sign * 0.065, centre_y, centre_z, 0.055, depth, height, opera_glass)
+        box("opera_side_window_mullion", outer_x + side_sign * 0.10, centre_y, centre_z, 0.045, 0.09, height, frame)
+        box("opera_side_window_sill", outer_x + side_sign * 0.11, centre_y, centre_z - height * 0.5 - 0.16,
+            0.20, depth + 0.38, 0.13, limestone)
+        box("opera_side_window_light", outer_x + side_sign * 0.105, centre_y, centre_z + height * 0.5 + 0.20,
+            0.05, depth * 0.72, 0.055, opera_light)
+
+    def rear_window(centre_x, face_y, centre_z, width=2.60, height=3.10):
+        side_sign = 1.0 if face_y >= 0.0 else -1.0
+        outer_y = face_y + side_sign * 0.055
+        box("opera_rear_window_frame", centre_x, outer_y, centre_z, width + 0.22, 0.11, height + 0.22, bronze)
+        box("opera_rear_window_glass", centre_x, outer_y + side_sign * 0.065, centre_z, width, 0.055, height, opera_glass)
+        box("opera_rear_window_mullion", centre_x, outer_y + side_sign * 0.10, centre_z, 0.09, 0.045, height, frame)
+        box("opera_rear_window_sill", centre_x, outer_y + side_sign * 0.11, centre_z - height * 0.5 - 0.16,
+            width + 0.38, 0.20, 0.13, limestone)
+
+    # --- Civic stone parcel, ceremonial steps, ramps and inlay joints. ---
+    box("opera_lot", 0.0, 0.0, 0.18, 52.0, 56.0, 0.36, pavement)
+    box("opera_lot_front_border", 0.0, -27.72, 0.385, 52.0, 0.56, 0.05, opera_granite)
+    box("opera_lot_rear_border", 0.0, 27.72, 0.385, 52.0, 0.56, 0.05, opera_granite)
+    box("opera_lot_left_border", -25.72, 0.0, 0.385, 0.56, 56.0, 0.05, opera_granite)
+    box("opera_lot_right_border", 25.72, 0.0, 0.385, 0.56, 56.0, 0.05, opera_granite)
+    for joint_index in range(13):
+        joint_x = -24.0 + joint_index * 4.0
+        box("opera_forecourt_joint", joint_x, -22.4, 0.395, 0.075, 10.4, 0.018, opera_granite)
+        box("opera_rear_yard_joint", joint_x, 24.0, 0.395, 0.075, 7.2, 0.018, opera_granite)
+    for joint_y in (-25.2, -19.8, 22.2, 25.8):
+        box("opera_lot_transverse_joint", 0.0, joint_y, 0.395, 50.8, 0.075, 0.018, opera_granite)
+    for step_index in range(5):
+        box("opera_grand_step", 0.0, -27.18 + step_index * 0.54, 0.055 + step_index * 0.055,
+            35.0, 0.62, 0.11 + step_index * 0.055, limestone)
+    for ramp_side in (-1.0, 1.0):
+        rbox("opera_access_ramp", ramp_side * 20.35, -25.65, 0.20, 3.15, 4.65, 0.14, limestone,
+             rotation=(0.072, 0.0, 0.0))
+        box("opera_ramp_kerb", ramp_side * 21.98, -25.65, 0.46, 0.16, 4.65, 0.34, opera_granite)
+        box("opera_ramp_light_strip", ramp_side * 18.78, -25.65, 0.43, 0.07, 4.25, 0.045, opera_light)
+
+    # Reflecting basin and central processional bridge.  Fountain rings
+    # are real low geometry and the water is a separate physical part.
+    box("opera_reflecting_pool_basin", 0.0, -21.55, 0.47, 39.0, 3.55, 0.24, opera_granite)
+    box("opera_reflecting_pool_water", 0.0, -21.55, 0.585, 38.15, 2.78, 0.045, opera_water)
+    box("opera_reflecting_pool_bridge", 0.0, -21.55, 0.62, 6.4, 3.82, 0.16, limestone)
+    box("opera_pool_bridge_light", 0.0, -21.55, 0.715, 0.12, 3.35, 0.025, opera_light)
+    for fountain_x in (-17.5, -14.5, -11.5, -8.5, -5.5, 5.5, 8.5, 11.5, 14.5, 17.5):
+        cyl("opera_fountain_nozzle", fountain_x, -21.55, 0.65, 0.075, 0.16, bronze, vertices=10)
+        cyl("opera_fountain_ring_outer", fountain_x, -21.55, 0.615, 0.46, 0.018, opera_water, vertices=12)
+        cyl("opera_fountain_ring_inner", fountain_x, -21.55, 0.622, 0.25, 0.018, opera_light, vertices=10)
+
+    # --- Travertine podium, auditorium core and rear fly tower. ---
+    box("opera_black_plinth", 0.0, 2.0, 0.58, 46.65, 36.65, 0.46, opera_granite)
+    # The podium is composed around a real 5 m deep foyer cavity: the
+    # rear volume starts at y=-11 and only two stone cheeks reach the
+    # curved entrance wall, so the doors do not sit on a solid box.
+    box("opera_podium_rear", 0.0, 4.5, 2.98, 46.0, 31.0, 5.24, stone)
+    box("opera_podium_rear_cornice", 0.0, 4.5, 5.72, 46.55, 31.55, 0.28, limestone)
+    for cheek_side in (-1.0, 1.0):
+        box("opera_podium_front_cheek", cheek_side * 20.75, -13.5, 2.98, 4.5, 5.0, 5.24, stone)
+        box("opera_podium_front_cheek_cornice", cheek_side * 20.75, -13.5, 5.72, 4.85, 5.35, 0.28, limestone)
+        box("opera_foyer_side_wall", cheek_side * 20.35, -13.85, 3.05, 0.32, 4.55, 5.35, interior)
+    box("opera_foyer_floor", 0.0, -14.05, 0.48, 41.5, 5.55, 0.24, opera_granite)
+    box("opera_auditorium_core", 0.0, 3.0, 8.10, 42.0, 30.0, 5.05, stone)
+    box("opera_auditorium_shadow_gap", 0.0, 3.0, 10.72, 42.35, 30.35, 0.18, bronze)
+
+    # Cut-stone piers, horizontal reveals and slit windows make the long
+    # podium read as masonry at road distance rather than a textured box.
+    for side_sign in (-1.0, 1.0):
+        face_x = side_sign * 23.0
+        for pier_y in (-14.0, -9.5, -5.0, -0.5, 4.0, 8.5, 13.0, 17.5):
+            box("opera_side_pier", face_x + side_sign * 0.17, pier_y, 2.98, 0.34, 0.78, 5.05, limestone)
+        for seam_z in (1.55, 2.85, 4.15, 5.25):
+            box("opera_side_stone_seam", face_x + side_sign * 0.055, 2.0, seam_z, 0.07, 35.3, 0.065, frame)
+        for window_y in (-11.75, -2.75, 6.25, 15.25):
+            side_window(face_x, window_y, 3.10, depth=2.55, height=3.35)
+        for clerestory_y in (-8.0, 3.0, 14.0):
+            box("opera_clerestory_frame", side_sign * 21.04, clerestory_y, 8.65, 0.10, 4.10, 1.25, bronze)
+            box("opera_clerestory_glass", side_sign * 21.11, clerestory_y, 8.65, 0.055, 3.82, 1.02, opera_glass)
+            box("opera_clerestory_fin", side_sign * 21.22, clerestory_y - 1.28, 8.65, 0.16, 0.10, 1.02, bronze)
+            box("opera_clerestory_fin", side_sign * 21.22, clerestory_y + 1.28, 8.65, 0.16, 0.10, 1.02, bronze)
+    for rear_pier_x in range(-20, 21, 5):
+        box("opera_rear_pier", float(rear_pier_x), 20.17, 2.98, 0.78, 0.34, 5.05, limestone)
+    for rear_seam_z in (1.55, 2.85, 4.15, 5.25):
+        box("opera_rear_stone_seam", 0.0, 20.055, rear_seam_z, 45.3, 0.07, 0.065, frame)
+    for rear_window_x in (-17.5, -12.5, 12.5, 17.5):
+        rear_window(rear_window_x, 20.0, 3.15, width=2.70, height=3.30)
+
+    # Fly tower: tall stone volume, bronze louvre field, coping, roof
+    # plant, guard rails and a working rear elevation.
+    box("opera_fly_tower", 0.0, 14.5, 10.14, 25.0, 10.0, 19.56, stone)
+    box("opera_fly_tower_cornice", 0.0, 14.5, 19.98, 25.55, 10.55, 0.24, limestone)
+    box("opera_fly_tower_roof", 0.0, 14.5, 20.18, 24.7, 9.7, 0.16, roof_dark)
+    for tower_pier_x in range(-12, 13, 3):
+        box("opera_fly_tower_rear_pier", float(tower_pier_x), 19.58, 10.35, 0.36, 0.16, 18.8, limestone)
+    for tower_seam_z in (4.0, 7.2, 10.4, 13.6, 16.8):
+        box("opera_fly_tower_rear_seam", 0.0, 19.575, tower_seam_z, 24.6, 0.065, 0.065, frame)
+    box("opera_fly_tower_louvre_shadow", 0.0, 19.64, 14.35, 15.8, 0.10, 7.8, interior)
+    for louvre_index in range(15):
+        louvre_x = -7.0 + louvre_index * 1.0
+        box("opera_fly_tower_louvre", louvre_x, 19.72, 14.35, 0.17, 0.10, 7.45, bronze)
+    for louvre_z in (11.2, 12.8, 14.4, 16.0, 17.6):
+        box("opera_fly_tower_louvre_rail", 0.0, 19.74, louvre_z, 15.3, 0.09, 0.12, frame)
+    for plant_x, plant_y, plant_w, plant_d in ((-8.2, 12.6, 4.2, 2.1), (-2.6, 16.6, 3.4, 1.8), (4.8, 12.4, 4.8, 2.2), (9.4, 16.2, 2.8, 1.7)):
+        box("opera_fly_roof_plant", plant_x, plant_y, 20.78, plant_w, plant_d, 1.05, metal)
+        box("opera_fly_roof_plant_lid", plant_x, plant_y, 21.36, plant_w - 0.24, plant_d - 0.24, 0.11, frame)
+        cyl("opera_fly_roof_fan", plant_x - plant_w * 0.22, plant_y, 21.48, 0.42, 0.13, bronze, vertices=16)
+        cyl("opera_fly_roof_fan_hub", plant_x - plant_w * 0.22, plant_y, 21.57, 0.11, 0.08, frame, vertices=10)
+    for rail_y in (9.85, 19.15):
+        box("opera_fly_roof_rail", 0.0, rail_y, 20.78, 24.2, 0.055, 0.055, bronze)
+    for rail_x in (-12.1, 12.1):
+        box("opera_fly_roof_side_rail", rail_x, 14.5, 20.78, 0.055, 9.3, 0.055, bronze)
+    cyl("opera_lightning_mast", 11.2, 18.4, 20.98, 0.035, 1.45, bronze, vertices=8)
+    sphere("opera_lightning_mast_tip", 11.2, 18.4, 21.74, 0.13, 0.13, 0.13, opera_light)
+
+    # Rear stage door, dock, canopy and service yard.
+    box("opera_stage_door_frame", 0.0, 19.66, 3.55, 7.55, 0.22, 6.15, bronze)
+    for slat_index in range(8):
+        box("opera_stage_door_slat", 0.0, 19.79, 0.95 + slat_index * 0.72, 7.05, 0.08, 0.62, metal)
+    box("opera_stage_door_centre_rail", 0.0, 19.84, 3.55, 0.14, 0.07, 5.85, frame)
+    box("opera_loading_dock", 0.0, 21.55, 0.68, 12.5, 3.55, 0.64, limestone)
+    box("opera_loading_dock_edge", 0.0, 23.30, 0.98, 12.5, 0.16, 0.08, opera_light)
+    for dock_side in (-1.0, 1.0):
+        rbox("opera_loading_ramp", dock_side * 7.65, 21.55, 0.39, 2.8, 3.55, 0.16, limestone,
+             rotation=(0.0, dock_side * 0.105, 0.0))
+        cyl("opera_dock_bumper", dock_side * 4.6, 23.38, 0.72, 0.16, 0.55, roof_dark, vertices=12)
+    rbox("opera_stage_canopy", 0.0, 20.85, 7.05, 10.8, 2.75, 0.18, bronze, rotation=(0.07, 0.0, 0.0), bevel=0.035)
+    for tie_x in (-4.6, -2.3, 2.3, 4.6):
+        tube_between("opera_stage_canopy_tie", (tie_x, 22.05, 7.12), (tie_x, 19.62, 10.65), 0.032, 0.032, metal, vertices=8)
+    for service_line_x in (-18.0, -12.0, 12.0, 18.0):
+        box("opera_service_yard_line", service_line_x, 24.0, 0.415, 0.13, 6.8, 0.018, opera_light)
+    box("opera_service_yard_centre_line", 0.0, 25.45, 0.415, 35.0, 0.13, 0.018, opera_light)
+
+    # --- Inhabited foyer behind the curved glass. ---
+    box("opera_foyer_back_wall", 0.0, -11.95, 7.05, 40.5, 1.55, 13.4, interior)
+    box("opera_foyer_ceiling", 0.0, -14.0, 13.55, 40.5, 5.6, 0.32, limestone)
+    for slat_index in range(41):
+        slat_x = -19.0 + slat_index * 0.95
+        box("opera_foyer_timber_slat", slat_x, -12.82, 7.05, 0.18, 0.13, 11.7, opera_wood)
+    for balcony_z in (4.95, 8.15, 11.35):
+        box("opera_foyer_balcony", 0.0, -13.75, balcony_z, 36.5, 2.35, 0.26, limestone)
+        box("opera_foyer_balcony_wood_front", 0.0, -14.98, balcony_z + 0.38, 36.5, 0.12, 0.55, opera_wood)
+        box("opera_foyer_balcony_glass_rail", 0.0, -15.02, balcony_z + 0.82, 36.5, 0.045, 0.38, opera_glass)
+        box("opera_foyer_balcony_light", 0.0, -15.04, balcony_z - 0.18, 35.8, 0.045, 0.045, opera_light)
+    for column_x in (-16.5, -8.25, 8.25, 16.5):
+        cyl("opera_foyer_column", column_x, -14.55, 6.85, 0.23, 12.95, bronze, vertices=16)
+        cyl("opera_foyer_column_base", column_x, -14.55, 0.62, 0.42, 0.52, opera_granite, vertices=16)
+    # A pleated crimson performance curtain is visible through the foyer.
+    box("opera_curtain_backing", 0.0, -12.35, 5.55, 13.4, 0.22, 9.0, interior)
+    for pleat_index in range(21):
+        pleat_x = -5.5 + pleat_index * 0.55
+        cyl("opera_curtain_pleat", pleat_x, -12.55, 5.30, 0.17, 8.45, curtain, vertices=10)
+    box("opera_curtain_pelmet", 0.0, -12.57, 9.78, 12.6, 0.30, 0.48, bronze)
+    box("opera_curtain_light_wash", 0.0, -12.78, 1.02, 11.8, 0.08, 0.14, opera_light)
+    for stair_side in (-1.0, 1.0):
+        for step_index in range(10):
+            step_x = stair_side * (2.05 + step_index * 0.74)
+            step_z = 0.74 + step_index * 0.42
+            box("opera_grand_interior_stair", step_x, -13.95, step_z, 0.72, 2.15, 0.15, limestone)
+        tube_between("opera_grand_stair_handrail", (stair_side * 1.75, -15.02, 1.45),
+                     (stair_side * 9.15, -15.02, 5.42), 0.045, 0.045, bronze, vertices=10)
+    for light_index in range(11):
+        light_x = -15.0 + light_index * 3.0
+        pendant_z = 9.35 + (0.75 if light_index % 2 else 0.0)
+        cyl("opera_pendant_rod", light_x, -14.45, (13.38 + pendant_z) * 0.5, 0.018, 13.38 - pendant_z, frame, vertices=6)
+        cyl("opera_pendant_lantern", light_x, -14.45, pendant_z, 0.17, 0.26, opera_light, vertices=12)
+
+    # Curved eleven-bay foyer curtain wall, doors, rails and canopy.
+    facade_xs = [-19.0 + bay_index * 3.8 for bay_index in range(11)]
+    facade_points = []
+    for facade_x in facade_xs:
+        facade_y = -16.55 - 1.15 * (1.0 - (facade_x / 19.0) ** 2)
+        facade_points.append((facade_x, facade_y))
+    for bay_index in range(10):
+        x0, y0 = facade_points[bay_index]
+        x1, y1 = facade_points[bay_index + 1]
+        mid_x = (x0 + x1) * 0.5
+        mid_y = (y0 + y1) * 0.5
+        bay_dx = x1 - x0
+        bay_dy = y1 - y0
+        bay_length = math.hypot(bay_dx, bay_dy)
+        bay_yaw = math.atan2(bay_dy, bay_dx)
+        rbox("opera_curved_glass_pane", mid_x, mid_y, 7.15, bay_length + 0.035, 0.065, 10.85, opera_glass,
+             rotation=(0.0, 0.0, bay_yaw))
+        rbox("opera_glass_kick_plate", mid_x, mid_y - 0.055, 0.98, bay_length, 0.13, 1.08, opera_granite,
+             rotation=(0.0, 0.0, bay_yaw))
+        for rail_z in (1.82, 5.45, 9.08, 12.62):
+            rbox("opera_curved_glass_rail", mid_x, mid_y - 0.065, rail_z, bay_length + 0.04, 0.13, 0.16, bronze,
+                 rotation=(0.0, 0.0, bay_yaw))
+        if 3 <= bay_index <= 6:
+            direction_x = bay_dx / bay_length
+            direction_y = bay_dy / bay_length
+            normal_x = direction_y
+            normal_y = -direction_x
+            for door_side in (-0.82, 0.82):
+                door_x = mid_x + direction_x * door_side + normal_x * 0.10
+                door_y = mid_y + direction_y * door_side + normal_y * 0.10
+                rbox("opera_entrance_door", door_x, door_y, 2.02, 1.52, 0.055, 3.18, opera_glass,
+                     rotation=(0.0, 0.0, bay_yaw))
+                handle_offset = 0.58 if door_side < 0.0 else -0.58
+                handle_x = door_x + direction_x * handle_offset + normal_x * 0.075
+                handle_y = door_y + direction_y * handle_offset + normal_y * 0.075
+                cyl("opera_door_handle", handle_x, handle_y, 1.62, 0.026, 0.84, bronze, vertices=8)
+            rbox("opera_door_header", mid_x + normal_x * 0.12, mid_y + normal_y * 0.12, 3.82,
+                 bay_length * 0.92, 0.11, 0.24, bronze, rotation=(0.0, 0.0, bay_yaw))
+    for point_index, (point_x, point_y) in enumerate(facade_points):
+        if point_index == 0:
+            tangent_yaw = math.atan2(facade_points[1][1] - point_y, facade_points[1][0] - point_x)
+        elif point_index == len(facade_points) - 1:
+            tangent_yaw = math.atan2(point_y - facade_points[-2][1], point_x - facade_points[-2][0])
+        else:
+            tangent_yaw = math.atan2(facade_points[point_index + 1][1] - facade_points[point_index - 1][1],
+                                     facade_points[point_index + 1][0] - facade_points[point_index - 1][0])
+        rbox("opera_curved_glass_mullion", point_x, point_y - 0.03, 7.15, 0.20, 0.27, 11.35, bronze,
+             rotation=(0.0, 0.0, tangent_yaw))
+
+    # Nine public colonnade fins carry the shell springing beam.  A
+    # segmented tied canopy turns the doors into a real entrance in
+    # silhouette and close-up rather than a decal or colour change.
+    colonnade_points = []
+    for fin_index in range(9):
+        fin_x = -20.0 + fin_index * 5.0
+        fin_y = -18.20 - 0.90 * (1.0 - (fin_x / 20.0) ** 2)
+        tangent_yaw = math.atan(0.0045 * fin_x)
+        colonnade_points.append((fin_x, fin_y, tangent_yaw))
+        rbox("opera_colonnade_fin", fin_x, fin_y, 6.76, 0.62, 1.05, 12.80, limestone,
+             rotation=(0.0, 0.0, tangent_yaw), bevel=0.035)
+        rbox("opera_colonnade_bronze_edge", fin_x, fin_y - 0.59, 6.76, 0.16, 0.10, 12.80, bronze,
+             rotation=(0.0, 0.0, tangent_yaw))
+        rbox("opera_colonnade_base", fin_x, fin_y, 0.58, 0.92, 1.28, 0.44, opera_granite,
+             rotation=(0.0, 0.0, tangent_yaw))
+        rbox("opera_colonnade_capital", fin_x, fin_y, 13.28, 1.02, 1.34, 0.34, bronze,
+             rotation=(0.0, 0.0, tangent_yaw))
+        box("opera_colonnade_uplight", fin_x, fin_y - 0.75, 0.46, 0.22, 0.22, 0.07, opera_light)
+    for bay_index in range(8):
+        x0, y0, _yaw0 = colonnade_points[bay_index]
+        x1, y1, _yaw1 = colonnade_points[bay_index + 1]
+        beam_length = math.hypot(x1 - x0, y1 - y0)
+        beam_yaw = math.atan2(y1 - y0, x1 - x0)
+        rbox("opera_shell_springing_beam", (x0 + x1) * 0.5, (y0 + y1) * 0.5 + 0.15, 13.62,
+             beam_length + 0.08, 0.85, 0.42, bronze, rotation=(0.0, 0.0, beam_yaw))
+    for bay_index in range(10):
+        x0, y0 = facade_points[bay_index]
+        x1, y1 = facade_points[bay_index + 1]
+        bay_length = math.hypot(x1 - x0, y1 - y0)
+        bay_yaw = math.atan2(y1 - y0, x1 - x0)
+        rbox("opera_entrance_canopy", (x0 + x1) * 0.5, (y0 + y1) * 0.5 - 1.28, 4.72,
+             bay_length + 0.06, 2.55, 0.17, bronze, rotation=(0.055, 0.0, bay_yaw), bevel=0.03)
+        rbox("opera_canopy_light", (x0 + x1) * 0.5, (y0 + y1) * 0.5 - 1.28, 4.60,
+             bay_length * 0.72, 0.09, 0.035, opera_light, rotation=(0.055, 0.0, bay_yaw))
+    for tie_x in (-16.0, -10.5, -5.0, 5.0, 10.5, 16.0):
+        tie_facade_y = -16.55 - 1.15 * (1.0 - (tie_x / 19.0) ** 2)
+        tube_between("opera_canopy_tie", (tie_x, tie_facade_y - 2.35, 4.86),
+                     (tie_x, tie_facade_y - 0.12, 10.95), 0.030, 0.030, metal, vertices=8)
+
+    # --- Three pleated ceramic shell vaults. ---
+    shell_builder = MeshBuilder()
+    shell_seam_builder = MeshBuilder()
+    shell_glass_builder = MeshBuilder()
+    shell_light_builder = MeshBuilder()
+    shell_specs = (
+        (-16.0, 6.9, 17.55, -15.6, 16.8),
+        (0.0, 8.6, 21.68, -17.2, 18.2),
+        (16.0, 6.9, 18.85, -16.1, 17.4),
+    )
+
+    def shell_point(spec, u, t, drop=0.0, y_offset=0.0):
+        centre_x, half_width, peak_z, y_front, y_rear = spec
+        profile = 0.80 + 0.20 * math.sin(math.pi * min(max(t * 1.08, 0.0), 1.0))
+        width_scale = 0.88 + 0.12 * math.sin(math.pi * t)
+        arch = max(math.cos(u * math.pi * 0.5), 0.0) ** 0.66
+        point_x = centre_x + u * half_width * width_scale
+        point_y = y_front + (y_rear - y_front) * t + y_offset
+        point_z = 5.0 + (peak_z - 5.0) * profile * arch
+        point_z += 0.050 * math.sin(u * math.pi * 7.0) * arch - drop
+        return Vector((point_x, point_y, point_z))
+
+    def offset_shell_point(spec, u, t, outward=0.065, y_offset=0.0):
+        point = shell_point(spec, u, t, y_offset=y_offset)
+        arch = max(math.cos(u * math.pi * 0.5), 0.0) ** 0.66
+        point.x += (1.0 if u >= 0.0 else -1.0) * outward * (1.0 - arch)
+        point.z += outward * (0.35 + 0.65 * arch)
+        return point
+
+    cross_segments = 32
+    length_segments = 18
+    shell_rows_by_spec = []
+    for spec in shell_specs:
+        outer_rows = []
+        inner_rows = []
+        for length_index in range(length_segments + 1):
+            t = length_index / float(length_segments)
+            outer_row = []
+            inner_row = []
+            for cross_index in range(cross_segments + 1):
+                u = -1.0 + 2.0 * cross_index / float(cross_segments)
+                outer_point = shell_point(spec, u, t)
+                inner_point = shell_point(spec, u, t, drop=0.34)
+                inner_point.x = spec[0] + (inner_point.x - spec[0]) * 0.985
+                outer_row.append(shell_builder.add_vertex(
+                    outer_point, ((outer_point.x + 26.0) / 3.0, (outer_point.y + 28.0) / 3.0)))
+                inner_row.append(shell_builder.add_vertex(
+                    inner_point, ((inner_point.x + 26.0) / 3.0, (inner_point.y + 28.0) / 3.0)))
+            outer_rows.append(outer_row)
+            inner_rows.append(inner_row)
+        shell_rows_by_spec.append((outer_rows, inner_rows))
+        for length_index in range(length_segments):
+            for cross_index in range(cross_segments):
+                shell_builder.add_face((
+                    outer_rows[length_index][cross_index],
+                    outer_rows[length_index][cross_index + 1],
+                    outer_rows[length_index + 1][cross_index + 1],
+                    outer_rows[length_index + 1][cross_index],
+                ))
+                shell_builder.add_face((
+                    inner_rows[length_index][cross_index],
+                    inner_rows[length_index + 1][cross_index],
+                    inner_rows[length_index + 1][cross_index + 1],
+                    inner_rows[length_index][cross_index + 1],
+                ))
+        # Close the rear of every vault in ceramic.  Fronts remain glazed.
+        outer_rows, _inner_rows = shell_rows_by_spec[-1]
+        centre_x, _half_width, _peak_z, _y_front, y_rear = spec
+        rear_centre = shell_builder.add_vertex(Vector((centre_x, y_rear, 5.05)), (centre_x / 3.0, y_rear / 3.0))
+        rear_row = outer_rows[-1]
+        for cross_index in range(cross_segments):
+            shell_builder.add_face((rear_centre, rear_row[cross_index], rear_row[cross_index + 1]))
+        # Thick shell skirts tie the vault into the podium cornice.
+        for side_sign in (-1.0, 1.0):
+            box("opera_shell_skirt", centre_x + side_sign * spec[1] * 0.94, (spec[3] + spec[4]) * 0.5, 4.72,
+                0.62, spec[4] - spec[3], 1.55, shell_mat)
+
+    for spec in shell_specs:
+        centre_x, _half_width, _peak_z, y_front, _y_rear = spec
+        # Front glazed lunette for each shell.
+        cap_centre_point = Vector((centre_x, y_front + 0.10, 5.08))
+        cap_centre = shell_glass_builder.add_vertex(cap_centre_point, (0.5, 0.0))
+        cap_row = []
+        for cross_index in range(cross_segments + 1):
+            u = -1.0 + 2.0 * cross_index / float(cross_segments)
+            cap_point = shell_point(spec, u, 0.0, drop=0.12, y_offset=0.10)
+            cap_row.append(shell_glass_builder.add_vertex(
+                cap_point, ((u + 1.0) * 0.5, max(0.0, (cap_point.z - 5.0) / 16.0))))
+        for cross_index in range(cross_segments):
+            shell_glass_builder.add_face((cap_centre, cap_row[cross_index + 1], cap_row[cross_index]))
+        # Radiating and concentric bronze mullions on the lunette.
+        for radial_u in (-0.78, -0.52, -0.26, 0.0, 0.26, 0.52, 0.78):
+            arch_point = shell_point(spec, radial_u, 0.0, drop=0.10, y_offset=0.015)
+            builder_tube(shell_seam_builder, [cap_centre_point, arch_point], [0.045, 0.045],
+                         sides=5, uv_v_scale=0.35)
+        for arc_fraction in (0.34, 0.62, 0.84):
+            arc_points = []
+            for arc_index in range(19):
+                arc_u = -1.0 + 2.0 * arc_index / 18.0
+                arch_point = shell_point(spec, arc_u, 0.0, drop=0.10, y_offset=0.015)
+                arc_points.append(cap_centre_point + (arch_point - cap_centre_point) * arc_fraction)
+            builder_tube(shell_seam_builder, arc_points, [0.034] * len(arc_points),
+                         sides=5, uv_v_scale=0.35)
+        # Longitudinal ceramic-panel ribs and transverse movement joints.
+        for rib_u in (-0.84, -0.63, -0.42, -0.21, 0.0, 0.21, 0.42, 0.63, 0.84):
+            rib_points = [offset_shell_point(spec, rib_u, rib_index / 18.0) for rib_index in range(19)]
+            builder_tube(shell_seam_builder, rib_points, [0.055] * len(rib_points),
+                         sides=5, uv_v_scale=0.45)
+        for seam_t in (0.16, 0.32, 0.48, 0.64, 0.80):
+            seam_points = [offset_shell_point(spec, -1.0 + seam_index / 12.0, seam_t, outward=0.050)
+                           for seam_index in range(25)]
+            builder_tube(shell_seam_builder, seam_points, [0.040] * len(seam_points),
+                         sides=5, uv_v_scale=0.45)
+        # Heavy front/rear fasciae and side edge beams show shell depth.
+        for fascia_t, fascia_radius in ((0.0, 0.165), (1.0, 0.135)):
+            fascia_points = [offset_shell_point(spec, -1.0 + fascia_index / 12.0, fascia_t, outward=0.035)
+                             for fascia_index in range(25)]
+            builder_tube(shell_seam_builder, fascia_points, [fascia_radius] * len(fascia_points),
+                         sides=7, uv_v_scale=0.45)
+        for edge_u in (-1.0, 1.0):
+            edge_points = [offset_shell_point(spec, edge_u, edge_index / 18.0, outward=0.045)
+                           for edge_index in range(19)]
+            builder_tube(shell_seam_builder, edge_points, [0.135] * len(edge_points),
+                         sides=7, uv_v_scale=0.45)
+        # Continuous warm cove light under each front fascia.
+        cove_points = []
+        for cove_index in range(25):
+            cove_u = -1.0 + cove_index / 12.0
+            cove_point = shell_point(spec, cove_u, 0.0, drop=0.24, y_offset=-0.10)
+            cove_points.append(cove_point)
+        builder_tube(shell_light_builder, cove_points, [0.035] * len(cove_points),
+                     sides=5, uv_v_scale=0.35)
+        # Central bronze-framed skylight spine follows the vault crown.
+        spine_points = [offset_shell_point(spec, 0.0, spine_index / 18.0, outward=0.10)
+                        for spine_index in range(19)]
+        builder_tube(shell_glass_builder, spine_points, [0.20] * len(spine_points),
+                     sides=7, uv_v_scale=0.45)
+        # Tapered shell buttress columns create a convincing load path.
+        for support_side in (-1.0, 1.0):
+            front_top = shell_point(spec, support_side * 0.91, 0.015)
+            rear_top = shell_point(spec, support_side * 0.91, 0.985)
+            tube_between("opera_shell_front_buttress",
+                         (centre_x + support_side * spec[1] * 0.94, y_front + 1.05, 0.36),
+                         (front_top.x, front_top.y, front_top.z), 0.27, 0.17, bronze, vertices=12)
+            tube_between("opera_shell_rear_buttress",
+                         (centre_x + support_side * spec[1] * 0.94, spec[4] - 1.05, 0.36),
+                         (rear_top.x, rear_top.y, rear_top.z), 0.24, 0.16, bronze, vertices=12)
+
+    shell_builder.build("opera_pleated_shells", shell_mat, smooth=True)
+    shell_seam_builder.build("opera_shell_bronze_seams", bronze, smooth=True)
+    shell_glass_builder.build("opera_shell_glass_lunettes", opera_glass, smooth=True)
+    shell_light_builder.build("opera_shell_cove_lights", opera_light, smooth=True)
+    # The sole object allowed to touch 22.00 m: a thin bronze finial.
+    box("opera_exact_22m_finial", 0.0, 0.35, 21.96, 0.48, 2.20, 0.08, bronze)
+
+    # --- Side restaurant terrace and north artists' entrance. ---
+    box("opera_restaurant_deck", 24.35, 0.0, 0.58, 2.55, 24.0, 0.16, opera_wood)
+    for pergola_y in (-11.0, -5.5, 0.0, 5.5, 11.0):
+        cyl("opera_pergola_post", 25.35, pergola_y, 1.85, 0.075, 2.65, bronze, vertices=10)
+    box("opera_pergola_beam", 25.35, 0.0, 3.16, 0.14, 23.4, 0.16, bronze)
+    for slat_index in range(13):
+        slat_y = -11.4 + slat_index * 1.9
+        box("opera_pergola_slat", 24.35, slat_y, 3.28, 2.55, 0.12, 0.09, opera_wood)
+    for table_y in (-8.25, -2.75, 2.75, 8.25):
+        cyl("opera_terrace_table_top", 24.25, table_y, 1.32, 0.58, 0.07, limestone, vertices=18)
+        cyl("opera_terrace_table_leg", 24.25, table_y, 0.97, 0.055, 0.66, bronze, vertices=10)
+        for chair_offset in (-0.82, 0.82):
+            box("opera_terrace_chair_seat", 24.25, table_y + chair_offset, 1.03, 0.46, 0.42, 0.07, opera_wood)
+            box("opera_terrace_chair_back", 24.25, table_y + chair_offset + (0.20 if chair_offset > 0.0 else -0.20),
+                1.27, 0.46, 0.06, 0.48, opera_wood)
+        box("opera_terrace_table_light", 24.25, table_y, 1.43, 0.12, 0.12, 0.12, opera_light)
+
+    box("opera_artist_door_frame", -23.12, 0.0, 2.05, 0.18, 1.75, 3.35, bronze)
+    box("opera_artist_door", -23.24, 0.0, 2.05, 0.08, 1.48, 3.05, opera_glass)
+    box("opera_artist_canopy", -23.82, 0.0, 3.92, 1.55, 2.75, 0.15, bronze)
+    box("opera_artist_entrance_light", -23.34, 0.0, 3.48, 0.06, 1.25, 0.08, opera_light)
+    box("opera_artist_step", -23.75, 0.0, 0.48, 1.35, 2.55, 0.14, limestone)
+
+    # Emergency stairs at the service corners, with landings and rails.
+    for stair_side in (-1.0, 1.0):
+        stair_x = stair_side * 21.65
+        for flight_index in range(4):
+            flight_base_z = 0.55 + flight_index * 1.28
+            rbox("opera_emergency_flight", stair_x, 18.65, flight_base_z + 0.56, 1.05, 2.75, 0.12, metal,
+                 rotation=(0.43 if flight_index % 2 == 0 else -0.43, 0.0, 0.0))
+            box("opera_emergency_landing", stair_x, 19.95 if flight_index % 2 == 0 else 17.35,
+                flight_base_z + 1.18, 1.15, 0.95, 0.11, metal)
+        box("opera_emergency_rail", stair_x + stair_side * 0.55, 18.65, 3.15, 0.045, 3.65, 0.045, bronze)
+
+    # --- Forecourt sculpture, banners, furniture and landscape. ---
+    sculpture_builder = MeshBuilder()
+    sculpture_base = Vector((-20.2, -22.4, 0.72))
+    sculpture_curves = (
+        (Vector((-21.2, -23.0, 0.72)), Vector((-22.0, -22.8, 2.5)), Vector((-20.4, -21.7, 4.1)), Vector((-18.7, -22.0, 4.65))),
+        (Vector((-20.2, -22.4, 0.72)), Vector((-20.6, -21.4, 2.8)), Vector((-19.2, -21.8, 4.3)), Vector((-19.9, -20.7, 5.25))),
+        (Vector((-19.2, -23.0, 0.72)), Vector((-18.7, -23.3, 2.4)), Vector((-19.8, -22.7, 3.7)), Vector((-21.0, -21.6, 3.95))),
+    )
+    for curve_points in sculpture_curves:
+        sampled = cubic_points(curve_points[0], curve_points[1], curve_points[2], curve_points[3], 14)
+        builder_tube(sculpture_builder, sampled, [0.14] * len(sampled), sides=8, uv_v_scale=0.35)
+    box("opera_sculpture_plinth", sculpture_base.x, sculpture_base.y, 0.54, 2.55, 2.55, 0.38, opera_granite)
+    sculpture_builder.build("opera_bronze_forecourt_sculpture", bronze, smooth=True)
+
+    box("opera_forecourt_sign_wall", 0.0, -25.65, 0.91, 10.5, 0.48, 1.10, opera_granite)
+    box("opera_forecourt_sign_band", 0.0, -25.96, 1.12, 8.9, 0.055, 0.28, bronze)
+    for sign_light_x in (-3.6, -1.8, 0.0, 1.8, 3.6):
+        box("opera_sign_light_slit", sign_light_x, -26.005, 0.78, 0.58, 0.025, 0.055, opera_light)
+    for banner_x in (-19.0, -13.0, 13.0, 19.0):
+        cyl("opera_banner_pole", banner_x, -24.35, 3.88, 0.045, 7.05, bronze, vertices=10)
+        box("opera_banner", banner_x + (0.48 if banner_x < 0.0 else -0.48), -24.35, 5.45, 0.88, 0.045, 3.35,
+            curtain if abs(banner_x) > 15.0 else bronze)
+        box("opera_banner_light_bar", banner_x + (0.48 if banner_x < 0.0 else -0.48), -24.39, 3.72, 0.88, 0.06, 0.07, opera_light)
+    for bollard_x in (-22.0, -18.0, -14.0, -10.0, 10.0, 14.0, 18.0, 22.0):
+        cyl("opera_forecourt_bollard", bollard_x, -26.75, 0.72, 0.085, 0.72, bronze, vertices=12)
+        box("opera_forecourt_bollard_light", bollard_x, -26.75, 1.10, 0.10, 0.10, 0.045, opera_light)
+    for bench_x in (-16.5, -9.5, 9.5, 16.5):
+        box("opera_forecourt_bench", bench_x, -19.75, 0.68, 2.45, 0.52, 0.11, opera_wood)
+        box("opera_forecourt_bench_base", bench_x, -19.75, 0.50, 2.00, 0.36, 0.28, opera_granite)
+    for mast_x in (-22.5, 22.5):
+        cyl("opera_forecourt_light_mast", mast_x, -20.5, 3.10, 0.055, 5.55, bronze, vertices=10)
+        for head_offset in (-0.38, 0.38):
+            box("opera_forecourt_light_head", mast_x + head_offset, -20.5, 5.92, 0.52, 0.16, 0.09, opera_light)
+    for planter_x in (-21.5, -17.5, 17.5, 21.5):
+        box("opera_front_planter", planter_x, -18.55, 0.66, 2.65, 0.82, 0.58, opera_granite)
+        box("opera_front_planter_soil", planter_x, -18.55, 0.97, 2.38, 0.58, 0.045, mulch)
+        box("opera_front_planter_hedge", planter_x, -18.55, 1.16, 2.18, 0.46, 0.34, hedge, bevel=0.045)
+
+    for garden_side in (-1.0, 1.0):
+        box("opera_side_lawn", garden_side * 24.55, 21.0, 0.43, 1.65, 12.5, 0.055, lawn)
+        box("opera_side_garden_hedge", garden_side * 24.55, 17.2, 0.76, 1.05, 3.35, 0.58, hedge, bevel=0.055)
+        box("opera_side_garden_hedge", garden_side * 24.55, 24.8, 0.76, 1.05, 3.35, 0.58, hedge, bevel=0.055)
+        for tree_y in (-13.0, 20.9):
+            cyl("opera_formal_tree_planter", garden_side * 24.55, tree_y, 0.62, 0.78, 0.52, opera_granite, vertices=18)
+            cyl("opera_formal_tree_trunk", garden_side * 24.55, tree_y, 1.75, 0.09, 1.95, opera_wood, vertices=10)
+            sphere("opera_formal_tree_canopy", garden_side * 24.55, tree_y, 3.25, 2.35, 2.35, 2.05, hedge)
+    for rear_planter_x in (-19.0, -14.5, 14.5, 19.0):
+        box("opera_rear_planter", rear_planter_x, 26.35, 0.62, 2.45, 0.72, 0.52, opera_granite)
+        box("opera_rear_planter_hedge", rear_planter_x, 26.35, 1.00, 2.12, 0.48, 0.34, hedge, bevel=0.045)
+
+
+# --------------------------------------------------------------------------- #
 # 0.2.17 botanical models.  These are deliberately geometric: palm fronds
 # have a curved rachis and individual folded leaflets, grass consists of
 # curved tapered blades, and flowers/shrubs have stems, branches, petals
@@ -2836,6 +3376,7 @@ def main():
         (build_villa, "villa.glb"),
         (build_glass_tower, "glass_tower.glb"),
         (build_main_tower, "main_tower.glb"),
+        (build_opera, "opera_house.glb"),
         (build_palm_date, "palm_date.glb"),
         (build_palm_royal, "palm_royal.glb"),
         (build_grass_tuft, "grass_tuft.glb"),
