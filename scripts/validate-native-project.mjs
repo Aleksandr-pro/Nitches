@@ -50,8 +50,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=33'), 'Native 0.2.30 must bump Android versionCode to 33');
-assert(preset.includes('version/name="0.2.30-native-alpha"'), 'Native version name must be 0.2.30-native-alpha');
+assert(preset.includes('version/code=34'), 'Native 0.2.31 must bump Android versionCode to 34');
+assert(preset.includes('version/name="0.2.31-native-alpha"'), 'Native version name must be 0.2.31-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -140,6 +140,10 @@ assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/b
 for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
 }
+for (const marker of ['get_global_transform_interpolated', 'PHYSICS_INTERPOLATION_MODE_OFF', 'reset_physics_interpolation', 'responsive_steering', 'ramp_digital_steering', 'shape_steering_input', 'CONTACT_PATCH_SAMPLES', 'TYRE_RELAXATION_LENGTH_M', 'free_orbit_0231', 'InputEventScreenDrag', 'InputEventMouseMotion', 'JOY_AXIS_RIGHT_X']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.31 anti-jitter/steering/free-camera marker is missing: ${marker}`);
+}
+assert(project.includes('common/physics_interpolation=true'), 'Native 0.2.31 requires project physics interpolation');
 for (const marker of ['directional_streaming_0230', 'update_streaming', '_streaming_tick', '_register_collider', 'streaming_colliders_total', 'STREAM_HIDE_BEHIND_M']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.30 directional-streaming marker is missing: ${marker}`);
 }

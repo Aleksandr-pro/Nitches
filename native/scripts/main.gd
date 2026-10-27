@@ -16,6 +16,12 @@ const TIME_MODES: Array[String] = ["day", "sunset", "night"]
 const CAMERA_CHASE := 0
 const CAMERA_HOOD := 1
 const CAMERA_TOP := 2
+const CAMERA_ORBIT_TOUCH_SENSITIVITY := 0.0052
+const CAMERA_ORBIT_MOUSE_SENSITIVITY := 0.0042
+const CAMERA_ORBIT_PITCH_MIN := -0.38
+const CAMERA_ORBIT_PITCH_MAX := 0.86
+const CAMERA_ORBIT_DISTANCE_MIN := 0.72
+const CAMERA_ORBIT_DISTANCE_MAX := 1.50
 
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
@@ -46,6 +52,12 @@ var _camera_follow_yaw := 0.0
 var _camera_target_smooth := Vector3.ZERO
 var _camera_drift_offset_smooth := 0.0
 var _camera_smoothing_initialized := false
+var _camera_orbit_yaw := 0.0
+var _camera_orbit_pitch := 0.0
+var _camera_orbit_distance_scale := 1.0
+var _camera_drag_touch_index := -1
+var _camera_mouse_dragging := false
+var _camera_manual_timer := 999.0
 
 
 func _ready() -> void:
@@ -142,6 +154,8 @@ func _profile_view() -> Dictionary:
 func _show_menu() -> void:
 	if _smoke_mode or _screenshot_mode or _menu == null:
 		return
+	_camera_drag_touch_index = -1
+	_camera_mouse_dragging = false
 	_in_menu = true
 	if _vehicle != null:
 		_vehicle.freeze = true
@@ -154,6 +168,8 @@ func _show_menu() -> void:
 
 
 func _enter_game() -> void:
+	_camera_drag_touch_index = -1
+	_camera_mouse_dragging = false
 	_in_menu = false
 	if _menu != null:
 		_menu.hide_menu()
@@ -169,7 +185,7 @@ func _update_menu_camera(delta: float) -> void:
 	if _camera == null or _vehicle == null:
 		return
 	_menu_orbit_angle += delta * 0.14
-	var centre := _vehicle.global_position + Vector3(0.0, 1.05, 0.0)
+	var centre := _vehicle.get_global_transform_interpolated().origin + Vector3(0.0, 1.05, 0.0)
 	var offset := Vector3(sin(_menu_orbit_angle), 0.0, cos(_menu_orbit_angle)) * 7.6 + Vector3(0.0, 2.1, 0.0)
 	_camera.global_position = centre + offset
 	_camera.look_at(centre, Vector3.UP)
@@ -268,6 +284,13 @@ func _update_adaptive_render_quality(delta: float) -> void:
 func _create_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "GameCamera"
+	# Manual camera interpolation (Godot's recommended special case):
+	# the camera itself is a top-level, non-interpolated node updated in
+	# _process, while its target is the vehicle's interpolated physics
+	# transform.  Following global_transform directly made the rendered
+	# car step against the camera whenever render/physics cadence split.
+	_camera.top_level = true
+	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_camera.near = 0.12
 	# RichTown's playable diagonal is about 1.4 km; 1.5 km still covers
 	# corner-to-corner views while tightening depth precision and culling.
@@ -289,6 +312,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if _in_menu:
+		return
+	if _handle_camera_orbit_input(event):
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed(&"camera_toggle"):
 		_cycle_camera()
@@ -313,8 +339,121 @@ func _toggle_desktop_fullscreen() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
+func _reset_camera_orbit() -> void:
+	_camera_orbit_yaw = 0.0
+	_camera_orbit_pitch = 0.0
+	_camera_orbit_distance_scale = 1.0
+	_camera_drag_touch_index = -1
+	_camera_mouse_dragging = false
+	_camera_manual_timer = 999.0
+
+
+func _rotate_camera_orbit(relative: Vector2, sensitivity: float) -> void:
+	_camera_orbit_yaw = wrapf(_camera_orbit_yaw - relative.x * sensitivity, -PI, PI)
+	_camera_orbit_pitch = clampf(
+		_camera_orbit_pitch - relative.y * sensitivity,
+		CAMERA_ORBIT_PITCH_MIN,
+		CAMERA_ORBIT_PITCH_MAX
+	)
+	_camera_manual_timer = 0.0
+
+
+func _handle_camera_orbit_input(event: InputEvent) -> bool:
+	if _smoke_mode or (_screenshot_mode and _screenshot_free_camera):
+		return false
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			if touch.double_tap:
+				_reset_camera_orbit()
+				return true
+			if _camera_drag_touch_index == -1:
+				_camera_drag_touch_index = touch.index
+				return true
+		elif touch.index == _camera_drag_touch_index:
+			_camera_drag_touch_index = -1
+			return true
+	elif event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		if _camera_drag_touch_index == -1:
+			_camera_drag_touch_index = drag.index
+		if drag.index != _camera_drag_touch_index:
+			return false
+		_rotate_camera_orbit(drag.relative, CAMERA_ORBIT_TOUCH_SENSITIVITY)
+		return true
+	elif event is InputEventMouseButton:
+		var button := event as InputEventMouseButton
+		match button.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				if button.pressed:
+					_camera_orbit_distance_scale = clampf(_camera_orbit_distance_scale * 0.92, CAMERA_ORBIT_DISTANCE_MIN, CAMERA_ORBIT_DISTANCE_MAX)
+					_camera_manual_timer = 0.0
+				return true
+			MOUSE_BUTTON_WHEEL_DOWN:
+				if button.pressed:
+					_camera_orbit_distance_scale = clampf(_camera_orbit_distance_scale * 1.08, CAMERA_ORBIT_DISTANCE_MIN, CAMERA_ORBIT_DISTANCE_MAX)
+					_camera_manual_timer = 0.0
+				return true
+			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+				if button.pressed and button.double_click:
+					_reset_camera_orbit()
+					return true
+				_camera_mouse_dragging = button.pressed
+				return true
+	elif event is InputEventMouseMotion:
+		if not _camera_mouse_dragging:
+			return false
+		var motion := event as InputEventMouseMotion
+		_rotate_camera_orbit(motion.relative, CAMERA_ORBIT_MOUSE_SENSITIVITY)
+		return true
+	elif event is InputEventMagnifyGesture:
+		var gesture := event as InputEventMagnifyGesture
+		_camera_orbit_distance_scale = clampf(
+			_camera_orbit_distance_scale / maxf(gesture.factor, 0.01),
+			CAMERA_ORBIT_DISTANCE_MIN,
+			CAMERA_ORBIT_DISTANCE_MAX
+		)
+		_camera_manual_timer = 0.0
+		return true
+	return false
+
+
+func _update_camera_orbit_controls(delta: float) -> void:
+	_camera_manual_timer += maxf(delta, 0.0)
+	if delta <= 0.0 or _smoke_mode or (_screenshot_mode and _screenshot_free_camera):
+		return
+	var yaw_velocity := 0.0
+	var pitch_velocity := 0.0
+	if Input.is_key_pressed(KEY_Q):
+		yaw_velocity += 1.9
+	if Input.is_key_pressed(KEY_E):
+		yaw_velocity -= 1.9
+	if Input.is_key_pressed(KEY_PAGEUP):
+		pitch_velocity += 1.15
+	if Input.is_key_pressed(KEY_PAGEDOWN):
+		pitch_velocity -= 1.15
+	for device in Input.get_connected_joypads():
+		var stick_x := Input.get_joy_axis(device, JOY_AXIS_RIGHT_X)
+		var stick_y := Input.get_joy_axis(device, JOY_AXIS_RIGHT_Y)
+		if absf(stick_x) > 0.12:
+			yaw_velocity -= stick_x * 2.6
+		if absf(stick_y) > 0.12:
+			pitch_velocity += stick_y * 1.7
+	if absf(yaw_velocity) > 0.001 or absf(pitch_velocity) > 0.001:
+		_camera_orbit_yaw = wrapf(_camera_orbit_yaw + yaw_velocity * delta, -PI, PI)
+		_camera_orbit_pitch = clampf(_camera_orbit_pitch + pitch_velocity * delta, CAMERA_ORBIT_PITCH_MIN, CAMERA_ORBIT_PITCH_MAX)
+		_camera_manual_timer = 0.0
+	if Input.is_key_pressed(KEY_EQUAL):
+		_camera_orbit_distance_scale = clampf(_camera_orbit_distance_scale * exp(-0.65 * delta), CAMERA_ORBIT_DISTANCE_MIN, CAMERA_ORBIT_DISTANCE_MAX)
+		_camera_manual_timer = 0.0
+	if Input.is_key_pressed(KEY_MINUS):
+		_camera_orbit_distance_scale = clampf(_camera_orbit_distance_scale * exp(0.65 * delta), CAMERA_ORBIT_DISTANCE_MIN, CAMERA_ORBIT_DISTANCE_MAX)
+		_camera_manual_timer = 0.0
+
+
 func _cycle_camera() -> void:
 	_camera_mode = (_camera_mode + 1) % 3
+	_reset_camera_orbit()
 	_snap_camera = true
 
 
@@ -341,6 +480,7 @@ func _reset_vehicle_to_road() -> void:
 		return
 	var target := _world.find_nearest_road_transform(_vehicle.global_position)
 	_vehicle.reset_to_transform(target)
+	_reset_camera_orbit()
 	_snap_camera = true
 
 
@@ -363,6 +503,7 @@ func _process(delta: float) -> void:
 		# follow rig must not fight the authored viewpoint.
 		pass
 	else:
+		_update_camera_orbit_controls(delta)
 		_update_camera(delta, _snap_camera)
 		_snap_camera = false
 	if _smoke_mode and not _smoke_completed:
@@ -372,10 +513,8 @@ func _process(delta: float) -> void:
 			_run_smoke_checks()
 
 
-func _vehicle_horizontal_yaw() -> float:
-	if _vehicle == null:
-		return 0.0
-	var forward := -_vehicle.global_transform.basis.z
+func _vehicle_horizontal_yaw(vehicle_transform: Transform3D) -> float:
+	var forward := -vehicle_transform.basis.z
 	forward.y = 0.0
 	if forward.length_squared() < 0.0001:
 		return _camera_follow_yaw
@@ -389,7 +528,9 @@ func _update_camera(delta: float, snap: bool) -> void:
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
 	var speed_ratio := clampf(speed_kmh / 210.0, 0.0, 1.0)
-	var raw_follow_yaw := _vehicle_horizontal_yaw()
+	var vehicle_transform := _vehicle.get_global_transform_interpolated()
+	var vehicle_position := vehicle_transform.origin
+	var raw_follow_yaw := _vehicle_horizontal_yaw(vehicle_transform)
 	if snap or not _camera_smoothing_initialized or delta <= 0.0:
 		_camera_follow_yaw = raw_follow_yaw
 		_camera_drift_offset_smooth = 0.0
@@ -417,18 +558,32 @@ func _update_camera(delta: float, snap: bool) -> void:
 
 	match _camera_mode:
 		CAMERA_HOOD:
-			var hood_position := _vehicle.global_transform * Vector3(0.0, 1.12, -0.32)
-			var hood_target := _vehicle.global_transform * Vector3(0.0, 0.98, -34.0)
+			var hood_position := vehicle_transform * Vector3(0.0, 1.12, -0.32)
+			var hood_look := Vector3(
+				-sin(_camera_orbit_yaw) * cos(_camera_orbit_pitch),
+				-sin(_camera_orbit_pitch),
+				-cos(_camera_orbit_yaw) * cos(_camera_orbit_pitch)
+			)
+			var hood_target := hood_position + vehicle_transform.basis * hood_look * 34.0
 			_camera.global_position = hood_position
 			_camera.look_at(hood_target, Vector3.UP)
 		CAMERA_TOP:
-			var top_position := _vehicle.global_position + Vector3(0.0, 31.0, 14.0)
+			var top_basis := Basis(Vector3.UP, _camera_follow_yaw + _camera_orbit_yaw)
+			var top_position := vehicle_position + top_basis * Vector3(0.0, 31.0, 14.0 * _camera_orbit_distance_scale)
+			var top_up := -top_basis.z
+			top_up.y = 0.0
+			top_up = top_up.normalized() if top_up.length_squared() > 0.0001 else Vector3(0.0, 0.0, -1.0)
 			_camera.global_position = top_position
-			_camera.look_at(_vehicle.global_position + Vector3.UP * 1.0, Vector3(0.0, 0.0, -1.0))
+			_camera.look_at(vehicle_position + Vector3.UP * 1.0, top_up)
 		_:
-			var distance := 6.15 + speed_ratio * 2.15
-			var height := 2.05 + speed_ratio * 0.38
-			var drift_offset_target := clampf(-_vehicle.get_lateral_speed_ms() * 0.055, -0.65, 0.65)
+			var base_distance := 6.15 + speed_ratio * 2.15
+			var base_height := 2.05 + speed_ratio * 0.38
+			var distance := base_distance * _camera_orbit_distance_scale
+			var base_pitch := atan2(base_height, base_distance)
+			var total_pitch := clampf(base_pitch + _camera_orbit_pitch, -0.04, 1.18)
+			var height := tan(total_pitch) * distance
+			var orbit_forward_factor := clampf(cos(_camera_orbit_yaw), 0.0, 1.0)
+			var drift_offset_target := clampf(-_vehicle.get_lateral_speed_ms() * 0.055, -0.65, 0.65) * orbit_forward_factor
 			if snap or delta <= 0.0:
 				_camera_drift_offset_smooth = drift_offset_target
 			else:
@@ -438,22 +593,25 @@ func _update_camera(delta: float, snap: bool) -> void:
 					1.0 - exp(-7.0 * delta)
 				)
 			var follow_basis := Basis(Vector3.UP, _camera_follow_yaw)
-			var desired_position := _vehicle.global_position + follow_basis * Vector3(_camera_drift_offset_smooth, height, distance)
-			desired_position = _get_safe_camera_position(desired_position)
+			var orbit_basis := Basis(Vector3.UP, _camera_follow_yaw + _camera_orbit_yaw)
+			var desired_position := vehicle_position + orbit_basis * Vector3(_camera_drift_offset_smooth, height, distance)
+			desired_position = _get_safe_camera_position(desired_position, vehicle_position)
 			if snap or delta <= 0.0:
 				_camera.global_position = desired_position
 			else:
-				var weight := 1.0 - exp(-7.5 * delta)
+				var position_rate := 14.0 if _camera_manual_timer < 0.30 else 7.5
+				var weight := 1.0 - exp(-position_rate * delta)
 				_camera.global_position = _camera.global_position.lerp(desired_position, weight)
 			var forward := -follow_basis.z
-			var target := _vehicle.global_position + Vector3.UP * 1.12 + forward * (6.0 + speed_ratio * 6.0)
+			var target := vehicle_position + Vector3.UP * 1.12 + forward * (6.0 + speed_ratio * 6.0) * orbit_forward_factor
 			if snap or delta <= 0.0:
 				_camera_target_smooth = target
 			else:
-				_camera_target_smooth = _camera_target_smooth.lerp(target, 1.0 - exp(-12.0 * delta))
+				var target_rate := 17.0 if _camera_manual_timer < 0.30 else 12.0
+				_camera_target_smooth = _camera_target_smooth.lerp(target, 1.0 - exp(-target_rate * delta))
 			if _camera.global_position.distance_squared_to(_camera_target_smooth) > 0.001:
 				_camera.look_at(_camera_target_smooth, Vector3.UP)
-				var roll := clampf(_camera_drift_offset_smooth * 0.055, -0.035, 0.035)
+				var roll := clampf(_camera_drift_offset_smooth * 0.055, -0.035, 0.035) * orbit_forward_factor
 				_camera.rotate_object_local(Vector3.FORWARD, roll)
 
 	# Almost imperceptible vibration only while nitro is active.  Using
@@ -466,10 +624,10 @@ func _update_camera(delta: float, snap: bool) -> void:
 	_camera.v_offset = cos(shake_time * 1.71) * shake * 0.7
 
 
-func _get_safe_camera_position(desired_position: Vector3) -> Vector3:
+func _get_safe_camera_position(desired_position: Vector3, focus_position: Vector3) -> Vector3:
 	if _vehicle == null:
 		return desired_position
-	var origin := _vehicle.global_position + Vector3.UP * 1.25
+	var origin := focus_position + Vector3.UP * 1.25
 	if origin.distance_squared_to(desired_position) < 0.04:
 		return desired_position
 	var query := PhysicsRayQueryParameters3D.create(origin, desired_position, 1, [_vehicle.get_rid()])
@@ -481,6 +639,23 @@ func _get_safe_camera_position(desired_position: Vector3) -> Vector3:
 	var hit_position: Vector3 = hit.get("position", desired_position)
 	var toward_vehicle := (origin - desired_position).normalized()
 	return hit_position + toward_vehicle * 0.28
+
+
+func get_camera_control_state() -> Dictionary:
+	return {
+		"free_orbit_0231": true,
+		"camera_interpolation_off": _camera != null and _camera.physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_OFF,
+		"camera_top_level": _camera != null and _camera.top_level,
+		"target_interpolated": true,
+		"physics_interpolation_project": bool(ProjectSettings.get_setting("physics/common/physics_interpolation", false)),
+		"mode": _camera_mode,
+		"orbit_yaw": _camera_orbit_yaw,
+		"orbit_pitch": _camera_orbit_pitch,
+		"orbit_distance_scale": _camera_orbit_distance_scale,
+		"touch_orbit": true,
+		"mouse_orbit": true,
+		"gamepad_orbit": true,
+	}
 
 
 func _count_geometry_instances(node: Node) -> int:
@@ -609,6 +784,9 @@ func _run_smoke_checks() -> void:
 	var smoothing_state := _vehicle.get_smoothing_state()
 	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
 		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))
+	var camera_control_state := get_camera_control_state()
+	if not bool(smoothing_state.get("physics_interpolation_vehicle", false)) or int(smoothing_state.get("contact_patch_samples", 0)) < 3 or not bool(smoothing_state.get("tyre_relaxation", false)) or not bool(smoothing_state.get("filtered_suspension_velocity", false)) or not bool(smoothing_state.get("precision_steering_0231", false)) or float(drive_base_state.get("steer_response", 0.0)) < 20.0 or float(drive_base_state.get("steer_actuator_rate_low", 0.0)) < 6.0 or float(drive_base_state.get("digital_steer_attack", 0.0)) < 5.0 or float(drive_base_state.get("digital_steer_initial_bite", 0.0)) < 0.15 or not bool(camera_control_state.get("free_orbit_0231", false)) or not bool(camera_control_state.get("camera_interpolation_off", false)) or not bool(camera_control_state.get("camera_top_level", false)) or not bool(camera_control_state.get("target_interpolated", false)) or not bool(camera_control_state.get("physics_interpolation_project", false)) or not bool(camera_control_state.get("touch_orbit", false)) or not bool(camera_control_state.get("mouse_orbit", false)) or not bool(camera_control_state.get("gamepad_orbit", false)) or not is_finite(float(camera_control_state.get("orbit_yaw", 0.0))) or not is_finite(float(camera_control_state.get("orbit_pitch", 0.0))):
+		failures.append("0.2.31 anti-jitter / precision steering / free-orbit camera pass is incomplete: smoothing=%s drive=%s camera=%s" % [str(smoothing_state), str(drive_base_state), str(camera_control_state)])
 	if not _camera_smoothing_initialized or not is_finite(_camera_follow_yaw):
 		failures.append("0.2.5 chase-camera smoothing is not initialized")
 

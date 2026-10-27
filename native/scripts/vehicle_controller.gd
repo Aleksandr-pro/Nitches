@@ -23,6 +23,10 @@ const ANTI_ROLL_FRONT := 8000.0
 const ANTI_ROLL_REAR := 6400.0
 const WHEELBASE := 2.86
 const TRACK_WIDTH := 1.64
+const CONTACT_PATCH_SAMPLES := 3
+const CONTACT_PATCH_LENGTH_M := 0.24
+const TYRE_RELAXATION_LENGTH_M := 0.26
+const TYRE_FORCE_MIN_ROLL_SPEED := 3.5
 const ENGINE_IDLE_RPM := 850.0
 const ENGINE_REDLINE_RPM := 6400.0
 # Owner-supplied spec sheet for the player car (Shelby GT500, 428 cid
@@ -85,6 +89,13 @@ var _flip_timer := 0.0
 var _last_safe_transform := Transform3D.IDENTITY
 var _safe_transform_timer := 0.0
 var _steering_visual_angle := 0.0
+var _steering_command := 0.0
+var _steering_speed_smooth := 0.0
+var _steering_limit_smooth := NativeArcadeCarAssist.MAX_STEER_RAD
+var _visual_forward_speed := 0.0
+var _visual_wheelspin_excess := 0.0
+var _filtered_yaw_rate := 0.0
+var _yaw_stability_torque := 0.0
 var _current_gear := 0
 var _engine_rpm := ENGINE_IDLE_RPM
 var _gear_shift_timer := 0.0
@@ -107,6 +118,10 @@ var _brake_light_active := false
 
 func _ready() -> void:
 	name = "PlayerMustang"
+	# The RigidBody is the one object the camera must follow through
+	# Godot's physics interpolation; make that explicit instead of
+	# relying on an inherited scene default.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	mass = 1450.0
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, 0.38, 0.02)
@@ -196,16 +211,30 @@ func _create_suspension_raycasts() -> void:
 		{"name": "WheelRR", "position": Vector3(0.82, 0.58, 1.43), "front": false, "driven": true, "side": 1, "axle": 1},
 	]
 	for definition in definitions:
-		var ray := RayCast3D.new()
-		ray.name = String(definition.get("name", "WheelRay"))
-		ray.position = definition.get("position", Vector3.ZERO)
-		ray.target_position = Vector3(0.0, -1.12, 0.0)
-		ray.collision_mask = 1
-		ray.enabled = true
-		ray.exclude_parent = true
-		add_child(ray)
+		var rays: Array = []
+		var base_position: Vector3 = definition.get("position", Vector3.ZERO)
+		# 0.2.31 contact patch: a real tyre does not meet the road at an
+		# infinitesimal centre point.  Centre/front/rear samples spread
+		# each HeightMap triangle boundary over the 24 cm patch, removing
+		# the one-tick load steps produced by the old single ray.
+		for sample_index in CONTACT_PATCH_SAMPLES:
+			var patch_offset := 0.0
+			if sample_index == 1:
+				patch_offset = -CONTACT_PATCH_LENGTH_M * 0.5
+			elif sample_index == 2:
+				patch_offset = CONTACT_PATCH_LENGTH_M * 0.5
+			var ray := RayCast3D.new()
+			ray.name = "%sPatch%d" % [String(definition.get("name", "WheelRay")), sample_index]
+			ray.position = base_position + Vector3(0.0, 0.0, patch_offset)
+			ray.target_position = Vector3(0.0, -1.12, 0.0)
+			ray.collision_mask = 1
+			ray.enabled = true
+			ray.exclude_parent = true
+			add_child(ray)
+			rays.append(ray)
 		var wheel := definition.duplicate(true)
-		wheel["ray"] = ray
+		wheel["ray"] = rays[0]
+		wheel["rays"] = rays
 		wheel["grounded"] = false
 		wheel["displacement"] = 0.0
 		wheel["spring_force"] = 0.0
@@ -213,6 +242,10 @@ func _create_suspension_raycasts() -> void:
 		wheel["filtered_spring_force"] = 0.0
 		wheel["filtered_normal"] = Vector3.UP
 		wheel["filtered_displacement"] = 0.0
+		wheel["filtered_suspension_velocity"] = 0.0
+		wheel["filtered_lateral_force"] = 0.0
+		wheel["filtered_longitudinal_force"] = 0.0
+		wheel["contact_patch_samples"] = 0
 		wheel["surface"] = {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 		_wheels.append(wheel)
 
@@ -378,6 +411,11 @@ func _collect_wheel_visuals(model: Node) -> void:
 		var pivot := _find_node_by_name(model, String(definition.get("pivot", ""))) as Node3D
 		var spin := _find_node_by_name(model, String(definition.get("spin", ""))) as Node3D
 		if pivot != null and spin != null:
+			# Wheel locals are animated in _process, so only their local
+			# transforms opt out; the interpolated RigidBody parent still
+			# carries them smoothly through the world.
+			pivot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			spin.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 			_wheel_visuals.append({
 				"pivot": pivot,
 				"spin": spin,
@@ -409,9 +447,11 @@ func _create_fallback_visual() -> void:
 		{"position": Vector3(0.82, WHEEL_RADIUS, -1.43), "front": false, "side": 1},
 	]:
 		var pivot := Node3D.new()
+		pivot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		pivot.position = definition.get("position", Vector3.ZERO)
 		_visual_root.add_child(pivot)
 		var spin := Node3D.new()
+		spin.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		pivot.add_child(spin)
 		var tyre := MeshInstance3D.new()
 		var cylinder := CylinderMesh.new()
@@ -643,7 +683,7 @@ func _touch_pressed(action_name: String) -> bool:
 	return bool(_touch_inputs.get(action_name, false))
 
 
-func _read_inputs() -> void:
+func _read_inputs(delta: float) -> void:
 	var keyboard_throttle := Input.get_axis(&"brake_reverse", &"accelerate")
 	var touch_throttle := 0.0
 	if _touch_pressed("accelerate"):
@@ -653,19 +693,35 @@ func _read_inputs() -> void:
 	_throttle_command = clampf(touch_throttle if absf(touch_throttle) > 0.01 else keyboard_throttle, -1.0, 1.0)
 
 	var keyboard_steering := Input.get_axis(&"steer_left", &"steer_right")
-	var touch_steering := 0.0
-	if _touch_pressed("steer_left"):
-		touch_steering -= 1.0
-	if _touch_pressed("steer_right"):
-		touch_steering += 1.0
-	steering_input = clampf(touch_steering if absf(touch_steering) > 0.01 else keyboard_steering, -1.0, 1.0)
+	var digital_steering_target := 0.0
+	if keyboard_steering < -0.5 or _touch_pressed("steer_left"):
+		digital_steering_target -= 1.0
+	if keyboard_steering > 0.5 or _touch_pressed("steer_right"):
+		digital_steering_target += 1.0
+
+	var analog_steering := 0.0
+	for device in Input.get_connected_joypads():
+		var axis_value := Input.get_joy_axis(device, JOY_AXIS_LEFT_X)
+		if absf(axis_value) > absf(analog_steering):
+			analog_steering = axis_value
+	if absf(analog_steering) > 0.08:
+		steering_input = NativeArcadeCarAssist.shape_steering_input(analog_steering)
+		_steering_command = clampf(analog_steering, -1.0, 1.0)
+	else:
+		_steering_command = NativeArcadeCarAssist.ramp_digital_steering(
+			_steering_command,
+			digital_steering_target,
+			delta,
+			_steering_speed_smooth
+		)
+		steering_input = NativeArcadeCarAssist.shape_steering_input(_steering_command)
 
 	handbrake_active = Input.is_action_pressed(&"handbrake") or _touch_pressed("handbrake")
 	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and _throttle_command > 0.05 and _nitro > 0.02
 
 
 func _physics_process(delta: float) -> void:
-	_read_inputs()
+	_read_inputs(delta)
 	if Input.is_action_just_pressed(&"reset_car"):
 		reset_requested.emit()
 
@@ -683,13 +739,24 @@ func _physics_process(delta: float) -> void:
 		throttle_input = _throttle_command
 	_drivetrain_forward_speed = lerpf(_drivetrain_forward_speed, _forward_speed, 1.0 - exp(-10.0 * delta))
 
-	# Drive ArcadeCar steering curve: quadratic speed falloff and an
-	# exponential approach are much smoother for digital touch buttons than
-	# the old linear move_toward() snap.
-	var max_steer := NativeArcadeCarAssist.steering_limit(_forward_speed)
-	var steering_target := -steering_input * max_steer
-	steering_angle = NativeArcadeCarAssist.smooth_steering(steering_angle, steering_target, delta)
-	_steering_visual_angle = steering_angle
+	# 0.2.31 precision steering: filter the speed used for the speed-
+	# sensitive lock, then drive a rate-limited rack.  Initial response
+	# is immediate, small corrections settle without overshoot, and
+	# centre/counter-steer are deliberately faster than turn-in.  The
+	# visual wheel angle is smoothed separately at render rate below.
+	_steering_speed_smooth = lerpf(_steering_speed_smooth, _forward_speed, 1.0 - exp(-9.0 * delta))
+	_filtered_yaw_rate = lerpf(_filtered_yaw_rate, angular_velocity.y, 1.0 - exp(-22.0 * delta))
+	var desired_steer_limit := NativeArcadeCarAssist.steering_limit(_steering_speed_smooth)
+	_steering_limit_smooth = lerpf(_steering_limit_smooth, desired_steer_limit, 1.0 - exp(-5.5 * delta))
+	var steering_target := -steering_input * _steering_limit_smooth
+	steering_angle = NativeArcadeCarAssist.responsive_steering(
+		steering_angle,
+		steering_target,
+		delta,
+		_steering_speed_smooth
+	)
+	if absf(steering_input) < 0.001 and absf(steering_angle) < 0.0008:
+		steering_angle = 0.0
 
 	if boost_active:
 		_nitro = maxf(_nitro - delta * 0.42, 0.0)
@@ -732,12 +799,16 @@ func _pacejka(slip: float, stiffness: float, shape: float, curvature: float) -> 
 
 
 func _ackermann_angle(side: int) -> float:
-	if absf(steering_angle) < 0.0005:
+	return _ackermann_angle_for(steering_angle, side)
+
+
+func _ackermann_angle_for(angle: float, side: int) -> float:
+	if absf(angle) < 0.0005:
 		return 0.0
-	var turn_radius := WHEELBASE / tan(absf(steering_angle))
-	var is_inner := (steering_angle > 0.0 and side < 0) or (steering_angle < 0.0 and side > 0)
+	var turn_radius := WHEELBASE / tan(absf(angle))
+	var is_inner := (angle > 0.0 and side < 0) or (angle < 0.0 and side > 0)
 	var denominator := maxf(turn_radius + (-TRACK_WIDTH * 0.5 if is_inner else TRACK_WIDTH * 0.5), 0.25)
-	return signf(steering_angle) * atan(WHEELBASE / denominator)
+	return signf(angle) * atan(WHEELBASE / denominator)
 
 
 func _update_drivetrain(delta: float) -> void:
@@ -824,43 +895,85 @@ func _update_drivetrain(delta: float) -> void:
 	_rear_slip_ratio = _wheelspin_excess_speed / maxf(absf(_forward_speed), 4.0)
 
 
-func _apply_suspension_and_tyres(_delta: float) -> void:
+func _apply_suspension_and_tyres(delta: float) -> void:
 	grounded_wheel_count = 0
 	var com_global := global_transform * center_of_mass
 
-	# First pass: raycast and suspension compression for anti-roll bars.
+	# First pass: sample each tyre contact patch and derive suspension
+	# compression for the anti-roll bars.  Time-based (not per-tick)
+	# filters keep this identical at any physics/render cadence.
+	var unload_alpha := 1.0 - exp(-20.0 * maxf(delta, 0.0))
 	for wheel in _wheels:
-		var ray := wheel.get("ray") as RayCast3D
+		var rays: Array = wheel.get("rays", [])
+		if rays.is_empty() and wheel.get("ray") != null:
+			rays = [wheel.get("ray")]
 		wheel["grounded"] = false
 		wheel["displacement"] = 0.0
 		wheel["spring_force"] = 0.0
 		wheel["slip_angle"] = 0.0
-		if ray == null:
+		wheel["contact_patch_samples"] = 0
+		if rays.is_empty():
 			wheel["filtered_displacement"] = 0.0
 			wheel["filtered_spring_force"] = 0.0
+			wheel["filtered_suspension_velocity"] = 0.0
+			wheel["filtered_lateral_force"] = 0.0
+			wheel["filtered_longitudinal_force"] = 0.0
 			continue
-		ray.force_raycast_update()
-		if not ray.is_colliding():
-			wheel["filtered_displacement"] = lerpf(float(wheel.get("filtered_displacement", 0.0)), 0.0, 0.35)
-			wheel["filtered_spring_force"] = lerpf(float(wheel.get("filtered_spring_force", 0.0)), 0.0, 0.35)
+
+		var weighted_displacement := 0.0
+		var total_weight := 0.0
+		var weighted_normal := Vector3.ZERO
+		var weighted_hit := Vector3.ZERO
+		var centre_hit := false
+		var centre_distance := SUSPENSION_REST_LENGTH + 1.0
+		var centre_hit_point := global_position
+		var hit_samples := 0
+		for sample_index in rays.size():
+			var ray := rays[sample_index] as RayCast3D
+			if ray == null:
+				continue
+			ray.force_raycast_update()
+			if not ray.is_colliding():
+				continue
+			var weight := 0.5 if sample_index == 0 else 0.25
+			var sample_point := ray.get_collision_point()
+			var sample_distance := ray.global_position.distance_to(sample_point)
+			var sample_displacement := clampf(SUSPENSION_REST_LENGTH - sample_distance, -0.08, SUSPENSION_TRAVEL)
+			weighted_displacement += sample_displacement * weight
+			weighted_normal += ray.get_collision_normal().normalized() * weight
+			weighted_hit += sample_point * weight
+			total_weight += weight
+			hit_samples += 1
+			if sample_index == 0:
+				centre_hit = true
+				centre_distance = sample_distance
+				centre_hit_point = sample_point
+
+		var displacement := clampf(weighted_displacement, 0.0, SUSPENSION_TRAVEL)
+		if hit_samples == 0 or total_weight <= 0.001 or displacement <= 0.0005:
+			wheel["filtered_displacement"] = lerpf(float(wheel.get("filtered_displacement", 0.0)), 0.0, unload_alpha)
+			wheel["filtered_spring_force"] = lerpf(float(wheel.get("filtered_spring_force", 0.0)), 0.0, unload_alpha)
+			wheel["filtered_suspension_velocity"] = lerpf(float(wheel.get("filtered_suspension_velocity", 0.0)), 0.0, unload_alpha)
+			wheel["filtered_lateral_force"] = lerpf(float(wheel.get("filtered_lateral_force", 0.0)), 0.0, unload_alpha)
+			wheel["filtered_longitudinal_force"] = lerpf(float(wheel.get("filtered_longitudinal_force", 0.0)), 0.0, unload_alpha)
 			continue
-		var hit_point := ray.get_collision_point()
-		var ground_normal := ray.get_collision_normal().normalized()
-		var distance := ray.global_position.distance_to(hit_point)
-		var displacement := clampf(SUSPENSION_REST_LENGTH - distance, 0.0, SUSPENSION_TRAVEL)
-		if displacement <= 0.0005 and distance > SUSPENSION_REST_LENGTH:
-			wheel["filtered_displacement"] = lerpf(float(wheel.get("filtered_displacement", 0.0)), 0.0, 0.35)
-			wheel["filtered_spring_force"] = lerpf(float(wheel.get("filtered_spring_force", 0.0)), 0.0, 0.35)
-			continue
-		# HeightMapShape3D is triangulated on a coarse 10 m grid. Its raw
-		# normal and compression therefore step at triangle boundaries even
-		# on a visually flat road.  Short physics-rate filters turn those
-		# steps into tyre/suspension compliance instead of body twitches.
+
+		var ground_normal := (weighted_normal / total_weight).normalized()
+		var hit_point := centre_hit_point if centre_hit else weighted_hit / total_weight
+		var distance := centre_distance if centre_hit else SUSPENSION_REST_LENGTH - displacement
+		# The patch average handles spatial steps; these short temporal
+		# filters handle the remaining normal/load noise.  Their rates are
+		# in 1/s, rather than fixed per-tick factors that change feel if
+		# the physics tick rate changes.
 		var previous_normal: Vector3 = wheel.get("filtered_normal", ground_normal)
 		if previous_normal.length_squared() < 0.0001:
 			previous_normal = ground_normal
-		var filtered_normal := previous_normal.lerp(ground_normal, 0.42).normalized()
-		var filtered_displacement := lerpf(float(wheel.get("filtered_displacement", displacement)), displacement, 0.55)
+		var filtered_normal := previous_normal.lerp(ground_normal, 1.0 - exp(-20.0 * maxf(delta, 0.0))).normalized()
+		var filtered_displacement := lerpf(
+			float(wheel.get("filtered_displacement", displacement)),
+			displacement,
+			1.0 - exp(-30.0 * maxf(delta, 0.0))
+		)
 		wheel["grounded"] = true
 		wheel["hit_point"] = hit_point
 		wheel["ground_normal"] = filtered_normal
@@ -869,6 +982,7 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		wheel["displacement"] = filtered_displacement
 		wheel["filtered_displacement"] = filtered_displacement
 		wheel["raw_displacement"] = displacement
+		wheel["contact_patch_samples"] = hit_samples
 		if _world != null:
 			wheel["surface"] = _world.get_surface_at(hit_point)
 		grounded_wheel_count += 1
@@ -904,17 +1018,28 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		var relative_position := hit_point - com_global
 		var point_velocity := linear_velocity + angular_velocity.cross(relative_position)
 		var suspension_velocity := point_velocity.dot(ground_normal)
+		var filtered_suspension_velocity := lerpf(
+			float(wheel.get("filtered_suspension_velocity", suspension_velocity)),
+			suspension_velocity,
+			1.0 - exp(-34.0 * maxf(delta, 0.0))
+		)
+		wheel["filtered_suspension_velocity"] = filtered_suspension_velocity
 		var displacement := float(wheel.get("displacement", 0.0))
 		var compression_ratio := clampf(displacement / SUSPENSION_TRAVEL, 0.0, 1.0)
 		var progressive_force := displacement * SPRING_STIFFNESS + compression_ratio * compression_ratio * 7200.0
-		var damping := SPRING_DAMPING_COMPRESSION if suspension_velocity < 0.0 else SPRING_DAMPING_REBOUND
-		var spring_force := progressive_force - suspension_velocity * damping
+		var damping := SPRING_DAMPING_COMPRESSION if filtered_suspension_velocity < 0.0 else SPRING_DAMPING_REBOUND
+		var spring_force := progressive_force - filtered_suspension_velocity * damping
 		var adjustment := float(axle_adjustments.get(int(wheel.get("axle", 0)), 0.0))
 		spring_force += adjustment if int(wheel.get("side", 0)) < 0 else -adjustment
 		spring_force = clampf(spring_force, 0.0, 26500.0)
 		var previous_spring_force := float(wheel.get("filtered_spring_force", 0.0))
 		if previous_spring_force > 0.01:
-			spring_force = lerpf(previous_spring_force, spring_force, 0.58)
+			spring_force = lerpf(previous_spring_force, spring_force, 1.0 - exp(-38.0 * maxf(delta, 0.0)))
+			spring_force = clampf(
+				spring_force,
+				previous_spring_force - 180000.0 * maxf(delta, 0.0),
+				previous_spring_force + 180000.0 * maxf(delta, 0.0)
+			)
 		wheel["filtered_spring_force"] = spring_force
 		wheel["spring_force"] = spring_force
 		apply_force(ground_normal * spring_force, relative_position)
@@ -994,6 +1119,23 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		lateral_force = clampf(lateral_force, -peak_force * grip_factor, peak_force * grip_factor)
 		var available_longitudinal := sqrt(maxf(peak_force * peak_force - lateral_force * lateral_force, 0.0))
 		longitudinal_force = clampf(longitudinal_force, -available_longitudinal, available_longitudinal)
+
+		# 0.2.31 tyre relaxation: carcass force builds over roughly one
+		# contact-patch-to-axle rolling distance, not in a single physics
+		# tick.  This is both physically recognisable and the final guard
+		# against one-tick Pacejka force steps becoming body twitches.
+		var roll_speed := maxf(absf(forward_velocity), TYRE_FORCE_MIN_ROLL_SPEED)
+		var lateral_alpha := 1.0 - exp(-roll_speed * maxf(delta, 0.0) / TYRE_RELAXATION_LENGTH_M)
+		var longitudinal_alpha := 1.0 - exp(-roll_speed * maxf(delta, 0.0) / (TYRE_RELAXATION_LENGTH_M * 0.78))
+		lateral_force = lerpf(float(wheel.get("filtered_lateral_force", lateral_force)), lateral_force, lateral_alpha)
+		longitudinal_force = lerpf(float(wheel.get("filtered_longitudinal_force", longitudinal_force)), longitudinal_force, longitudinal_alpha)
+		var relaxed_magnitude := Vector2(lateral_force, longitudinal_force).length()
+		if relaxed_magnitude > peak_force and relaxed_magnitude > 0.001:
+			var force_scale := peak_force / relaxed_magnitude
+			lateral_force *= force_scale
+			longitudinal_force *= force_scale
+		wheel["filtered_lateral_force"] = lateral_force
+		wheel["filtered_longitudinal_force"] = longitudinal_force
 		# Drive ArcadeCar roll_reduction: tyre forces are applied closer to
 		# the centre-of-mass height. Suspension above still acts at the real
 		# contact, but lateral/longitudinal forces rock the body less.
@@ -1018,14 +1160,22 @@ func _apply_suspension_and_tyres(_delta: float) -> void:
 		# Bicycle-model yaw damping.  It replaces the old heavy global
 		# angular damping with a targeted stability torque and is mostly
 		# released while handbraking or already in a controlled drift.
-		if grounded_wheel_count >= 2 and absf(_forward_speed) > 3.0:
+		if grounded_wheel_count >= 2 and absf(_steering_speed_smooth) > 3.0:
 			var understeer_gradient := 0.0028
-			var desired_yaw_rate := _forward_speed / WHEELBASE * tan(steering_angle) / (1.0 + understeer_gradient * _forward_speed * _forward_speed)
-			var grip_limited_yaw_rate := clampf(_surface_mu * 9.81 * 0.92 / maxf(absf(_forward_speed), 1.0), 0.22, 1.15)
+			var desired_yaw_rate := _steering_speed_smooth / WHEELBASE * tan(steering_angle) / (1.0 + understeer_gradient * _steering_speed_smooth * _steering_speed_smooth)
+			var grip_limited_yaw_rate := clampf(_surface_mu * 9.81 * 0.92 / maxf(absf(_steering_speed_smooth), 1.0), 0.22, 1.15)
 			desired_yaw_rate = clampf(desired_yaw_rate, -grip_limited_yaw_rate, grip_limited_yaw_rate)
-			var yaw_error := desired_yaw_rate - angular_velocity.y
+			var yaw_error := desired_yaw_rate - _filtered_yaw_rate
+			if absf(yaw_error) <= 0.006:
+				yaw_error = 0.0
+			else:
+				yaw_error -= signf(yaw_error) * 0.006
 			var stability_strength := 900.0 if handbrake_active else (1900.0 if is_drifting() else 5200.0)
-			apply_torque(Vector3.UP * clampf(yaw_error * stability_strength, -9000.0, 9000.0))
+			var desired_yaw_torque := clampf(yaw_error * stability_strength, -9000.0, 9000.0)
+			_yaw_stability_torque = move_toward(_yaw_stability_torque, desired_yaw_torque, 65000.0 * maxf(delta, 0.0))
+			apply_torque(Vector3.UP * _yaw_stability_torque)
+		else:
+			_yaw_stability_torque = move_toward(_yaw_stability_torque, 0.0, 65000.0 * maxf(delta, 0.0))
 
 	if grounded_wheel_count > 0 and absf(throttle_input) < 0.03 and not handbrake_active:
 		var horizontal_velocity := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
@@ -1070,6 +1220,13 @@ func _update_flip_recovery(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	# Physics-rate scalars are intentionally re-filtered at render rate
+	# for wheel spin/steer visuals; gameplay forces above keep using the
+	# unfiltered physics state.  This removes visible 60 Hz steps when
+	# rendering and physics cadences differ, especially on phones.
+	_steering_visual_angle = lerpf(_steering_visual_angle, steering_angle, 1.0 - exp(-38.0 * maxf(delta, 0.0)))
+	_visual_forward_speed = lerpf(_visual_forward_speed, _forward_speed, 1.0 - exp(-32.0 * maxf(delta, 0.0)))
+	_visual_wheelspin_excess = lerpf(_visual_wheelspin_excess, _wheelspin_excess_speed, 1.0 - exp(-26.0 * maxf(delta, 0.0)))
 	for i in _wheel_visuals.size():
 		var wheel_visual: Dictionary = _wheel_visuals[i]
 		var pivot := wheel_visual.get("pivot") as Node3D
@@ -1087,10 +1244,10 @@ func _process(delta: float) -> void:
 			wheel_visual["visual_displacement"] = visual_displacement
 			pivot.position = base_position + Vector3.UP * visual_displacement * 0.86
 		if bool(wheel_visual.get("front", false)):
-			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _ackermann_angle(int(wheel_visual.get("side", 1)))
-		var visual_speed := _forward_speed
+			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _ackermann_angle_for(_steering_visual_angle, int(wheel_visual.get("side", 1)))
+		var visual_speed := _visual_forward_speed
 		if not bool(wheel_visual.get("front", false)):
-			visual_speed += _wheelspin_excess_speed
+			visual_speed += _visual_wheelspin_excess
 		spin.rotation.x -= visual_speed * delta / WHEEL_RADIUS
 
 	var smoke_intensity := 0.0
@@ -1135,6 +1292,7 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
 	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 	global_transform = target
+	reset_physics_interpolation()
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
@@ -1151,6 +1309,20 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	_drive_force_per_wheel = 0.0
 	_wheelspin_excess_speed = 0.0
 	_rear_slip_ratio = 0.0
+	steering_input = 0.0
+	steering_angle = 0.0
+	_steering_command = 0.0
+	_steering_speed_smooth = 0.0
+	_steering_limit_smooth = NativeArcadeCarAssist.MAX_STEER_RAD
+	_steering_visual_angle = 0.0
+	_visual_forward_speed = 0.0
+	_visual_wheelspin_excess = 0.0
+	_filtered_yaw_rate = 0.0
+	_yaw_stability_torque = 0.0
+	for wheel in _wheels:
+		wheel["filtered_suspension_velocity"] = 0.0
+		wheel["filtered_lateral_force"] = 0.0
+		wheel["filtered_longitudinal_force"] = 0.0
 	_last_safe_transform = target
 
 
@@ -1277,6 +1449,13 @@ func get_smoothing_state() -> Dictionary:
 		"gear_shift_torque_blend": _shift_torque_blend,
 		"filtered_suspension": true,
 		"anti_roll_requires_both_wheels": true,
+		"physics_interpolation_vehicle": physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_ON,
+		"contact_patch_samples": CONTACT_PATCH_SAMPLES,
+		"tyre_relaxation": true,
+		"filtered_suspension_velocity": true,
+		"precision_steering_0231": true,
+		"steering_command": _steering_command,
+		"steering_limit_smooth": _steering_limit_smooth,
 		"throttle_command": _throttle_command,
 		"effective_throttle": throttle_input,
 	}

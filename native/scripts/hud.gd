@@ -179,7 +179,7 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 19)
 	_district_label = _make_label(info_box, "RICHTOWN", 23)
 	_coordinates_label = _make_label(info_box, "КООРДИНАТЫ  X —  •  Z —  •  Y —", 16, Color(0.62, 1.0, 0.78))
-	_objective_label = _make_label(info_box, "СВОБОДНАЯ ПОЕЗДКА • ТЕСТ ФИЗИКИ", 14, Color(0.78, 0.90, 1.0))
+	_objective_label = _make_label(info_box, "СВОБОДНАЯ ПОЕЗДКА • СВАЙП — КАМЕРА", 14, Color(0.78, 0.90, 1.0))
 
 	# Minimap, performance and small actions, top-right.
 	var right_column := VBoxContainer.new()
@@ -280,7 +280,7 @@ func _build_ui() -> void:
 		hint_panel.name = "DesktopControlsHint"
 		hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
 		_set_offsets(hint_panel, -280.0, -66.0, 280.0, -14.0)
-		_desktop_hint_label = _make_label(hint_panel, "WASD — ЕХАТЬ • SPACE — ДРИФТ • SHIFT — N₂O • C — КАМЕРА • T — ВРЕМЯ • R — СБРОС • F11 — ЭКРАН", 12, Color(0.86, 0.94, 1.0))
+		_desktop_hint_label = _make_label(hint_panel, "WASD — ЕХАТЬ • SPACE — ДРИФТ • SHIFT — N₂O • C — КАМЕРА • ДРАГ МЫШИ — ОРБИТА • КОЛЕСО — ЗУМ", 12, Color(0.86, 0.94, 1.0))
 		_desktop_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_desktop_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_desktop_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -288,7 +288,7 @@ func _build_ui() -> void:
 
 func _update_static_labels() -> void:
 	if _objective_label != null:
-		_objective_label.text = "СВОБОДНАЯ ПОЕЗДКА • ТЕСТ ФИЗИКИ"
+		_objective_label.text = "СВОБОДНАЯ ПОЕЗДКА • СВАЙП — КАМЕРА"
 	_update_coordinates_label()
 
 
