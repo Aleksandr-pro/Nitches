@@ -1,7 +1,7 @@
 props_out/bus_shelter.glb: meshes=239 tris=9420 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,SolarCell,PropsGlass,LampGlow,PropsWood
 props_out/flower_clump.glb: meshes=6 tris=4336 size=0.66x0.51x0.71m minY=0.01 mats=FlowerLeaf,FlowerCentre,FlowerCoral,FlowerWhite,FlowerYellow
 props_out/glass_tower.glb: meshes=562 tris=12240 size=34.00x72.90x34.00m minY=0.00 mats=VillaGranite,TowerStone,TowerTrim,VillaInterior,TowerGlass,WindowFrame,TowerMetal,LampGlow,TowerSpandrel,VillaWood,PropsMetal,VillaPavement,RoofDark,VillaCurtain,VillaHedge,VillaLawn,VillaMulch
-props_out/grand_hotel.glb: meshes=2375 tris=33712 size=33.60x49.07x26.11m minY=0.00 mats=HotelGranite,HotelStone,HotelPlaster,RoofDark,HotelBronze,WindowFrame,HotelInterior,HotelLight,HotelGlass,HotelCurtain,HotelAccent,VillaHedge,HotelWood,HotelWater
+props_out/grand_hotel.glb: meshes=2401 tris=34216 size=33.60x49.07x26.00m minY=0.00 mats=HotelGranite,HotelStone,HotelPlaster,HotelBronze,WindowFrame,HotelInterior,HotelLight,HotelGlass,HotelCurtain,HotelAccent,VillaHedge,HotelWood,HotelWater,RoofDark,SolarCell
 props_out/grass_tuft.glb: meshes=2 tris=1112 size=0.66x0.56x0.57m minY=0.01 mats=GrassBlade,GrassBladeDry
 props_out/hero_building.glb: meshes=1706 tris=30616 size=32.40x28.56x24.60m minY=0.00 mats=VillaGranite,HeroStone,HeroTrim,HeroPlaster,RoofDark,WindowFrame,VillaInterior,VillaCurtain,VillaGlass,LampGlow,HeroWood,VillaHedge,HeroMetal,VillaPavement,PropsMetal,SolarCell,VillaLawn,VillaMulch
 props_out/main_tower.glb: meshes=1462 tris=39820 size=50.00x148.00x42.00m minY=0.00 mats=VillaGranite,VillaPavement,MainStone,VillaInterior,MainGlass,WindowFrame,MainTrim,VillaMulch,VillaHedge,PropsMetal,VillaWood,MainMetal,LampGlow,RoofDark,MainSpandrel,VillaCurtain,MainWater,VillaLawn
