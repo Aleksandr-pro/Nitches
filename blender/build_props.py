@@ -2835,43 +2835,68 @@ def build_opera():
     for spec in shell_specs:
         outer_rows = []
         inner_rows = []
+        outer_uv_rows = []
+        inner_uv_rows = []
         for length_index in range(length_segments + 1):
             t = length_index / float(length_segments)
             outer_row = []
             inner_row = []
+            outer_uv_row = []
+            inner_uv_row = []
             for cross_index in range(cross_segments + 1):
                 u = -1.0 + 2.0 * cross_index / float(cross_segments)
                 outer_point = shell_point(spec, u, t)
                 inner_point = shell_point(spec, u, t, drop=0.34)
                 inner_point.x = spec[0] + (inner_point.x - spec[0]) * 0.985
-                outer_row.append(shell_builder.add_vertex(
-                    outer_point, ((outer_point.x + 26.0) / 3.0, (outer_point.y + 28.0) / 3.0)))
-                inner_row.append(shell_builder.add_vertex(
-                    inner_point, ((inner_point.x + 26.0) / 3.0, (inner_point.y + 28.0) / 3.0)))
+                outer_row.append(shell_builder.add_vertex(outer_point))
+                inner_row.append(shell_builder.add_vertex(inner_point))
+                outer_uv_row.append(((outer_point.x + 26.0) / 3.0, (outer_point.y + 28.0) / 3.0))
+                inner_uv_row.append(((inner_point.x + 26.0) / 3.0, (inner_point.y + 28.0) / 3.0))
             outer_rows.append(outer_row)
             inner_rows.append(inner_row)
-        shell_rows_by_spec.append((outer_rows, inner_rows))
+            outer_uv_rows.append(outer_uv_row)
+            inner_uv_rows.append(inner_uv_row)
+        shell_rows_by_spec.append((outer_rows, inner_rows, outer_uv_rows, inner_uv_rows))
         for length_index in range(length_segments):
             for cross_index in range(cross_segments):
-                shell_builder.add_face((
+                shell_builder.quad(
                     outer_rows[length_index][cross_index],
                     outer_rows[length_index][cross_index + 1],
                     outer_rows[length_index + 1][cross_index + 1],
                     outer_rows[length_index + 1][cross_index],
-                ))
-                shell_builder.add_face((
+                    (
+                        outer_uv_rows[length_index][cross_index],
+                        outer_uv_rows[length_index][cross_index + 1],
+                        outer_uv_rows[length_index + 1][cross_index + 1],
+                        outer_uv_rows[length_index + 1][cross_index],
+                    ),
+                )
+                shell_builder.quad(
                     inner_rows[length_index][cross_index],
                     inner_rows[length_index + 1][cross_index],
                     inner_rows[length_index + 1][cross_index + 1],
                     inner_rows[length_index][cross_index + 1],
-                ))
+                    (
+                        inner_uv_rows[length_index][cross_index],
+                        inner_uv_rows[length_index + 1][cross_index],
+                        inner_uv_rows[length_index + 1][cross_index + 1],
+                        inner_uv_rows[length_index][cross_index + 1],
+                    ),
+                )
         # Close the rear of every vault in ceramic.  Fronts remain glazed.
-        outer_rows, _inner_rows = shell_rows_by_spec[-1]
+        outer_rows, _inner_rows, outer_uv_rows, _inner_uv_rows = shell_rows_by_spec[-1]
         centre_x, _half_width, _peak_z, _y_front, y_rear = spec
-        rear_centre = shell_builder.add_vertex(Vector((centre_x, y_rear, 5.05)), (centre_x / 3.0, y_rear / 3.0))
+        rear_centre = shell_builder.add_vertex(Vector((centre_x, y_rear, 5.05)))
+        rear_centre_uv = ((centre_x + 26.0) / 3.0, (y_rear + 28.0) / 3.0)
         rear_row = outer_rows[-1]
+        rear_uv_row = outer_uv_rows[-1]
         for cross_index in range(cross_segments):
-            shell_builder.add_face((rear_centre, rear_row[cross_index], rear_row[cross_index + 1]))
+            shell_builder.tri(
+                rear_centre,
+                rear_row[cross_index],
+                rear_row[cross_index + 1],
+                (rear_centre_uv, rear_uv_row[cross_index], rear_uv_row[cross_index + 1]),
+            )
         # Thick shell skirts tie the vault into the podium cornice.
         for side_sign in (-1.0, 1.0):
             box("opera_shell_skirt", centre_x + side_sign * spec[1] * 0.94, (spec[3] + spec[4]) * 0.5, 4.72,
@@ -2881,15 +2906,22 @@ def build_opera():
         centre_x, _half_width, _peak_z, y_front, _y_rear = spec
         # Front glazed lunette for each shell.
         cap_centre_point = Vector((centre_x, y_front + 0.10, 5.08))
-        cap_centre = shell_glass_builder.add_vertex(cap_centre_point, (0.5, 0.0))
+        cap_centre = shell_glass_builder.add_vertex(cap_centre_point)
+        cap_centre_uv = (0.5, 0.0)
         cap_row = []
+        cap_uv_row = []
         for cross_index in range(cross_segments + 1):
             u = -1.0 + 2.0 * cross_index / float(cross_segments)
             cap_point = shell_point(spec, u, 0.0, drop=0.12, y_offset=0.10)
-            cap_row.append(shell_glass_builder.add_vertex(
-                cap_point, ((u + 1.0) * 0.5, max(0.0, (cap_point.z - 5.0) / 16.0))))
+            cap_row.append(shell_glass_builder.add_vertex(cap_point))
+            cap_uv_row.append(((u + 1.0) * 0.5, max(0.0, (cap_point.z - 5.0) / 16.0)))
         for cross_index in range(cross_segments):
-            shell_glass_builder.add_face((cap_centre, cap_row[cross_index + 1], cap_row[cross_index]))
+            shell_glass_builder.tri(
+                cap_centre,
+                cap_row[cross_index + 1],
+                cap_row[cross_index],
+                (cap_centre_uv, cap_uv_row[cross_index + 1], cap_uv_row[cross_index]),
+            )
         # Radiating and concentric bronze mullions on the lunette.
         for radial_u in (-0.78, -0.52, -0.26, 0.0, 0.26, 0.52, 0.78):
             arch_point = shell_point(spec, radial_u, 0.0, drop=0.10, y_offset=0.015)
