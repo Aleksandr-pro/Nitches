@@ -38,10 +38,13 @@ const modelCopies = [
   ['src/assets/models/props/ornamental_shrub.glb', 'vegetation/ornamental_shrub.glb'],
 ];
 
+// 0.2.36 menu cards are cropped from real 0.2.35 in-game CI frames;
+// the retired photoreal menu renders are deliberately no longer staged.
 const uiCopies = [
-  ['src/assets/ui/menu_shelby.jpg', 'ui/menu_shelby.jpg'],
-  ['src/assets/ui/menu_richtown.jpg', 'ui/menu_richtown.jpg'],
-  ['src/assets/ui/menu_garage.jpg', 'ui/menu_garage.jpg'],
+  ['src/assets/ui/menu_play_gameplay.jpg', 'ui/menu_play_gameplay.jpg'],
+  ['src/assets/ui/menu_shelby_gameplay.jpg', 'ui/menu_shelby_gameplay.jpg'],
+  ['src/assets/ui/menu_richtown_gameplay.jpg', 'ui/menu_richtown_gameplay.jpg'],
+  ['src/assets/ui/menu_world_gameplay.jpg', 'ui/menu_world_gameplay.jpg'],
   ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
 ];
 
