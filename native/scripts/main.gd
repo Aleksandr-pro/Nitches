@@ -1789,7 +1789,7 @@ func _run_smoke_checks() -> void:
 		catalog_by_id[String(car.get("id", ""))] = car
 	var audi_spec := catalog_by_id.get("audi_r8_v10_plus", {}) as Dictionary
 	var camaro_spec := catalog_by_id.get("chevrolet_camaro_ss", {}) as Dictionary
-	var mercedes_spec := catalog_by_id.get("mercedes_benz_560_sel", {}) as Dictionary
+	var mercedes_spec := catalog_by_id.get("mercedes_560_sel", {}) as Dictionary
 	if not bool(frontend_state.get("multi_car_0240", false)) or int(frontend_state.get("catalog_cars", 0)) != 4 or int(frontend_state.get("catalog_view_cars", 0)) != 4 or int(frontend_state.get("car_customization_slots", 0)) != 4 or int(frontend_state.get("car_stat_slots", 0)) != 4 or int(audi_spec.get("power_hp", 0)) != 610 or int(audi_spec.get("torque_nm", 0)) != 560 or int(audi_spec.get("top_speed_kmh", 0)) != 330 or int(camaro_spec.get("power_hp", 0)) != 455 or int(camaro_spec.get("torque_nm", 0)) != 617 or int(camaro_spec.get("top_speed_kmh", 0)) != 290 or int(mercedes_spec.get("power_hp", 0)) != 300 or int(mercedes_spec.get("torque_nm", 0)) != 455 or int(mercedes_spec.get("top_speed_kmh", 0)) != 250 or not bool(menu_state.get("multi_car_0240", false)) or int(menu_state.get("catalog_cars", 0)) != 4 or int(menu_state.get("store_cars", 0)) != 4 or not bool(steering_wheel_state.get("photo_steering_wheel_0240", false)) or not bool(steering_wheel_state.get("replaceable_per_car_0240", false)) or (steering_wheel_state.get("wheel_texture_size", Vector2.ZERO) as Vector2).x < 512.0 or not bool(vehicle_audio_state.get("multi_car_audio_0240", false)) or String(vehicle_audio_state.get("car_id", "")) != _selected_car_id:
 		failures.append("0.2.40 four-car catalogue / supplied models / photo steering wheel / per-car audio pass is incomplete: frontend=%s menu=%s wheel=%s audio=%s audi=%s camaro=%s mercedes=%s" % [str(frontend_state), str(menu_state), str(steering_wheel_state), str(vehicle_audio_state), str(audi_spec), str(camaro_spec), str(mercedes_spec)])
 
@@ -1926,7 +1926,7 @@ func _run_screenshot_tour() -> void:
 		},
 		{
 			"name": "08c_car_mercedes_560_sel", "time": "day", "hud": true, "vehicle": "spawn",
-			"car_id": "mercedes_benz_560_sel", "gameplay_camera": true, "marketing": true, "frames": 6,
+			"car_id": "mercedes_560_sel", "gameplay_camera": true, "marketing": true, "frames": 6,
 		},
 		{
 			"name": "08d_car_shelby_gt500", "time": "day", "hud": true, "vehicle": "spawn",

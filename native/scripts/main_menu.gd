@@ -805,7 +805,7 @@ func _texture_for_car(car_id: String) -> Texture2D:
             path = "res://assets/ui/menu_audi_r8_gameplay.jpg"
         "chevrolet_camaro_ss":
             path = "res://assets/ui/menu_camaro_ss_gameplay.jpg"
-        "mercedes_benz_560_sel":
+        "mercedes_560_sel":
             path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"
         _:
             path = "res://assets/ui/menu_shelby_gameplay.jpg"
@@ -916,6 +916,13 @@ func _refresh_car_presentation() -> void:
     var specs := _specs_for_car(_selected_car_id)
     if specs.is_empty():
         return
+    # Keep the store detail pane on the live studio car after a garage
+    # switch.  A tuning item for this same car stays selected; a car
+    # card or another car's tuning item follows the new selection.
+    if _catalog_by_id.has(_store_selected_id):
+        _store_selected_id = _selected_car_id
+    elif _store_selected_id.begins_with("tuning_") and not _store_selected_id.begins_with("tuning_%s_" % _selected_car_id):
+        _store_selected_id = _selected_car_id
     var display_name := _car_display_name(specs)
     var tuning := _tuning_values_for(specs, int(_customization.get("tuning_level", 0)))
     if _top_car_label != null:
