@@ -17,12 +17,14 @@ signal reset_requested
 signal menu_requested
 signal sound_toggle_requested
 signal map_requested
+signal ignition_requested
 
 const MinimapScript := preload("res://scripts/minimap.gd")
 const SteeringWheelScript := preload("res://scripts/steering_wheel.gd")
 const DashboardGaugeScript := preload("res://scripts/dashboard_gauge.gd")
 const TouchPedalScript := preload("res://scripts/touch_pedal.gd")
 const RoundActionButtonScript := preload("res://scripts/round_action_button.gd")
+const IgnitionButtonScript := preload("res://scripts/ignition_button.gd")
 const CircularMaskShader := preload("res://shaders/circular_mask.gdshader")
 
 var _root: Control
@@ -36,6 +38,7 @@ var _gas_pedal: NativeTouchPedal
 var _brake_pedal: NativeTouchPedal
 var _nitro_button: NativeRoundActionButton
 var _drift_button: NativeRoundActionButton
+var _ignition_button: NativeIgnitionButton
 var _steer_left_button: Button
 var _steer_right_button: Button
 var _camera_button: Button
@@ -80,6 +83,10 @@ func bind(world: NativeWorldBuilder, vehicle: NativeVehicle) -> void:
     _slow_timer = 1.0
     if _minimap != null:
         _minimap.bind(world, vehicle)
+    if _vehicle != null:
+        if not _vehicle.engine_state_changed.is_connected(_on_engine_state_changed):
+            _vehicle.engine_state_changed.connect(_on_engine_state_changed)
+        _on_engine_state_changed(_vehicle.get_engine_state())
     if _world != null and not _world.build_error.is_empty():
         show_build_error(_world.build_error)
 
@@ -156,6 +163,8 @@ func reset_touch_controls() -> void:
         _nitro_button.force_release()
     if _drift_button != null:
         _drift_button.force_release()
+    if _ignition_button != null:
+        _ignition_button.force_release()
 
 
 func _style_label(label: Label, font_size: int, color: Color) -> void:
@@ -223,6 +232,10 @@ func _build_ui() -> void:
     _map_overlay.modulate.a = 0.0
     _map_overlay.pressed.connect(func() -> void: map_requested.emit())
     _root.add_child(_map_overlay)
+
+    _ignition_button = IgnitionButtonScript.new()
+    _root.add_child(_ignition_button)
+    _ignition_button.pressed.connect(_on_ignition_pressed)
 
     _reset_button = _make_icon_button("↺", 27)
     _reset_button.name = "ResetCarButton"
@@ -338,7 +351,12 @@ func _layout_hud() -> void:
     var minimap_rect := Rect2(Vector2(margin_x, margin_y), Vector2(minimap_d, minimap_d))
     _place(_minimap, minimap_rect)
     _place(_map_overlay, minimap_rect)
-    _place(_district_label, Rect2(minimap_rect.position + Vector2(0.0, minimap_d + 5.0), Vector2(minimap_d, 32.0)))
+    # 0.2.35: the engine power button lives directly under the
+    # minimap and is exactly the handbrake lever button's diameter.
+    var ignition_d := clampf(vh * 0.12, 64.0, 104.0)
+    var ignition_rect := Rect2(Vector2(minimap_rect.get_center().x - ignition_d * 0.5, minimap_rect.end.y + 8.0), Vector2(ignition_d, ignition_d))
+    _place(_ignition_button, ignition_rect)
+    _place(_district_label, Rect2(minimap_rect.position + Vector2(0.0, minimap_d + 8.0 + ignition_d + 5.0), Vector2(minimap_d, 32.0)))
 
     var reset_size := clampf(vh * 0.09, 56.0, 72.0)
     _place(_reset_button, Rect2(Vector2(minimap_rect.end.x + gap, margin_y), Vector2(reset_size, reset_size)))
@@ -412,6 +430,17 @@ func _on_pedal_value_changed(action_name: String, value: float) -> void:
         _vehicle.set_touch_pedal(action_name, value)
 
 
+func _on_ignition_pressed() -> void:
+    ignition_requested.emit()
+    if _vehicle != null:
+        _vehicle.toggle_engine()
+
+
+func _on_engine_state_changed(state: int) -> void:
+    if _ignition_button != null:
+        _ignition_button.set_engine_state(state)
+
+
 func _on_round_action_changed(action_name: String, pressed: bool) -> void:
     if _vehicle != null:
         _vehicle.set_touch_input(action_name, pressed)
@@ -444,6 +473,8 @@ func update_from_vehicle(slow_update: bool = false) -> void:
     var nitro_ratio := _vehicle.get_nitro_ratio()
     _gauge.set_values(speed, gear, _vehicle.get_rpm_ratio(), nitro_ratio)
     _nitro_button.set_charge_ratio(nitro_ratio)
+    if _ignition_button != null:
+        _ignition_button.set_engine_state(_vehicle.get_engine_state())
 
     var car_transform := _vehicle.get_global_transform_interpolated()
     var car_position := car_transform.origin
@@ -484,8 +515,14 @@ func update_from_vehicle(slow_update: bool = false) -> void:
 
 func get_smoke_state() -> Dictionary:
     var viewport_size := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2.ZERO
+    var ignition_diameter := minf(_ignition_button.size.x, _ignition_button.size.y) if _ignition_button != null else 0.0
+    var drift_diameter := minf(_drift_button.size.x, _drift_button.size.y) if _drift_button != null else 0.0
     return {
         "hud_0233": true,
+        "hud_0235": true,
+        "ignition_button": _ignition_button.get_smoke_state() if _ignition_button != null else {},
+        "ignition_under_minimap": _ignition_button != null and _minimap != null and _ignition_button.position.y >= _minimap.position.y + _minimap.size.y,
+        "ignition_same_size_as_drift": ignition_diameter > 0.0 and absf(ignition_diameter - drift_diameter) <= 0.5,
         "safe_area_3pct_4pct": true,
         "viewport_size": viewport_size,
         "dashboard_gauge": _gauge.get_smoke_state() if _gauge != null else {},

@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -47,6 +47,9 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/route_guide.gd'),
   readText('scripts/car_silhouette_icon.gd'),
   readText('shaders/backdrop_blur.gdshader'),
+  readText('scripts/vehicle_audio.gd'),
+  readText('scripts/ignition_button.gd'),
+  readFile('docs/AUDIO_CREDITS.md', 'utf8'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -59,8 +62,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=37'), 'Native 0.2.34 must bump Android versionCode to 37');
-assert(preset.includes('version/name="0.2.34-native-alpha"'), 'Native version name must be 0.2.34-native-alpha');
+assert(preset.includes('version/code=38'), 'Native 0.2.35 must bump Android versionCode to 38');
+assert(preset.includes('version/name="0.2.35-native-alpha"'), 'Native version name must be 0.2.35-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -81,7 +84,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}`;
 for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -196,7 +199,20 @@ for (const marker of ['world_map_0234', 'zoom_label_tiers_0234', '_try_position_
 }
 assert(!worldMapScript.includes('_canvas.draw_circle(centre, radius, color)'), 'Native 0.2.34 world map must not draw the removed debug district circles');
 assert(syncScript.includes('menu_shelby.jpg') && syncScript.includes('menu_richtown.jpg') && syncScript.includes('menu_garage.jpg') && syncScript.includes('ui_click.wav'), 'Native asset sync must stage the 0.2.34 menu artwork and click sound');
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon']) {
+// 0.2.35 ignition + recorded Shelby audio: the car spawns off, a
+// handbrake-sized power button sits under the minimap, F/Enter also
+// toggles the engine, and the old synthesized 55 Hz loop is gone.
+// The continuous voice is a 16-point recorded GT500 bank in on/off
+// throttle layers, with recorded Mustang idle/start/stop and tyre
+// squeal on a dedicated limited bus.
+for (const marker of ['class_name NativeVehicleAudio', 'class_name NativeIgnitionButton', 'recorded_audio_0235', 'recorded_gt500_bank', 'gt500_on_0900.wav', 'gt500_on_4400.wav', 'gt500_off_0900.wav', 'gt500_off_4400.wav', 'mustang_idle.wav', 'mustang_start.wav', 'mustang_stop.wav', 'tire_squeal_loop.wav', 'AudioEffectLimiter', 'VehicleAudio0235', 'ENGINE_CRANKING', 'ENGINE_STOPPING', 'toggle_engine', 'start_engine', 'stop_engine', '_ensure_action(&"ignition_toggle"', 'set_audio_suspended', 'ignition_0235', 'hud_0235', 'ignition_button_0235', 'ignition_under_minimap', 'ignition_same_size_as_drift']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.35 ignition/recorded-audio marker is missing: ${marker}`);
+}
+assert(!vehicleScript.includes('_engine_player') && !vehicleScript.includes('AudioStreamWAV.new()') && !vehicleScript.includes('sin(phase) * 0.42'), 'Native 0.2.35 must not restore the synthesized procedural engine loop');
+assert(syncScript.includes('shelbyAudioRpms') && syncScript.includes('shelbyAudioNames') && syncScript.includes('assertRealWav'), 'Native asset sync must stage and header-check the complete 0.2.35 Shelby WAV bank');
+assert(audioCredits.includes('VacekH') && audioCredits.includes('205510') && audioCredits.includes('lmbubec') && audioCredits.includes('119449') && audioCredits.includes('Tom Haigh') && audioCredits.includes('CC BY 3.0') && audioCredits.includes('CC0'), 'Native 0.2.35 audio credits must preserve the CC0 provenance and the required CC BY 3.0 tyre attribution');
+assert(mainMenuScript.includes('Tom Haigh (CC BY 3.0)'), 'Native 0.2.35 settings must carry the in-app CC BY 3.0 tyre-sound attribution');
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon', 'class_name NativeVehicleAudio', 'class_name NativeIgnitionButton']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -526,6 +542,29 @@ assert(museumBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Museum source is
 const museumLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-museum');
 assert(museumLandmark && museumLandmark.x === 665 && museumLandmark.z === -340, 'RichTown Museum landmark must stay at X665 Z-340');
 
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400];
+const shelbyAudioFiles = [
+  ...shelbyAudioRpms.flatMap((rpm) => [
+    `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
+    `gt500_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  'mustang_idle.wav',
+  'mustang_start.wav',
+  'mustang_stop.wav',
+  'tire_squeal_loop.wav',
+];
+assert(shelbyAudioFiles.length === 36, 'Native 0.2.35 must ship 32 GT500 loops plus idle/start/stop/tyre recordings');
+for (const name of shelbyAudioFiles) {
+  const source = `src/assets/audio/shelby/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  assert(info.size > 40_000, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit for the mobile audio bank`);
+}
+const shelbyManifest = JSON.parse(await readFile('src/assets/audio/shelby/bank_manifest.json', 'utf8'));
+assert(shelbyManifest.sample_rate === 32000 && shelbyManifest.channels === 1 && shelbyManifest.engine_loops.length === 32, 'Native 0.2.35 Shelby bank manifest must describe all 32 mono engine loops');
+
 if (requireAssets) {
   const required = [
     'assets/vehicles/mustang.glb',
@@ -576,6 +615,7 @@ if (requireAssets) {
     'assets/ui/menu_richtown.jpg',
     'assets/ui/menu_garage.jpg',
     'assets/audio/ui_click.wav',
+    ...shelbyAudioFiles.map((name) => `assets/audio/shelby/${name}`),
   ];
   for (const relative of required) {
     const file = path.join(root, relative);
@@ -584,6 +624,10 @@ if (requireAssets) {
     if (file.endsWith('.glb')) {
       const bytes = await readFile(file);
       assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', `${file} is an LFS pointer or corrupt GLB`);
+    }
+    if (file.endsWith('.wav')) {
+      const bytes = await readFile(file);
+      assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${file} is not a real WAV`);
     }
   }
 }

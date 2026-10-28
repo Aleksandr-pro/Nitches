@@ -9,6 +9,7 @@ extends RigidBody3D
 ## browser physics loop or any JavaScript bridge.
 
 signal reset_requested
+signal engine_state_changed(state: int)
 
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
 const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
@@ -29,6 +30,13 @@ const TYRE_RELAXATION_LENGTH_M := 0.26
 const TYRE_FORCE_MIN_ROLL_SPEED := 3.5
 const ENGINE_IDLE_RPM := 850.0
 const ENGINE_REDLINE_RPM := 6400.0
+const ENGINE_OFF := 0
+const ENGINE_CRANKING := 1
+const ENGINE_RUNNING := 2
+const ENGINE_STOPPING := 3
+const CRANK_DURATION_S := 1.18
+const STOP_DURATION_S := 0.82
+const CRANK_RPM := 260.0
 # Owner-supplied spec sheet for the player car (Shelby GT500, 428 cid
 # V8): 365 hp SAE gross, 569 Nm at 3200 rpm, 0-100 km/h in 6.0 s,
 # ~207 km/h top speed.  The drivetrain is the period 4-speed manual
@@ -93,7 +101,8 @@ var _smoke_emitters: Array[GPUParticles3D] = []
 var _nitro_emitters: Array[GPUParticles3D] = []
 var _contact_shadow_material: StandardMaterial3D
 var _soft_disc_texture: Texture2D
-var _engine_player: AudioStreamPlayer
+var _vehicle_audio: NativeVehicleAudio
+var _audio_suspended := false
 var _nitro := 0.72
 var _forward_speed := 0.0
 var _lateral_speed := 0.0
@@ -119,7 +128,11 @@ var _visual_wheelspin_excess := 0.0
 var _filtered_yaw_rate := 0.0
 var _yaw_stability_torque := 0.0
 var _current_gear := 0
-var _engine_rpm := ENGINE_IDLE_RPM
+var _engine_state := ENGINE_OFF
+var _engine_rpm := 0.0
+var _engine_transition_timer := 0.0
+var _engine_stop_start_rpm := 0.0
+var _ignition_key_was_pressed := false
 var _gear_shift_timer := 0.0
 var _gear_shift_duration := 0.0
 var _shift_torque_blend := 1.0
@@ -181,6 +194,7 @@ func _ensure_input_actions() -> void:
 	_ensure_action(&"steer_right", [KEY_D, KEY_RIGHT])
 	_ensure_action(&"handbrake", [KEY_SPACE])
 	_ensure_action(&"boost", [KEY_SHIFT])
+	_ensure_action(&"ignition_toggle", [KEY_F, KEY_ENTER])
 	_ensure_action(&"reset_car", [KEY_R])
 	_ensure_action(&"camera_toggle", [KEY_C])
 	_ensure_action(&"time_toggle", [KEY_T])
@@ -831,28 +845,156 @@ func _create_vehicle_effects() -> void:
 
 
 func _create_engine_audio() -> void:
-	var sample_rate := 22050
-	var samples := PackedByteArray()
-	samples.resize(sample_rate)
-	for i in sample_rate:
-		var phase := TAU * 55.0 * float(i) / float(sample_rate)
-		var value := sin(phase) * 0.42 + sin(phase * 2.0) * 0.25 + sin(phase * 3.0) * 0.14 + signf(sin(phase)) * 0.07
-		samples[i] = int(clampf(128.0 + value * 92.0, 3.0, 252.0))
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_8_BITS
-	stream.mix_rate = sample_rate
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_begin = 0
-	stream.loop_end = sample_rate
-	stream.data = samples
+	_vehicle_audio = NativeVehicleAudio.new()
+	add_child(_vehicle_audio)
+	_vehicle_audio.set_suspended(_audio_suspended)
+	engine_state_changed.emit(_engine_state)
 
-	_engine_player = AudioStreamPlayer.new()
-	_engine_player.name = "EngineAudio"
-	_engine_player.stream = stream
-	_engine_player.volume_db = -24.0
-	_engine_player.pitch_scale = 0.72
-	add_child(_engine_player)
-	_engine_player.play()
+
+func _set_engine_state(next_state: int) -> void:
+	var clamped_state := clampi(next_state, ENGINE_OFF, ENGINE_STOPPING)
+	if clamped_state == _engine_state:
+		return
+	_engine_state = clamped_state
+	engine_state_changed.emit(_engine_state)
+
+
+func get_engine_state() -> int:
+	return _engine_state
+
+
+func is_engine_running() -> bool:
+	return _engine_state == ENGINE_RUNNING
+
+
+func start_engine() -> void:
+	if _engine_state == ENGINE_RUNNING or _engine_state == ENGINE_CRANKING:
+		return
+	_engine_transition_timer = CRANK_DURATION_S
+	_engine_stop_start_rpm = 0.0
+	_reverse_engaged = false
+	_current_gear = 0
+	_gear_shift_timer = 0.0
+	_gear_shift_duration = 0.0
+	_shift_torque_blend = 1.0
+	_set_engine_state(ENGINE_CRANKING)
+	if _vehicle_audio != null:
+		_vehicle_audio.play_start()
+
+
+func stop_engine(play_sound: bool = true) -> void:
+	if _engine_state == ENGINE_OFF or _engine_state == ENGINE_STOPPING:
+		return
+	_engine_stop_start_rpm = maxf(_engine_rpm, ENGINE_IDLE_RPM if _engine_state == ENGINE_RUNNING else CRANK_RPM)
+	_engine_transition_timer = STOP_DURATION_S
+	boost_active = false
+	_reverse_engaged = false
+	_set_engine_state(ENGINE_STOPPING)
+	if _vehicle_audio != null:
+		if play_sound:
+			_vehicle_audio.play_stop()
+		else:
+			_vehicle_audio.cancel_event()
+			_vehicle_audio.stop_engine_loops()
+
+
+func toggle_engine() -> void:
+	match _engine_state:
+		ENGINE_RUNNING, ENGINE_CRANKING:
+			stop_engine()
+		_:
+			start_engine()
+
+
+func set_audio_suspended(suspended: bool) -> void:
+	_audio_suspended = suspended
+	if _vehicle_audio != null:
+		_vehicle_audio.set_suspended(suspended)
+
+
+func get_engine_load() -> float:
+	if _engine_state != ENGINE_RUNNING:
+		return 0.0
+	var load := 0.0
+	if _reverse_engaged:
+		load = absf(minf(throttle_input, 0.0))
+	elif throttle_input > 0.0:
+		load = throttle_input
+	load *= _shift_torque_blend
+	if boost_active:
+		load = minf(load * 1.08 + 0.08, 1.0)
+	return clampf(load, 0.0, 1.0)
+
+
+func get_audio_state() -> Dictionary:
+	if _vehicle_audio == null:
+		return {
+			"recorded_audio_0235": false,
+			"streams_ready": false,
+			"engine_state": _engine_state,
+			"engine_rpm": _engine_rpm,
+		}
+	var state := _vehicle_audio.get_smoke_state()
+	state["engine_state"] = _engine_state
+	state["engine_rpm"] = _engine_rpm
+	state["engine_load"] = get_engine_load()
+	return state
+
+
+func _update_engine_state(delta: float) -> void:
+	var ignition_down := Input.is_action_pressed(&"ignition_toggle")
+	if ignition_down and not _ignition_key_was_pressed:
+		toggle_engine()
+	_ignition_key_was_pressed = ignition_down
+
+	match _engine_state:
+		ENGINE_CRANKING:
+			_engine_transition_timer = maxf(_engine_transition_timer - delta, 0.0)
+			var progress := clampf(1.0 - _engine_transition_timer / CRANK_DURATION_S, 0.0, 1.0)
+			if progress < 0.62:
+				var crank_target := CRANK_RPM + sin(progress * TAU * 3.0) * 24.0
+				_engine_rpm = move_toward(_engine_rpm, crank_target, 1500.0 * delta)
+			else:
+				# The recorded catch flares briefly, then settles onto
+				# the 850 rpm idle used by the drivetrain and gauge.
+				var settle := smoothstep(0.62, 1.0, progress)
+				_engine_rpm = lerpf(1220.0, ENGINE_IDLE_RPM, settle)
+			if _engine_transition_timer <= 0.0:
+				_engine_rpm = maxf(_engine_rpm, ENGINE_IDLE_RPM)
+				_set_engine_state(ENGINE_RUNNING)
+		ENGINE_STOPPING:
+			_engine_transition_timer = maxf(_engine_transition_timer - delta, 0.0)
+			var stop_progress := clampf(1.0 - _engine_transition_timer / STOP_DURATION_S, 0.0, 1.0)
+			var eased := 1.0 - pow(1.0 - stop_progress, 3.0)
+			var shudder := sin(stop_progress * 34.0) * 34.0 * (1.0 - stop_progress) * (1.0 if stop_progress >= 0.18 else 0.0)
+			_engine_rpm = maxf(_engine_stop_start_rpm * (1.0 - eased) + shudder, 0.0)
+			if _engine_transition_timer <= 0.0:
+				_engine_rpm = 0.0
+				_current_gear = 0
+				_reverse_engaged = false
+				_set_engine_state(ENGINE_OFF)
+				if _vehicle_audio != null:
+					_vehicle_audio.stop_engine_loops()
+		ENGINE_OFF:
+			_engine_rpm = move_toward(_engine_rpm, 0.0, 2400.0 * delta)
+		ENGINE_RUNNING:
+			pass
+
+
+func _update_vehicle_audio(delta: float) -> void:
+	if _vehicle_audio == null or _audio_suspended:
+		return
+	var tire_level := 0.0
+	if grounded_wheel_count >= 2:
+		var speed_factor := smoothstep(4.5, 12.0, absf(_forward_speed))
+		if speed_factor > 0.0:
+			tire_level = maxf(tire_level, clampf((get_drift_angle_degrees() - 7.0) / 28.0, 0.0, 1.0) * speed_factor)
+		if handbrake_active:
+			tire_level = maxf(tire_level, 0.62 * speed_factor)
+		if absf(_rear_slip_ratio) > 0.18 and absf(throttle_input) > 0.05:
+			tire_level = maxf(tire_level, clampf((absf(_rear_slip_ratio) - 0.18) / 0.55, 0.0, 1.0))
+	var tire_pitch := 0.72 + clampf(absf(_forward_speed) / 42.0, 0.0, 1.0) * 0.38 + clampf(absf(_rear_slip_ratio), 0.0, 1.0) * 0.12
+	_vehicle_audio.update_audio(delta, _engine_state, _engine_rpm, get_engine_load(), boost_active, tire_level, tire_pitch)
 
 
 func set_touch_input(action_name: String, pressed: bool) -> void:
@@ -907,6 +1049,11 @@ func _read_inputs(delta: float) -> void:
 		if _touch_pressed("brake_reverse"):
 			touch_throttle -= 1.0
 	_throttle_command = clampf(touch_throttle if absf(touch_throttle) > 0.01 else keyboard_throttle, -1.0, 1.0)
+	if _engine_state != ENGINE_RUNNING:
+		# A dead engine cannot launch or reverse.  Preserve the
+		# negative pedal because the tyre model uses it as the service
+		# brake while the car is still rolling forward.
+		_throttle_command = minf(_throttle_command, 0.0)
 
 	var keyboard_steering := Input.get_axis(&"steer_left", &"steer_right")
 	var digital_steering_target := 0.0
@@ -941,7 +1088,7 @@ func _read_inputs(delta: float) -> void:
 		steering_input = NativeArcadeCarAssist.shape_steering_input_with_preferences(_steering_command, _steering_sensitivity, _steering_dead_zone)
 
 	handbrake_active = Input.is_action_pressed(&"handbrake") or _touch_pressed("handbrake")
-	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and _throttle_command > 0.05 and _nitro > 0.02
+	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and _throttle_command > 0.05 and _nitro > 0.02 and _engine_state == ENGINE_RUNNING
 
 
 func _update_tilt_steering(delta: float) -> void:
@@ -967,6 +1114,7 @@ func _update_tilt_steering(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_engine_state(delta)
 	_read_inputs(delta)
 	if Input.is_action_just_pressed(&"reset_car"):
 		reset_requested.emit()
@@ -1059,6 +1207,20 @@ func _ackermann_angle_for(angle: float, side: int) -> float:
 
 
 func _update_drivetrain(delta: float) -> void:
+	if _engine_state != ENGINE_RUNNING:
+		_reverse_engaged = false
+		_gear_shift_timer = 0.0
+		_gear_shift_duration = 0.0
+		_shift_torque_blend = 1.0
+		_smoothed_drive_force_per_wheel = move_toward(_smoothed_drive_force_per_wheel, 0.0, 42000.0 * delta)
+		_drive_force_per_wheel = _smoothed_drive_force_per_wheel
+		_engine_brake_force_per_wheel = 0.0
+		var stopped_excess := -_forward_speed if handbrake_active else 0.0
+		var stopped_rate := 18.0 if absf(stopped_excess) > absf(_wheelspin_excess_speed) else 9.0
+		_wheelspin_excess_speed = move_toward(_wheelspin_excess_speed, stopped_excess, stopped_rate * delta)
+		_rear_slip_ratio = _wheelspin_excess_speed / maxf(absf(_forward_speed), 4.0)
+		return
+
 	if throttle_input > 0.03:
 		_reverse_engaged = false
 	elif throttle_input < -0.03 and _forward_speed <= 0.45:
@@ -1524,10 +1686,7 @@ func _process(delta: float) -> void:
 	for material in _tail_light_materials:
 		material.emission_energy_multiplier = 4.6 if _brake_light_active else (1.1 if _headlights_enabled else 0.65)
 
-	if _engine_player != null:
-		var rpm := get_rpm_ratio()
-		_engine_player.pitch_scale = 0.68 + rpm * 1.65
-		_engine_player.volume_db = -25.0 + absf(throttle_input) * 7.0 + (4.0 if boost_active else 0.0)
+	_update_vehicle_audio(delta)
 
 
 func reset_to_transform(target: Transform3D) -> void:
@@ -1544,7 +1703,17 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	angular_velocity = Vector3.ZERO
 	sleeping = false
 	_current_gear = 0
-	_engine_rpm = ENGINE_IDLE_RPM
+	if _engine_state == ENGINE_RUNNING:
+		_engine_rpm = ENGINE_IDLE_RPM
+	else:
+		_engine_rpm = 0.0
+		_engine_transition_timer = 0.0
+		_engine_stop_start_rpm = 0.0
+		_set_engine_state(ENGINE_OFF)
+		if _vehicle_audio != null:
+			_vehicle_audio.cancel_event()
+			_vehicle_audio.stop_engine_loops()
+	boost_active = false
 	_gear_shift_timer = 0.0
 	_gear_shift_duration = 0.0
 	_shift_torque_blend = 1.0
@@ -1688,6 +1857,8 @@ func is_drifting() -> bool:
 
 
 func get_gear_label() -> String:
+	if _engine_state != ENGINE_RUNNING:
+		return "N"
 	if _reverse_engaged or _forward_speed < -0.45:
 		return "R"
 	if absf(_forward_speed) < 0.25 and absf(throttle_input) < 0.03:
@@ -1696,7 +1867,9 @@ func get_gear_label() -> String:
 
 
 func get_rpm_ratio() -> float:
-	return clampf((_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
+	if _engine_rpm <= ENGINE_IDLE_RPM:
+		return clampf(0.08 * _engine_rpm / ENGINE_IDLE_RPM, 0.0, 0.08)
+	return clampf(0.08 + 0.92 * (_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
 
 
 func get_smoothing_state() -> Dictionary:
@@ -1723,6 +1896,12 @@ func get_smoothing_state() -> Dictionary:
 		"steering_limit_smooth": _steering_limit_smooth,
 		"throttle_command": _throttle_command,
 		"effective_throttle": throttle_input,
+		"ignition_0235": true,
+		"engine_state": _engine_state,
+		"engine_running": is_engine_running(),
+		"engine_rpm": _engine_rpm,
+		"engine_load": get_engine_load(),
+		"vehicle_audio": get_audio_state(),
 	}
 
 

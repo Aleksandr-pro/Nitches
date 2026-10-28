@@ -1129,10 +1129,13 @@ func _build_settings_panel(parent: Node) -> Control:
     spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", 12, COL_MUTED)
-    _version_button = _button("Nitches 0.2.34-native-alpha", COL_LOCKED, Vector2(0.0, 40.0), 12)
+    _version_button = _button("Nitches 0.2.35-native-alpha", COL_LOCKED, Vector2(0.0, 40.0), 12)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
+    var audio_credit := _label(right, "Записи Mustang: VacekH и lmbubec (CC0) • шины: Tom Haigh (CC BY 3.0)", 10, COL_MUTED)
+    audio_credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    audio_credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _refresh_settings_controls()
     return vbox.get_parent().get_parent() as Control
 

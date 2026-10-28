@@ -24,6 +24,7 @@ on:
       - 'src/world/realWorld.js'
       - 'src/assets/models/**'
       - 'src/assets/textures/realworld/**'
+      - 'src/assets/audio/**'
       - 'public/assets/models/**'
       - '.github/workflows/native-screenshots.yml'
 
