@@ -65,8 +65,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=40'), 'Native 0.2.37 must bump Android versionCode to 40');
-assert(preset.includes('version/name="0.2.37-native-alpha"'), 'Native version name must be 0.2.37-native-alpha');
+assert(preset.includes('version/code=41'), 'Native 0.2.38 must bump Android versionCode to 41');
+assert(preset.includes('version/name="0.2.38-native-alpha"'), 'Native version name must be 0.2.38-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -213,6 +213,17 @@ for (const marker of ['view_sector_streaming_0237', 'STREAM_SECTOR_HIDE_MARGIN_R
   assert(combinedRuntime.includes(marker), `Native 0.2.37 performance/Sail Island marker is missing: ${marker}`);
 }
 assert(minimapScript.includes('func _draw_vector_world() -> void:\n    var radius := _clip_radius()'), 'Native 0.2.37 minimap vector fallback must declare its clip radius locally, not borrow _draw() scope');
+// 0.2.38 Sail Island loop road repair from the phone screenshots:
+// the closed oval gets a seam tangent + entry pad, single broken
+// centreline, no closed-chain arrows and no random wear/props;
+// resort paving/hedges/pools are fitted and re-audited against the
+// carriageway, and the pool audit counts the concrete rim without
+// letting a pool reject its own relocation candidate.
+for (const marker of ['closedLoop0238', 'resortRoad0238', 'sail_loop_closed_0238', 'sail_loop_entry_pad_0238', 'sail_loop_center_dashes_0238', 'sail_loop_clean_markings_0238', 'sail_loop_pristine_asphalt_0238', 'sail_resort_min_road_clearance_0238', 'sail_resort_rejected_road_overlaps_0238', 'sail_island_hedges_0238', 'sail_pools_final_0238', 'sail_pool_min_road_clearance_0238', 'sail_loop_road_repair_0238', 'canonical_pool_rim_clearance_0238', 'canonical_pool_self_excluded_0238', 'excluded_pool_index', 'sail_loop_generic_props_removed_0238', 'sail_loop_segments_without_props_0238', '21_sail_loop_entry', '22_sail_loop_east']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.38 Sail loop road-repair marker is missing: ${marker}`);
+}
+assert(worldScript.includes('{"x": 1216.0, "z": 80.0, "w": 16.0, "d": 26.0}') && worldScript.includes('{"x": 1149.8, "z": 80.0, "w": 4.4, "d": 18.0'), 'Native 0.2.38 must keep the east Sail pool and arrival apron inside the loop with road clearance');
+assert(!worldScript.includes('{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0') && !worldScript.includes('{"x": 1220.0, "z": 61.0, "w": 20.0') && !worldScript.includes('{"x": 1220.0, "z": 99.0, "w": 20.0'), 'Native 0.2.38 must not restore the Sail paving/hedge bars that crossed the loop carriageway');
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых авто без 3D-моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');

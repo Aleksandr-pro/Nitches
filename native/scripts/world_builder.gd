@@ -615,7 +615,7 @@ func _subdivide_road_points_for_junctions(
 	return result
 
 
-func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float, include_generated_buildings: bool = true) -> bool:
+func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float, include_generated_buildings: bool = true, excluded_pool_index: int = -1) -> bool:
 	if _road_clearance_xz(point) < minimum_road_clearance:
 		return false
 	for building_variant in data.get("buildings", []):
@@ -645,8 +645,11 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 				footprint_d = maxf(footprint_d, 18.87)
 		if absf(point.x - centre.x) <= footprint_w * 0.5 + building_padding and absf(point.z - centre.z) <= footprint_d * 0.5 + building_padding:
 			return false
-	for pool_variant in data.get("pools", []):
-		var pool: Dictionary = pool_variant
+	var all_pools: Array = data.get("pools", [])
+	for pool_index in all_pools.size():
+		if pool_index == excluded_pool_index:
+			continue
+		var pool: Dictionary = all_pools[pool_index]
 		var centre := _item_position(pool)
 		var local := Basis(Vector3.UP, -_f(pool, "rotY")) * (point - centre)
 		if absf(local.x) <= (_f(pool, "w", 8.0) + 1.3) * 0.5 + building_padding and absf(local.z) <= (_f(pool, "d", 5.0) + 1.3) * 0.5 + building_padding:
@@ -2540,6 +2543,8 @@ func _expand_sail_island_0237() -> void:
 			"widthM": 9.0,
 			"lanes": 2,
 			"speedLimitKmh": 30,
+			"closedLoop0238": true,
+			"resortRoad0238": true,
 			"samples": loop_samples,
 		})
 		data["roads"] = roads
@@ -2585,9 +2590,13 @@ func _expand_sail_island_0237() -> void:
 			resort_pools += 1
 	if resort_pools == 0:
 		for pool_spec in [
-			{"x": 1220.0, "z": 80.0, "w": 18.0, "d": 28.0},
-			{"x": 1184.0, "z": 50.0, "w": 36.0, "d": 6.0},
-			{"x": 1184.0, "z": 110.0, "w": 36.0, "d": 6.0},
+			# 0.2.38: keep the built rims inside the loop with real
+			# clearance.  The first east pool touched the inner lane
+			# edge, so the generic sanitizer exiled it east of the
+			# carriageway (the blue slab in the phone screenshots).
+			{"x": 1216.0, "z": 80.0, "w": 16.0, "d": 26.0},
+			{"x": 1186.0, "z": 50.0, "w": 34.0, "d": 6.0},
+			{"x": 1186.0, "z": 110.0, "w": 34.0, "d": 6.0},
 		]:
 			var px := _f(pool_spec, "x")
 			var pz := _f(pool_spec, "z")
@@ -2620,6 +2629,7 @@ func _expand_sail_island_0237() -> void:
 
 	_enhancement_stats["sail_island_expanded_0237"] = true
 	_enhancement_stats["sail_island_loop_0237"] = true
+	_enhancement_stats["sail_loop_closed_0238"] = true
 	_enhancement_stats["sail_island_land_area_m2_0237"] = float(land_cells) * step * step
 	_enhancement_stats["sail_island_radii_0237"] = SAIL_ISLAND_RADII
 	_enhancement_stats["sail_resort_villas_0237"] = resort_villas
@@ -2728,16 +2738,21 @@ func _sanitize_canonical_buildings_0237() -> void:
 ## Same audit for exported pools: one Palm Island pool lay across
 ## the rt-palm-2 carriageway.  A relocated pool must clear roads by
 ## 1.2 m and every sampled point of its rectangle must also clear
-## buildings, other pools and landmarks.
+## buildings, other pools and landmarks.  0.2.38: the audited
+## rectangle is the built concrete rim (water + 1.3 m), not just the
+## water plane, and the pool being moved is excluded from its own
+## object test -- the old self-overlap rejection threw the Sail
+## Island east pool 32 m outside the loop into the grass.
 func _sanitize_canonical_pools_0237() -> void:
 	var relocated := 0
 	var unresolved := 0
 	var minimum_after := INF
-	for pool_variant in data.get("pools", []):
-		var pool: Dictionary = pool_variant
+	var pools: Array = data.get("pools", [])
+	for pool_index in pools.size():
+		var pool: Dictionary = pools[pool_index]
 		var centre := _item_position(pool)
 		var yaw := _f(pool, "rotY")
-		var size := Vector2(_f(pool, "w", 8.0), _f(pool, "d", 5.0))
+		var size := Vector2(_f(pool, "w", 8.0) + 1.3, _f(pool, "d", 5.0) + 1.3)
 		var clearance := _rect_road_clearance_0237(centre, size, yaw)
 		if clearance >= 1.2:
 			minimum_after = minf(minimum_after, clearance)
@@ -2761,7 +2776,7 @@ func _sanitize_canonical_pools_0237() -> void:
 						var fz: float = fz_variant
 						var point := candidate + basis * Vector3(fx * size.x, 0.0, fz * size.y)
 						point.y = height_at(point.x, point.z)
-						if not _is_position_clear(point, 0.35, 0.0):
+						if not _is_position_clear(point, 0.35, 0.0, true, pool_index):
 							clear_of_objects = false
 							break
 					if not clear_of_objects:
@@ -2784,6 +2799,8 @@ func _sanitize_canonical_pools_0237() -> void:
 	_enhancement_stats["canonical_pools_relocated_0237"] = relocated
 	_enhancement_stats["canonical_pools_unresolved_0237"] = unresolved
 	_enhancement_stats["canonical_pool_min_clearance_0237"] = minimum_after
+	_enhancement_stats["canonical_pool_rim_clearance_0238"] = unresolved == 0
+	_enhancement_stats["canonical_pool_self_excluded_0238"] = true
 
 
 func _grid_height(ix: int, iz: int) -> float:
@@ -3083,12 +3100,18 @@ func _build_road_mesh(extra_width: float, y_offset: float, uv_distance: float, c
 		var left_points: Array[Vector3] = []
 		var center_points: Array[Vector3] = []
 		var right_points: Array[Vector3] = []
+		# 0.2.38: a closed chain (the Sail Island oval) repeats its
+		# first sample at the end.  Give both copies of that seam the
+		# same through-tangent; using only the outgoing segment at
+		# the start and only the incoming segment at the end twisted
+		# the ribbon edges into a small wedge at the entry junction.
+		var is_closed_loop := points.size() > 3 and points[0].distance_to(points[points.size() - 1]) < 0.05
 		for i in points.size():
 			var direction := Vector3.ZERO
 			if i == 0:
-				direction = points[1] - points[0]
+				direction = points[1] - (points[points.size() - 2] if is_closed_loop else points[0])
 			elif i == points.size() - 1:
-				direction = points[i] - points[i - 1]
+				direction = (points[1] if is_closed_loop else points[i]) - points[i - 1]
 			else:
 				direction = points[i + 1] - points[i - 1]
 			direction.y = 0.0
@@ -3222,6 +3245,19 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 				0.0,
 				Vector3(x_max - x_min + 0.04, 0.012, cross_width + 0.04)
 			))
+	# 0.2.38 Sail Island entry: the 10 m causeway meets the closed
+	# 9 m oval at its westernmost point (1140,80), where the loop
+	# tangent is north-south.  The city-grid loop above cannot see
+	# that T-junction, so the two ribbons simply overlapped with
+	# coplanar patches at the seam.  One pad over the exact union
+	# box (loop width x causeway width) gives the entry a single
+	# asphalt surface; its height follows the loop samples, which
+	# are registered 0.10 m above the reshaped island plateau.
+	transforms.append(make_transform(
+		Vector3(1140.0, height_at(1140.0, 80.0) + 0.202, 80.0),
+		0.0,
+		Vector3(9.04, 0.012, 10.04)
+	))
 	var pad_mesh := BoxMesh.new()
 	pad_mesh.size = Vector3.ONE
 	pad_mesh.material = asphalt_material
@@ -3229,6 +3265,7 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 	_enhancement_stats["intersection_pads"] = transforms.size()
 	_enhancement_stats["rejected_fake_junction_pads_0236"] = rejected_fake_junctions
 	_enhancement_stats["real_junction_arms_0236"] = true
+	_enhancement_stats["sail_loop_entry_pad_0238"] = true
 
 
 
@@ -3400,6 +3437,7 @@ func _build_road_edges(parent: Node) -> void:
 		var width := _f(road, "widthM", 10.0)
 		var half_width := width * 0.5
 		var is_boulevard := road_id.begins_with("rt-blvd-")
+		var is_sail_loop := road_id == "rt-sail-loop"
 		var points: Array[Vector3] = []
 		for sample in samples:
 			points.append(_sample_point(sample))
@@ -3523,7 +3561,7 @@ func _build_road_edges(parent: Node) -> void:
 				)
 				if is_boulevard:
 					boulevard_granite_curb_transforms.append(curb_transform)
-				elif near_junction and i % 2 == 0:
+				elif near_junction and i % 2 == 0 and not is_sail_loop:
 					painted_curb_transforms.append(curb_transform)
 				else:
 					curb_transforms.append(curb_transform)
@@ -3636,12 +3674,14 @@ func _build_road_markings(parent: Node) -> void:
 	var lane_arrow_count := 0
 	var boulevard_fresh_markings := 0
 	var junction_paint_breaks := 0
+	var sail_loop_center_dashes := 0
 	var road_index := 0
 
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var road_id := String(road.get("id", ""))
 		var is_boulevard := road_id.begins_with("rt-blvd-")
+		var is_sail_loop := road_id == "rt-sail-loop"
 		var samples: Array = road.get("samples", [])
 		if samples.size() < 2:
 			road_index += 1
@@ -3654,6 +3694,11 @@ func _build_road_markings(parent: Node) -> void:
 		if lanes >= 4 or width >= 17.0:
 			divider_offsets = [-width * 0.25, width * 0.25]
 			lane_centers = [-width * 0.375, -width * 0.125, width * 0.125, width * 0.375]
+		if is_sail_loop:
+			# 0.2.38 resort-ring paint: one broken white centreline
+			# (the dash pass below) instead of a double-yellow solid
+			# pair wrapped around a tight 9 m oval.
+			divider_offsets = [0.0]
 		var points: Array[Vector3] = []
 		for sample in samples:
 			points.append(_sample_point(sample))
@@ -3662,6 +3707,7 @@ func _build_road_markings(parent: Node) -> void:
 			var flat_segment := points[point_index + 1] - points[point_index]
 			flat_segment.y = 0.0
 			total_length += flat_segment.length()
+		var is_closed_loop := points.size() > 3 and points[0].distance_to(points[points.size() - 1]) < 0.05
 		var start_direction := points[1] - points[0]
 		var end_direction := points[points.size() - 1] - points[points.size() - 2]
 		var start_info := _junction_info(points[0], road_id, start_direction)
@@ -3724,18 +3770,21 @@ func _build_road_markings(parent: Node) -> void:
 			if not near_paint_break:
 				# Opposing traffic is separated by a double yellow solid
 				# centreline. White dashes below are only between lanes
-				# travelling in the same direction.
-				for center_offset_variant in [-0.18, 0.18]:
-					var center_offset := float(center_offset_variant)
-					var center_point: Vector3 = midpoint + side * center_offset
-					var center_group := 0 if is_boulevard or _hash01(road_index * 149 + i * 7, 91) < 0.68 else 1
-					(center_groups[center_group] as Array).append(make_transform(
-						Vector3(center_point.x, _road_surface_y(midpoint.y, center_offset, half_width, crown_scale) + 0.018, center_point.z),
-						yaw,
-						Vector3(0.16 if is_boulevard else 0.145, 0.032, length + 0.04)
-					))
-					if is_boulevard:
-						boulevard_fresh_markings += 1
+				# travelling in the same direction.  The Sail resort
+				# ring is the one exception: it uses the single broken
+				# centre dash configured above.
+				if not is_sail_loop:
+					for center_offset_variant in [-0.18, 0.18]:
+						var center_offset := float(center_offset_variant)
+						var center_point: Vector3 = midpoint + side * center_offset
+						var center_group := 0 if is_boulevard or _hash01(road_index * 149 + i * 7, 91) < 0.68 else 1
+						(center_groups[center_group] as Array).append(make_transform(
+							Vector3(center_point.x, _road_surface_y(midpoint.y, center_offset, half_width, crown_scale) + 0.018, center_point.z),
+							yaw,
+							Vector3(0.16 if is_boulevard else 0.145, 0.032, length + 0.04)
+						))
+						if is_boulevard:
+							boulevard_fresh_markings += 1
 
 				for lane_offset in divider_offsets:
 					# Do not turn the finely split junction pieces into
@@ -3755,6 +3804,8 @@ func _build_road_markings(parent: Node) -> void:
 					))
 					if is_boulevard:
 						boulevard_fresh_markings += 1
+					if is_sail_loop:
+						sail_loop_center_dashes += 1
 
 				if has_parking:
 					var parking_group := mini(2, int(_hash01(road_index * 113 + i * 23, 61) * 3.0))
@@ -3798,7 +3849,10 @@ func _build_road_markings(parent: Node) -> void:
 						Vector3(0.14, 0.032, length + 0.04)
 					))
 
-		if total_length > 34.0:
+		# Closed chains have no distinct start/end approach: the
+		# generic arrow pass extrapolated a straight 15 m chord from
+		# the seam and painted arrows across the oval's forecourt.
+		if total_length > 34.0 and not is_closed_loop:
 			var chain_direction := start_direction
 			chain_direction.y = 0.0
 			if chain_direction.length_squared() > 0.0001:
@@ -4032,6 +4086,8 @@ func _build_road_markings(parent: Node) -> void:
 	_enhancement_stats["lane_dashes"] = dash_total
 	_enhancement_stats["center_lines"] = center_total
 	_enhancement_stats["lane_arrows"] = lane_arrow_count
+	_enhancement_stats["sail_loop_center_dashes_0238"] = sail_loop_center_dashes
+	_enhancement_stats["sail_loop_clean_markings_0238"] = sail_loop_center_dashes >= 40
 	_enhancement_stats["boulevard_fresh_markings"] = boulevard_fresh_markings
 	_enhancement_stats["boulevard_yellow_edge_lines"] = boulevard_edge_transforms.size()
 	_enhancement_stats["parking_markings"] = parking_total
@@ -4062,11 +4118,15 @@ func _build_road_details(parent: Node) -> void:
 	var stud_yellow_transforms: Array[Transform3D] = []
 	var stud_red_transforms: Array[Transform3D] = []
 	var road_index := 0
+	var sail_loop_seen := false
 	var bridge_ids := ["rt-palm-1", "rt-sail-road"]
 
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var road_id := String(road.get("id", ""))
+		var is_sail_loop := road_id == "rt-sail-loop"
+		if is_sail_loop:
+			sail_loop_seen = true
 		var samples: Array = road.get("samples", [])
 		if samples.size() < 2:
 			road_index += 1
@@ -4114,6 +4174,10 @@ func _build_road_details(parent: Node) -> void:
 			var crown_scale := _road_crown_scale(segment_start + length * 0.5, total_length, trim_start, trim_end)
 			var near_junction := (trim_start > 0.0 and segment_start < trim_start + 2.0) or (trim_end > 0.0 and segment_end > total_length - trim_end - 2.0)
 			var detail_roll := _hash01(road_index * 401 + i * 31, 17)
+			if is_sail_loop:
+				# Pristine resort asphalt: no random black repair
+				# rectangles, tar seams or oil in the driving lanes.
+				detail_roll = 1.0
 			var lane_roll := _hash01(road_index * 419 + i * 37, 29)
 			var lane_offset := lane_centers[mini(lane_centers.size() - 1, int(lane_roll * float(lane_centers.size())))]
 
@@ -4172,7 +4236,7 @@ func _build_road_details(parent: Node) -> void:
 					Vector3(0.72 + lane_roll * 0.55, 0.012, 1.5 + detail_roll * 2.2)
 				))
 
-			var add_studs := (width >= 17.0 and i % 2 == 0) or (width < 17.0 and i % 3 == 0)
+			var add_studs := not is_sail_loop and ((width >= 17.0 and i % 2 == 0) or (width < 17.0 and i % 3 == 0))
 			if add_studs:
 				stud_yellow_transforms.append(make_transform(
 					Vector3(midpoint.x, _road_surface_y(midpoint.y, 0.0, half_width, crown_scale) + 0.016, midpoint.z),
@@ -4196,7 +4260,7 @@ func _build_road_details(parent: Node) -> void:
 							Vector3(0.11, 0.028, 0.11)
 						))
 
-		if total_length > 45.0 and _hash01(road_index * 521, 71) < 0.62:
+		if not is_sail_loop and total_length > 45.0 and _hash01(road_index * 521, 71) < 0.62:
 			var chain_direction := start_direction
 			chain_direction.y = 0.0
 			if chain_direction.length_squared() > 0.0001:
@@ -4352,6 +4416,7 @@ func _build_road_details(parent: Node) -> void:
 	var signal_long_built := _add_batched_model(parent, "res://assets/props/traffic_signal_long.glb", signal_long_transforms, "BlenderTrafficSignalsLong")
 
 	_enhancement_stats["road_wear_scale_0237"] = true
+	_enhancement_stats["sail_loop_pristine_asphalt_0238"] = sail_loop_seen
 	_enhancement_stats["manholes"] = manhole_transforms.size()
 	_enhancement_stats["drainage_grates"] = drainage_transforms.size()
 	_enhancement_stats["asphalt_patches"] = patch_city_transforms.size() + patch_pothole_transforms.size()
@@ -6358,22 +6423,35 @@ func _build_sail_island_resort_0237() -> void:
 	var metal_material := _prop_material("PropsMetal")
 	var lawn_material := _material("park_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.52, 0.74, 0.38), 0.96, 0.0, Vector3(0.55, 0.55, 0.55), true)
 
-	# Arrival forecourt west of the podium, the east infinity-pool
+	# Arrival apron west of the podium, the east infinity-pool
 	# deck, the north/south reflecting-pool terraces and a stone pad
 	# under every resort villa (read back from data so a sanitized
-	# parcel and its pad can never drift apart).
+	# parcel and its pad can never drift apart).  0.2.38 sizes are
+	# fitted to the inside of the 48x46 m oval and then re-checked
+	# against the road grid: the 0.2.37 rectangles all crossed the
+	# carriageway (the beige slabs cutting the loop in the phone
+	# screenshots), because nobody audited them against the road
+	# they were built around.
+	var resort_min_road_clearance := INF
+	var resort_rejected_road_overlaps := 0
 	var paving_transforms: Array = []
 	for spec in [
-		{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0, "yaw": 0.0},
-		{"x": 1220.0, "z": 80.0, "w": 25.0, "d": 38.0, "yaw": 0.0},
-		{"x": 1184.0, "z": 50.0, "w": 76.0, "d": 10.0, "yaw": 0.0},
-		{"x": 1184.0, "z": 110.0, "w": 76.0, "d": 10.0, "yaw": 0.0},
+		{"x": 1149.8, "z": 80.0, "w": 4.4, "d": 18.0, "yaw": 0.0},
+		{"x": 1216.0, "z": 80.0, "w": 20.0, "d": 32.0, "yaw": 0.0},
+		{"x": 1186.0, "z": 50.0, "w": 39.0, "d": 8.5, "yaw": 0.0},
+		{"x": 1186.0, "z": 110.0, "w": 39.0, "d": 8.5, "yaw": 0.0},
 	]:
 		var px := _f(spec, "x")
 		var pz := _f(spec, "z")
+		var spec_yaw := _f(spec, "yaw")
+		var spec_clearance := _rect_road_clearance_0237(Vector3(px, 0.0, pz), Vector2(_f(spec, "w"), _f(spec, "d")), spec_yaw)
+		resort_min_road_clearance = minf(resort_min_road_clearance, spec_clearance)
+		if spec_clearance < 0.9:
+			resort_rejected_road_overlaps += 1
+			continue
 		paving_transforms.append(make_transform(
 			Vector3(px, height_at(px, pz) + 0.08, pz),
-			_f(spec, "yaw"),
+			spec_yaw,
 			Vector3(_f(spec, "w"), 0.16, _f(spec, "d"))
 		))
 	var resort_villa_count := 0
@@ -6383,9 +6461,15 @@ func _build_sail_island_resort_0237() -> void:
 			continue
 		resort_villa_count += 1
 		var villa_pos := _item_position(building)
+		var villa_yaw := _f(building, "rotY")
+		var pad_clearance := _rect_road_clearance_0237(villa_pos, Vector2(24.0, 20.0), villa_yaw)
+		resort_min_road_clearance = minf(resort_min_road_clearance, pad_clearance)
+		if pad_clearance < 0.9:
+			resort_rejected_road_overlaps += 1
+			continue
 		paving_transforms.append(make_transform(
 			Vector3(villa_pos.x, villa_pos.y + 0.05, villa_pos.z),
-			_f(building, "rotY"),
+			villa_yaw,
 			Vector3(24.0, 0.12, 20.0)
 		))
 	_add_multimesh(root, unit_box, paving_material, paving_transforms, "SailIslandPaving", false, -1.0, 420.0, 180.0)
@@ -6411,15 +6495,27 @@ func _build_sail_island_resort_0237() -> void:
 	for hx in range(1162, 1210, 11):
 		for hz in [57.5, 102.5]:
 			var hedge_pos := Vector3(float(hx), height_at(float(hx), hz) + 0.45, hz)
+			var row_clearance := _rect_road_clearance_0237(hedge_pos, Vector2(9.0, 1.0), 0.0)
+			resort_min_road_clearance = minf(resort_min_road_clearance, row_clearance)
+			if row_clearance < 0.9:
+				resort_rejected_road_overlaps += 1
+				continue
 			hedge_transforms.append(make_transform(hedge_pos, 0.0, Vector3(9.0, 0.9, 1.0)))
+	# Short end hedges stop well inside the oval; the 0.2.37
+	# 14-20 m bars ran straight across both driving lanes.
 	for spec in [
-		{"x": 1149.0, "z": 61.0, "w": 14.0, "d": 1.0},
-		{"x": 1149.0, "z": 99.0, "w": 14.0, "d": 1.0},
-		{"x": 1220.0, "z": 61.0, "w": 20.0, "d": 1.0},
-		{"x": 1220.0, "z": 99.0, "w": 20.0, "d": 1.0},
+		{"x": 1157.0, "z": 61.0, "w": 8.0, "d": 1.0},
+		{"x": 1157.0, "z": 99.0, "w": 8.0, "d": 1.0},
+		{"x": 1215.0, "z": 61.0, "w": 10.0, "d": 1.0},
+		{"x": 1215.0, "z": 99.0, "w": 10.0, "d": 1.0},
 	]:
 		var px := _f(spec, "x")
 		var pz := _f(spec, "z")
+		var hedge_clearance := _rect_road_clearance_0237(Vector3(px, 0.0, pz), Vector2(_f(spec, "w"), _f(spec, "d")), 0.0)
+		resort_min_road_clearance = minf(resort_min_road_clearance, hedge_clearance)
+		if hedge_clearance < 0.9:
+			resort_rejected_road_overlaps += 1
+			continue
 		hedge_transforms.append(make_transform(
 			Vector3(px, height_at(px, pz) + 0.45, pz),
 			0.0,
@@ -6588,8 +6684,29 @@ func _build_sail_island_resort_0237() -> void:
 		_add_multimesh(root, umbrella_canopy_mesh, cabana_materials[cabana_group], cabana_canopy_transforms[cabana_group], "SailIslandBeachUmbrellas_%d" % cabana_group, false, -1.0, 360.0, 180.0)
 	_add_multimesh(root, unit_box, _material("city_white_painted", "", "", Color(0.90, 0.92, 0.90), 0.52, 0.05), cabana_lounger_transforms, "SailIslandBeachLoungers", false, -1.0, 360.0, 180.0)
 
+	# Read the pools back after the canonical sanitizer: the stats
+	# below describe where the water/rims were actually built.
+	var sail_pool_count := 0
+	var sail_pool_min_clearance := INF
+	for pool_variant in data.get("pools", []):
+		var pool: Dictionary = pool_variant
+		if not bool(pool.get("sail_resort_0237", false)):
+			continue
+		sail_pool_count += 1
+		sail_pool_min_clearance = minf(sail_pool_min_clearance, _rect_road_clearance_0237(
+			_item_position(pool),
+			Vector2(_f(pool, "w", 8.0) + 1.3, _f(pool, "d", 5.0) + 1.3),
+			_f(pool, "rotY")
+		))
+
 	_enhancement_stats["sail_island_resort_0237"] = true
 	_enhancement_stats["sail_island_paving_0237"] = paving_transforms.size()
+	_enhancement_stats["sail_island_hedges_0238"] = hedge_transforms.size()
+	_enhancement_stats["sail_resort_min_road_clearance_0238"] = resort_min_road_clearance
+	_enhancement_stats["sail_resort_rejected_road_overlaps_0238"] = resort_rejected_road_overlaps
+	_enhancement_stats["sail_pools_final_0238"] = sail_pool_count
+	_enhancement_stats["sail_pool_min_road_clearance_0238"] = sail_pool_min_clearance
+	_enhancement_stats["sail_loop_road_repair_0238"] = resort_min_road_clearance >= 0.9 and resort_rejected_road_overlaps == 0 and sail_pool_count >= 3 and sail_pool_min_clearance >= 1.2 and bool(_enhancement_stats.get("sail_loop_entry_pad_0238", false)) and bool(_enhancement_stats.get("sail_loop_clean_markings_0238", false)) and bool(_enhancement_stats.get("sail_loop_pristine_asphalt_0238", false))
 	_enhancement_stats["sail_island_promenade_segments_0237"] = promenade_transforms.size()
 	_enhancement_stats["sail_island_palms_0237"] = date_palm_transforms.size() + royal_palm_transforms.size() if island_palms_built else 0
 	_enhancement_stats["sail_island_lamps_0237"] = lamp_transforms.size()
@@ -8218,6 +8335,7 @@ func _build_city_details() -> void:
 	var sign_counter := 0
 	var rejected_roadside_footprints := 0
 	var bridge_segments_skipped_0237 := 0
+	var sail_loop_segments_skipped_0238 := 0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var samples: Array = road.get("samples", [])
@@ -8229,6 +8347,10 @@ func _build_city_details() -> void:
 		# scatter put planter crates, bins and sign posts on the sand
 		# or water just outside the Sail/Palm causeway rails.
 		var is_bridge_road_0237 := String(road.get("id", "")) in ["rt-sail-road", "rt-palm-1", "rt-highway-1"]
+		# The resort oval has its own designed lamps/palms/hedges;
+		# the generic city scatter dropped sign posts, bins and
+		# planters onto its narrow pavements and entry mouth.
+		var is_sail_loop_0238 := String(road.get("id", "")) == "rt-sail-loop"
 		for i in range(samples.size() - 1):
 			var a := _sample_point(samples[i])
 			var b := _sample_point(samples[i + 1])
@@ -8240,8 +8362,11 @@ func _build_city_details() -> void:
 			var side_vector := Vector3(-direction.z, 0.0, direction.x)
 			var midpoint := (a + b) * 0.5
 			var road_yaw := _yaw_for_x_direction(direction)
-			if is_bridge_road_0237:
-				bridge_segments_skipped_0237 += 1
+			if is_bridge_road_0237 or is_sail_loop_0238:
+				if is_bridge_road_0237:
+					bridge_segments_skipped_0237 += 1
+				if is_sail_loop_0238:
+					sail_loop_segments_skipped_0238 += 1
 				segment_counter += 1
 				continue
 
@@ -8329,6 +8454,8 @@ func _build_city_details() -> void:
 	var roadside_prop_count := bollard_transforms.size() + planter_transforms.size() + bin_transforms.size() + sign_post_transforms.size()
 	_enhancement_stats["bridge_roadside_props_removed_0237"] = bridge_segments_skipped_0237 > 0
 	_enhancement_stats["bridge_segments_without_props_0237"] = bridge_segments_skipped_0237
+	_enhancement_stats["sail_loop_generic_props_removed_0238"] = sail_loop_segments_skipped_0238 >= 56
+	_enhancement_stats["sail_loop_segments_without_props_0238"] = sail_loop_segments_skipped_0238
 	_enhancement_stats["readable_road_signs_0237"] = sign_back_transforms_0237.size()
 	_enhancement_stats["city_detail_props"] = roadside_prop_count
 	_enhancement_stats["roadside_bollards"] = bollard_transforms.size()
