@@ -23,6 +23,9 @@ const modelCopies = [
   ['src/assets/models/props/mosque.glb', 'buildings/mosque.glb'],
   ['src/assets/models/props/grand_hotel.glb', 'buildings/grand_hotel.glb'],
   ['src/assets/models/props/museum.glb', 'buildings/museum.glb'],
+  ['src/assets/models/props/cottage_dune.glb', 'buildings/cottage_dune.glb'],
+  ['src/assets/models/props/cottage_courtyard.glb', 'buildings/cottage_courtyard.glb'],
+  ['src/assets/models/props/cottage_palm.glb', 'buildings/cottage_palm.glb'],
   ['src/assets/models/props/street_lamp.glb', 'props/street_lamp.glb'],
   ['src/assets/models/props/bus_shelter.glb', 'props/bus_shelter.glb'],
   ['src/assets/models/props/park_bench.glb', 'props/park_bench.glb'],
@@ -102,6 +105,15 @@ const textureNames = [
   'user_palm_leaf.png',
   'user_sky_day.jpg', 'user_sky_sunset.jpg', 'user_sky_night.jpg',
   'cafe_linen.jpg', 'cafe_linen_normal.png',
+  // 0.2.39 Sail cottage estates: seven authored PBR sets, each with a
+  // real roughness map instead of one scalar for every surface.
+  'cottage_basalt.jpg', 'cottage_basalt_normal.jpg', 'cottage_basalt_roughness.jpg',
+  'cottage_limestone_blocks.jpg', 'cottage_limestone_blocks_normal.jpg', 'cottage_limestone_blocks_roughness.jpg',
+  'cottage_paving.jpg', 'cottage_paving_normal.jpg', 'cottage_paving_roughness.jpg',
+  'cottage_rammed_sand.jpg', 'cottage_rammed_sand_normal.jpg', 'cottage_rammed_sand_roughness.jpg',
+  'cottage_roof_metal.jpg', 'cottage_roof_metal_normal.jpg', 'cottage_roof_metal_roughness.jpg',
+  'cottage_teak_weathered.jpg', 'cottage_teak_weathered_normal.jpg', 'cottage_teak_weathered_roughness.jpg',
+  'cottage_travertine_coarse.jpg', 'cottage_travertine_coarse_normal.jpg', 'cottage_travertine_coarse_roughness.jpg',
 ];
 
 async function readHeader(file, length = 64) {
