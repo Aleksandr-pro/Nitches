@@ -1668,6 +1668,30 @@ func _run_smoke_checks() -> void:
 	var drive_base_state := _vehicle.get_drive_base_state()
 	if not bool(drive_base_state.get("car_paint_shader", false)) or not bool(drive_base_state.get("paint_reflections_ready", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
 		failures.append("ArcadeCar reflective paint Drive base is not active: %s" % str(drive_base_state))
+	# 0.2.41 regression: exercise the real automatic-gear helper on a
+	# detached vehicle for every catalog car.  In particular the 560 SEL
+	# must leave first soon after 64.7 km/h, then reach third/fourth.
+	var drivetrain_probe := VehicleScript.new() as NativeVehicle
+	var automatic_gears_ok := drivetrain_probe != null
+	var automatic_gear_report := {}
+	if drivetrain_probe != null:
+		for probe_id in NativeCarCatalog.car_ids():
+			drivetrain_probe.configure_car(probe_id)
+			var probe_car := NativeCarCatalog.get_car(probe_id)
+			var ratios: Array = probe_car.get("gear_ratios", [])
+			var last_gear := maxi(ratios.size() - 1, 0)
+			var gears_at_speed := {}
+			for speed_kmh in [40.0, 70.0, 120.0, 180.0, 240.0]:
+				gears_at_speed[str(int(speed_kmh))] = drivetrain_probe.get_automatic_gear_for_speed(speed_kmh / 3.6, 0)
+			automatic_gear_report[probe_id] = gears_at_speed
+			var gears_ok := int(gears_at_speed.get("120", 0)) >= 2 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= mini(3, last_gear)
+			if probe_id == "mercedes_560_sel":
+				gears_ok = gears_ok and int(gears_at_speed.get("70", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 3
+			if not gears_ok:
+				automatic_gears_ok = false
+		drivetrain_probe.free()
+	if not automatic_gears_ok or not bool(drive_base_state.get("automatic_shift_0241", false)) or not bool(drive_base_state.get("paint_finish_0241", false)) or int(drive_base_state.get("paint_shader_surfaces", 0)) < 1 or float(drive_base_state.get("paint_metallic", 0.0)) < 0.6 or float(drive_base_state.get("paint_clearcoat_roughness", 1.0)) > 0.08:
+		failures.append("0.2.41 coupled-RPM automatic shifts / glossy paint finish are incomplete: drive=%s gears=%s" % [str(drive_base_state), str(automatic_gear_report)])
 	var smoothing_state := _vehicle.get_smoothing_state()
 	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
 		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))

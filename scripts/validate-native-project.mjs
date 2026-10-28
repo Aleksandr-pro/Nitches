@@ -74,8 +74,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=43'), 'Native 0.2.40 must bump Android versionCode to 43');
-assert(preset.includes('version/name="0.2.40-native-alpha"'), 'Native version name must be 0.2.40-native-alpha');
+assert(preset.includes('version/code=44'), 'Native 0.2.41 must bump Android versionCode to 44');
+assert(preset.includes('version/name="0.2.41-native-alpha"'), 'Native version name must be 0.2.41-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -264,6 +264,17 @@ for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207],
 assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
 assert(mainScript.includes('"car_id": "audi_r8_v10_plus"') && mainScript.includes('"car_id": "chevrolet_camaro_ss"') && mainScript.includes('"car_id": "mercedes_560_sel"') && mainScript.includes('catalog_by_id.get("mercedes_560_sel"') && !mainScript.includes('"car_id": "mercedes_benz_560_sel"') && !mainScript.includes('catalog_by_id.get("mercedes_benz_560_sel"') && mainMenuScript.includes('"mercedes_560_sel":\n            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"'), 'Native screenshot/menu code must use the exact catalogue car IDs, distinct from GLB filenames');
 assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0') && mainMenuScript.includes('Altair78 (CC BY-SA 4.0)') && mainMenuScript.includes('docs/AUDIO_CREDITS.md'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
+// 0.2.41 supplied-car hotfix: the automatic gearbox must use road-speed
+// coupled RPM (the 560 SEL first gear ends at 64.7 km/h and must not trap
+// the car at 67-68), and the silver/black finishes need per-car glossy
+// paint plus exact semantic handling so BlackGloss is not rebuilt as
+// glass merely because its lowercase name contains "glass".
+for (const marker of ['automatic_shift_0241', '_desired_automatic_gear_for_speed', 'get_automatic_gear_for_speed', '_coupled_rpm_for_gear', 'shift_speeds_kmh', 'paint_finish_0241', 'paint_metallic', 'paint_clearcoat_roughness', 'paint_flake_tint_amount', '_textured_material_override', 'paint_shader_surfaces', 'blackgloss']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.41 drivetrain/paint marker is missing: ${marker}`);
+}
+assert(carCatalogScript.includes('"paint_roughness": 0.075') && carCatalogScript.includes('"paint_roughness": 0.065') && carCatalogScript.includes('"paint_flake_strength": 0.16') && carCatalogScript.includes('"paint_flake_strength": 0.12'), 'Native 0.2.41 must give the silver R8 and black 560 SEL smooth, fine-flake glossy factory finishes');
+assert(vehicleScript.includes('lower_name == "blackgloss"') && vehicleScript.includes('lower_name == "glasswindow"') && !vehicleScript.includes('lower_name.contains("glass") or lower_name.contains("window")'), 'Native 0.2.41 must handle BlackGloss and GlassWindow as exact distinct exterior semantics');
+assert(mainScript.includes('0.2.41 coupled-RPM automatic shifts') && mainScript.includes('get_automatic_gear_for_speed(speed_kmh / 3.6, 0)') && mainScript.includes('for probe_id in NativeCarCatalog.car_ids()'), 'Native 0.2.41 smoke must exercise the real automatic-gear helper for every catalogue car');
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых машин без моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
