@@ -1,134 +1,280 @@
 class_name NativeMinimap
 extends Control
 
-## Compact real-metre RichTown minimap rendered directly by Godot CanvasItem
-## drawing calls.  North (minimum Z) is at the top, matching the world data
-## coordinates used by the native scene.
+## 0.2.33 circular heading-up minimap.  The visible disc is a
+## player-centred local map rather than the whole city squeezed into
+## a small rectangle.  It rotates with the car, keeps a fixed N
+## marker on the rim, draws the current destination route and uses
+## small category icons/colours for nearby points of interest.
 
+const VIEW_RADIUS_M := 260.0
+
+var _roads: Array = []
+var _parks: Array = []
+var _pois: Array = []
+var _world_bounds := Rect2(520.0, -500.0, 980.0, 1000.0)
+var _player_position := Vector2(760.0, 330.0)
+var _player_forward := Vector2(0.0, -1.0)
+var _destination := Vector2.INF
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _data: Dictionary = {}
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(184.0, 190.0)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	clip_contents = true
+    name = "Minimap"
+    clip_contents = true
+    mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _sync_circular_mask_size()
+
+
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_RESIZED:
+        _sync_circular_mask_size()
+
+
+func _sync_circular_mask_size() -> void:
+    if material is ShaderMaterial and size.x > 1.0 and size.y > 1.0:
+        (material as ShaderMaterial).set_shader_parameter("rect_size", size)
 
 
 func bind(world: NativeWorldBuilder, vehicle: NativeVehicle) -> void:
-	_world = world
-	_vehicle = vehicle
-	if _world != null:
-		_data = _world.get_world_data()
-	queue_redraw()
+    _world = world
+    _vehicle = vehicle
+    if _world != null:
+        _data = _world.get_world_data()
+        var bounds: Dictionary = _data.get("bounds", {})
+        var min_x := float(bounds.get("minX", 520.0))
+        var min_z := float(bounds.get("minZ", -500.0))
+        var max_x := float(bounds.get("maxX", 1500.0))
+        var max_z := float(bounds.get("maxZ", 500.0))
+        set_world_data(
+            _data.get("roads", []),
+            Rect2(min_x, min_z, max_x - min_x, max_z - min_z),
+            _world.get_park_map_entries()
+        )
+    refresh()
 
 
 func refresh() -> void:
-	queue_redraw()
+    if _vehicle != null:
+        var car_transform := _vehicle.get_global_transform_interpolated()
+        set_player(car_transform.origin, -car_transform.basis.z)
+    queue_redraw()
 
 
 func has_data() -> bool:
-	return not _data.is_empty()
+    return not _data.is_empty() or not _roads.is_empty()
 
 
 func get_feature_counts() -> Dictionary:
-	return {
-		"roads": (_data.get("roads", []) as Array).size(),
-		"buildings": (_data.get("buildings", []) as Array).size(),
-		"landmarks": (_data.get("landmarks", []) as Array).size(),
-		"parks": _world.get_park_rects().size() if _world != null else 0,
-	}
+    return {
+        "roads": (_data.get("roads", []) as Array).size() if not _data.is_empty() else _roads.size(),
+        "buildings": (_data.get("buildings", []) as Array).size(),
+        "landmarks": (_data.get("landmarks", []) as Array).size(),
+        "parks": _parks.size(),
+        "pois": _pois.size(),
+    }
 
 
-func _bounds() -> Dictionary:
-	return _data.get("bounds", {"minX": 520.0, "maxX": 1500.0, "minZ": -500.0, "maxZ": 500.0})
+func set_world_data(roads: Array, bounds: Rect2, parks: Array = []) -> void:
+    _roads = roads.duplicate(true)
+    _parks = parks.duplicate(true)
+    _world_bounds = bounds
+    queue_redraw()
 
 
-func _map_point(x: float, z: float) -> Vector2:
-	var bounds := _bounds()
-	var min_x := float(bounds.get("minX", 520.0))
-	var max_x := float(bounds.get("maxX", 1500.0))
-	var min_z := float(bounds.get("minZ", -500.0))
-	var max_z := float(bounds.get("maxZ", 500.0))
-	var usable := size - Vector2(12.0, 12.0)
-	var nx := clampf((x - min_x) / maxf(max_x - min_x, 1.0), 0.0, 1.0)
-	var nz := clampf((z - min_z) / maxf(max_z - min_z, 1.0), 0.0, 1.0)
-	return Vector2(6.0 + nx * usable.x, 6.0 + (1.0 - nz) * usable.y)
+func set_points_of_interest(points: Array) -> void:
+    _pois = points.duplicate(true)
+    queue_redraw()
 
 
-func _draw_zone(zone_name: String, color: Color) -> void:
-	var zones: Dictionary = _data.get("zones", {})
-	var zone: Dictionary = zones.get(zone_name, {})
-	if zone.is_empty():
-		return
-	var top_left := _map_point(float(zone.get("minX", 0.0)), float(zone.get("maxZ", 0.0)))
-	var bottom_right := _map_point(float(zone.get("maxX", 0.0)), float(zone.get("minZ", 0.0)))
-	draw_rect(Rect2(top_left, bottom_right - top_left), color, true)
+func set_player(world_position: Vector3, forward: Vector3) -> void:
+    _player_position = Vector2(world_position.x, world_position.z)
+    var flat := Vector2(forward.x, forward.z)
+    if flat.length() > 0.001:
+        _player_forward = flat.normalized()
+    queue_redraw()
+
+
+func set_destination(world_position: Vector2) -> void:
+    _destination = world_position
+    queue_redraw()
+
+
+func clear_destination() -> void:
+    _destination = Vector2.INF
+    queue_redraw()
+
+
+func get_destination() -> Vector2:
+    return _destination
+
+
+func get_smoke_state() -> Dictionary:
+    return {
+        "circular_heading_up_0233": true,
+        "roads": _roads.size(),
+        "parks": _parks.size(),
+        "pois": _pois.size(),
+        "view_radius_m": VIEW_RADIUS_M,
+        "has_destination": _destination != Vector2.INF,
+        "player_position": _player_position,
+        "bounds": _world_bounds,
+        "rect": get_global_rect(),
+    }
+
+
+func _rotate_to_vehicle(delta_world: Vector2) -> Vector2:
+    # Vehicle forward must always point to the top of the disc.
+    # Vehicle right in world X/Z coordinates is (forward.y,-forward.x)
+    # for the map convention x=east, y=south.
+    var forward := _player_forward
+    var right := Vector2(-forward.y, forward.x)
+    return Vector2(delta_world.dot(right), -delta_world.dot(forward))
+
+
+func _world_to_map(world_position: Vector2) -> Vector2:
+    var centre := size * 0.5
+    var radius := minf(size.x, size.y) * 0.5
+    var scale := radius / VIEW_RADIUS_M
+    return centre + _rotate_to_vehicle(world_position - _player_position) * scale
+
+
+func _clip_radius() -> float:
+    return minf(size.x, size.y) * 0.5
+
+
+func _inside(point: Vector2, margin: float = 0.0) -> bool:
+    return point.distance_to(size * 0.5) <= _clip_radius() - margin
+
+
+func _draw_clipped_line(from: Vector2, to: Vector2, color: Color, width: float) -> void:
+    var centre := size * 0.5
+    var radius := _clip_radius() - 2.0
+    var clipped_from := from
+    var clipped_to := to
+    if clipped_from.distance_to(centre) > radius:
+        clipped_from = centre + (clipped_from - centre).normalized() * radius
+    if clipped_to.distance_to(centre) > radius:
+        clipped_to = centre + (clipped_to - centre).normalized() * radius
+    # Cull route/road pieces that only touch opposite rim points after
+    # this inexpensive radial clamp.
+    if clipped_from.distance_to(clipped_to) < 1.0:
+        return
+    draw_line(clipped_from, clipped_to, color, width, true)
+
+
+func _draw_rotated_rect(world_rect: Rect2, color: Color) -> void:
+    var corners := PackedVector2Array()
+    corners.append(_world_to_map(Vector2(world_rect.position.x, world_rect.position.y)))
+    corners.append(_world_to_map(Vector2(world_rect.end.x, world_rect.position.y)))
+    corners.append(_world_to_map(Vector2(world_rect.end.x, world_rect.end.y)))
+    corners.append(_world_to_map(Vector2(world_rect.position.x, world_rect.end.y)))
+    var centre := size * 0.5
+    for i in corners.size():
+        if corners[i].distance_to(centre) > _clip_radius() * 1.6:
+            return
+    draw_colored_polygon(corners, color)
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.045, 0.075, 0.88), true)
-	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.62, 0.12, 0.70), false, 1.5)
-	if _data.is_empty():
-		var inset := Vector2(10.0, 10.0)
-		draw_line(inset, size - inset, Color(1.0, 0.18, 0.08, 0.90), 3.0, true)
-		draw_line(Vector2(size.x - inset.x, inset.y), Vector2(inset.x, size.y - inset.y), Color(1.0, 0.18, 0.08, 0.90), 3.0, true)
-		return
+    if size.x < 24.0 or size.y < 24.0:
+        return
+    var centre := size * 0.5
+    var radius := _clip_radius()
+    var font := get_theme_default_font()
+    var north_font_size := int(clampf(radius * 0.14, 11.0, 19.0))
 
-	_draw_zone("sea", Color(0.05, 0.42, 0.66, 0.82))
-	_draw_zone("marina", Color(0.08, 0.55, 0.76, 0.86))
-	_draw_zone("beach", Color(0.78, 0.64, 0.38, 0.38))
-	_draw_zone("palmIsland", Color(0.25, 0.58, 0.32, 0.42))
-	_draw_zone("sailIsland", Color(0.25, 0.58, 0.32, 0.42))
-	_draw_zone("rtPlaza", Color(0.72, 0.72, 0.70, 0.34))
-	if _world != null:
-		for rect_variant in _world.get_park_rects():
-			var park_rect: Rect2 = rect_variant
-			var park_top_left := _map_point(park_rect.position.x, park_rect.position.y + park_rect.size.y)
-			var park_bottom_right := _map_point(park_rect.position.x + park_rect.size.x, park_rect.position.y)
-			draw_rect(Rect2(park_top_left, park_bottom_right - park_top_left), Color(0.16, 0.62, 0.24, 0.55), true)
+    # The parent applies a circular shader mask; drawing the base as
+    # a full disc also keeps the control correct without material.
+    draw_circle(centre, radius, Color(0.004, 0.012, 0.030, 0.50))
+    draw_arc(centre, radius * 0.72, 0.0, TAU, 72, Color(0.62, 0.74, 0.86, 0.10), 1.0, true)
+    draw_arc(centre, radius * 0.42, 0.0, TAU, 56, Color(0.62, 0.74, 0.86, 0.08), 1.0, true)
 
-	for building_variant in _data.get("buildings", []):
-		var building: Dictionary = building_variant
-		var point := _map_point(float(building.get("x", 0.0)), float(building.get("z", 0.0)))
-		var color := Color(0.78, 0.82, 0.88, 0.72)
-		if String(building.get("model", "generic")) != "generic":
-			color = Color(1.0, 0.68, 0.20, 0.90)
-		draw_rect(Rect2(point - Vector2(1.4, 1.4), Vector2(2.8, 2.8)), color, true)
+    for park_data in _parks:
+        if park_data is Dictionary:
+            _draw_rotated_rect((park_data as Dictionary).get("rect", Rect2()), Color(0.08, 0.42, 0.18, 0.68))
 
-	for road_variant in _data.get("roads", []):
-		var road: Dictionary = road_variant
-		var samples: Array = road.get("samples", [])
-		if samples.size() < 2:
-			continue
-		var points := PackedVector2Array()
-		for sample_variant in samples:
-			var sample: Array = sample_variant
-			if sample.size() >= 3:
-				points.append(_map_point(float(sample[0]), float(sample[2])))
-		if points.size() >= 2:
-			draw_polyline(points, Color(0.92, 0.94, 0.96, 0.86), 1.35, true)
+    for road in _roads:
+        if not (road is Dictionary):
+            continue
+        var road_data := road as Dictionary
+        var width_world := float(road_data.get("widthM", road_data.get("width", 16.0)))
+        var road_width := clampf(width_world * radius / VIEW_RADIUS_M, 3.0, 12.0)
+        var samples: Array = road_data.get("samples", [])
+        if samples.size() >= 2:
+            for i in range(samples.size() - 1):
+                var first: Array = samples[i]
+                var second: Array = samples[i + 1]
+                if first.size() < 3 or second.size() < 3:
+                    continue
+                var from := Vector2(float(first[0]), float(first[2]))
+                var to := Vector2(float(second[0]), float(second[2]))
+                if from.distance_to(_player_position) > VIEW_RADIUS_M * 2.2 and to.distance_to(_player_position) > VIEW_RADIUS_M * 2.2:
+                    continue
+                var a2 := _world_to_map(from)
+                var b2 := _world_to_map(to)
+                _draw_clipped_line(a2, b2, Color(0.48, 0.56, 0.66, 0.92), road_width)
+                _draw_clipped_line(a2, b2, Color(0.90, 0.94, 1.0, 0.24), 1.0)
+            continue
+        var from: Vector2 = road_data.get("from", Vector2.ZERO)
+        var to: Vector2 = road_data.get("to", Vector2.ZERO)
+        if from.distance_to(_player_position) > VIEW_RADIUS_M * 2.2 and to.distance_to(_player_position) > VIEW_RADIUS_M * 2.2:
+            continue
+        var a := _world_to_map(from)
+        var b := _world_to_map(to)
+        _draw_clipped_line(a, b, Color(0.48, 0.56, 0.66, 0.92), road_width)
+        _draw_clipped_line(a, b, Color(0.90, 0.94, 1.0, 0.24), 1.0)
 
-	for landmark_variant in _data.get("landmarks", []):
-		var landmark: Dictionary = landmark_variant
-		var point := _map_point(float(landmark.get("x", 0.0)), float(landmark.get("z", 0.0)))
-		draw_circle(point, 2.4, Color(1.0, 0.45, 0.12, 0.95))
+    if _destination != Vector2.INF:
+        var destination_point := _world_to_map(_destination)
+        _draw_clipped_line(centre, destination_point, Color(0.08, 0.78, 1.0, 0.34), 7.0)
+        _draw_clipped_line(centre, destination_point, Color(0.18, 0.88, 1.0, 0.96), 3.0)
+        var marker := destination_point
+        if not _inside(marker, 10.0):
+            marker = centre + (marker - centre).normalized() * (radius - 13.0)
+        draw_circle(marker, 6.0, Color(0.10, 0.82, 1.0, 0.96))
+        draw_arc(marker, 8.5, 0.0, TAU, 28, Color.WHITE, 1.4, true)
 
-	if _vehicle == null:
-		return
-	var player_position := _vehicle.global_position
-	var player_point := _map_point(player_position.x, player_position.z)
-	var forward := -_vehicle.global_transform.basis.z
-	var screen_direction := Vector2(forward.x, -forward.z)
-	if screen_direction.length_squared() < 0.001:
-		screen_direction = Vector2.UP
-	screen_direction = screen_direction.normalized()
-	var right := Vector2(-screen_direction.y, screen_direction.x)
-	var triangle := PackedVector2Array([
-		player_point + screen_direction * 7.0,
-		player_point - screen_direction * 4.5 + right * 3.4,
-		player_point - screen_direction * 4.5 - right * 3.4,
-	])
-	draw_colored_polygon(triangle, Color(1.0, 0.48, 0.08, 1.0))
-	draw_circle(player_point, 1.7, Color.WHITE)
+    for poi_data in _pois:
+        if not (poi_data is Dictionary):
+            continue
+        var poi := poi_data as Dictionary
+        var world_point: Vector2 = poi.get("position", Vector2.ZERO)
+        if world_point.distance_to(_player_position) > VIEW_RADIUS_M:
+            continue
+        var point := _world_to_map(world_point)
+        if not _inside(point, 7.0):
+            continue
+        # Compact category icons: coloured core plus a category glyph.
+        var category: String = poi.get("category", "")
+        var color := Color(1.0, 0.72, 0.26)
+        if category in ["Религия", "Мечеть", "Культ"]:
+            color = Color(0.72, 0.50, 1.0)
+        elif category in ["Отель", "Пляж", "Старт"]:
+            color = Color(0.35, 0.72, 1.0)
+        elif category in ["Кафе", "Инфраструктура", "Достопримечательность"]:
+            color = Color(1.0, 0.48, 0.30)
+        draw_circle(point, 3.4, color)
+
+    # The vehicle marker is always centred and points up because the
+    # world rotates underneath it in heading-up mode.
+    var arrow := PackedVector2Array([
+        centre + Vector2(0.0, -10.0),
+        centre + Vector2(6.5, 7.0),
+        centre + Vector2(0.0, 3.4),
+        centre + Vector2(-6.5, 7.0),
+    ])
+    draw_colored_polygon(arrow, Color(1.0, 0.58, 0.10, 1.0))
+
+    # Fixed north indicator on the rim.  World north is -Z; after the
+    # heading transform its direction rotates opposite the car.
+    var north_direction := _rotate_to_vehicle(Vector2(0.0, -1.0)).normalized()
+    var north_point := centre + north_direction * (radius - 13.0)
+    draw_circle(north_point, 9.0, Color(0.012, 0.025, 0.05, 0.66))
+    draw_arc(north_point, 9.0, 0.0, TAU, 28, Color(0.72, 0.86, 1.0, 0.72), 1.0, true)
+    if font != null:
+        draw_string(font, north_point + Vector2(-4.2, 4.8), "N", HORIZONTAL_ALIGNMENT_LEFT, -1.0, north_font_size, Color(0.86, 0.94, 1.0, 0.98))
+
+    draw_arc(centre, radius - 0.8, 0.0, TAU, 96, Color(1.0, 0.64, 0.16, 0.76), 1.6, true)

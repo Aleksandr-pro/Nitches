@@ -11,6 +11,7 @@ extends CanvasLayer
 ## distance from the player.  Main freezes the car while it is open.
 
 signal close_requested
+signal destination_changed(world_position: Vector2)
 
 const NO_DRAG := -2
 const MOUSE_DRAG := -1
@@ -159,6 +160,8 @@ func get_smoke_state() -> Dictionary:
         "pinch_zoom": true,
         "centre_world": _centre_world,
         "selected_poi": String(_selected_poi.get("name", "")),
+        "selected_destination": get_selected_destination(),
+        "minimap_points": get_minimap_points().size(),
     }
 
 
@@ -476,6 +479,7 @@ func _build_pois() -> void:
     _pois.sort_custom(_poi_sort)
     if not _pois.is_empty():
         _selected_poi = _pois[0]
+        _emit_destination_changed()
 
 
 func _label_style() -> StyleBoxFlat:
@@ -586,12 +590,35 @@ func _select_poi_by_id(id: String, focus: bool) -> void:
     if poi.is_empty():
         return
     _selected_poi = poi
+    _emit_destination_changed()
     if focus:
         _centre_world = Vector2(float(poi.get("x", _centre_world.x)), float(poi.get("z", _centre_world.y)))
         _zoom_factor = maxf(_zoom_factor, 2.7)
         _clamp_centre()
     _update_detail()
     _refresh_map()
+
+
+func get_minimap_points() -> Array:
+    var result: Array = []
+    for poi in _pois:
+        var poi_dict: Dictionary = poi
+        result.append({
+            "name": String(poi_dict.get("name", "")),
+            "category": String(poi_dict.get("category", "")),
+            "position": Vector2(float(poi_dict.get("x", 0.0)), float(poi_dict.get("z", 0.0))),
+        })
+    return result
+
+
+func get_selected_destination() -> Vector2:
+    if _selected_poi.is_empty():
+        return Vector2.INF
+    return Vector2(float(_selected_poi.get("x", 0.0)), float(_selected_poi.get("z", 0.0)))
+
+
+func _emit_destination_changed() -> void:
+    destination_changed.emit(get_selected_destination())
 
 
 func _district_name_at(x: float, z: float) -> String:

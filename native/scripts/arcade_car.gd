@@ -41,13 +41,21 @@ static func steering_limit(speed_ms: float) -> float:
 
 
 static func shape_steering_input(raw_input: float) -> float:
+	return shape_steering_input_with_preferences(raw_input, 1.0, STEERING_DEADBAND)
+
+
+static func shape_steering_input_with_preferences(raw_input: float, sensitivity: float, dead_zone: float) -> float:
 	var magnitude := absf(clampf(raw_input, -1.0, 1.0))
-	if magnitude <= STEERING_DEADBAND:
+	var safe_dead_zone := clampf(dead_zone, 0.0, 0.25)
+	if magnitude <= safe_dead_zone:
 		return 0.0
-	# Remove the deadband before the precision curve so a centred stick
-	# is truly centred but the first usable travel starts near zero.
-	magnitude = (magnitude - STEERING_DEADBAND) / (1.0 - STEERING_DEADBAND)
-	return signf(raw_input) * pow(magnitude, STEERING_INPUT_CURVE)
+	# Remove the deadband before the precision curve so a centred
+	# wheel/stick/tilt sensor is truly centred but the first usable
+	# travel starts near zero.  Sensitivity is applied after the curve
+	# and still clamped to the physical steering-command range.
+	magnitude = (magnitude - safe_dead_zone) / maxf(1.0 - safe_dead_zone, 0.01)
+	var shaped := signf(raw_input) * pow(magnitude, STEERING_INPUT_CURVE)
+	return clampf(shaped * clampf(sensitivity, 0.5, 1.8), -1.0, 1.0)
 
 
 static func ramp_digital_steering(current: float, target: float, delta: float, speed_ms: float) -> float:
@@ -107,6 +115,7 @@ static func get_smoke_state() -> Dictionary:
 		"min_steer_rad": MIN_STEER_RAD,
 		"steer_response": STEER_RESPONSE,
 		"steering_precision_0231": true,
+		"steering_preferences_0233": true,
 		"steer_actuator_rate_low": STEER_ACTUATOR_RATE_LOW,
 		"steer_return_rate_low": STEER_RETURN_RATE_LOW,
 		"digital_steer_attack": DIGITAL_STEER_ATTACK_LOW,

@@ -12,6 +12,7 @@ const HudScript := preload("res://scripts/hud.gd")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
 const PROFILE_PATH := "user://nitches_profile.cfg"
+const SETTINGS_PATH := "user://nitches_settings.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
 const CAMERA_CHASE := 0
@@ -31,6 +32,8 @@ var _menu: NativeMainMenu
 var _world_map: NativeWorldMap
 var _map_open := false
 var _in_menu := false
+var _has_entered_game := false
+var _settings: Dictionary = {}
 var _menu_orbit_angle := 0.0
 var _profile: Dictionary = {}
 var _profile_save_timer := 0.0
@@ -96,6 +99,8 @@ func _ready() -> void:
 	add_child(_hud)
 	_hud.bind(_world, _vehicle)
 	_hud.camera_requested.connect(_cycle_camera)
+	_hud.view_requested.connect(_on_view_requested)
+	_hud.sound_toggle_requested.connect(_on_sound_toggle_requested)
 	_hud.time_requested.connect(_cycle_time)
 	_hud.reset_requested.connect(_reset_vehicle_to_road)
 	_hud.menu_requested.connect(_show_menu)
@@ -103,6 +108,7 @@ func _ready() -> void:
 	# 0.2.29: the game opens on the main menu (profile / garage /
 	# store / worlds) over a cinematic orbit of the car; Play enters
 	# the world.  Smoke and screenshot runs skip straight to driving.
+	_load_settings()
 	_load_profile()
 	_menu = MainMenuScript.new() as NativeMainMenu
 	add_child(_menu)
@@ -110,6 +116,10 @@ func _ready() -> void:
 	_menu.refresh_profile(_profile_view())
 	_menu.play_requested.connect(_enter_game)
 	_menu.world_map_requested.connect(_show_world_map)
+	_menu.settings_changed.connect(_on_settings_changed)
+	_menu.camera_cycle_requested.connect(_cycle_camera)
+	_menu.time_cycle_requested.connect(_cycle_time)
+	_apply_settings(_settings, false)
 
 	# 0.2.32: full-screen named RichTown map over the game.  The HUD
 	# minimap and M/Tab open it; the car is frozen while it is read.
@@ -117,6 +127,9 @@ func _ready() -> void:
 	add_child(_world_map)
 	_world_map.bind(_world, _vehicle)
 	_world_map.close_requested.connect(_hide_world_map)
+	_world_map.destination_changed.connect(_on_world_map_destination_changed)
+	_hud.set_minimap_points(_world_map.get_minimap_points())
+	_on_world_map_destination_changed(_world_map.get_selected_destination())
 	_hud.map_requested.connect(_show_world_map)
 	if _smoke_mode or _screenshot_mode:
 		_enter_game()
@@ -128,6 +141,126 @@ func _ready() -> void:
 	print("[native] Nitches Horizon Godot alpha is ready")
 	if _screenshot_mode:
 		_run_screenshot_tour()
+
+
+func _default_settings() -> Dictionary:
+	return {
+		"control_type": "wheel",
+		"steering_sensitivity": 1.0,
+		"steering_dead_zone": 0.03,
+		"wheel_size_multiplier": 1.0,
+		"sound_enabled": true,
+		"developer_mode": false,
+	}
+
+
+func _sanitize_settings(source: Dictionary) -> Dictionary:
+	var result := _default_settings()
+	for key in result.keys():
+		if source.has(key):
+			result[key] = source[key]
+	var control_type := String(result.get("control_type", "wheel"))
+	if control_type != "wheel" and control_type != "tilt" and control_type != "arrows":
+		control_type = "wheel"
+	result["control_type"] = control_type
+	result["steering_sensitivity"] = clampf(float(result.get("steering_sensitivity", 1.0)), 0.5, 1.8)
+	result["steering_dead_zone"] = clampf(float(result.get("steering_dead_zone", 0.03)), 0.0, 0.25)
+	result["wheel_size_multiplier"] = clampf(float(result.get("wheel_size_multiplier", 1.0)), 0.75, 1.25)
+	result["sound_enabled"] = bool(result.get("sound_enabled", true))
+	result["developer_mode"] = bool(result.get("developer_mode", false))
+	return result
+
+
+func _load_settings() -> void:
+	_settings = _default_settings()
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		for key in _settings.keys():
+			_settings[key] = cfg.get_value("settings", key, _settings[key])
+	_settings = _sanitize_settings(_settings)
+
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	for key in _settings.keys():
+		cfg.set_value("settings", key, _settings[key])
+	cfg.save(SETTINGS_PATH)
+
+
+func _camera_mode_label() -> String:
+	match _camera_mode:
+		CAMERA_HOOD:
+			return "КАПОТ"
+		CAMERA_TOP:
+			return "СВЕРХУ"
+		_:
+			return "ВИД СЗАДИ"
+
+
+func _time_mode_label() -> String:
+	match TIME_MODES[_time_index]:
+		"sunset":
+			return "ЗАКАТ"
+		"night":
+			return "НОЧЬ"
+		_:
+			return "ДЕНЬ"
+
+
+func _settings_for_menu() -> Dictionary:
+	var result := _settings.duplicate(true)
+	result["camera_label"] = _camera_mode_label()
+	result["time_label"] = _time_mode_label()
+	return result
+
+
+func _refresh_menu_settings() -> void:
+	if _menu != null:
+		_menu.bind_settings(_settings_for_menu())
+
+
+func _apply_settings(settings: Dictionary, save_settings: bool) -> void:
+	_settings = _sanitize_settings(settings)
+	if _vehicle != null:
+		_vehicle.set_control_preferences(
+			String(_settings.get("control_type", "wheel")),
+			float(_settings.get("steering_sensitivity", 1.0)),
+			float(_settings.get("steering_dead_zone", 0.03))
+		)
+	if _hud != null:
+		_hud.apply_control_preferences(
+			String(_settings.get("control_type", "wheel")),
+			float(_settings.get("wheel_size_multiplier", 1.0))
+		)
+		_hud.set_developer_mode(bool(_settings.get("developer_mode", false)))
+		_hud.set_sound_enabled(bool(_settings.get("sound_enabled", true)))
+	AudioServer.set_bus_mute(0, not bool(_settings.get("sound_enabled", true)))
+	_refresh_menu_settings()
+	if save_settings:
+		_save_settings()
+
+
+func _on_settings_changed(settings: Dictionary) -> void:
+	_apply_settings(settings, true)
+
+
+func _on_sound_toggle_requested() -> void:
+	var next := _settings.duplicate(true)
+	next["sound_enabled"] = not bool(next.get("sound_enabled", true))
+	_apply_settings(next, true)
+
+
+func _on_view_requested() -> void:
+	_reset_camera_orbit()
+	_snap_camera = true
+
+
+func _on_world_map_destination_changed(world_position: Vector2) -> void:
+	if _hud != null:
+		if world_position == Vector2.INF:
+			_hud.clear_destination()
+		else:
+			_hud.set_destination(world_position)
 
 
 func _load_profile() -> void:
@@ -179,11 +312,15 @@ func _show_menu() -> void:
 	if _hud != null:
 		_hud.visible = false
 	_menu.refresh_profile(_profile_view())
-	_menu.show_menu()
+	if _has_entered_game:
+		_menu.show_settings()
+	else:
+		_menu.show_menu()
 	_save_profile()
 
 
 func _enter_game() -> void:
+	_has_entered_game = true
 	_camera_drag_touch_index = -1
 	_camera_mouse_dragging = false
 	if _world_map != null:
@@ -516,11 +653,13 @@ func _cycle_camera() -> void:
 	_camera_mode = (_camera_mode + 1) % 3
 	_reset_camera_orbit()
 	_snap_camera = true
+	_refresh_menu_settings()
 
 
 func _cycle_time() -> void:
 	_time_index = (_time_index + 1) % TIME_MODES.size()
 	_apply_time_mode()
+	_refresh_menu_settings()
 
 
 func _apply_time_mode() -> void:
@@ -530,6 +669,7 @@ func _apply_time_mode() -> void:
 	_world.set_time_of_day(mode)
 	if _vehicle != null:
 		_vehicle.set_headlights_enabled(mode != "day")
+	_refresh_menu_settings()
 
 
 func _on_vehicle_reset_requested() -> void:
@@ -917,34 +1057,36 @@ func _run_smoke_checks() -> void:
 		failures.append("vehicle is outside the game camera frustum")
 
 	var hud_state := _hud.get_smoke_state()
-	var minimap_counts: Dictionary = hud_state.get("minimap_counts", {})
-	if int(minimap_counts.get("roads", 0)) < 35 or int(minimap_counts.get("buildings", 0)) < 45 or int(minimap_counts.get("parks", 0)) < 3:
-		failures.append("minimap did not receive complete world data: %s" % str(minimap_counts))
-	var performance_text := String(hud_state.get("performance_text", ""))
-	if performance_text.is_empty() or performance_text == "FPS —" or performance_text.contains("WORLD DATA ERROR"):
-		failures.append("HUD performance label did not update cleanly: %s" % performance_text)
-	var coordinates_text := String(hud_state.get("coordinates_text", ""))
-	if not coordinates_text.contains("КООРДИНАТЫ") or not coordinates_text.contains("X 760") or not coordinates_text.contains("Z 330") or not coordinates_text.contains("Y "):
-		failures.append("0.2.12 HUD live coordinates did not update at spawn: %s" % coordinates_text)
+	var minimap_state: Dictionary = hud_state.get("minimap", {})
+	var gauge_state: Dictionary = hud_state.get("dashboard_gauge", {})
+	var gas_pedal_state: Dictionary = hud_state.get("gas_pedal", {})
+	var brake_pedal_state: Dictionary = hud_state.get("brake_pedal", {})
+	var nitro_button_state: Dictionary = hud_state.get("nitro_button", {})
+	var drift_button_state: Dictionary = hud_state.get("drift_button", {})
 	var viewport_size: Vector2 = hud_state.get("viewport_size", Vector2.ZERO)
-	var coordinates_rect: Rect2 = hud_state.get("coordinates_rect", Rect2())
-	if not _rect_is_on_screen(coordinates_rect, viewport_size):
-		failures.append("coordinates label is not fully on screen: rect=%s viewport=%s" % [str(coordinates_rect), str(viewport_size)])
-	var speed_rect: Rect2 = hud_state.get("speed_rect", Rect2())
-	var pedal_rect: Rect2 = hud_state.get("pedal_rect", Rect2())
-	if not _rect_is_on_screen(speed_rect, viewport_size):
-		failures.append("speed panel is not fully on screen: rect=%s viewport=%s" % [str(speed_rect), str(viewport_size)])
-	if not _rect_is_on_screen(pedal_rect, viewport_size):
-		failures.append("pedal row is not fully on screen: rect=%s viewport=%s" % [str(pedal_rect), str(viewport_size)])
+	var minimap_rect: Rect2 = minimap_state.get("rect", Rect2())
+	var gauge_rect: Rect2 = gauge_state.get("rect", Rect2())
+	var gas_rect: Rect2 = gas_pedal_state.get("rect", Rect2())
+	var brake_rect: Rect2 = brake_pedal_state.get("rect", Rect2())
+	var nitro_rect: Rect2 = nitro_button_state.get("rect", Rect2())
+	var drift_rect: Rect2 = drift_button_state.get("rect", Rect2())
+	var safe_left := viewport_size.x * 0.03 - 1.0
+	var safe_top := viewport_size.y * 0.04 - 1.0
+	var safe_right := viewport_size.x * 0.97 + 1.0
+	var safe_bottom := viewport_size.y * 0.96 + 1.0
+	var hud_rects_safe := minimap_rect.position.x >= safe_left and minimap_rect.position.y >= safe_top and gauge_rect.end.x <= safe_right and gauge_rect.position.y >= safe_top and gas_rect.end.x <= safe_right and gas_rect.end.y <= safe_bottom
+	var hud_rects_visible := _rect_is_on_screen(minimap_rect, viewport_size) and _rect_is_on_screen(gauge_rect, viewport_size) and _rect_is_on_screen(gas_rect, viewport_size) and _rect_is_on_screen(brake_rect, viewport_size) and _rect_is_on_screen(nitro_rect, viewport_size) and _rect_is_on_screen(drift_rect, viewport_size)
+	if not bool(hud_state.get("hud_0233", false)) or not bool(hud_state.get("safe_area_3pct_4pct", false)) or not hud_rects_safe or not hud_rects_visible or not bool(minimap_state.get("circular_heading_up_0233", false)) or int(minimap_state.get("roads", 0)) < 35 or int(minimap_state.get("parks", 0)) < 3 or int(minimap_state.get("pois", 0)) < 20 or not bool(minimap_state.get("has_destination", false)) or not bool(gauge_state.get("circular_gauge_0233", false)) or String(gauge_state.get("speed_text", "")) != "0" or not bool(gas_pedal_state.get("analog_pedal_0233", false)) or not bool(brake_pedal_state.get("analog_pedal_0233", false)) or gas_rect.size.y < viewport_size.y * 0.28 or brake_rect.size.y < viewport_size.y * 0.28 or absf(gas_rect.position.x - brake_rect.end.x - 8.0) > 1.5 or not bool(nitro_button_state.get("round_action_0233", false)) or not bool(drift_button_state.get("round_action_0233", false)) or nitro_rect.position.x - drift_rect.end.x < 15.0 or bool(hud_state.get("performance_visible", true)) != bool(hud_state.get("developer_mode", false)):
+		failures.append("0.2.33 safe-area circular HUD / analog pedals pass is incomplete: hud=%s minimap=%s gauge=%s" % [str(hud_state), str(minimap_state), str(gauge_state)])
 	var menu_state := _menu.get_smoke_state()
 	var spec_sheet := _vehicle.get_spec_sheet()
 	var world_map_state := _world_map.get_smoke_state()
 	var steering_wheel_state: Dictionary = hud_state.get("steering_wheel", {})
-	var steering_wheel_rect: Rect2 = hud_state.get("steering_wheel_rect", Rect2())
-	if not bool(world_map_state.get("world_map_0232", false)) or not bool(world_map_state.get("created", false)) or not bool(world_map_state.get("data_bound", false)) or bool(world_map_state.get("visible_now", true)) or int(world_map_state.get("districts", 0)) < 5 or int(world_map_state.get("district_labels", 0)) < 5 or int(world_map_state.get("roads", 0)) < 50 or int(world_map_state.get("road_labels", 0)) < 6 or int(world_map_state.get("pois", 0)) < 20 or int(world_map_state.get("poi_labels", 0)) < 20 or int(world_map_state.get("parks", 0)) < 3 or not bool(steering_wheel_state.get("touch_steering_wheel_0232", false)) or not bool(steering_wheel_state.get("created", false)) or float(steering_wheel_state.get("max_lock_degrees", 0.0)) < 130.0 or float(steering_wheel_state.get("centering_rate", 0.0)) < 4.0 or not _rect_is_on_screen(steering_wheel_rect, viewport_size) or not bool(smoothing_state.get("touch_steering_wheel_0232", false)):
-		failures.append("0.2.32 steering-wheel / full world-map pass is incomplete: map=%s wheel=%s smoothing=%s" % [str(world_map_state), str(steering_wheel_state), str(smoothing_state)])
-	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 5 or int(menu_state.get("tabs", 0)) < 5 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
-		failures.append("0.2.29 main menu / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
+	var steering_wheel_rect: Rect2 = steering_wheel_state.get("rect", Rect2())
+	if not bool(world_map_state.get("world_map_0232", false)) or not bool(world_map_state.get("created", false)) or not bool(world_map_state.get("data_bound", false)) or bool(world_map_state.get("visible_now", true)) or int(world_map_state.get("districts", 0)) < 5 or int(world_map_state.get("district_labels", 0)) < 5 or int(world_map_state.get("roads", 0)) < 50 or int(world_map_state.get("road_labels", 0)) < 6 or int(world_map_state.get("pois", 0)) < 20 or int(world_map_state.get("poi_labels", 0)) < 20 or int(world_map_state.get("parks", 0)) < 3 or not bool(steering_wheel_state.get("touch_steering_wheel_0232", false)) or not bool(steering_wheel_state.get("created", false)) or float(steering_wheel_state.get("max_lock_degrees", 0.0)) < 130.0 or float(steering_wheel_state.get("centering_rate", 0.0)) < 4.0 or not _rect_is_on_screen(steering_wheel_rect, viewport_size) or steering_wheel_rect.size.x < 230.0 or not bool(steering_wheel_state.get("configurable_size_0233", false)) or not bool(smoothing_state.get("touch_steering_wheel_0232", false)) or not bool(smoothing_state.get("analog_touch_pedals_0233", false)) or int(world_map_state.get("minimap_points", 0)) < 20:
+		failures.append("0.2.33 doubled steering-wheel / full world-map pass is incomplete: map=%s wheel=%s smoothing=%s" % [str(world_map_state), str(steering_wheel_state), str(smoothing_state)])
+	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 6 or int(menu_state.get("tabs", 0)) < 6 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or not bool(menu_state.get("settings_panel_0233", false)) or int(menu_state.get("control_buttons", 0)) < 3 or not bool(menu_state.get("settings_bound", false)) or not bool(menu_state.get("version_button_created", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
+		failures.append("0.2.33 main menu/settings / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
 
 	if failures.is_empty():
 		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
@@ -952,7 +1094,7 @@ func _run_smoke_checks() -> void:
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
 			str(_camera.global_position),
-			str(minimap_counts),
+			str(minimap_state),
 			str(traffic_stats),
 			str(enhancement_stats),
 			str(vehicle_aabb_size),
