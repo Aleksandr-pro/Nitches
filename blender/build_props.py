@@ -24,6 +24,9 @@ Props:
   * mosque.glb        Building Model No.7: fixed-scale RichTown Mosque
   * grand_hotel.glb   Building Model No.8: fixed-scale beachfront grand hotel
   * museum.glb        Building Model No.9: fixed-scale civic museum (central axis)
+  * cottage_dune.glb / cottage_courtyard.glb / cottage_palm.glb
+                      Building Models No.10-12: exterior-only Sail Island
+                      desert cottage estates with walled private grounds
   * palm_date.glb / palm_royal.glb
                       botanically structured palms with curved segmented
                       trunks, individual pinnate leaflets and crown detail
@@ -201,6 +204,28 @@ def standard_mats():
     mat("MuseumBannerTeal", (0.02, 0.32, 0.34), roughness=0.85)
     mat("MuseumBannerOchre", (0.72, 0.42, 0.10), roughness=0.85)
     mat("MuseumLight", (1.0, 0.74, 0.42), roughness=0.32, emission=(1.0, 0.58, 0.24))
+    # Building Models No.10-12 are exterior-only Dubai desert cottages
+    # for Sail Island.  Their semantic set is deliberately physical:
+    # matte rammed sand and limestone never share a roughness with
+    # honed travertine, vesicular basalt, sun-dried teak, standing-seam
+    # roof metal or bronze.  Godot binds matching albedo / normal /
+    # roughness maps to these names; no interior material is authored.
+    mat("CottageSand", (0.80, 0.69, 0.52), roughness=0.97)
+    mat("CottageTravertine", (0.76, 0.66, 0.50), roughness=0.84)
+    mat("CottageLimestone", (0.78, 0.69, 0.55), roughness=0.93)
+    mat("CottageBasalt", (0.055, 0.060, 0.068), roughness=0.78, metallic=0.04)
+    mat("CottageTeak", (0.34, 0.20, 0.10), roughness=0.86)
+    mat("CottageBronze", (0.42, 0.27, 0.13), roughness=0.38, metallic=0.84)
+    mat("CottageGlass", (0.09, 0.23, 0.30), roughness=0.06, metallic=0.12)
+    mat("CottageCore", (0.025, 0.023, 0.021), roughness=0.98)
+    mat("CottageBlind", (0.62, 0.55, 0.43), roughness=1.0)
+    mat("CottageRoofMetal", (0.20, 0.16, 0.12), roughness=0.52, metallic=0.68)
+    mat("CottagePaving", (0.68, 0.61, 0.50), roughness=0.94)
+    mat("CottageGravel", (0.55, 0.48, 0.39), roughness=1.0)
+    mat("CottageLawn", (0.16, 0.34, 0.11), roughness=1.0)
+    mat("CottageHedge", (0.07, 0.24, 0.07), roughness=1.0)
+    mat("CottageWater", (0.04, 0.36, 0.43), roughness=0.07, metallic=0.05)
+    mat("CottageLight", (1.0, 0.72, 0.38), roughness=0.32, emission=(1.0, 0.55, 0.20))
     # The traffic signals are deliberately NOT an animated system yet.
     # Only the red lens material emits; amber and green remain dark.
     mat("SignalMetal", (0.36, 0.39, 0.42), roughness=0.34, metallic=0.9)
@@ -5004,17 +5029,696 @@ def main():
         (build_mosque, "mosque.glb"),
         (build_hotel, "grand_hotel.glb"),
         (build_museum, "museum.glb"),
+        (build_cottage_dune, "cottage_dune.glb"),
+        (build_cottage_courtyard, "cottage_courtyard.glb"),
+        (build_cottage_palm, "cottage_palm.glb"),
         (build_palm_date, "palm_date.glb"),
         (build_palm_royal, "palm_royal.glb"),
         (build_grass_tuft, "grass_tuft.glb"),
         (build_flower_clump, "flower_clump.glb"),
         (build_ornamental_shrub, "ornamental_shrub.glb"),
     ):
+        # Local model reviews can build one asset without regenerating
+        # the whole city set, e.g. NITCHES_PROPS_ONLY=cottage_dune.glb.
+        # CI leaves the variable unset and always builds every prop.
+        requested = {name.strip() for name in os.environ.get("NITCHES_PROPS_ONLY", "").split(",") if name.strip()}
+        if requested and filename not in requested:
+            continue
         reset_scene()
         standard_mats()
         build()
         export(out_dir, filename)
     print("[props] done ->", out_dir)
+
+
+# --------------------------------------------------------------------------- #
+# Building Models No.10-12 - Sail Island desert cottage estates.
+#
+# These are not scaled copies of Building Model No.1.  Each asset is a
+# complete exterior-only private estate in one fixed 36 x 27 m envelope:
+# chamfered perimeter wall, vehicle and pedestrian gates, driveway,
+# garage, entrance court, house shell, rear terrace and pool.  Window
+# assemblies contain only a dark exterior backing/blind immediately
+# behind reflective glass; there are no rooms, stairs or furniture.
+# The front is Blender -Y, matching the established villa convention.
+# --------------------------------------------------------------------------- #
+
+def _cottage_window(cx, cy, cz, width, height, face, blind_fraction=0.0, divisions=None):
+    sand = MATS["CottageSand"]
+    basalt = MATS["CottageBasalt"]
+    bronze = MATS["CottageBronze"]
+    glass = MATS["CottageGlass"]
+    core = MATS["CottageCore"]
+    blind = MATS["CottageBlind"]
+    if divisions is None:
+        divisions = max(1, int(width // 1.15))
+    sign = -1.0 if face in ("front", "left") else 1.0
+    blind_drop = height * blind_fraction
+    if face in ("front", "back"):
+        box("cottage_window_reveal", cx, cy + sign * 0.025, cz, width + 0.34, 0.09, height + 0.34, basalt)
+        box("cottage_window_core", cx, cy + sign * 0.055, cz, width - 0.02, 0.045, height - 0.02, core)
+        if blind_drop > 0.04:
+            box("cottage_window_blind", cx, cy + sign * 0.085, cz + height / 2.0 - blind_drop / 2.0 - 0.03, width - 0.14, 0.030, blind_drop, blind)
+            box("cottage_window_blind_rail", cx, cy + sign * 0.090, cz + height / 2.0 - blind_drop - 0.055, width - 0.10, 0.035, 0.045, bronze)
+        for side in (-1.0, 1.0):
+            box("cottage_window_frame_side", cx + side * (width / 2.0 + 0.035), cy + sign * 0.085, cz, 0.15, 0.15, height + 0.24, bronze)
+            box("cottage_window_frame_rail", cx, cy + sign * 0.085, cz + side * (height / 2.0 + 0.035), width + 0.30, 0.15, 0.15, bronze)
+        box("cottage_window_glass", cx, cy + sign * 0.128, cz, width, 0.035, height, glass)
+        for division in range(1, divisions):
+            mx = cx - width / 2.0 + width * division / divisions
+            box("cottage_window_mullion", mx, cy + sign * 0.152, cz, 0.055, 0.045, height, bronze)
+        box("cottage_window_transom", cx, cy + sign * 0.152, cz + height * 0.24, width, 0.045, 0.055, bronze)
+        box("cottage_window_sill", cx, cy + sign * 0.155, cz - height / 2.0 - 0.16, width + 0.42, 0.32, 0.10, basalt)
+        box("cottage_window_header", cx, cy + sign * 0.110, cz + height / 2.0 + 0.17, width + 0.34, 0.20, 0.10, sand)
+    else:
+        box("cottage_window_reveal", cx + sign * 0.025, cy, cz, 0.09, width + 0.34, height + 0.34, basalt)
+        box("cottage_window_core", cx + sign * 0.055, cy, cz, 0.045, width - 0.02, height - 0.02, core)
+        if blind_drop > 0.04:
+            box("cottage_window_blind", cx + sign * 0.085, cy, cz + height / 2.0 - blind_drop / 2.0 - 0.03, 0.030, width - 0.14, blind_drop, blind)
+            box("cottage_window_blind_rail", cx + sign * 0.090, cy, cz + height / 2.0 - blind_drop - 0.055, 0.035, width - 0.10, 0.045, bronze)
+        for side in (-1.0, 1.0):
+            box("cottage_window_frame_side", cx + sign * 0.085, cy + side * (width / 2.0 + 0.035), cz, 0.15, 0.15, height + 0.24, bronze)
+            box("cottage_window_frame_rail", cx + sign * 0.085, cy, cz + side * (height / 2.0 + 0.035), 0.15, width + 0.30, 0.15, bronze)
+        box("cottage_window_glass", cx + sign * 0.128, cy, cz, 0.035, width, height, glass)
+        for division in range(1, divisions):
+            my = cy - width / 2.0 + width * division / divisions
+            box("cottage_window_mullion", cx + sign * 0.152, my, cz, 0.045, 0.055, height, bronze)
+        box("cottage_window_transom", cx + sign * 0.152, cy, cz + height * 0.24, 0.045, width, 0.055, bronze)
+        box("cottage_window_sill", cx + sign * 0.155, cy, cz - height / 2.0 - 0.16, 0.32, width + 0.42, 0.10, basalt)
+        box("cottage_window_header", cx + sign * 0.110, cy, cz + height / 2.0 + 0.17, 0.20, width + 0.34, 0.10, sand)
+
+
+def _cottage_louver(cx, cy, cz, width, height, face, material=None):
+    bronze = MATS["CottageBronze"]
+    core = MATS["CottageCore"]
+    slat_material = MATS["CottageTeak"] if material is None else material
+    sign = -1.0 if face in ("front", "left") else 1.0
+    count = max(3, int(width / 0.34))
+    if face in ("front", "back"):
+        box("cottage_louver_core", cx, cy + sign * 0.045, cz, width, 0.05, height, core)
+        for side in (-1.0, 1.0):
+            box("cottage_louver_frame", cx + side * (width / 2.0 + 0.04), cy + sign * 0.13, cz, 0.12, 0.18, height + 0.18, bronze)
+            box("cottage_louver_frame", cx, cy + sign * 0.13, cz + side * (height / 2.0 + 0.04), width + 0.22, 0.18, 0.12, bronze)
+        for index in range(count):
+            x = cx - width / 2.0 + (index + 0.5) * width / count
+            box("cottage_louver_slat", x, cy + sign * 0.15, cz, 0.11, 0.07, height - 0.08, slat_material)
+    else:
+        box("cottage_louver_core", cx + sign * 0.045, cy, cz, 0.05, width, height, core)
+        for side in (-1.0, 1.0):
+            box("cottage_louver_frame", cx + sign * 0.13, cy + side * (width / 2.0 + 0.04), cz, 0.18, 0.12, height + 0.18, bronze)
+            box("cottage_louver_frame", cx + sign * 0.13, cy, cz + side * (height / 2.0 + 0.04), 0.18, width + 0.22, 0.12, bronze)
+        for index in range(count):
+            y = cy - width / 2.0 + (index + 0.5) * width / count
+            box("cottage_louver_slat", cx + sign * 0.15, y, cz, 0.07, 0.11, height - 0.08, slat_material)
+
+
+def _cottage_mashrabiya(cx, cy, cz, width, height, face):
+    bronze = MATS["CottageBronze"]
+    stone = MATS["CottageTravertine"]
+    core = MATS["CottageCore"]
+    sign = -1.0 if face in ("front", "left") else 1.0
+    verticals = max(3, int(width / 0.42))
+    horizontals = max(3, int(height / 0.48))
+    if face in ("front", "back"):
+        box("cottage_mashrabiya_core", cx, cy + sign * 0.04, cz, width, 0.05, height, core)
+        for side in (-1.0, 1.0):
+            box("cottage_mashrabiya_frame", cx + side * (width / 2.0 + 0.05), cy + sign * 0.12, cz, 0.16, 0.18, height + 0.22, stone)
+            box("cottage_mashrabiya_frame", cx, cy + sign * 0.12, cz + side * (height / 2.0 + 0.05), width + 0.28, 0.18, 0.16, stone)
+        for index in range(verticals):
+            x = cx - width / 2.0 + (index + 0.5) * width / verticals
+            box("cottage_mashrabiya_bar_v", x, cy + sign * 0.14, cz, 0.065, 0.07, height, bronze)
+        for index in range(horizontals):
+            z = cz - height / 2.0 + (index + 0.5) * height / horizontals
+            box("cottage_mashrabiya_bar_h", cx, cy + sign * 0.145, z, width, 0.075, 0.065, bronze)
+    else:
+        box("cottage_mashrabiya_core", cx + sign * 0.04, cy, cz, 0.05, width, height, core)
+        for side in (-1.0, 1.0):
+            box("cottage_mashrabiya_frame", cx + sign * 0.12, cy + side * (width / 2.0 + 0.05), cz, 0.18, 0.16, height + 0.22, stone)
+            box("cottage_mashrabiya_frame", cx + sign * 0.12, cy, cz + side * (height / 2.0 + 0.05), 0.18, width + 0.28, 0.16, stone)
+        for index in range(verticals):
+            y = cy - width / 2.0 + (index + 0.5) * width / verticals
+            box("cottage_mashrabiya_bar_v", cx + sign * 0.14, y, cz, 0.07, 0.065, height, bronze)
+        for index in range(horizontals):
+            z = cz - height / 2.0 + (index + 0.5) * height / horizontals
+            box("cottage_mashrabiya_bar_h", cx + sign * 0.145, cy, z, 0.075, width, 0.065, bronze)
+
+
+def _cottage_door(cx, cy, face="front"):
+    teak = MATS["CottageTeak"]
+    bronze = MATS["CottageBronze"]
+    basalt = MATS["CottageBasalt"]
+    glass = MATS["CottageGlass"]
+    core = MATS["CottageCore"]
+    sign = -1.0 if face in ("front", "left") else 1.0
+    if face in ("front", "back"):
+        box("cottage_door_reveal", cx, cy + sign * 0.035, 1.72, 2.05, 0.10, 3.05, basalt)
+        box("cottage_door_leaf", cx - 0.28, cy + sign * 0.105, 1.68, 1.28, 0.09, 2.92, teak, bevel=0.012)
+        for groove in (-0.42, 0.0, 0.42):
+            box("cottage_door_groove", cx - 0.28 + groove, cy + sign * 0.158, 1.68, 0.025, 0.018, 2.72, basalt)
+        box("cottage_door_sidelight_core", cx + 0.72, cy + sign * 0.070, 1.68, 0.42, 0.045, 2.86, core)
+        box("cottage_door_sidelight", cx + 0.72, cy + sign * 0.112, 1.68, 0.36, 0.035, 2.80, glass)
+        box("cottage_door_handle", cx + 0.24, cy + sign * 0.20, 1.55, 0.055, 0.055, 1.35, bronze)
+        box("cottage_door_step", cx, cy + sign * 0.48, 0.16, 2.35, 0.72, 0.18, basalt)
+        box("cottage_door_canopy", cx, cy + sign * 0.62, 3.38, 2.75, 1.25, 0.14, bronze, bevel=0.015)
+        box("cottage_door_canopy_light", cx, cy + sign * 0.62, 3.29, 1.55, 0.055, 0.025, MATS["CottageLight"])
+    else:
+        box("cottage_door_reveal", cx + sign * 0.035, cy, 1.72, 0.10, 2.05, 3.05, basalt)
+        box("cottage_door_leaf", cx + sign * 0.105, cy - 0.28, 1.68, 0.09, 1.28, 2.92, teak, bevel=0.012)
+        box("cottage_door_sidelight_core", cx + sign * 0.070, cy + 0.72, 1.68, 0.045, 0.42, 2.86, core)
+        box("cottage_door_sidelight", cx + sign * 0.112, cy + 0.72, 1.68, 0.035, 0.36, 2.80, glass)
+        box("cottage_door_handle", cx + sign * 0.20, cy + 0.24, 1.55, 0.055, 0.055, 1.35, bronze)
+        box("cottage_door_step", cx + sign * 0.48, cy, 0.16, 0.72, 2.35, 0.18, basalt)
+
+
+def _cottage_garage_door(cx, cy, width=4.8, face="front"):
+    bronze = MATS["CottageBronze"]
+    basalt = MATS["CottageBasalt"]
+    core = MATS["CottageCore"]
+    glass = MATS["CottageGlass"]
+    sign = -1.0 if face in ("front", "left") else 1.0
+    if face in ("front", "back"):
+        box("cottage_garage_reveal", cx, cy + sign * 0.035, 1.62, width + 0.42, 0.10, 3.05, basalt)
+        for panel in range(4):
+            z = 0.48 + panel * 0.72
+            box("cottage_garage_panel", cx, cy + sign * 0.105, z, width, 0.075, 0.64, bronze)
+        for xoff in (-width * 0.30, 0.0, width * 0.30):
+            box("cottage_garage_window_core", cx + xoff, cy + sign * 0.150, 2.72, 0.72, 0.025, 0.28, core)
+            box("cottage_garage_window", cx + xoff, cy + sign * 0.168, 2.72, 0.64, 0.025, 0.22, glass)
+        box("cottage_garage_handle", cx, cy + sign * 0.17, 1.02, 0.52, 0.045, 0.055, basalt)
+        box("cottage_garage_sensor", cx + width / 2.0 + 0.34, cy + sign * 0.12, 1.25, 0.16, 0.07, 0.26, basalt)
+        box("cottage_garage_sensor_light", cx + width / 2.0 + 0.34, cy + sign * 0.165, 1.30, 0.045, 0.025, 0.045, MATS["CottageLight"])
+    else:
+        box("cottage_garage_reveal", cx + sign * 0.035, cy, 1.62, 0.10, width + 0.42, 3.05, basalt)
+        for panel in range(4):
+            box("cottage_garage_panel", cx + sign * 0.105, cy, 0.48 + panel * 0.72, 0.075, width, 0.64, bronze)
+
+
+def _cottage_flat_roof(cx, cy, top, width, depth, parapet_material=None, solar=False):
+    bronze = MATS["CottageBronze"]
+    gravel = MATS["RoofGravel"]
+    basalt = MATS["CottageBasalt"]
+    box("cottage_roof_slab", cx, cy, top + 0.16, width + 0.65, depth + 0.65, 0.32, bronze, bevel=0.025)
+    box("cottage_roof_gravel", cx, cy, top + 0.355, max(width - 0.45, 0.4), max(depth - 0.45, 0.4), 0.07, gravel)
+    if parapet_material is not None:
+        for sy in (cy - depth / 2.0 + 0.13, cy + depth / 2.0 - 0.13):
+            box("cottage_roof_parapet", cx, sy, top + 0.58, width - 0.18, 0.26, 0.42, parapet_material)
+            box("cottage_roof_coping", cx, sy, top + 0.83, width - 0.05, 0.36, 0.08, basalt)
+        for sx in (cx - width / 2.0 + 0.13, cx + width / 2.0 - 0.13):
+            box("cottage_roof_parapet", sx, cy, top + 0.58, 0.26, depth - 0.18, 0.42, parapet_material)
+            box("cottage_roof_coping", sx, cy, top + 0.83, 0.36, depth - 0.05, 0.08, basalt)
+    if solar:
+        _cottage_solar_array(cx - width * 0.18, cy, top + 0.42, 3, 2)
+    _cottage_hvac(cx + width * 0.31, cy + depth * 0.24, top + 0.40)
+
+
+def _cottage_solar_array(cx, cy, base_z, columns, rows):
+    solar = MATS["SolarCell"]
+    bronze = MATS["CottageBronze"]
+    for row in range(rows):
+        for column in range(columns):
+            x = cx + (column - (columns - 1) / 2.0) * 1.82
+            y = cy + (row - (rows - 1) / 2.0) * 1.28
+            rbox("cottage_solar_panel", x, y, base_z + 0.30, 1.68, 1.08, 0.055, solar, rotation=(math.radians(-17.0), 0.0, 0.0))
+            box("cottage_solar_leg", x - 0.58, y + 0.30, base_z + 0.12, 0.055, 0.055, 0.28, bronze)
+            box("cottage_solar_leg", x + 0.58, y + 0.30, base_z + 0.12, 0.055, 0.055, 0.28, bronze)
+
+
+def _cottage_hvac(cx, cy, base_z):
+    bronze = MATS["CottageBronze"]
+    basalt = MATS["CottageBasalt"]
+    box("cottage_hvac_body", cx, cy, base_z + 0.42, 1.85, 0.92, 0.84, bronze, bevel=0.025)
+    for index in range(5):
+        box("cottage_hvac_louvre", cx, cy - 0.49, base_z + 0.18 + index * 0.14, 1.62, 0.035, 0.055, basalt)
+    cyl("cottage_hvac_fan", cx, cy, base_z + 0.87, 0.34, 0.055, basalt, vertices=16)
+
+
+def _cottage_pergola(cx, cy, width, depth, height=2.85, base_z=0.22):
+    teak = MATS["CottageTeak"]
+    bronze = MATS["CottageBronze"]
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            box("cottage_pergola_post", cx + sx * (width / 2.0 - 0.18), cy + sy * (depth / 2.0 - 0.18), base_z + height / 2.0, 0.18, 0.18, height, bronze)
+    for sy in (-1.0, 1.0):
+        box("cottage_pergola_beam", cx, cy + sy * (depth / 2.0 - 0.18), base_z + height + 0.10, width + 0.30, 0.20, 0.20, teak)
+    slats = max(4, int(width / 0.55))
+    for index in range(slats):
+        x = cx - width / 2.0 + (index + 0.5) * width / slats
+        box("cottage_pergola_slat", x, cy, base_z + height + 0.27, 0.13, depth + 0.25, 0.09, teak)
+
+
+def _cottage_balcony(cx, cy, cz, width, face):
+    basalt = MATS["CottageBasalt"]
+    bronze = MATS["CottageBronze"]
+    glass = MATS["CottageGlass"]
+    hedge = MATS["CottageHedge"]
+    sign = -1.0 if face in ("front", "left") else 1.0
+    if face in ("front", "back"):
+        box("cottage_balcony_slab", cx, cy + sign * 0.72, cz, width + 0.35, 1.48, 0.18, basalt, bevel=0.015)
+        box("cottage_balcony_glass", cx, cy + sign * 1.38, cz + 0.58, width, 0.045, 0.92, glass)
+        box("cottage_balcony_rail", cx, cy + sign * 1.38, cz + 1.08, width + 0.08, 0.09, 0.075, bronze)
+        for side in (-1.0, 1.0):
+            box("cottage_balcony_side_glass", cx + side * width / 2.0, cy + sign * 0.72, cz + 0.58, 0.045, 1.28, 0.92, glass)
+            box("cottage_balcony_planter", cx + side * (width / 2.0 - 0.42), cy + sign * 1.05, cz + 0.22, 0.62, 0.38, 0.26, basalt)
+            box("cottage_balcony_hedge", cx + side * (width / 2.0 - 0.42), cy + sign * 1.05, cz + 0.43, 0.54, 0.30, 0.20, hedge, bevel=0.06)
+    else:
+        box("cottage_balcony_slab", cx + sign * 0.72, cy, cz, 1.48, width + 0.35, 0.18, basalt, bevel=0.015)
+        box("cottage_balcony_glass", cx + sign * 1.38, cy, cz + 0.58, 0.045, width, 0.92, glass)
+        box("cottage_balcony_rail", cx + sign * 1.38, cy, cz + 1.08, 0.09, width + 0.08, 0.075, bronze)
+
+
+def _cottage_pool(cx, cy, width, depth):
+    basalt = MATS["CottageBasalt"]
+    stone = MATS["CottageTravertine"]
+    water = MATS["CottageWater"]
+    box("cottage_pool_basin", cx, cy, 0.28, width + 0.55, depth + 0.55, 0.34, basalt)
+    box("cottage_pool_water", cx, cy, 0.43, width, depth, 0.07, water)
+    for sy in (-1.0, 1.0):
+        box("cottage_pool_coping", cx, cy + sy * (depth / 2.0 + 0.16), 0.49, width + 0.70, 0.28, 0.11, stone)
+    for sx in (-1.0, 1.0):
+        box("cottage_pool_coping", cx + sx * (width / 2.0 + 0.16), cy, 0.49, 0.28, depth + 0.70, 0.11, stone)
+    for step in range(3):
+        box("cottage_pool_step", cx - width / 2.0 + 0.55 + step * 0.34, cy, 0.30 + step * 0.055, 0.30, min(depth * 0.52, 2.2), 0.09, stone)
+    box("cottage_pool_bench", cx + width / 2.0 - 0.55, cy, 0.34, 0.55, max(depth - 0.7, 0.6), 0.10, stone)
+
+
+def _cottage_wall_run(cx, cy, length, rotation_z=0.0):
+    sand = MATS["CottageSand"]
+    basalt = MATS["CottageBasalt"]
+    if abs(rotation_z) < 0.001:
+        box("cottage_wall_base", cx, cy, 0.27, length, 0.34, 0.54, basalt)
+        box("cottage_wall_panel", cx, cy, 1.25, length, 0.26, 1.42, sand)
+        box("cottage_wall_cap", cx, cy, 2.05, length + 0.04, 0.40, 0.18, basalt)
+    else:
+        rbox("cottage_wall_base", cx, cy, 0.27, length, 0.34, 0.54, basalt, rotation=(0.0, 0.0, rotation_z))
+        rbox("cottage_wall_panel", cx, cy, 1.25, length, 0.26, 1.42, sand, rotation=(0.0, 0.0, rotation_z))
+        rbox("cottage_wall_cap", cx, cy, 2.05, length + 0.04, 0.40, 0.18, basalt, rotation=(0.0, 0.0, rotation_z))
+
+
+def _cottage_wall_pilaster(cx, cy, side=False):
+    stone = MATS["CottageTravertine"]
+    basalt = MATS["CottageBasalt"]
+    light = MATS["CottageLight"]
+    if side:
+        box("cottage_wall_pilaster", cx, cy, 1.13, 0.46, 0.58, 2.26, stone, bevel=0.015)
+        box("cottage_wall_pilaster_cap", cx, cy, 2.32, 0.56, 0.68, 0.12, basalt)
+    else:
+        box("cottage_wall_pilaster", cx, cy, 1.13, 0.58, 0.46, 2.26, stone, bevel=0.015)
+        box("cottage_wall_pilaster_cap", cx, cy, 2.32, 0.68, 0.56, 0.12, basalt)
+        box("cottage_wall_light", cx, cy - 0.26, 1.78, 0.09, 0.035, 0.34, light)
+
+
+def _cottage_gate(cx, width, pedestrian=False):
+    teak = MATS["CottageTeak"]
+    bronze = MATS["CottageBronze"]
+    basalt = MATS["CottageBasalt"]
+    y = -13.20
+    box("cottage_gate_frame_top", cx, y, 2.02, width, 0.11, 0.13, bronze)
+    box("cottage_gate_frame_bottom", cx, y, 0.24, width, 0.11, 0.13, bronze)
+    for side in (-1.0, 1.0):
+        box("cottage_gate_frame_side", cx + side * (width / 2.0 - 0.055), y, 1.13, 0.11, 0.11, 1.90, bronze)
+    slats = max(3, int(width / 0.34))
+    for index in range(slats):
+        x = cx - width / 2.0 + (index + 0.5) * width / slats
+        box("cottage_gate_slat", x, y + 0.035, 1.13, 0.17, 0.055, 1.78, teak)
+    if pedestrian:
+        box("cottage_gate_handle", cx + width / 2.0 - 0.25, y - 0.11, 1.08, 0.045, 0.045, 0.52, bronze)
+    else:
+        box("cottage_gate_track", cx + 1.2, y + 0.22, 0.055, width + 4.0, 0.16, 0.055, basalt)
+        box("cottage_gate_motor", cx - width / 2.0 - 0.55, y + 0.52, 0.42, 0.62, 0.52, 0.62, basalt, bevel=0.02)
+        box("cottage_gate_motor_light", cx - width / 2.0 - 0.55, y + 0.24, 0.48, 0.055, 0.025, 0.055, MATS["CottageLight"])
+
+
+def _cottage_planter(cx, cy, width, depth, hedge_height=0.62):
+    basalt = MATS["CottageBasalt"]
+    hedge = MATS["CottageHedge"]
+    gravel = MATS["CottageGravel"]
+    box("cottage_planter", cx, cy, 0.34, width, depth, 0.48, basalt, bevel=0.015)
+    box("cottage_planter_soil", cx, cy, 0.60, width - 0.18, depth - 0.18, 0.055, gravel)
+    box("cottage_planter_hedge", cx, cy, 0.66 + hedge_height / 2.0, width - 0.30, depth - 0.30, hedge_height, hedge, bevel=0.10)
+
+
+def _build_cottage_site(gate_x, pedestrian_x, entrance_x, entrance_y, garage_x, pool_center, pool_size):
+    paving = MATS["CottagePaving"]
+    gravel = MATS["CottageGravel"]
+    lawn = MATS["CottageLawn"]
+    basalt = MATS["CottageBasalt"]
+    teak = MATS["CottageTeak"]
+    stone = MATS["CottageTravertine"]
+    bronze = MATS["CottageBronze"]
+
+    # A mineral ground plane makes the asset readable as one estate in
+    # Blender and prevents terrain poking through the private garden.
+    # Three slabs approximate the chamfered lot instead of leaving
+    # paved rectangular corners outside the diagonal boundary walls.
+    box("cottage_site_base", 0.0, 0.0, 0.055, 35.2, 19.0, 0.11, gravel)
+    box("cottage_site_base_front", 0.0, -11.3, 0.055, 28.2, 3.7, 0.11, gravel)
+    box("cottage_site_base_rear", 0.0, 11.3, 0.055, 28.2, 3.7, 0.11, gravel)
+    # Desert-modern landscaping is mostly mineral ground with framed
+    # lawn rooms, not one continuous bright-green carpet.
+    for lawn_x, lawn_y, lawn_w, lawn_d in (
+        (-13.9, 3.8, 5.6, 14.6),
+        (13.9, 3.8, 5.6, 14.6),
+        (-12.4, -9.2, 6.8, 5.2),
+        (12.4, -9.2, 6.8, 5.2),
+        (-5.9, -9.4, 4.6, 4.6),
+        (5.9, -9.4, 4.6, 4.6),
+    ):
+        box("cottage_site_lawn", lawn_x, lawn_y, 0.125, lawn_w, lawn_d, 0.055, lawn)
+        box("cottage_lawn_edging", lawn_x, lawn_y - lawn_d / 2.0, 0.145, lawn_w + 0.08, 0.07, 0.055, basalt)
+        box("cottage_lawn_edging", lawn_x, lawn_y + lawn_d / 2.0, 0.145, lawn_w + 0.08, 0.07, 0.055, basalt)
+        box("cottage_lawn_edging", lawn_x - lawn_w / 2.0, lawn_y, 0.145, 0.07, lawn_d + 0.08, 0.055, basalt)
+        box("cottage_lawn_edging", lawn_x + lawn_w / 2.0, lawn_y, 0.145, 0.07, lawn_d + 0.08, 0.055, basalt)
+
+    # Drive and turning court.  Dark expansion joints are real thin
+    # geometry, so the court does not depend only on texture repetition.
+    box("cottage_drive", gate_x, -8.65, 0.155, 5.6, 9.1, 0.075, paving)
+    court_width = abs(garage_x - gate_x) + 8.4
+    box("cottage_turning_court", (gate_x + garage_x) / 2.0, -5.15, 0.155, court_width, 4.3, 0.075, paving)
+    for index in range(6):
+        box("cottage_drive_joint", gate_x, -12.35 + index * 1.55, 0.198, 5.62, 0.055, 0.018, basalt)
+    box("cottage_drive_centre_joint", gate_x, -8.65, 0.198, 0.055, 9.1, 0.018, basalt)
+    box("cottage_gate_drain", gate_x, -12.78, 0.19, 5.35, 0.24, 0.035, basalt)
+    for index in range(9):
+        box("cottage_gate_drain_slot", gate_x - 2.35 + index * 0.59, -12.78, 0.212, 0.28, 0.045, 0.012, bronze)
+
+    # Pedestrian route: gate -> entrance, with an L-turn only where the
+    # architectural axis requires it.
+    path_mid_y = (entrance_y + -13.0) / 2.0
+    path_length = abs(entrance_y - -13.0)
+    box("cottage_pedestrian_path", pedestrian_x, path_mid_y, 0.16, 1.55, path_length, 0.07, stone)
+    if abs(entrance_x - pedestrian_x) > 0.25:
+        box("cottage_pedestrian_path_turn", (pedestrian_x + entrance_x) / 2.0, entrance_y - 0.72, 0.16, abs(entrance_x - pedestrian_x) + 1.55, 1.45, 0.07, stone)
+
+    # Front wall with true vehicle/pedestrian openings.  The gates are
+    # closed exterior assemblies; no attempt is made to model beyond
+    # the slats.
+    gaps = sorted(((gate_x - 2.75, gate_x + 2.75), (pedestrian_x - 0.68, pedestrian_x + 0.68)))
+    cursor = -14.0
+    for gap_start, gap_end in gaps:
+        if gap_start - cursor > 0.25:
+            _cottage_wall_run((cursor + gap_start) / 2.0, -13.20, gap_start - cursor)
+        cursor = max(cursor, gap_end)
+    if 14.0 - cursor > 0.25:
+        _cottage_wall_run((cursor + 14.0) / 2.0, -13.20, 14.0 - cursor)
+    for px in (-13.6, -9.6, -5.6, 3.8, 7.8, 11.8, 13.6):
+        if not any(start - 0.45 <= px <= end + 0.45 for start, end in gaps):
+            _cottage_wall_pilaster(px, -13.20)
+    for px in (gate_x - 3.12, gate_x + 3.12, pedestrian_x - 1.02, pedestrian_x + 1.02):
+        _cottage_wall_pilaster(px, -13.20)
+    _cottage_gate(gate_x, 5.35, pedestrian=False)
+    _cottage_gate(pedestrian_x, 1.28, pedestrian=True)
+    box("cottage_address_plaque", pedestrian_x + 1.45, -13.49, 1.48, 0.52, 0.035, 0.34, bronze)
+    box("cottage_intercom", gate_x - 3.48, -13.43, 1.18, 0.20, 0.09, 0.34, basalt)
+    box("cottage_intercom_light", gate_x - 3.48, -13.49, 1.25, 0.045, 0.020, 0.045, MATS["CottageLight"])
+
+    # Chamfered corners suit Sail Island's curved shore and loop road.
+    for sx in (-1.0, 1.0):
+        _cottage_wall_run(sx * 15.85, -11.35, 5.25, math.radians(45.0 if sx > 0 else -45.0))
+        _cottage_wall_run(sx * 15.85, 11.35, 5.25, math.radians(-45.0 if sx > 0 else 45.0))
+        # Side wall uses a rotated run so its stacked courses follow Y.
+        rbox("cottage_wall_base_side", sx * 17.70, 0.0, 0.27, 19.0, 0.34, 0.54, basalt, rotation=(0.0, 0.0, math.radians(90.0)))
+        rbox("cottage_wall_panel_side", sx * 17.70, 0.0, 1.25, 19.0, 0.26, 1.42, MATS["CottageSand"], rotation=(0.0, 0.0, math.radians(90.0)))
+        rbox("cottage_wall_cap_side", sx * 17.70, 0.0, 2.05, 19.04, 0.40, 0.18, basalt, rotation=(0.0, 0.0, math.radians(90.0)))
+        for py in (-7.5, -2.5, 2.5, 7.5):
+            _cottage_wall_pilaster(sx * 17.70, py, side=True)
+    _cottage_wall_run(0.0, 13.20, 28.0)
+    for px in (-12.0, -6.0, 0.0, 6.0, 12.0):
+        # Rear pilasters reuse the front detail but their small light
+        # remains on the garden side of the wall.
+        _cottage_wall_pilaster(px, 13.20)
+
+    # Landscape structure: clipped hedges, planters and sculptural
+    # boulders.  Palms remain separate high-detail vegetation models.
+    _cottage_planter(-15.6, -6.0, 2.6, 6.4, 0.72)
+    _cottage_planter(15.6, -6.0, 2.6, 6.4, 0.72)
+    _cottage_planter(-15.6, 7.5, 2.6, 5.2, 0.58)
+    _cottage_planter(15.6, 7.5, 2.6, 5.2, 0.58)
+    for bx, by, scale in ((-13.8, -10.6, 1.15), (13.8, -10.8, 0.92), (-14.4, 11.2, 0.82)):
+        sphere("cottage_garden_boulder", bx, by, 0.38, 1.15 * scale, 0.82 * scale, 0.58 * scale, basalt)
+    for lx in (-6.0, 6.0):
+        box("cottage_path_bollard", pedestrian_x + lx * 0.18, -10.7, 0.42, 0.13, 0.13, 0.62, basalt)
+        box("cottage_path_bollard_light", pedestrian_x + lx * 0.18, -10.7, 0.75, 0.095, 0.095, 0.055, MATS["CottageLight"])
+
+    # Rear leisure terrace: teak deck boards, pool and a shaded cabana.
+    pool_x, pool_y = pool_center
+    pool_w, pool_d = pool_size
+    deck_w = min(pool_w + (1.4 if pool_w < 5.0 else 3.2), 21.0)
+    deck_d = min(pool_d + 2.6, 12.2)
+    deck_x = pool_x
+    box("cottage_pool_deck", deck_x, pool_y, 0.17, deck_w, deck_d, 0.09, teak)
+    board_count = max(4, int(deck_w / 0.62))
+    for index in range(1, board_count):
+        x = deck_x - deck_w / 2.0 + index * deck_w / board_count
+        box("cottage_pool_deck_joint", x, pool_y, 0.222, 0.028, deck_d - 0.08, 0.012, basalt)
+    _cottage_pool(pool_x, pool_y, pool_w, pool_d)
+    if pool_w >= 5.0:
+        _cottage_pergola(deck_x + deck_w / 2.0 - 2.35, pool_y, 4.3, min(deck_d - 0.5, 4.8), 2.75, 0.22)
+        box("cottage_outdoor_kitchen", deck_x - deck_w / 2.0 + 1.45, pool_y, 0.58, 2.25, 0.72, 0.78, basalt, bevel=0.015)
+        box("cottage_outdoor_kitchen_top", deck_x - deck_w / 2.0 + 1.45, pool_y, 1.01, 2.38, 0.82, 0.09, stone)
+        box("cottage_outdoor_grill", deck_x - deck_w / 2.0 + 1.45, pool_y, 1.09, 0.92, 0.52, 0.07, bronze)
+    else:
+        # Courtyard No.11 has a narrow side lap pool.  Its cabana sits
+        # at the shallow southern end instead of over the water, and
+        # the outdoor kitchen is omitted from the 3 m side garden.
+        _cottage_pergola(pool_x, pool_y - pool_d / 2.0 - 0.15, 3.7, 3.4, 2.65, 0.22)
+        box("cottage_lap_pool_bench", pool_x - pool_w / 2.0 - 0.55, pool_y + 1.8, 0.48, 0.55, 2.4, 0.52, stone, bevel=0.015)
+
+
+def _cottage_facade_seams(cx, cy, base_z, width, height, face):
+    """Fine panel shadow gaps over a solid exterior wall volume."""
+    basalt = MATS["CottageBasalt"]
+    sign = -1.0 if face in ("front", "left") else 1.0
+    verticals = max(2, int(width / 3.1))
+    horizontals = max(1, int(height / 3.4))
+    centre_z = base_z + height / 2.0
+    if face in ("front", "back"):
+        for index in range(1, verticals):
+            x = cx - width / 2.0 + width * index / verticals
+            box("cottage_facade_seam_v", x, cy + sign * 0.012, centre_z, 0.045, 0.024, height - 0.18, basalt)
+        for index in range(1, horizontals + 1):
+            z = base_z + height * index / (horizontals + 1)
+            box("cottage_facade_seam_h", cx, cy + sign * 0.012, z, width - 0.18, 0.024, 0.045, basalt)
+    else:
+        for index in range(1, verticals):
+            y = cy - width / 2.0 + width * index / verticals
+            box("cottage_facade_seam_v", cx + sign * 0.012, y, centre_z, 0.024, 0.045, height - 0.18, basalt)
+        for index in range(1, horizontals + 1):
+            z = base_z + height * index / (horizontals + 1)
+            box("cottage_facade_seam_h", cx + sign * 0.012, cy, z, 0.024, width - 0.18, 0.045, basalt)
+
+
+def _cottage_downspouts(points, top_z):
+    bronze = MATS["CottageBronze"]
+    for x, y in points:
+        cyl("cottage_downspout", x, y, top_z / 2.0 + 0.15, 0.045, top_z - 0.25, bronze, vertices=8)
+        cyl("cottage_downspout_shoe", x, y, 0.22, 0.065, 0.22, MATS["CottageBasalt"], vertices=8)
+
+
+def build_cottage_dune():
+    """No.10: horizontal dune pavilion with a flying roof and stone blade."""
+    sand = MATS["CottageSand"]
+    stone = MATS["CottageTravertine"]
+    limestone = MATS["CottageLimestone"]
+    basalt = MATS["CottageBasalt"]
+    teak = MATS["CottageTeak"]
+    _build_cottage_site(-8.5, -2.0, -1.6, -4.8, -10.2, (2.5, 10.35), (12.5, 3.7))
+
+    box("dune_plinth", 0.8, 1.15, 0.24, 27.0, 15.4, 0.30, basalt, bevel=0.025)
+    box("dune_main_volume", 3.8, 1.8, 3.95, 16.8, 10.6, 7.30, sand, bevel=0.04)
+    box("dune_east_stone_volume", 10.45, 1.1, 3.55, 4.3, 9.5, 6.50, stone, bevel=0.035)
+    box("dune_stone_blade", -4.9, 0.55, 4.30, 2.35, 12.1, 8.05, stone, bevel=0.03)
+    box("dune_garage_volume", -10.6, -1.15, 2.02, 8.1, 7.1, 3.48, limestone, bevel=0.035)
+    box("dune_entry_link", -2.2, -2.65, 1.92, 5.2, 4.35, 3.28, sand, bevel=0.03)
+    box("dune_floor_band", 3.8, 1.8, 3.82, 17.02, 10.82, 0.18, basalt)
+    box("dune_blade_cap", -4.9, 0.55, 8.39, 2.58, 12.35, 0.14, basalt)
+    _cottage_flat_roof(3.8, 1.8, 7.60, 16.8, 10.6, None, solar=True)
+    _cottage_flat_roof(-10.6, -1.15, 3.76, 8.1, 7.1, limestone, solar=False)
+    box("dune_link_roof", -2.2, -2.65, 3.66, 5.65, 4.80, 0.20, MATS["CottageBronze"], bevel=0.015)
+    # A perimeter bronze frame enlarges the main roof shadow without
+    # burying its solar/HVAC layer under a second full slab.
+    for edge_y in (-4.18, 7.78):
+        box("dune_flying_roof_edge", 3.8, edge_y, 8.03, 19.4, 0.48, 0.18, MATS["CottageBronze"])
+    for edge_x in (-5.72, 13.32):
+        box("dune_flying_roof_edge", edge_x, 1.8, 8.03, 0.48, 12.4, 0.18, MATS["CottageBronze"])
+    _cottage_facade_seams(3.8, -3.50, 0.35, 16.6, 7.15, "front")
+    _cottage_facade_seams(3.8, 7.10, 0.35, 16.6, 7.15, "back")
+    _cottage_facade_seams(-4.62, 1.8, 0.35, 10.4, 7.15, "left")
+    _cottage_facade_seams(12.62, 1.1, 0.35, 9.3, 6.35, "right")
+    _cottage_louver(-4.9, -5.51, 5.70, 1.55, 2.55, "front", teak)
+    _cottage_window(-4.9, -5.51, 1.95, 1.35, 2.45, "front", 0.0)
+
+    # Front: deep shaded glass below, a teak-screened sleeping floor
+    # above and the stone blade acting as a solar fin between them.
+    _cottage_window(-0.8, -3.50, 1.82, 3.1, 2.65, "front", 0.18)
+    _cottage_window(3.8, -3.50, 1.82, 3.4, 2.65, "front", 0.0)
+    _cottage_window(8.7, -3.65, 1.82, 3.0, 2.65, "front", 0.34)
+    _cottage_window(-0.8, -3.50, 5.72, 2.7, 2.25, "front", 0.42)
+    _cottage_louver(4.3, -3.50, 5.72, 5.4, 2.35, "front", teak)
+    _cottage_window(9.3, -3.65, 5.72, 2.5, 2.25, "front", 0.0)
+    _cottage_balcony(4.0, -3.50, 4.08, 5.8, "front")
+    _cottage_door(-1.6, -4.83, "front")
+    _cottage_garage_door(-10.2, -4.70, 4.9, "front")
+    _cottage_window(-13.7, -4.70, 2.05, 1.35, 1.65, "front", 0.25)
+
+    # Rear and flanks are fully composed for cars passing either way.
+    _cottage_window(-0.6, 7.10, 1.90, 3.4, 2.70, "back", 0.0)
+    _cottage_window(4.2, 7.10, 1.90, 3.8, 2.70, "back", 0.22)
+    _cottage_window(8.9, 5.85, 1.90, 2.8, 2.70, "back", 0.0)
+    _cottage_window(0.4, 7.10, 5.72, 3.0, 2.25, "back", 0.38)
+    _cottage_window(6.4, 7.10, 5.72, 3.4, 2.25, "back", 0.0)
+    _cottage_balcony(4.4, 7.10, 4.08, 6.4, "back")
+    _cottage_window(-4.62, -1.8, 5.65, 2.4, 2.0, "left", 0.0)
+    _cottage_window(-4.62, 3.4, 2.05, 2.8, 2.3, "left", 0.30)
+    _cottage_window(12.62, -1.2, 2.05, 3.0, 2.45, "right", 0.18)
+    _cottage_window(12.62, 3.2, 5.55, 3.2, 2.1, "right", 0.0)
+    _cottage_pergola(3.8, 8.35, 9.5, 2.1, 2.85, 0.30)
+    _cottage_downspouts(((12.35, -3.75), (12.35, 6.0), (-6.25, 6.75)), 7.55)
+
+
+def build_cottage_courtyard():
+    """No.11: U-shaped mashrabiya courtyard house with a barjeel tower."""
+    sand = MATS["CottageSand"]
+    stone = MATS["CottageTravertine"]
+    limestone = MATS["CottageLimestone"]
+    basalt = MATS["CottageBasalt"]
+    _build_cottage_site(5.8, 0.0, 0.0, -4.35, 10.0, (15.05, 6.8), (3.15, 9.6))
+
+    box("courtyard_plinth", 0.0, 1.9, 0.24, 27.5, 16.8, 0.30, basalt, bevel=0.025)
+    box("courtyard_west_wing", -9.7, 2.0, 3.42, 6.7, 13.0, 6.28, sand, bevel=0.04)
+    box("courtyard_east_wing", 9.7, 2.0, 3.42, 6.7, 13.0, 6.28, sand, bevel=0.04)
+    box("courtyard_rear_wing", 0.0, 7.15, 3.88, 14.8, 6.1, 7.20, limestone, bevel=0.04)
+    box("courtyard_front_screen_west", -4.15, -4.28, 3.22, 4.0, 0.72, 5.88, stone, bevel=0.025)
+    box("courtyard_front_screen_east", 4.15, -4.28, 3.22, 4.0, 0.72, 5.88, stone, bevel=0.025)
+    box("courtyard_portal_beam", 0.0, -4.28, 5.94, 4.55, 0.78, 0.58, basalt)
+    for sx in (-2.10, 2.10):
+        box("courtyard_portal_column", sx, -4.28, 2.92, 0.52, 0.62, 5.28, stone, bevel=0.02)
+        box("courtyard_portal_light", sx, -4.65, 2.92, 0.075, 0.030, 2.25, MATS["CottageLight"])
+    _cottage_mashrabiya(-4.15, -4.65, 3.35, 3.15, 4.65, "front")
+    _cottage_mashrabiya(4.15, -4.65, 3.35, 3.15, 4.65, "front")
+    _cottage_door(0.0, 4.08, "front")
+    _cottage_flat_roof(-9.7, 2.0, 6.56, 6.7, 13.0, sand, solar=False)
+    _cottage_flat_roof(9.7, 2.0, 6.56, 6.7, 13.0, sand, solar=True)
+    _cottage_flat_roof(0.0, 7.15, 7.48, 14.8, 6.1, limestone, solar=False)
+
+    # Modern cubic wind tower: screened crown, stepped cap and a narrow
+    # light slot rather than a historical replica ornament.
+    box("courtyard_barjeel", -7.9, 7.3, 5.55, 3.15, 3.15, 10.55, stone, bevel=0.035)
+    box("courtyard_barjeel_band", -7.9, 7.3, 7.72, 3.34, 3.34, 0.20, basalt)
+    _cottage_mashrabiya(-7.9, 5.71, 9.35, 2.15, 2.05, "front")
+    _cottage_mashrabiya(-7.9, 8.89, 9.35, 2.15, 2.05, "back")
+    _cottage_mashrabiya(-9.49, 7.3, 9.35, 2.15, 2.05, "left")
+    _cottage_mashrabiya(-6.31, 7.3, 9.35, 2.15, 2.05, "right")
+    box("courtyard_barjeel_cap_slab", -7.9, 7.3, 10.93, 3.52, 3.52, 0.18, MATS["CottageBronze"])
+    box("courtyard_barjeel_cap_step", -7.9, 7.3, 11.17, 2.55, 2.55, 0.30, basalt)
+    box("courtyard_barjeel_cap_finial", -7.9, 7.3, 11.48, 0.72, 0.72, 0.32, MATS["CottageBronze"])
+    box("courtyard_barjeel_light", -7.9, 5.69, 3.65, 0.075, 0.030, 5.1, MATS["CottageLight"])
+    _cottage_facade_seams(-9.7, -4.52, 0.35, 6.5, 6.1, "front")
+    _cottage_facade_seams(9.7, -4.52, 0.35, 6.5, 6.1, "front")
+    _cottage_facade_seams(-13.07, 2.0, 0.35, 12.8, 6.1, "left")
+    _cottage_facade_seams(13.07, 2.0, 0.35, 12.8, 6.1, "right")
+    _cottage_facade_seams(0.0, 10.22, 0.35, 14.6, 7.0, "back")
+    _cottage_mashrabiya(-13.07, -2.4, 5.05, 2.6, 1.75, "left")
+    _cottage_mashrabiya(13.07, -2.4, 5.05, 2.6, 1.75, "right")
+
+    # Exterior courtyard room: fountain, paving medallion and pergola.
+    cyl("courtyard_paving_medallion", 0.0, 1.35, 0.42, 3.05, 0.10, stone, vertices=28)
+    cyl("courtyard_fountain_basin", 0.0, 1.35, 0.62, 1.52, 0.48, basalt, vertices=20)
+    cyl("courtyard_fountain_water", 0.0, 1.35, 0.86, 1.32, 0.055, MATS["CottageWater"], vertices=20)
+    cyl("courtyard_fountain_column", 0.0, 1.35, 1.13, 0.17, 0.62, MATS["CottageBronze"], vertices=12)
+    sphere("courtyard_fountain_sphere", 0.0, 1.35, 1.55, 0.52, 0.52, 0.52, stone)
+    _cottage_pergola(0.0, -1.15, 8.6, 3.2, 3.05, 0.34)
+    _cottage_planter(-5.15, 3.6, 1.15, 4.4, 0.52)
+    _cottage_planter(5.15, 3.6, 1.15, 4.4, 0.52)
+
+    _cottage_window(-9.7, -4.52, 2.05, 3.1, 2.5, "front", 0.22)
+    _cottage_window(-9.7, -4.52, 5.20, 2.6, 1.9, "front", 0.0)
+    _cottage_garage_door(10.0, -4.52, 4.7, "front")
+    _cottage_window(9.7, -4.52, 5.20, 2.6, 1.9, "front", 0.36)
+    _cottage_window(-6.33, -1.2, 2.15, 3.0, 2.55, "right", 0.0)
+    _cottage_window(-6.33, 2.8, 5.20, 2.7, 1.9, "right", 0.28)
+    _cottage_window(6.33, -1.2, 2.15, 3.0, 2.55, "left", 0.20)
+    _cottage_window(6.33, 2.8, 5.20, 2.7, 1.9, "left", 0.0)
+    _cottage_window(-13.07, 0.6, 2.15, 3.4, 2.5, "left", 0.18)
+    _cottage_window(-13.07, 5.0, 5.20, 2.8, 1.9, "left", 0.0)
+    _cottage_window(13.07, 0.6, 2.15, 3.4, 2.5, "right", 0.0)
+    _cottage_window(13.07, 5.0, 5.20, 2.8, 1.9, "right", 0.34)
+    _cottage_window(-4.2, 10.22, 2.10, 3.2, 2.55, "back", 0.24)
+    _cottage_window(0.4, 10.22, 2.10, 3.4, 2.55, "back", 0.0)
+    _cottage_window(4.8, 10.22, 5.65, 3.2, 2.05, "back", 0.40)
+    _cottage_downspouts(((-13.2, -4.3), (13.2, -4.3), (-7.6, 10.35), (7.6, 10.35)), 6.55)
+
+
+def build_cottage_palm():
+    """No.12: two metal-roofed resort pavilions around a shaded veranda."""
+    sand = MATS["CottageSand"]
+    limestone = MATS["CottageLimestone"]
+    basalt = MATS["CottageBasalt"]
+    bronze = MATS["CottageBronze"]
+    roof_metal = MATS["CottageRoofMetal"]
+    teak = MATS["CottageTeak"]
+    _build_cottage_site(8.0, 1.0, 1.0, -4.05, 9.1, (-1.5, 10.25), (15.5, 3.9))
+
+    box("palm_plinth", 0.9, 1.0, 0.24, 28.5, 15.8, 0.30, basalt, bevel=0.025)
+    box("palm_west_pavilion", -6.4, 1.0, 3.00, 13.0, 10.0, 5.42, sand, bevel=0.04)
+    box("palm_east_pavilion", 8.6, 0.55, 2.78, 9.2, 8.6, 4.98, limestone, bevel=0.04)
+    box("palm_glass_link", 1.0, -1.05, 2.00, 5.0, 5.9, 3.42, MATS["CottageCore"], bevel=0.025)
+    box("palm_chimney_blade", -13.35, 2.2, 4.45, 1.55, 4.7, 8.35, basalt, bevel=0.025)
+    box("palm_chimney_cap", -13.35, 2.2, 8.72, 1.82, 4.95, 0.18, bronze)
+
+    gable_roof("palm_west_roof", -6.4, 1.0, 6.82, 14.3, 11.7, 2.25, roof_metal, ridge_axis="x")
+    box("palm_west_ridge", -6.4, 1.0, 7.99, 14.42, 0.28, 0.12, bronze)
+    gable_roof("palm_east_roof", 8.6, 0.55, 6.28, 10.4, 10.1, 2.02, roof_metal, ridge_axis="x")
+    box("palm_east_ridge", 8.6, 0.55, 7.34, 10.52, 0.28, 0.12, bronze)
+    box("palm_link_roof", 1.0, -1.05, 3.83, 5.55, 6.45, 0.22, bronze, bevel=0.015)
+    for roof_x, roof_y, roof_z, slope in ((-8.8, -1.55, 6.99, -1.0), (-3.9, 3.55, 6.99, 1.0), (8.6, -1.75, 6.43, -1.0)):
+        rbox("palm_skylight", roof_x, roof_y, roof_z, 1.65, 1.10, 0.10, MATS["CottageGlass"], rotation=(math.radians(21.0 * slope), 0.0, 0.0))
+        rbox("palm_skylight_frame", roof_x, roof_y, roof_z - 0.035, 1.82, 1.26, 0.055, bronze, rotation=(math.radians(21.0 * slope), 0.0, 0.0))
+    # Exposed rafter tails and continuous gutters make the low roofs
+    # read as construction rather than two coloured prisms.
+    for x in range(-13, 1):
+        box("palm_rafter_tail", float(x) + 0.2, -4.62, 5.63, 0.11, 0.72, 0.13, teak)
+        box("palm_rafter_tail", float(x) + 0.2, 6.62, 5.63, 0.11, 0.72, 0.13, teak)
+    for y in (-4.98, 6.98):
+        cyl("palm_gutter", -6.4, y, 5.72, 0.075, 14.1, bronze, vertices=8, rotation=(0.0, math.radians(90.0), 0.0))
+
+    # Deep front and rear verandas with slim columns and teak soffit slats.
+    for vy, face in ((-5.95, "front"), (7.25, "back")):
+        box("palm_veranda_floor", -3.0, vy + (0.95 if face == "front" else -0.95), 0.34, 18.5, 2.25, 0.16, teak)
+        box("palm_veranda_roof", -3.0, vy, 3.42, 18.8, 2.55, 0.16, bronze, bevel=0.015)
+        for vx in (-11.8, -7.4, -3.0, 1.4, 5.8):
+            cyl("palm_veranda_column", vx, vy, 1.86, 0.075, 3.05, bronze, vertices=10)
+        for index in range(24):
+            box("palm_veranda_soffit_slat", -12.0 + index * 0.78, vy, 3.30, 0.10, 2.38, 0.035, teak)
+
+    _cottage_facade_seams(-6.4, -4.02, 0.35, 12.8, 5.25, "front")
+    _cottage_facade_seams(-6.4, 6.02, 0.35, 12.8, 5.25, "back")
+    _cottage_facade_seams(8.6, -3.77, 0.35, 9.0, 4.8, "front")
+    _cottage_facade_seams(8.6, 4.87, 0.35, 9.0, 4.8, "back")
+    _cottage_facade_seams(-12.92, 1.0, 0.35, 9.8, 5.25, "left")
+    _cottage_facade_seams(13.22, 0.55, 0.35, 8.4, 4.8, "right")
+    _cottage_window(-9.8, -4.02, 2.05, 3.3, 2.65, "front", 0.0)
+    _cottage_window(-4.7, -4.02, 2.05, 3.4, 2.65, "front", 0.26)
+    _cottage_window(-7.2, -4.02, 4.72, 4.8, 1.35, "front", 0.42)
+    _cottage_door(1.0, -4.02, "front")
+    _cottage_window(5.9, -3.77, 2.00, 2.25, 2.45, "front", 0.20)
+    _cottage_garage_door(9.1, -3.77, 4.65, "front")
+    _cottage_window(-9.4, 6.02, 2.05, 3.5, 2.65, "back", 0.22)
+    _cottage_window(-4.2, 6.02, 2.05, 3.7, 2.65, "back", 0.0)
+    _cottage_window(1.0, 1.92, 2.02, 3.7, 2.72, "back", 0.34)
+    _cottage_window(8.6, 4.87, 2.00, 4.4, 2.45, "back", 0.0)
+    _cottage_window(-12.92, -1.4, 2.25, 3.2, 2.55, "left", 0.18)
+    _cottage_window(-12.92, 3.8, 4.55, 2.6, 1.45, "left", 0.0)
+    _cottage_window(13.22, 0.4, 2.15, 3.4, 2.45, "right", 0.28)
+    _cottage_window(13.22, 3.6, 4.35, 2.4, 1.35, "right", 0.0)
+
+    # Outdoor fireplace is a black firebox in the basalt blade, with a
+    # bronze lintel and stacked-log niche visible from the pool terrace.
+    box("palm_fireplace_opening", -13.35, 4.61, 1.32, 1.05, 0.07, 1.28, MATS["CottageCore"])
+    box("palm_fireplace_lintel", -13.35, 4.66, 2.06, 1.28, 0.09, 0.16, bronze)
+    box("palm_fireplace_glow", -13.35, 4.67, 0.82, 0.62, 0.025, 0.16, MATS["CottageLight"])
+    for log_index in range(4):
+        cyl("palm_firewood", -12.35, 4.62, 0.55 + log_index * 0.16, 0.065, 0.78, teak, vertices=8, rotation=(0.0, math.radians(90.0), 0.0))
+    _cottage_downspouts(((-13.2, -5.05), (0.35, -5.05), (-13.2, 7.05), (13.0, 5.05)), 5.65)
 
 
 main()
