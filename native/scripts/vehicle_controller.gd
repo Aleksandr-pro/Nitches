@@ -90,6 +90,8 @@ var _last_safe_transform := Transform3D.IDENTITY
 var _safe_transform_timer := 0.0
 var _steering_visual_angle := 0.0
 var _steering_command := 0.0
+var _touch_steering_value := 0.0
+var _touch_steering_engaged := false
 var _steering_speed_smooth := 0.0
 var _steering_limit_smooth := NativeArcadeCarAssist.MAX_STEER_RAD
 var _visual_forward_speed := 0.0
@@ -162,6 +164,7 @@ func _ensure_input_actions() -> void:
 	_ensure_action(&"reset_car", [KEY_R])
 	_ensure_action(&"camera_toggle", [KEY_C])
 	_ensure_action(&"time_toggle", [KEY_T])
+	_ensure_action(&"map_toggle", [KEY_M, KEY_TAB])
 
 
 func _ensure_action(action_name: StringName, keys: Array) -> void:
@@ -679,6 +682,17 @@ func set_touch_input(action_name: String, pressed: bool) -> void:
 	_touch_inputs[action_name] = pressed
 
 
+## 0.2.32: direct analog value from the on-screen steering wheel.
+## While engaged it is the highest-priority steering source; the
+## wheel keeps emitting during its spring return so the rack follows
+## the visible rim all the way back to centre.
+func set_touch_steering(value: float, engaged: bool) -> void:
+	_touch_steering_value = clampf(value, -1.0, 1.0)
+	_touch_steering_engaged = engaged
+	if engaged:
+		_steering_command = _touch_steering_value
+
+
 func _touch_pressed(action_name: String) -> bool:
 	return bool(_touch_inputs.get(action_name, false))
 
@@ -704,7 +718,10 @@ func _read_inputs(delta: float) -> void:
 		var axis_value := Input.get_joy_axis(device, JOY_AXIS_LEFT_X)
 		if absf(axis_value) > absf(analog_steering):
 			analog_steering = axis_value
-	if absf(analog_steering) > 0.08:
+	if _touch_steering_engaged:
+		steering_input = NativeArcadeCarAssist.shape_steering_input(_touch_steering_value)
+		_steering_command = _touch_steering_value
+	elif absf(analog_steering) > 0.08:
 		steering_input = NativeArcadeCarAssist.shape_steering_input(analog_steering)
 		_steering_command = clampf(analog_steering, -1.0, 1.0)
 	else:
@@ -1312,6 +1329,8 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	steering_input = 0.0
 	steering_angle = 0.0
 	_steering_command = 0.0
+	_touch_steering_value = 0.0
+	_touch_steering_engaged = false
 	_steering_speed_smooth = 0.0
 	_steering_limit_smooth = NativeArcadeCarAssist.MAX_STEER_RAD
 	_steering_visual_angle = 0.0
@@ -1455,6 +1474,9 @@ func get_smoothing_state() -> Dictionary:
 		"filtered_suspension_velocity": true,
 		"precision_steering_0231": true,
 		"steering_command": _steering_command,
+		"touch_steering_wheel_0232": true,
+		"touch_steering_value": _touch_steering_value,
+		"touch_steering_engaged": _touch_steering_engaged,
 		"steering_limit_smooth": _steering_limit_smooth,
 		"throttle_command": _throttle_command,
 		"effective_throttle": throttle_input,

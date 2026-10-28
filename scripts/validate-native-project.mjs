@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -38,6 +38,8 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readFile('blender/build_props.py', 'utf8'),
   readFile('.github/workflows/native-godot-desktop.yml', 'utf8'),
   readText('scripts/main_menu.gd'),
+  readText('scripts/steering_wheel.gd'),
+  readText('scripts/world_map.gd'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -50,8 +52,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=34'), 'Native 0.2.31 must bump Android versionCode to 34');
-assert(preset.includes('version/name="0.2.31-native-alpha"'), 'Native version name must be 0.2.31-native-alpha');
+assert(preset.includes('version/code=35'), 'Native 0.2.32 must bump Android versionCode to 35');
+assert(preset.includes('version/name="0.2.32-native-alpha"'), 'Native version name must be 0.2.32-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -72,7 +74,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}`;
 for (const marker of ['DesktopControlsHint', 'is_touchscreen_available', 'KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -140,6 +142,10 @@ assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/b
 for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
 }
+for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.32 steering-wheel/world-map marker is missing: ${marker}`);
+}
+assert(!hudScript.includes('"steer_left"') && !hudScript.includes('"steer_right"'), 'Native 0.2.32 HUD must replace binary steering buttons with the steering wheel');
 for (const marker of ['get_global_transform_interpolated', 'PHYSICS_INTERPOLATION_MODE_OFF', 'reset_physics_interpolation', 'responsive_steering', 'ramp_digital_steering', 'shape_steering_input', 'CONTACT_PATCH_SAMPLES', 'TYRE_RELAXATION_LENGTH_M', 'free_orbit_0231', 'InputEventScreenDrag', 'InputEventMouseMotion', 'JOY_AXIS_RIGHT_X']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.31 anti-jitter/steering/free-camera marker is missing: ${marker}`);
 }
@@ -160,7 +166,7 @@ assert(!worldScript.includes('Basis(Vector3.UP, yaw).scaled('), 'Native 0.2.27 m
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
