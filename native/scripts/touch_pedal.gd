@@ -168,11 +168,11 @@ func _draw() -> void:
         return
     var inset := 3.0 if is_held() else 0.0
     var rect := Rect2(Vector2(inset, inset), size - Vector2(inset * 2.0, inset * 2.0))
-    draw_stylebox(_pressed_background_style if is_held() else _background_style, rect)
+    draw_style_box(_pressed_background_style if is_held() else _background_style, rect)
     if _value > 0.001:
         var fill_height := maxf((rect.size.y - 6.0) * _value, 3.0)
         var fill_rect := Rect2(rect.position + Vector2(3.0, rect.size.y - 3.0 - fill_height), Vector2(rect.size.x - 6.0, fill_height))
-        draw_stylebox(_fill_style, fill_rect)
+        draw_style_box(_fill_style, fill_rect)
     var line_color := Color(1.0, 1.0, 1.0, 0.20 if not is_held() else 0.34)
     for i in 3:
         var y := rect.position.y + 18.0 + float(i) * 12.0
