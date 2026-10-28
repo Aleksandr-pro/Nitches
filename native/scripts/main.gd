@@ -52,6 +52,10 @@ var _session_top_speed_kmh := 0.0
 var _session_drift_deg := 0.0
 var _session_seconds := 0.0
 var _credit_distance_bank_m := 0.0
+var _selected_car_id := NativeCarCatalog.DEFAULT_CAR_ID
+var _car_customizations: Dictionary = {}
+var _car_stats: Dictionary = {}
+var _current_car_marketing_shot := 0
 var _profile: Dictionary = {}
 var _profile_save_timer := 0.0
 var _camera: Camera3D
@@ -100,9 +104,12 @@ func _ready() -> void:
 		push_error("Native world failed to build: %s" % _world.build_error)
 
 	_vehicle = VehicleScript.new() as NativeVehicle
+	_selected_car_id = _load_saved_selected_car_id()
+	_vehicle.configure_car(_selected_car_id)
 	add_child(_vehicle)
 	_vehicle.set_world(_world)
 	_vehicle.reset_requested.connect(_on_vehicle_reset_requested)
+	_vehicle.car_changed.connect(_on_vehicle_car_changed)
 	_vehicle.reset_to_transform(_world.spawn_transform)
 	_vehicle.global_transform = _world.spawn_transform
 
@@ -141,6 +148,7 @@ func _ready() -> void:
 	_menu.bind_specs(_vehicle.get_spec_sheet())
 	_menu.refresh_profile(_profile_view())
 	_menu.bind_customization(_customization_view())
+	_menu.bind_car_catalog(_car_catalog_view())
 	_menu.play_requested.connect(_enter_game)
 	_menu.world_map_requested.connect(_show_world_map)
 	_menu.settings_changed.connect(_on_settings_changed)
@@ -152,6 +160,7 @@ func _ready() -> void:
 	_menu.customization_changed.connect(_on_customization_changed)
 	_menu.tuning_purchase_requested.connect(_on_tuning_purchase_requested)
 	_menu.profile_changed.connect(_on_profile_changed)
+	_menu.car_selection_requested.connect(_select_car)
 	_apply_settings(_settings, false)
 
 	# 0.2.32: full-screen named RichTown map over the game.  The HUD
@@ -354,38 +363,141 @@ func _on_fast_travel_requested(world_position: Vector2, cost: int, poi_name: Str
 		_menu.bind_customization(_customization_view())
 
 
-func _profile_paint_color() -> Color:
-	var value: Variant = _profile.get("paint_color", "7a0609ff")
+func _load_saved_selected_car_id() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load(PROFILE_PATH) == OK:
+		return NativeCarCatalog.normalize_id(String(cfg.get_value("profile", "selected_car_id", NativeCarCatalog.DEFAULT_CAR_ID)))
+	return NativeCarCatalog.DEFAULT_CAR_ID
+
+
+func _color_from_profile_value(value: Variant, fallback: Color) -> Color:
 	if value is Color:
 		return value
 	var parsed := Color.html(String(value))
-	return parsed if parsed.a > 0.01 else Color(0.48, 0.025, 0.035)
+	return parsed if parsed.a > 0.01 else fallback
+
+
+func _customization_view_for(car_id: String) -> Dictionary:
+	var normalized := NativeCarCatalog.normalize_id(car_id)
+	var defaults := NativeCarCatalog.default_customization(normalized)
+	var source := _car_customizations.get(normalized, {}) as Dictionary
+	var result := defaults.duplicate(true)
+	for key in source.keys():
+		result[key] = source[key]
+	result["car_id"] = normalized
+	result["paint_color"] = _color_from_profile_value(result.get("paint_color", defaults.get("paint_color")), defaults.get("paint_color", Color(0.48, 0.025, 0.035)) as Color)
+	result["owned_tuning_level"] = clampi(int(result.get("owned_tuning_level", result.get("tuning_owned_max", 0))), 0, TUNING_COSTS.size() - 1)
+	result["tuning_owned_max"] = int(result.get("owned_tuning_level", 0))
+	result["tuning_level"] = clampi(int(result.get("tuning_level", 0)), 0, int(result.get("owned_tuning_level", 0)))
+	result["credits"] = int(_profile.get("credits", 35000))
+	var definition := NativeCarCatalog.get_car(normalized)
+	result["car_name"] = String(definition.get("name", normalized))
+	result["steering_wheel_texture"] = String(definition.get("steering_wheel_texture", NativeCarCatalog.COMMON_STEERING_WHEEL_TEXTURE))
+	result["steering_wheel_id"] = String(definition.get("steering_wheel_id", NativeCarCatalog.COMMON_STEERING_WHEEL_ID))
+	return result
+
+
+func _active_customization() -> Dictionary:
+	return _customization_view_for(_selected_car_id)
+
+
+func _store_active_customization(customization: Dictionary) -> void:
+	var stored := customization.duplicate(true)
+	stored.erase("credits")
+	stored.erase("car_name")
+	stored.erase("steering_wheel_texture")
+	stored.erase("steering_wheel_id")
+	_car_customizations[_selected_car_id] = stored
+	_profile["paint_id"] = String(stored.get("paint_id", "red"))
+	_profile["paint_color"] = (stored.get("paint_color") as Color).to_html() if stored.get("paint_color") is Color else String(stored.get("paint_color", "7a0609ff"))
+	_profile["wheel_finish"] = String(stored.get("wheel_finish", "silver"))
+	_profile["tuning_level"] = int(stored.get("tuning_level", 0))
+	_profile["owned_tuning_level"] = int(stored.get("owned_tuning_level", 0))
+	_profile["license_plate"] = String(stored.get("license_plate", "NITCHES"))
+
+
+func _profile_paint_color() -> Color:
+	return _active_customization().get("paint_color", Color(0.48, 0.025, 0.035)) as Color
 
 
 func _customization_view() -> Dictionary:
-	return {
-		"paint_id": String(_profile.get("paint_id", "red")),
-		"paint_color": _profile_paint_color(),
-		"wheel_finish": String(_profile.get("wheel_finish", "silver")),
-		"tuning_level": int(_profile.get("tuning_level", 0)),
-		"owned_tuning_level": int(_profile.get("owned_tuning_level", 0)),
-		"tuning_owned_max": int(_profile.get("owned_tuning_level", 0)),
-		"license_plate": String(_profile.get("license_plate", "GT500-67")),
-		"credits": int(_profile.get("credits", 35000)),
-	}
+	return _active_customization()
 
 
 func _apply_customization_to_vehicle() -> void:
 	if _vehicle == null:
 		return
-	var owned := clampi(int(_profile.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
-	var tuning := clampi(int(_profile.get("tuning_level", 0)), 0, owned)
-	_profile["owned_tuning_level"] = owned
-	_profile["tuning_level"] = tuning
-	_vehicle.set_paint_color(_profile_paint_color())
-	_vehicle.set_wheel_finish(String(_profile.get("wheel_finish", "silver")))
-	_vehicle.set_tuning_level(tuning)
-	_vehicle.set_license_plate(String(_profile.get("license_plate", "GT500-67")))
+	var customization := _active_customization()
+	_store_active_customization(customization)
+	_vehicle.set_paint_color(customization.get("paint_color") as Color)
+	_vehicle.set_wheel_finish(String(customization.get("wheel_finish", "silver")))
+	_vehicle.set_tuning_level(int(customization.get("tuning_level", 0)))
+	_vehicle.set_license_plate(String(customization.get("license_plate", "NITCHES")))
+	_apply_steering_wheel_to_hud()
+
+
+func _apply_steering_wheel_to_hud() -> void:
+	if _hud == null or _vehicle == null:
+		return
+	var specs := _vehicle.get_spec_sheet()
+	_hud.set_steering_wheel_texture_path(String(specs.get("steering_wheel_texture", NativeCarCatalog.COMMON_STEERING_WHEEL_TEXTURE)))
+
+
+func _car_catalog_view() -> Array:
+	return NativeCarCatalog.get_menu_cars(_car_customizations, _car_stats, _selected_car_id)
+
+
+func _capture_active_customization() -> void:
+	if _vehicle == null:
+		return
+	var old_id := _vehicle.get_car_id()
+	var customization := _customization_view_for(old_id)
+	var state := _vehicle.get_customization_state()
+	customization["paint_color"] = state.get("paint_color", customization.get("paint_color"))
+	customization["wheel_finish"] = String(state.get("wheel_finish", customization.get("wheel_finish", "silver")))
+	customization["tuning_level"] = int(state.get("tuning_level", customization.get("tuning_level", 0)))
+	customization["license_plate"] = String(state.get("license_plate", customization.get("license_plate", "NITCHES")))
+	_car_customizations[old_id] = customization.duplicate(true)
+
+
+func _select_car(car_id: String) -> void:
+	if _vehicle == null:
+		return
+	var next_id := NativeCarCatalog.normalize_id(car_id)
+	if next_id == _vehicle.get_car_id():
+		_selected_car_id = next_id
+		_refresh_menu_profile_and_customization()
+		return
+	_capture_active_customization()
+	if _vehicle.switch_car(next_id):
+		_selected_car_id = next_id
+
+
+func _on_vehicle_car_changed(car_id: String) -> void:
+	_selected_car_id = NativeCarCatalog.normalize_id(car_id)
+	_profile["selected_car_id"] = _selected_car_id
+	_apply_customization_to_vehicle()
+	_apply_time_mode()
+	_snap_camera = true
+	if _menu != null:
+		_menu.bind_specs(_vehicle.get_spec_sheet())
+	_refresh_menu_profile_and_customization()
+	_save_profile()
+
+
+func _car_stats_view() -> Array:
+	var rows: Array = []
+	for car in NativeCarCatalog.get_cars():
+		var car_id := String(car.get("id", ""))
+		var stats := _car_stats.get(car_id, {}) as Dictionary
+		rows.append({
+			"car_id": car_id,
+			"name": String(car.get("name", car_id)),
+			"distance_km": float(stats.get("distance_km", 0.0)),
+			"top_speed_kmh": float(stats.get("top_speed_kmh", 0.0)),
+			"drift_deg": float(stats.get("drift_deg", 0.0)),
+		})
+	return rows
 
 
 func _refresh_menu_profile_and_customization() -> void:
@@ -393,20 +505,23 @@ func _refresh_menu_profile_and_customization() -> void:
 		return
 	_menu.refresh_profile(_profile_view())
 	_menu.bind_customization(_customization_view())
+	_menu.bind_car_catalog(_car_catalog_view())
 
 
 func _on_customization_changed(state: Dictionary) -> void:
+	var customization := _active_customization()
 	if state.has("paint_id"):
-		_profile["paint_id"] = String(state.get("paint_id", "red"))
+		customization["paint_id"] = String(state.get("paint_id", "red"))
 	if state.has("paint_color"):
-		_profile["paint_color"] = (state.get("paint_color") as Color).to_html()
+		customization["paint_color"] = state.get("paint_color")
 	if state.has("wheel_finish"):
-		_profile["wheel_finish"] = String(state.get("wheel_finish", "silver"))
+		customization["wheel_finish"] = String(state.get("wheel_finish", "silver"))
 	if state.has("license_plate"):
-		_profile["license_plate"] = String(state.get("license_plate", "GT500-67"))
+		customization["license_plate"] = String(state.get("license_plate", "NITCHES"))
 	if state.has("tuning_level"):
-		var owned := clampi(int(_profile.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
-		_profile["tuning_level"] = clampi(int(state.get("tuning_level", 0)), 0, owned)
+		var owned := clampi(int(customization.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
+		customization["tuning_level"] = clampi(int(state.get("tuning_level", 0)), 0, owned)
+	_store_active_customization(customization)
 	_apply_customization_to_vehicle()
 	_save_profile()
 	_refresh_menu_profile_and_customization()
@@ -414,7 +529,8 @@ func _on_customization_changed(state: Dictionary) -> void:
 
 func _on_tuning_purchase_requested(level: int) -> void:
 	var bounded := clampi(level, 0, TUNING_COSTS.size() - 1)
-	var owned := clampi(int(_profile.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
+	var customization := _active_customization()
+	var owned := clampi(int(customization.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
 	if bounded > owned:
 		var cost := TUNING_COSTS[bounded]
 		var credits := int(_profile.get("credits", 35000))
@@ -423,8 +539,9 @@ func _on_tuning_purchase_requested(level: int) -> void:
 				_menu.set_garage_status("НЕ ХВАТАЕТ CR %d • сначала заработайте кредиты в свободном заезде" % (cost - credits))
 			return
 		_profile["credits"] = credits - cost
-		_profile["owned_tuning_level"] = bounded
-	_profile["tuning_level"] = bounded
+		customization["owned_tuning_level"] = bounded
+	customization["tuning_level"] = bounded
+	_store_active_customization(customization)
 	_apply_customization_to_vehicle()
 	_save_profile()
 	_refresh_menu_profile_and_customization()
@@ -547,7 +664,7 @@ func _set_garage_active(active: bool) -> void:
 			_garage_return_transform = _vehicle.global_transform
 			_has_garage_return = true
 		_garage_stage.visible = true
-		var target := Transform3D(Basis.IDENTITY, GARAGE_STUDIO_ORIGIN + Vector3(0.0, 0.66, 0.0))
+		var target := Transform3D(Basis.IDENTITY, GARAGE_STUDIO_ORIGIN + Vector3(0.0, 0.66 + maxf(float(_vehicle.get_car_definition().get("wheel_ray_y", 0.58)) - 0.58, 0.0), 0.0))
 		_vehicle.global_transform = target
 		_vehicle.reset_physics_interpolation()
 		_vehicle.reset_to_transform(target)
@@ -562,7 +679,7 @@ func _set_garage_active(active: bool) -> void:
 
 
 func _on_menu_panel_changed(panel: int) -> void:
-	# Garage (1) and Store (2) both present the live Shelby studio.
+	# Garage (1) and Store (2) both present the live selected-car studio.
 	_set_garage_active(panel == NativeMainMenu.PANEL_GARAGE or panel == NativeMainMenu.PANEL_STORE)
 
 
@@ -580,6 +697,13 @@ func _on_garage_zoomed(factor: float) -> void:
 func _get_frontend_smoke_state() -> Dictionary:
 	return {
 		"frontend_0234": true,
+		"multi_car_0240": true,
+		"selected_car_id": _selected_car_id,
+		"catalog_cars": NativeCarCatalog.car_count(),
+		"catalog_view_cars": _car_catalog_view().size(),
+		"car_customization_slots": _car_customizations.size(),
+		"car_stat_slots": _car_stats.size(),
+		"marketing_car_shots": _current_car_marketing_shot,
 		"garage_stage_created": _garage_stage != null,
 		"garage_stage_children": _garage_stage.get_child_count() if _garage_stage != null else 0,
 		"garage_active": _garage_active,
@@ -606,6 +730,9 @@ func _load_profile() -> void:
 		"play_seconds": 0.0,
 		"history": [],
 		"achievement_rewards_claimed": [],
+		"selected_car_id": NativeCarCatalog.DEFAULT_CAR_ID,
+		"car_customizations": {},
+		"car_stats": {},
 		"paint_id": "red",
 		"paint_color": "7a0609ff",
 		"wheel_finish": "silver",
@@ -623,13 +750,59 @@ func _load_profile() -> void:
 		_profile["achievement_rewards_claimed"] = []
 	if String(_profile.get("avatar_id", "wheel")) not in ["wheel", "star", "flag", "helmet"]:
 		_profile["avatar_id"] = "wheel"
+	_selected_car_id = NativeCarCatalog.normalize_id(String(_profile.get("selected_car_id", _selected_car_id)))
+	_profile["selected_car_id"] = _selected_car_id
+	if not (_profile.get("car_customizations", {}) is Dictionary):
+		_profile["car_customizations"] = {}
+	_car_customizations = (_profile.get("car_customizations", {}) as Dictionary).duplicate(true)
+	for car_id in NativeCarCatalog.car_ids():
+		var defaults := NativeCarCatalog.default_customization(car_id)
+		var stored := _car_customizations.get(car_id, {}) as Dictionary
+		var merged := defaults.duplicate(true)
+		for key in stored.keys():
+			merged[key] = stored[key]
+		_car_customizations[car_id] = merged
+	if (_profile.get("car_customizations", {}) as Dictionary).is_empty():
+		# 0.2.40 migration: every pre-catalogue save described the one
+		# Shelby, so its paint/wheels/tuning/plate land in that slot;
+		# the three new cars start from their catalogue defaults.
+		var legacy := _car_customizations.get(NativeCarCatalog.DEFAULT_CAR_ID, {}) as Dictionary
+		legacy["paint_id"] = String(_profile.get("paint_id", "red"))
+		legacy["paint_color"] = _color_from_profile_value(_profile.get("paint_color", "7a0609ff"), Color(0.48, 0.025, 0.035))
+		legacy["wheel_finish"] = String(_profile.get("wheel_finish", "silver"))
+		legacy["owned_tuning_level"] = clampi(int(_profile.get("owned_tuning_level", 0)), 0, TUNING_COSTS.size() - 1)
+		legacy["tuning_level"] = clampi(int(_profile.get("tuning_level", 0)), 0, int(legacy.get("owned_tuning_level", 0)))
+		legacy["license_plate"] = String(_profile.get("license_plate", "GT500-67"))
+		_car_customizations[NativeCarCatalog.DEFAULT_CAR_ID] = legacy
+	if not (_profile.get("car_stats", {}) is Dictionary):
+		_profile["car_stats"] = {}
+	_car_stats = (_profile.get("car_stats", {}) as Dictionary).duplicate(true)
+	if _car_stats.is_empty():
+		_car_stats[NativeCarCatalog.DEFAULT_CAR_ID] = {
+			"distance_km": float(_profile.get("distance_m", 0.0)) / 1000.0,
+			"top_speed_kmh": float(_profile.get("top_speed_kmh", 0.0)),
+			"drift_deg": float(_profile.get("drift_record_deg", 0.0)),
+			"play_seconds": float(_profile.get("play_seconds", 0.0)),
+		}
+	for car_id in NativeCarCatalog.car_ids():
+		if not _car_stats.has(car_id):
+			_car_stats[car_id] = {"distance_km": 0.0, "top_speed_kmh": 0.0, "drift_deg": 0.0, "play_seconds": 0.0}
+	_profile["car_customizations"] = _car_customizations.duplicate(true)
+	_profile["car_stats"] = _car_stats.duplicate(true)
+	_store_active_customization(_active_customization())
 
 
 func _save_profile(record_history: bool = false) -> void:
+	_capture_active_customization()
+	_profile["selected_car_id"] = _selected_car_id
+	_profile["car_customizations"] = _car_customizations.duplicate(true)
+	_profile["car_stats"] = _car_stats.duplicate(true)
 	if record_history and _session_distance_m >= 50.0:
 		var history: Array = (_profile.get("history", []) as Array).duplicate(true)
 		history.append({
 			"date": Time.get_date_string_from_system(),
+			"car_id": _selected_car_id,
+			"car_name": String(NativeCarCatalog.get_car(_selected_car_id).get("name", _selected_car_id)),
 			"distance_km": _session_distance_m / 1000.0,
 			"top_speed_kmh": _session_top_speed_kmh,
 			"drift_deg": _session_drift_deg,
@@ -661,7 +834,7 @@ func _achievement_specs(distance_km: float, top_speed: float, drift_record: floa
 		{"id": "first_km", "title": "Первый километр", "detail": "Проехать 1 км по RichTown", "reward": 250, "unlocked": distance_km >= 1.0, "current": distance_km, "target": 1.0, "unit": "км", "progress": clampf(distance_km / 1.0, 0.0, 1.0)},
 		{"id": "distance_50", "title": "Городской марафон", "detail": "Проехать 50 км и открыть уровень 2", "reward": 2500, "unlocked": distance_km >= 50.0, "current": distance_km, "target": 50.0, "unit": "км", "progress": clampf(distance_km / 50.0, 0.0, 1.0)},
 		{"id": "speed_150", "title": "Штурм скорости", "detail": "Разогнаться до 150 км/ч", "reward": 750, "unlocked": top_speed >= 150.0, "current": top_speed, "target": 150.0, "unit": "км/ч", "progress": clampf(top_speed / 150.0, 0.0, 1.0)},
-		{"id": "speed_200", "title": "Почти предел Shelby", "detail": "Разогнаться до 200 км/ч", "reward": 1500, "unlocked": top_speed >= 200.0, "current": top_speed, "target": 200.0, "unit": "км/ч", "progress": clampf(top_speed / 200.0, 0.0, 1.0)},
+		{"id": "speed_200", "title": "Двести по городу", "detail": "Разогнаться до 200 км/ч", "reward": 1500, "unlocked": top_speed >= 200.0, "current": top_speed, "target": 200.0, "unit": "км/ч", "progress": clampf(top_speed / 200.0, 0.0, 1.0)},
 		{"id": "drift_25", "title": "Боковой стиль", "detail": "Дрифт с углом не меньше 25°", "reward": 750, "unlocked": drift_record >= 25.0, "current": drift_record, "target": 25.0, "unit": "°", "progress": clampf(drift_record / 25.0, 0.0, 1.0)},
 		{"id": "hour", "title": "Час за рулём", "detail": "60 минут свободного заезда", "reward": 2000, "unlocked": play_seconds >= 3600.0, "current": play_minutes, "target": 60.0, "unit": "мин", "progress": clampf(play_minutes / 60.0, 0.0, 1.0)},
 	]
@@ -699,6 +872,8 @@ func _profile_view() -> Dictionary:
 	if _session_distance_m >= 50.0:
 		history.append({
 			"date": "СЕЙЧАС",
+			"car_id": _selected_car_id,
+			"car_name": String(NativeCarCatalog.get_car(_selected_car_id).get("name", _selected_car_id)),
 			"distance_km": _session_distance_m / 1000.0,
 			"top_speed_kmh": _session_top_speed_kmh,
 			"drift_deg": _session_drift_deg,
@@ -720,12 +895,8 @@ func _profile_view() -> Dictionary:
 		"xp_to_next_km": 50.0 - level_progress_km,
 		"achievements": achievements,
 		"history": history,
-		"car_stats": [{
-			"name": "Shelby GT500",
-			"distance_km": distance_km,
-			"top_speed_kmh": top_speed,
-			"drift_deg": drift_record,
-		}],
+		"selected_car_id": _selected_car_id,
+		"car_stats": _car_stats_view(),
 	}
 
 func _show_menu() -> void:
@@ -822,9 +993,11 @@ func _update_menu_camera(delta: float) -> void:
 		_garage_idle_time += maxf(delta, 0.0)
 		if _garage_idle_time > 2.5:
 			_garage_yaw = wrapf(_garage_yaw + delta * 0.16, -PI, PI)
-		var centre := GARAGE_STUDIO_ORIGIN + Vector3(0.0, 1.05, 0.0)
-		var horizontal := cos(_garage_pitch) * _garage_distance
-		var desired := centre + Vector3(sin(_garage_yaw) * horizontal, sin(_garage_pitch) * _garage_distance, cos(_garage_yaw) * horizontal)
+		var car_definition := _vehicle.get_car_definition()
+		var centre := GARAGE_STUDIO_ORIGIN + Vector3(0.0, clampf(float(car_definition.get("height_m", 1.32)) * 0.72, 0.82, 1.18), 0.0)
+		var garage_distance := _garage_distance * float(car_definition.get("garage_camera_scale", 1.0))
+		var horizontal := cos(_garage_pitch) * garage_distance
+		var desired := centre + Vector3(sin(_garage_yaw) * horizontal, sin(_garage_pitch) * garage_distance, cos(_garage_yaw) * horizontal)
 		if _snap_camera or _camera.global_position.distance_to(desired) > 30.0:
 			_camera.global_position = desired
 			_snap_camera = false
@@ -835,8 +1008,9 @@ func _update_menu_camera(delta: float) -> void:
 		return
 	_camera.fov = 58.0
 	_menu_orbit_angle += delta * 0.14
-	var centre := _vehicle.get_global_transform_interpolated().origin + Vector3(0.0, 1.05, 0.0)
-	var offset := Vector3(sin(_menu_orbit_angle), 0.0, cos(_menu_orbit_angle)) * 7.6 + Vector3(0.0, 2.1, 0.0)
+	var car_definition := _vehicle.get_car_definition()
+	var centre := _vehicle.get_global_transform_interpolated().origin + Vector3(0.0, clampf(float(car_definition.get("height_m", 1.32)) * 0.72, 0.82, 1.18), 0.0)
+	var offset := Vector3(sin(_menu_orbit_angle), 0.0, cos(_menu_orbit_angle)) * 7.6 * float(car_definition.get("garage_camera_scale", 1.0)) + Vector3(0.0, 2.1, 0.0)
 	_camera.global_position = centre + offset
 	_camera.look_at(centre, Vector3.UP)
 
@@ -850,6 +1024,13 @@ func _accumulate_profile(delta: float) -> void:
 	_profile["play_seconds"] = float(_profile.get("play_seconds", 0.0)) + delta
 	var drift_deg := _vehicle.get_drift_angle_degrees() if _vehicle.is_drifting() else 0.0
 	_profile["drift_record_deg"] = maxf(float(_profile.get("drift_record_deg", 0.0)), drift_deg)
+	var car_id := _vehicle.get_car_id()
+	var car_stats := _car_stats.get(car_id, {"distance_km": 0.0, "top_speed_kmh": 0.0, "drift_deg": 0.0, "play_seconds": 0.0}) as Dictionary
+	car_stats["distance_km"] = float(car_stats.get("distance_km", 0.0)) + speed_kmh / 3.6 * delta / 1000.0
+	car_stats["top_speed_kmh"] = maxf(float(car_stats.get("top_speed_kmh", 0.0)), speed_kmh)
+	car_stats["drift_deg"] = maxf(float(car_stats.get("drift_deg", 0.0)), drift_deg)
+	car_stats["play_seconds"] = float(car_stats.get("play_seconds", 0.0)) + delta
+	_car_stats[car_id] = car_stats
 	_session_distance_m += speed_kmh / 3.6 * delta
 	_session_top_speed_kmh = maxf(_session_top_speed_kmh, speed_kmh)
 	_session_drift_deg = maxf(_session_drift_deg, drift_deg)
@@ -1213,7 +1394,7 @@ func _update_camera(delta: float, snap: bool) -> void:
 		return
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
-	var speed_ratio := clampf(speed_kmh / 210.0, 0.0, 1.0)
+	var speed_ratio := clampf(speed_kmh / maxf(float(_vehicle.get_spec_sheet().get("top_speed_kmh", 210)), 120.0), 0.0, 1.0)
 	var vehicle_transform := _vehicle.get_global_transform_interpolated()
 	var vehicle_position := vehicle_transform.origin
 	var raw_follow_yaw := _vehicle_horizontal_yaw(vehicle_transform)
@@ -1237,14 +1418,14 @@ func _update_camera(delta: float, snap: bool) -> void:
 	if _speed_post != null:
 		var post_ratio := 0.0
 		if _camera_mode != CAMERA_TOP:
-			post_ratio = clampf(speed_kmh / 215.0, 0.0, 1.0)
+			post_ratio = clampf(speed_kmh / maxf(float(_vehicle.get_spec_sheet().get("top_speed_kmh", 215)), 120.0), 0.0, 1.0)
 			if _vehicle.is_boosting():
 				post_ratio = clampf(post_ratio * 1.12 + 0.05, 0.0, 1.0)
 		_speed_post.set_speed_ratio(post_ratio)
 
 	match _camera_mode:
 		CAMERA_HOOD:
-			var hood_position := vehicle_transform * Vector3(0.0, 1.12, -0.32)
+			var hood_position := vehicle_transform * (_vehicle.get_car_definition().get("hood_camera_position", Vector3(0.0, 1.12, -0.32)) as Vector3)
 			var hood_look := Vector3(
 				-sin(_camera_orbit_yaw) * cos(_camera_orbit_pitch),
 				-sin(_camera_orbit_pitch),
@@ -1262,8 +1443,9 @@ func _update_camera(delta: float, snap: bool) -> void:
 			_camera.global_position = top_position
 			_camera.look_at(vehicle_position + Vector3.UP * 1.0, top_up)
 		_:
-			var base_distance := 6.15 + speed_ratio * 2.15
-			var base_height := 2.05 + speed_ratio * 0.38
+			var chase_scale := float(_vehicle.get_car_definition().get("camera_distance_scale", 1.0))
+			var base_distance := (6.15 + speed_ratio * 2.15) * chase_scale
+			var base_height := (2.05 + speed_ratio * 0.38) * sqrt(chase_scale)
 			var distance := base_distance * _camera_orbit_distance_scale
 			var base_pitch := atan2(base_height, base_distance)
 			var total_pitch := clampf(base_pitch + _camera_orbit_pitch, -0.04, 1.18)
@@ -1289,7 +1471,7 @@ func _update_camera(delta: float, snap: bool) -> void:
 				var weight := 1.0 - exp(-position_rate * delta)
 				_camera.global_position = _camera.global_position.lerp(desired_position, weight)
 			var forward := -follow_basis.z
-			var target := vehicle_position + Vector3.UP * 1.12 + forward * (6.0 + speed_ratio * 6.0) * orbit_forward_factor
+			var target := vehicle_position + Vector3.UP * clampf(float(_vehicle.get_car_definition().get("height_m", 1.32)) * 0.82, 0.92, 1.22) + forward * (6.0 + speed_ratio * 6.0) * orbit_forward_factor
 			if snap or delta <= 0.0:
 				_camera_target_smooth = target
 			else:
@@ -1601,6 +1783,16 @@ func _run_smoke_checks() -> void:
 	if not bool(frontend_state.get("frontend_0234", false)) or not bool(frontend_state.get("garage_stage_created", false)) or int(frontend_state.get("garage_stage_children", 0)) < 12 or not bool(menu_state.get("clean_menu_0234", false)) or not bool(menu_state.get("store_panel_0236", false)) or int(menu_state.get("store_items", 0)) < 4 or not bool(menu_state.get("labeled_tabs_0236", false)) or not bool(menu_state.get("top_xp_bar_0236", false)) or not bool(menu_state.get("clickable_home_cards_0236", false)) or not bool(menu_state.get("wheel_previews_0236", false)) or not bool(menu_state.get("profile_single_scroll_0236", false)) or int(menu_state.get("achievement_cards_0236", 0)) < 6 or not bool(menu_state.get("locked_world_conditions_0236", false)) or not bool(menu_state.get("hover_sound_0236", false)) or not bool(menu_state.get("gameplay_card_textures_0236", false)) or not bool(frontend_state.get("studio_reflection_probe_0236", false)) or float(frontend_state.get("garage_distance_0236", 0.0)) < 10.0 or not bool(menu_state.get("backdrop_blur_0234", false)) or not bool(menu_state.get("customization_bound", false)) or not bool(route_state.get("route_guide_0234", false)) or int(route_state.get("graph_nodes", 0)) < 300 or int(route_state.get("graph_edges", 0)) < 300 or not bool(route_state.get("has_route", false)) or int(route_state.get("path_points", 0)) < 8 or float(route_state.get("path_distance_m", 0.0)) < 350.0 or int(minimap_state.get("route_points", 0)) < 8 or not bool(minimap_state.get("road_route_0234", false)) or not bool(customization_state.get("customization_0234", false)) or int(tuning_preview.get("power_hp", 0)) != 423 or int(tuning_preview.get("torque_nm", 0)) != 660 or int(tuning_preview.get("performance_index", 0)) != 701 or String(tuning_preview.get("class_label", "")) != "S1":
 		failures.append("0.2.36 labelled menu / real-content store / reflective garage studio / Shelby customization / AStar road-route pass is incomplete: frontend=%s route=%s custom=%s tuning=%s menu=%s" % [str(frontend_state), str(route_state), str(customization_state), str(tuning_preview), str(menu_state)])
 
+	var catalog_by_id := {}
+	for car_variant in NativeCarCatalog.get_cars():
+		var car: Dictionary = car_variant
+		catalog_by_id[String(car.get("id", ""))] = car
+	var audi_spec := catalog_by_id.get("audi_r8_v10_plus", {}) as Dictionary
+	var camaro_spec := catalog_by_id.get("chevrolet_camaro_ss", {}) as Dictionary
+	var mercedes_spec := catalog_by_id.get("mercedes_benz_560_sel", {}) as Dictionary
+	if not bool(frontend_state.get("multi_car_0240", false)) or int(frontend_state.get("catalog_cars", 0)) != 4 or int(frontend_state.get("catalog_view_cars", 0)) != 4 or int(frontend_state.get("car_customization_slots", 0)) != 4 or int(frontend_state.get("car_stat_slots", 0)) != 4 or int(audi_spec.get("power_hp", 0)) != 610 or int(audi_spec.get("torque_nm", 0)) != 560 or int(audi_spec.get("top_speed_kmh", 0)) != 330 or int(camaro_spec.get("power_hp", 0)) != 455 or int(camaro_spec.get("torque_nm", 0)) != 617 or int(camaro_spec.get("top_speed_kmh", 0)) != 290 or int(mercedes_spec.get("power_hp", 0)) != 300 or int(mercedes_spec.get("torque_nm", 0)) != 455 or int(mercedes_spec.get("top_speed_kmh", 0)) != 250 or not bool(menu_state.get("multi_car_0240", false)) or int(menu_state.get("catalog_cars", 0)) != 4 or int(menu_state.get("store_cars", 0)) != 4 or not bool(steering_wheel_state.get("photo_steering_wheel_0240", false)) or not bool(steering_wheel_state.get("replaceable_per_car_0240", false)) or (steering_wheel_state.get("wheel_texture_size", Vector2.ZERO) as Vector2).x < 512.0 or not bool(vehicle_audio_state.get("multi_car_audio_0240", false)) or String(vehicle_audio_state.get("car_id", "")) != _selected_car_id:
+		failures.append("0.2.40 four-car catalogue / supplied models / photo steering wheel / per-car audio pass is incomplete: frontend=%s menu=%s wheel=%s audio=%s audi=%s camaro=%s mercedes=%s" % [str(frontend_state), str(menu_state), str(steering_wheel_state), str(vehicle_audio_state), str(audi_spec), str(camaro_spec), str(mercedes_spec)])
+
 	if failures.is_empty():
 		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
 			world_geometry_count,
@@ -1725,6 +1917,22 @@ func _run_screenshot_tour() -> void:
 			"camera": Vector3(430.0, 165.0, 240.0), "target": Vector3(730.0, 8.0, -30.0),
 		},
 		{
+			"name": "08a_car_audi_r8", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "audi_r8_v10_plus", "gameplay_camera": true, "marketing": true, "frames": 6,
+		},
+		{
+			"name": "08b_car_camaro_ss", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "chevrolet_camaro_ss", "gameplay_camera": true, "marketing": true, "frames": 6,
+		},
+		{
+			"name": "08c_car_mercedes_560_sel", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "mercedes_benz_560_sel", "gameplay_camera": true, "marketing": true, "frames": 6,
+		},
+		{
+			"name": "08d_car_shelby_gt500", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "shelby_gt500", "gameplay_camera": true, "marketing": true, "frames": 6,
+		},
+		{
 			"name": "15_corniche_t_junction", "time": "day", "vehicle": "hide",
 			"camera": Vector3(895.0, 18.0, -335.0), "target": Vector3(930.0, 1.0, -300.0),
 		},
@@ -1801,6 +2009,18 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 	if wanted_time_index != _time_index:
 		_time_index = wanted_time_index
 		_apply_time_mode()
+	if shot.has("car_id"):
+		var wanted_car := NativeCarCatalog.normalize_id(String(shot.get("car_id", "")))
+		_current_car_marketing_shot += 1
+		if _vehicle.get_car_id() != wanted_car:
+			_select_car(wanted_car)
+			var switch_frames := 0
+			while _vehicle.is_car_switch_pending() and switch_frames < 30:
+				await RenderingServer.frame_post_draw
+				switch_frames += 1
+			if _vehicle.get_car_id() != wanted_car:
+				push_error("[native-screenshots] FAIL: car switch to %s did not finish" % wanted_car)
+				return false
 	var is_menu_shot := shot.has("menu_panel")
 	if _hud != null:
 		_hud.visible = bool(shot.get("hud", false)) and not is_menu_shot

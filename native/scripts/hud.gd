@@ -143,6 +143,11 @@ func set_sound_enabled(enabled: bool) -> void:
         _sound_button.text = "♪" if enabled else "✕"
 
 
+func set_steering_wheel_texture_path(path: String) -> void:
+    if _wheel != null:
+        _wheel.set_wheel_texture_path(path)
+
+
 func reset_touch_controls() -> void:
     if _vehicle != null:
         for action_name in _touch_buttons.keys():

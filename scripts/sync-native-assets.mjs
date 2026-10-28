@@ -14,6 +14,9 @@ const destinationRoot = 'native/assets';
 
 const modelCopies = [
   ['public/assets/models/cars/mustang/mustang.glb', 'vehicles/mustang.glb', 'mustang'],
+  ['src/assets/models/cars/audi_r8_v10_plus.glb', 'vehicles/audi_r8_v10_plus.glb'],
+  ['src/assets/models/cars/chevrolet_camaro_ss.glb', 'vehicles/chevrolet_camaro_ss.glb'],
+  ['src/assets/models/cars/mercedes_benz_560_sel.glb', 'vehicles/mercedes_benz_560_sel.glb'],
   ['src/assets/models/props/villa.glb', 'buildings/villa.glb'],
   ['src/assets/models/props/glass_tower.glb', 'buildings/glass_tower.glb'],
   ['src/assets/models/props/main_tower.glb', 'buildings/main_tower.glb'],
@@ -48,6 +51,7 @@ const uiCopies = [
   ['src/assets/ui/menu_shelby_gameplay.jpg', 'ui/menu_shelby_gameplay.jpg'],
   ['src/assets/ui/menu_richtown_gameplay.jpg', 'ui/menu_richtown_gameplay.jpg'],
   ['src/assets/ui/menu_world_gameplay.jpg', 'ui/menu_world_gameplay.jpg'],
+  ['src/assets/ui/steering_wheel_common.png', 'ui/steering_wheel_common.png'],
   ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
 ];
 
@@ -65,10 +69,36 @@ const shelbyAudioNames = [
   'mustang_stop.wav',
   'tire_squeal_loop.wav',
 ];
-const audioCopies = shelbyAudioNames.map((name) => [
-  `src/assets/audio/shelby/${name}`,
-  `audio/shelby/${name}`,
-]);
+// 0.2.40 recorded banks for the three supplied cars.  The generator
+// writes phase-trimmed on/off-throttle loops plus idle/start/stop for
+// each bank; NativeVehicleAudio selects one bank per catalogue car.
+const recordedCarAudioBanks = {
+  audi_r8: [1231, 1602, 3735],
+  camaro_ss: [635, 1444, 2265, 3747, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 3747, 4342],
+};
+const recordedCarAudioCopies = Object.entries(recordedCarAudioBanks).flatMap(([bank, rpms]) => {
+  const names = [
+    ...rpms.flatMap((rpm) => [
+      `engine_on_${String(rpm).padStart(4, '0')}.wav`,
+      `engine_off_${String(rpm).padStart(4, '0')}.wav`,
+    ]),
+    'engine_idle.wav',
+    'engine_start.wav',
+    'engine_stop.wav',
+  ];
+  return names.map((name) => [
+    `src/assets/audio/${bank}/${name}`,
+    `audio/${bank}/${name}`,
+  ]);
+});
+const audioCopies = [
+  ...shelbyAudioNames.map((name) => [
+    `src/assets/audio/shelby/${name}`,
+    `audio/shelby/${name}`,
+  ]),
+  ...recordedCarAudioCopies,
+];
 
 const textureNames = [
   'user_grass.jpg', 'user_grass_normal.jpg',

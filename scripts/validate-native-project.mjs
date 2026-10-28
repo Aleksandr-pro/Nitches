@@ -13,7 +13,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript] = await Promise.all([
+function parseGlbJson(bytes) {
+  assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', 'GLB header is missing');
+  const jsonLength = bytes.readUInt32LE(12);
+  const jsonType = bytes.readUInt32LE(16);
+  assert(jsonType === 0x4e4f534a, 'First GLB chunk is not JSON');
+  return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
+}
+
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -53,6 +61,7 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/avatar_icon.gd'),
   readText('scripts/wheel_preview.gd'),
   readText('scripts/lock_icon.gd'),
+  readText('scripts/car_catalog.gd'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -65,8 +74,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=42'), 'Native 0.2.39 must bump Android versionCode to 42');
-assert(preset.includes('version/name="0.2.39-native-alpha"'), 'Native version name must be 0.2.39-native-alpha');
+assert(preset.includes('version/code=43'), 'Native 0.2.40 must bump Android versionCode to 43');
+assert(preset.includes('version/name="0.2.40-native-alpha"'), 'Native version name must be 0.2.40-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -87,7 +96,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
 for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -241,7 +250,20 @@ for (const marker of ['closedLoop0238', 'resortRoad0238', 'sail_loop_closed_0238
 }
 assert(worldScript.includes('{"x": 1216.0, "z": 80.0, "w": 16.0, "d": 26.0}') && worldScript.includes('{"x": 1149.8, "z": 80.0, "w": 4.4, "d": 18.0'), 'Native 0.2.38 must keep the east Sail pool and arrival apron inside the loop with road clearance');
 assert(!worldScript.includes('{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0') && !worldScript.includes('{"x": 1220.0, "z": 61.0, "w": 20.0') && !worldScript.includes('{"x": 1220.0, "z": 99.0, "w": 20.0'), 'Native 0.2.38 must not restore the Sail paving/hedge bars that crossed the loop carriageway');
-assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых авто без 3D-моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
+// 0.2.40 four-car catalogue: one parameterised RigidBody, owner-supplied
+// Audi/Camaro/Mercedes GLBs, separate recorded banks, a photographic
+// replaceable HUD wheel, per-car customization/stats and a compulsory
+// in-game screenshot for every car.
+for (const marker of ['class_name NativeCarCatalog', 'get_menu_cars', 'car_count', 'get_cars', 'car_selection_requested', 'bind_car_catalog', 'multi_car_0240', 'configure_car', 'switch_car', 'car_changed', 'configure_for_car', 'multi_car_audio_0240', 'photo_steering_wheel_0240', 'replaceable_per_car_0240', 'set_wheel_texture_path', 'set_steering_wheel_texture_path', '08a_car_audi_r8', '08b_car_camaro_ss', '08c_car_mercedes_560_sel', '08d_car_shelby_gt500', 'audi_r8_v10_plus', 'chevrolet_camaro_ss', 'mercedes_560_sel', '_car_customizations', '_car_stats', 'selected_car_id', '_load_car_model']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.40 multi-car marker is missing: ${marker}`);
+}
+for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207], ['audi_r8_v10_plus', 610, 560, 330], ['chevrolet_camaro_ss', 455, 617, 290], ['mercedes_560_sel', 300, 455, 250]]) {
+  assert(carCatalogScript.includes(`"id": "${carId}"`), `Native catalogue is missing ${carId}`);
+  assert(carCatalogScript.includes(`"power_hp": ${power}`) && carCatalogScript.includes(`"torque_nm": ${torque}`) && carCatalogScript.includes(`"top_speed_kmh": ${topSpeed}`), `Native catalogue spec sheet drifted for ${carId}`);
+}
+assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
+assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
+assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых машин без моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
 assert(!mainMenuScript.includes('COL_TEAL') && !mainMenuScript.includes('COL_MAGENTA') && !mainMenuScript.includes('COL_YELLOW'), 'Native 0.2.34 menu must not return to the rejected multi-neon palette');
@@ -267,7 +289,7 @@ assert(!vehicleScript.includes('_engine_player') && !vehicleScript.includes('Aud
 assert(syncScript.includes('shelbyAudioRpms') && syncScript.includes('shelbyAudioNames') && syncScript.includes('assertRealWav'), 'Native asset sync must stage and header-check the complete 0.2.35 Shelby WAV bank');
 assert(audioCredits.includes('VacekH') && audioCredits.includes('205510') && audioCredits.includes('lmbubec') && audioCredits.includes('119449') && audioCredits.includes('Tom Haigh') && audioCredits.includes('CC BY 3.0') && audioCredits.includes('CC0'), 'Native 0.2.35 audio credits must preserve the CC0 provenance and the required CC BY 3.0 tyre attribution');
 assert(mainMenuScript.includes('Tom Haigh (CC BY 3.0)'), 'Native 0.2.35 settings must carry the in-app CC BY 3.0 tyre-sound attribution');
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon', 'class_name NativeVehicleAudio', 'class_name NativeIgnitionButton', 'class_name NativeAvatarIcon', 'class_name NativeWheelPreview', 'class_name NativeLockIcon']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon', 'class_name NativeVehicleAudio', 'class_name NativeIgnitionButton', 'class_name NativeAvatarIcon', 'class_name NativeWheelPreview', 'class_name NativeLockIcon', 'class_name NativeCarCatalog']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -638,9 +660,68 @@ for (const name of shelbyAudioFiles) {
 const shelbyManifest = JSON.parse(await readFile('src/assets/audio/shelby/bank_manifest.json', 'utf8'));
 assert(shelbyManifest.sample_rate === 32000 && shelbyManifest.channels === 1 && shelbyManifest.engine_loops.length === 32, 'Native 0.2.35 Shelby bank manifest must describe all 32 mono engine loops');
 
+const suppliedCarAudioBanks = {
+  audi_r8: [1231, 1602, 3735],
+  camaro_ss: [635, 1444, 2265, 3747, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 3747, 4342],
+};
+const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([bank, rpms]) => [
+  ...rpms.flatMap((rpm) => [
+    `${bank}/engine_on_${String(rpm).padStart(4, '0')}.wav`,
+    `${bank}/engine_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  `${bank}/engine_idle.wav`,
+  `${bank}/engine_start.wav`,
+  `${bank}/engine_stop.wav`,
+]);
+assert(suppliedCarAudioFiles.length === 37, 'Native 0.2.40 must ship 28 supplied-car loops plus idle/start/stop for all three banks');
+for (const [bank, rpms] of Object.entries(suppliedCarAudioBanks)) {
+  const manifest = JSON.parse(await readFile(`src/assets/audio/${bank}/bank_manifest.json`, 'utf8'));
+  assert(manifest.bank === bank && manifest.format === 'mono WAV 32000 Hz 16-bit' && manifest.anchors.length === rpms.length, `${bank} audio manifest does not describe its complete mono bank`);
+  assert(manifest.anchors.every((anchor, index) => anchor.rpm === rpms[index] && anchor.on.sample_rate === 32000 && anchor.off.sample_rate === 32000 && anchor.on.channels === 1 && anchor.off.channels === 1 && anchor.source_recording && anchor.author && anchor.license && anchor.url), `${bank} audio manifest is missing per-anchor provenance`);
+}
+for (const name of suppliedCarAudioFiles) {
+  const source = `src/assets/audio/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  assert(info.size > 15_000, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit`);
+}
+
+const steeringWheelBytes = await readFile('src/assets/ui/steering_wheel_common.png');
+assert(steeringWheelBytes.length > 500_000 && steeringWheelBytes.readUInt32BE(16) === 1024 && steeringWheelBytes.readUInt32BE(20) === 1024 && steeringWheelBytes[25] === 6, 'Native 0.2.40 photographic steering wheel must be a 1024x1024 RGBA PNG');
+assert([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => steeringWheelBytes[index] === value), 'Native steering-wheel PNG signature is invalid');
+
+const suppliedCars = [
+  { stem: 'audi_r8_v10_plus', minimumBytes: 5_000_000, size: [1.966872, 1.200647, 4.426], materials: ['Paint', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireRubber'] },
+  { stem: 'chevrolet_camaro_ss', minimumBytes: 3_500_000, size: [2.037753, 1.346721, 4.790135], materials: ['Paint', 'GlassWindow', 'LiveryTexture', 'TireRimTexture'] },
+  { stem: 'mercedes_benz_560_sel', minimumBytes: 5_000_000, size: [1.955433, 1.559742, 5.16], materials: ['Paint', 'PaintSecondary', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireTreadTexture'] },
+];
+for (const car of suppliedCars) {
+  const source = `src/assets/models/cars/${car.stem}.glb`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  const gltf = parseGlbJson(bytes);
+  const report = JSON.parse(await readFile(`src/assets/models/cars/${car.stem}_report.json`, 'utf8'));
+  const nodeNames = new Set((gltf.nodes ?? []).map((node) => node.name));
+  const materialNames = new Set((gltf.materials ?? []).map((material) => material.name));
+  assert(info.size > car.minimumBytes && report.outputBytes === info.size, `${source} byte size does not match its conversion report`);
+  assert(report.boundsGltfSizeXYZ.every((value, index) => Math.abs(value - car.size[index]) < 0.02), `${source} real-scale bounds drifted`);
+  for (const nodeName of ['Body', 'Wheel_FL', 'Wheel_FR', 'Wheel_RL', 'Wheel_RR', 'Wheel_FL_Spin', 'Wheel_FR_Spin', 'Wheel_RL_Spin', 'Wheel_RR_Spin']) {
+    assert(nodeNames.has(nodeName), `${source} is missing runtime node ${nodeName}`);
+  }
+  for (const materialName of car.materials) {
+    assert(materialNames.has(materialName), `${source} is missing semantic material ${materialName}`);
+  }
+}
+
 if (requireAssets) {
   const required = [
     'assets/vehicles/mustang.glb',
+    'assets/vehicles/audi_r8_v10_plus.glb',
+    'assets/vehicles/chevrolet_camaro_ss.glb',
+    'assets/vehicles/mercedes_benz_560_sel.glb',
     'assets/buildings/villa.glb',
     'assets/buildings/glass_tower.glb',
     'assets/buildings/main_tower.glb',
@@ -692,8 +773,10 @@ if (requireAssets) {
     'assets/ui/menu_shelby_gameplay.jpg',
     'assets/ui/menu_richtown_gameplay.jpg',
     'assets/ui/menu_world_gameplay.jpg',
+    'assets/ui/steering_wheel_common.png',
     'assets/audio/ui_click.wav',
     ...shelbyAudioFiles.map((name) => `assets/audio/shelby/${name}`),
+    ...suppliedCarAudioFiles.map((name) => `assets/audio/${name}`),
   ];
   for (const relative of required) {
     const file = path.join(root, relative);
