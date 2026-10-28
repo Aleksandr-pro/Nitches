@@ -314,6 +314,7 @@ func _draw_cached_world() -> bool:
 
 
 func _draw_vector_world() -> void:
+    var radius := _clip_radius()
     for park_data in _parks:
         if park_data is Dictionary:
             _draw_rotated_rect((park_data as Dictionary).get("rect", Rect2()), Color(0.08, 0.42, 0.18, 0.68))
