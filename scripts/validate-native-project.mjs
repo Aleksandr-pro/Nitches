@@ -194,6 +194,15 @@ for (const marker of ['clean_menu_0234', 'store_panel_0236', 'labeled_tabs_0236'
 for (const marker of ['_build_store_panel', 'PANEL_STORE', '_store_items', '_cycle_store_sort', '_on_store_action_pressed', 'StoreDragSurface0236', 'top_xp_bar_0236', 'clickable_home_cards_0236', 'home_goal_0236', 'wheel_previews_0236', 'profile_single_scroll_0236', 'achievement_cards_0236', 'locked_world_conditions_0236', 'hover_sound_0236', 'gameplay_card_textures_0236', 'PANEL_TRANSITION_SECONDS := 0.18', 'MIN_FONT_SIZE := 14', 'MIN_TOUCH_HEIGHT := 48.0', 'StudioReflectionProbe0236', '"current": distance_km', '"unit": "км"', '"progress": clampf', 'NativeMainMenu.PANEL_STORE', '11_menu_store']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.36 readable-menu/store marker is missing: ${marker}`);
 }
+// 0.2.36 road-infrastructure repair: junction pads, zebras, stop
+// lines, tactile paving and signal heads are generated only for road
+// arms that really exist; shelters/planters/bins/signs are checked by
+// footprint, and curb/paint geometry is subdivided only near real
+// junction mouths so openings no longer stop at source-sample bounds.
+for (const marker of ['road_infrastructure_repair_0236', '_junction_arm_mask', '_junction_has_both_axes', '_is_footprint_clear_of_roads', '_is_pole_clear_of_road', '_subdivide_road_points_for_junctions', 'rejected_fake_junction_pads_0236', 'real_crosswalk_groups_0236', 'rejected_fake_crosswalks_0236', 'rejected_offroad_crosswalk_stripes_0236', 'traffic_signals_on_real_arms_0236', 'rejected_fake_signal_approaches_0236', 'continuous_arterial_curbs_0236', 'rounded_curb_edge_alignment_0236', 'road_junction_subsegments_0236', 'bike_lane_junction_breaks_0236', 'bus_shelter_footprints_clear_0236', 'roadside_footprints_clear_0236', 'rejected_road_palms_0236', 'rejected_road_trees_0236', 'rejected_road_bushes_0236', 'rejected_road_lamps_0236', '15_corniche_t_junction', '16_corniche_l_corner', '17_boulevard_full_junction', '18_west_t_junction']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.36 road-infrastructure marker is missing: ${marker}`);
+}
+assert(!worldScript.includes('{"x": 914.0, "z": -300.0') && !worldScript.includes('{"x": 914.0, "z": -110.0') && !worldScript.includes('{"x": 914.0, "z": 70.0'), 'Native 0.2.36 must not restore the Corniche bus shelters centred on cross streets/crosswalks');
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых авто без 3D-моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');

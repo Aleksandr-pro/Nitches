@@ -1410,6 +1410,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.28 paving variety pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("directional_streaming_0230", false)) or int(enhancement_stats.get("streaming_chunks_total", 0)) < 60 or int(enhancement_stats.get("streaming_colliders_total", 0)) < 300 or int(enhancement_stats.get("streaming_colliders_active", 0)) >= int(enhancement_stats.get("streaming_colliders_total", 0)):
 		failures.append("0.2.30 directional streaming pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("road_infrastructure_repair_0236", false)) or not bool(enhancement_stats.get("real_junction_arms_0236", false)) or not bool(enhancement_stats.get("traffic_signals_on_real_arms_0236", false)) or not bool(enhancement_stats.get("continuous_arterial_curbs_0236", false)) or not bool(enhancement_stats.get("rounded_curb_edge_alignment_0236", false)) or not bool(enhancement_stats.get("bike_lane_junction_breaks_0236", false)) or not bool(enhancement_stats.get("bus_shelter_footprints_clear_0236", false)) or not bool(enhancement_stats.get("roadside_footprints_clear_0236", false)) or int(enhancement_stats.get("rejected_fake_junction_pads_0236", 0)) < 1 or int(enhancement_stats.get("real_crosswalk_groups_0236", 0)) < 50 or int(enhancement_stats.get("rejected_fake_crosswalks_0236", 0)) < 10 or int(enhancement_stats.get("rejected_fake_signal_approaches_0236", 0)) < 10 or int(enhancement_stats.get("road_junction_subsegments_0236", 0)) < 100 or int(enhancement_stats.get("rejected_road_palms_0236", 0)) < 1:
+		failures.append("0.2.36 real-arm road infrastructure/footprint repair pass is incomplete: %s" % str(enhancement_stats))
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
@@ -1699,6 +1701,22 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "08_city_aerial_sunset", "time": "sunset", "vehicle": "hide",
 			"camera": Vector3(430.0, 165.0, 240.0), "target": Vector3(730.0, 8.0, -30.0),
+		},
+		{
+			"name": "15_corniche_t_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(895.0, 18.0, -335.0), "target": Vector3(930.0, 1.0, -300.0),
+		},
+		{
+			"name": "16_corniche_l_corner", "time": "day", "vehicle": "hide",
+			"camera": Vector3(895.0, 18.0, -395.0), "target": Vector3(930.0, 1.0, -430.0),
+		},
+		{
+			"name": "17_boulevard_full_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(725.0, 18.0, -145.0), "target": Vector3(760.0, 1.0, -110.0),
+		},
+		{
+			"name": "18_west_t_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(525.0, 16.0, -335.0), "target": Vector3(560.0, 1.0, -300.0),
 		},
 		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
 		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},
