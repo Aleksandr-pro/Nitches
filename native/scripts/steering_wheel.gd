@@ -23,6 +23,7 @@ var _drag_index := NO_DRAG
 var _last_pointer_angle := 0.0
 var _has_pointer_angle := false
 var _centering := false
+var _input_enabled := true
 var _hub_label: Label
 
 
@@ -74,12 +75,26 @@ func set_display_value(value: float) -> void:
         queue_redraw()
 
 
+func set_input_enabled(enabled: bool) -> void:
+    _input_enabled = enabled
+    mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+    if not enabled:
+        force_release()
+    queue_redraw()
+
+
+func is_input_enabled() -> bool:
+    return _input_enabled
+
+
 func get_smoke_state() -> Dictionary:
     return {
         "touch_steering_wheel_0232": true,
         "created": true,
         "value": _value,
         "engaged": is_engaged(),
+        "input_enabled": _input_enabled,
+        "configurable_size_0233": true,
         "max_lock_degrees": MAX_LOCK_DEGREES,
         "centering_rate": CENTERING_RATE_PER_SEC,
         "rect": get_global_rect(),
@@ -163,7 +178,22 @@ func _end_drag(index: int) -> void:
     queue_redraw()
 
 
+func _input(event: InputEvent) -> void:
+    if not _input_enabled:
+        return
+    if event is InputEventScreenTouch:
+        var touch := event as InputEventScreenTouch
+        if not touch.pressed:
+            _end_drag(touch.index)
+    elif event is InputEventMouseButton:
+        var button := event as InputEventMouseButton
+        if button.button_index == MOUSE_BUTTON_LEFT and not button.pressed:
+            _end_drag(MOUSE_DRAG)
+
+
 func _gui_input(event: InputEvent) -> void:
+    if not _input_enabled:
+        return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
         if touch.pressed:

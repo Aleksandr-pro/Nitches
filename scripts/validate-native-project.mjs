@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -40,6 +40,10 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/main_menu.gd'),
   readText('scripts/steering_wheel.gd'),
   readText('scripts/world_map.gd'),
+  readText('scripts/dashboard_gauge.gd'),
+  readText('scripts/touch_pedal.gd'),
+  readText('scripts/round_action_button.gd'),
+  readText('shaders/circular_mask.gdshader'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -52,8 +56,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=35'), 'Native 0.2.32 must bump Android versionCode to 35');
-assert(preset.includes('version/name="0.2.32-native-alpha"'), 'Native version name must be 0.2.32-native-alpha');
+assert(preset.includes('version/code=36'), 'Native 0.2.33 must bump Android versionCode to 36');
+assert(preset.includes('version/name="0.2.33-native-alpha"'), 'Native version name must be 0.2.33-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -74,15 +78,15 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}`;
-for (const marker of ['DesktopControlsHint', 'is_touchscreen_available', 'KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}`;
+for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
 // 0.2.22 RichTown parks: Central Park, Museum Garden, Corniche Palmetum.
 for (const marker of ['PARK_SPECS', '_build_parks', 'parks_0222', 'RichTown Central Park', 'Museum Garden', 'Corniche Palmetum', 'central_park_fountain_garden', 'museum_garden_pergola', 'beach_palmetum_rondel', '_is_in_park', 'get_park_rects', '_park_plant_oak_grove', '_park_plant_palm_grove', '_park_plant_parterre']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.22 parks marker is missing: ${marker}`);
 }
-assert(minimapScript.includes('get_park_rects'), 'Minimap must draw the 0.2.22 RichTown parks');
+assert(minimapScript.includes('_draw_rotated_rect') && minimapScript.includes('get_park_map_entries'), 'Minimap must draw the 0.2.22 RichTown parks from the HUD world-data binding');
 // 0.2.23 photoreal model detail pass: denser palms/ground cover and
 // fully modelled street/park furniture with per-model triangle stats.
 for (const marker of ['photoreal_models_0223', 'photoreal_park_furniture_0223', 'street_lamp_triangles', 'bus_shelter_triangles', 'park_bench_triangles', 'park_pergola_triangles', 'park_bench_models', 'BlenderParkBenches', 'BlenderParkPergola', 'res://assets/props/park_bench.glb', 'res://assets/props/park_pergola.glb']) {
@@ -145,7 +149,7 @@ for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'pre
 for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.32 steering-wheel/world-map marker is missing: ${marker}`);
 }
-assert(!hudScript.includes('"steer_left"') && !hudScript.includes('"steer_right"'), 'Native 0.2.32 HUD must replace binary steering buttons with the steering wheel');
+assert(hudScript.includes('_control_type == "arrows"') && hudScript.includes('_wheel.visible = _control_type != "arrows"'), 'Native 0.2.33 HUD must default to the steering wheel and expose arrows only as a settings alternative');
 for (const marker of ['get_global_transform_interpolated', 'PHYSICS_INTERPOLATION_MODE_OFF', 'reset_physics_interpolation', 'responsive_steering', 'ramp_digital_steering', 'shape_steering_input', 'CONTACT_PATCH_SAMPLES', 'TYRE_RELAXATION_LENGTH_M', 'free_orbit_0231', 'InputEventScreenDrag', 'InputEventMouseMotion', 'JOY_AXIS_RIGHT_X']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.31 anti-jitter/steering/free-camera marker is missing: ${marker}`);
 }
@@ -166,7 +170,12 @@ assert(!worldScript.includes('Basis(Vector3.UP, yaw).scaled('), 'Native 0.2.27 m
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap']) {
+for (const marker of ['class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'NativeDashboardGauge', 'hud_0233', 'safe_area_3pct_4pct', 'circular_heading_up_0233', 'circular_gauge_0233', 'analog_pedal_0233', 'round_action_0233', 'set_control_preferences', 'set_touch_pedal', 'shape_steering_input_with_preferences', '_update_tilt_steering', 'nitches_settings.cfg', 'settings_panel_0233', 'bind_settings', 'show_settings', 'destination_changed', 'get_minimap_points', 'district_notice_seconds']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.33 HUD/settings marker is missing: ${marker}`);
+}
+assert(!hudScript.includes('NITCHES HORIZON • NATIVE') && !hudScript.includes('"CAM"') && !hudScript.includes('"TIME"') && !hudScript.includes('"RESET"') && !hudScript.includes('"MENU"'), 'Native 0.2.33 HUD must not restore the removed text panel/buttons');
+assert(hudScript.includes('_performance_label.visible = false') && hudScript.includes('set_developer_mode'), 'Native 0.2.33 performance text must stay hidden until developer mode');
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -346,10 +355,6 @@ for (const marker of [
   'TowerMetal',
   '_glass_model_fit',
   'main_tower.glb',
-  '_coordinates_label',
-  '_update_coordinates_label',
-  'coordinates_text',
-  'coordinates_rect',
   'VillaPlaster',
   'VillaStone',
   'VillaLimestone',

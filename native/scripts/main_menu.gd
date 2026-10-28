@@ -10,6 +10,9 @@ extends CanvasLayer
 
 signal play_requested
 signal world_map_requested
+signal settings_changed(settings: Dictionary)
+signal camera_cycle_requested
+signal time_cycle_requested
 
 const COL_BG := Color(0.008, 0.20, 0.22, 0.90)
 const COL_PANEL := Color(0.03, 0.14, 0.15, 0.97)
@@ -29,6 +32,30 @@ var _car_name := ""
 var _specs_bound := false
 var _profile_bound := false
 var _world_map_button: Button
+var _settings: Dictionary = {
+    "control_type": "wheel",
+    "steering_sensitivity": 1.0,
+    "steering_dead_zone": 0.03,
+    "wheel_size_multiplier": 1.0,
+    "sound_enabled": true,
+    "developer_mode": false,
+    "camera_label": "ВИД СЗАДИ",
+    "time_label": "ДЕНЬ",
+}
+var _settings_bound := false
+var _updating_settings := false
+var _control_buttons: Dictionary = {}
+var _sensitivity_slider: HSlider
+var _dead_zone_slider: HSlider
+var _wheel_size_slider: HSlider
+var _setting_value_labels: Dictionary = {}
+var _sound_toggle: Button
+var _camera_setting_button: Button
+var _time_setting_button: Button
+var _developer_status_label: Label
+var _version_button: Button
+var _version_taps := 0
+var _last_version_tap_msec := 0
 
 var _top_car_label: Label
 var _top_credits_label: Label
@@ -54,6 +81,11 @@ func show_menu() -> void:
         _root.visible = true
 
 
+func show_settings() -> void:
+    show_menu()
+    _show_panel(5)
+
+
 func hide_menu() -> void:
     if _root != null:
         _root.visible = false
@@ -73,6 +105,12 @@ func get_smoke_state() -> Dictionary:
         "profile_bound": _profile_bound,
         "visible_now": is_menu_visible(),
         "world_map_button": _world_map_button != null,
+        "settings_panel_0233": _sensitivity_slider != null and _dead_zone_slider != null and _wheel_size_slider != null,
+        "control_buttons": _control_buttons.size(),
+        "settings_bound": _settings_bound,
+        "version_button_created": _version_button != null,
+        "developer_mode": bool(_settings.get("developer_mode", false)),
+        "control_type": String(_settings.get("control_type", "wheel")),
     }
 
 
@@ -208,9 +246,10 @@ func _build_ui() -> void:
     _panels.append(_build_profile_panel(panels_root))
     _panels.append(_build_store_panel(panels_root))
     _panels.append(_build_worlds_panel(panels_root))
+    _panels.append(_build_settings_panel(panels_root))
     _show_panel(0)
 
-    _label(column, "ИГРАТЬ — выезд в RichTown   •   Esc или кнопка MENU в игре — вернуться в меню", 14, COL_MUTED)
+    _label(column, "ИГРАТЬ — выезд в RichTown   •   Esc или ⏸ в игре — пауза и настройки", 14, COL_MUTED)
 
 
 func _build_top_bar(parent: Node) -> void:
@@ -260,7 +299,7 @@ func _build_tabs(parent: Node) -> void:
     tabs.add_theme_constant_override("separation", 8)
     parent.add_child(tabs)
     var group := ButtonGroup.new()
-    var names := ["ГЛАВНАЯ", "ГАРАЖ", "ПРОФИЛЬ", "МАГАЗИН", "КАРТЫ И МИРЫ"]
+    var names := ["ГЛАВНАЯ", "ГАРАЖ", "ПРОФИЛЬ", "МАГАЗИН", "КАРТЫ И МИРЫ", "НАСТРОЙКИ"]
     for i in names.size():
         var tab := _button(names[i], COL_TEAL, Vector2(0.0, 46.0), 17)
         tab.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -452,6 +491,162 @@ func _build_worlds_panel(parent: Node) -> Control:
     _world_map_button.pressed.connect(func() -> void: world_map_requested.emit())
     vbox.add_child(_world_map_button)
     return vbox.get_parent().get_parent() as Control
+
+
+func _slider_row(parent: Node, key: String, caption: String, minimum: float, maximum: float, step: float) -> HSlider:
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 10)
+    parent.add_child(row)
+    var cap := _label(row, caption, 15, COL_MUTED)
+    cap.custom_minimum_size = Vector2(190.0, 0.0)
+    cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    var slider := HSlider.new()
+    slider.min_value = minimum
+    slider.max_value = maximum
+    slider.step = step
+    slider.custom_minimum_size = Vector2(0.0, 36.0)
+    slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    row.add_child(slider)
+    var value_label := _label(row, "", 15, COL_TEXT)
+    value_label.custom_minimum_size = Vector2(72.0, 0.0)
+    value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _setting_value_labels[key] = value_label
+    slider.value_changed.connect(func(value: float) -> void:
+        _settings[key] = value
+        _refresh_setting_value_labels()
+        _emit_settings()
+    )
+    return slider
+
+
+func _build_settings_panel(parent: Node) -> Control:
+    var vbox := _new_panel(parent)
+    _label(vbox, "НАСТРОЙКИ", 28, COL_TEXT)
+    var columns := HBoxContainer.new()
+    columns.add_theme_constant_override("separation", 22)
+    columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(columns)
+
+    var left := VBoxContainer.new()
+    left.add_theme_constant_override("separation", 9)
+    left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    left.size_flags_stretch_ratio = 1.25
+    columns.add_child(left)
+    _label(left, "УПРАВЛЕНИЕ", 19, COL_YELLOW)
+    _label(left, "Тип управления", 15, COL_MUTED)
+    var type_row := HBoxContainer.new()
+    type_row.add_theme_constant_override("separation", 8)
+    left.add_child(type_row)
+    var group := ButtonGroup.new()
+    for spec in [["wheel", "РУЛЬ"], ["tilt", "НАКЛОН"], ["arrows", "СТРЕЛКИ"]]:
+        var control_type := String(spec[0])
+        var button := _button(String(spec[1]), COL_TEAL, Vector2(0.0, 52.0), 16)
+        button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        button.toggle_mode = true
+        button.button_group = group
+        button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        button.pressed.connect(func() -> void:
+            _settings["control_type"] = control_type
+            _emit_settings()
+        )
+        type_row.add_child(button)
+        _control_buttons[control_type] = button
+    _sensitivity_slider = _slider_row(left, "steering_sensitivity", "Чувствительность руля", 0.5, 1.8, 0.05)
+    _dead_zone_slider = _slider_row(left, "steering_dead_zone", "Мёртвая зона", 0.0, 0.25, 0.01)
+    _wheel_size_slider = _slider_row(left, "wheel_size_multiplier", "Размер руля", 0.75, 1.25, 0.05)
+    _label(left, "НАКЛОН автоматически запоминает текущее положение телефона как центр при включении.", 13, COL_MUTED)
+
+    var right := VBoxContainer.new()
+    right.add_theme_constant_override("separation", 10)
+    right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    columns.add_child(right)
+    _label(right, "ИГРА И ПАУЗА", 19, COL_YELLOW)
+    _camera_setting_button = _button("КАМЕРА: ВИД СЗАДИ", COL_TEAL, Vector2(0.0, 54.0), 17)
+    _camera_setting_button.pressed.connect(func() -> void: camera_cycle_requested.emit())
+    right.add_child(_camera_setting_button)
+    _time_setting_button = _button("ВРЕМЯ СУТОК: ДЕНЬ", COL_TEAL, Vector2(0.0, 54.0), 17)
+    _time_setting_button.pressed.connect(func() -> void: time_cycle_requested.emit())
+    right.add_child(_time_setting_button)
+    _sound_toggle = _button("ЗВУК: ВКЛ", COL_MAGENTA, Vector2(0.0, 54.0), 17)
+    _sound_toggle.pressed.connect(func() -> void:
+        _settings["sound_enabled"] = not bool(_settings.get("sound_enabled", true))
+        _refresh_settings_controls()
+        _emit_settings()
+    )
+    right.add_child(_sound_toggle)
+    var continue_button := _button("ПРОДОЛЖИТЬ", COL_YELLOW, Vector2(0.0, 58.0), 19)
+    continue_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    continue_button.pressed.connect(func() -> void: play_requested.emit())
+    right.add_child(continue_button)
+    var spacer := Control.new()
+    spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    right.add_child(spacer)
+    _developer_status_label = _label(right, "режим разработчика выключен", 13, COL_MUTED)
+    _version_button = _button("Nitches 0.2.33-native-alpha", COL_LOCKED, Vector2(0.0, 42.0), 13)
+    _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _version_button.pressed.connect(_on_version_pressed)
+    right.add_child(_version_button)
+    _refresh_settings_controls()
+    return vbox.get_parent().get_parent() as Control
+
+
+func _on_version_pressed() -> void:
+    var now := Time.get_ticks_msec()
+    if now - _last_version_tap_msec > 1600:
+        _version_taps = 0
+    _last_version_tap_msec = now
+    _version_taps += 1
+    if _version_taps >= 5:
+        _version_taps = 0
+        _settings["developer_mode"] = not bool(_settings.get("developer_mode", false))
+        _refresh_settings_controls()
+        _emit_settings()
+
+
+func _emit_settings() -> void:
+    if not _updating_settings:
+        settings_changed.emit(_settings.duplicate(true))
+
+
+func _refresh_setting_value_labels() -> void:
+    if _setting_value_labels.has("steering_sensitivity"):
+        (_setting_value_labels["steering_sensitivity"] as Label).text = "x%.2f" % float(_settings.get("steering_sensitivity", 1.0))
+    if _setting_value_labels.has("steering_dead_zone"):
+        (_setting_value_labels["steering_dead_zone"] as Label).text = "%d%%" % int(round(float(_settings.get("steering_dead_zone", 0.03)) * 100.0))
+    if _setting_value_labels.has("wheel_size_multiplier"):
+        (_setting_value_labels["wheel_size_multiplier"] as Label).text = "%d%%" % int(round(float(_settings.get("wheel_size_multiplier", 1.0)) * 100.0))
+
+
+func _refresh_settings_controls() -> void:
+    _updating_settings = true
+    var control_type := String(_settings.get("control_type", "wheel"))
+    for key in _control_buttons.keys():
+        (_control_buttons[key] as Button).button_pressed = String(key) == control_type
+    if _sensitivity_slider != null:
+        _sensitivity_slider.value = float(_settings.get("steering_sensitivity", 1.0))
+    if _dead_zone_slider != null:
+        _dead_zone_slider.value = float(_settings.get("steering_dead_zone", 0.03))
+    if _wheel_size_slider != null:
+        _wheel_size_slider.value = float(_settings.get("wheel_size_multiplier", 1.0))
+    if _sound_toggle != null:
+        _sound_toggle.text = "ЗВУК: ВКЛ" if bool(_settings.get("sound_enabled", true)) else "ЗВУК: ВЫКЛ"
+    if _camera_setting_button != null:
+        _camera_setting_button.text = "КАМЕРА: %s" % String(_settings.get("camera_label", "ВИД СЗАДИ"))
+    if _time_setting_button != null:
+        _time_setting_button.text = "ВРЕМЯ СУТОК: %s" % String(_settings.get("time_label", "ДЕНЬ"))
+    if _developer_status_label != null:
+        _developer_status_label.text = "режим разработчика включён: FPS/DRAW/TRIS/CPU/PHYS видны в HUD" if bool(_settings.get("developer_mode", false)) else "режим разработчика выключен • 5 касаний по версии"
+    _refresh_setting_value_labels()
+    _updating_settings = false
+
+
+func bind_settings(settings: Dictionary) -> void:
+    for key in settings.keys():
+        _settings[key] = settings[key]
+    _settings_bound = true
+    _refresh_settings_controls()
 
 
 # --------------------------------------------------------------------- #

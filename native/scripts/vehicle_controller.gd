@@ -92,6 +92,14 @@ var _steering_visual_angle := 0.0
 var _steering_command := 0.0
 var _touch_steering_value := 0.0
 var _touch_steering_engaged := false
+var _touch_pedal_values: Dictionary = {"accelerate": 0.0, "brake_reverse": 0.0}
+var _control_type := "wheel"
+var _steering_sensitivity := 1.0
+var _steering_dead_zone := 0.03
+var _tilt_steering_value := 0.0
+var _tilt_neutral_roll := 0.0
+var _tilt_calibrated := false
+var _tilt_sensor_available := false
 var _steering_speed_smooth := 0.0
 var _steering_limit_smooth := NativeArcadeCarAssist.MAX_STEER_RAD
 var _visual_forward_speed := 0.0
@@ -682,14 +690,38 @@ func set_touch_input(action_name: String, pressed: bool) -> void:
 	_touch_inputs[action_name] = pressed
 
 
+## 0.2.33 HUD settings: control source and steering feel are user
+## preferences, persisted by Main.  Switching away from the wheel
+## immediately releases any stale analog wheel engagement.
+func set_control_preferences(control_type: String, sensitivity: float, dead_zone: float) -> void:
+	var next_type := control_type
+	if next_type != "wheel" and next_type != "tilt" and next_type != "arrows":
+		next_type = "wheel"
+	if next_type != _control_type and next_type == "tilt":
+		_tilt_calibrated = false
+		_tilt_sensor_available = false
+		_tilt_steering_value = 0.0
+	_control_type = next_type
+	_steering_sensitivity = clampf(sensitivity, 0.5, 1.8)
+	_steering_dead_zone = clampf(dead_zone, 0.0, 0.25)
+	if _control_type != "wheel":
+		_touch_steering_engaged = false
+		_touch_steering_value = 0.0
+
+
+func set_touch_pedal(action_name: String, value: float) -> void:
+	if _touch_pedal_values.has(action_name):
+		_touch_pedal_values[action_name] = clampf(value, 0.0, 1.0)
+
+
 ## 0.2.32: direct analog value from the on-screen steering wheel.
 ## While engaged it is the highest-priority steering source; the
 ## wheel keeps emitting during its spring return so the rack follows
 ## the visible rim all the way back to centre.
 func set_touch_steering(value: float, engaged: bool) -> void:
 	_touch_steering_value = clampf(value, -1.0, 1.0)
-	_touch_steering_engaged = engaged
-	if engaged:
+	_touch_steering_engaged = engaged and _control_type == "wheel"
+	if _touch_steering_engaged:
 		_steering_command = _touch_steering_value
 
 
@@ -699,11 +731,12 @@ func _touch_pressed(action_name: String) -> bool:
 
 func _read_inputs(delta: float) -> void:
 	var keyboard_throttle := Input.get_axis(&"brake_reverse", &"accelerate")
-	var touch_throttle := 0.0
-	if _touch_pressed("accelerate"):
-		touch_throttle += 1.0
-	if _touch_pressed("brake_reverse"):
-		touch_throttle -= 1.0
+	var touch_throttle := float(_touch_pedal_values.get("accelerate", 0.0)) - float(_touch_pedal_values.get("brake_reverse", 0.0))
+	if absf(touch_throttle) <= 0.01:
+		if _touch_pressed("accelerate"):
+			touch_throttle += 1.0
+		if _touch_pressed("brake_reverse"):
+			touch_throttle -= 1.0
 	_throttle_command = clampf(touch_throttle if absf(touch_throttle) > 0.01 else keyboard_throttle, -1.0, 1.0)
 
 	var keyboard_steering := Input.get_axis(&"steer_left", &"steer_right")
@@ -718,11 +751,16 @@ func _read_inputs(delta: float) -> void:
 		var axis_value := Input.get_joy_axis(device, JOY_AXIS_LEFT_X)
 		if absf(axis_value) > absf(analog_steering):
 			analog_steering = axis_value
-	if _touch_steering_engaged:
-		steering_input = NativeArcadeCarAssist.shape_steering_input(_touch_steering_value)
+	if _control_type == "tilt":
+		_update_tilt_steering(delta)
+	if _control_type == "wheel" and _touch_steering_engaged:
+		steering_input = NativeArcadeCarAssist.shape_steering_input_with_preferences(_touch_steering_value, _steering_sensitivity, _steering_dead_zone)
 		_steering_command = _touch_steering_value
+	elif _control_type == "tilt" and _tilt_sensor_available:
+		steering_input = NativeArcadeCarAssist.shape_steering_input_with_preferences(_tilt_steering_value, _steering_sensitivity, _steering_dead_zone)
+		_steering_command = _tilt_steering_value
 	elif absf(analog_steering) > 0.08:
-		steering_input = NativeArcadeCarAssist.shape_steering_input(analog_steering)
+		steering_input = NativeArcadeCarAssist.shape_steering_input_with_preferences(analog_steering, _steering_sensitivity, _steering_dead_zone)
 		_steering_command = clampf(analog_steering, -1.0, 1.0)
 	else:
 		_steering_command = NativeArcadeCarAssist.ramp_digital_steering(
@@ -731,10 +769,32 @@ func _read_inputs(delta: float) -> void:
 			delta,
 			_steering_speed_smooth
 		)
-		steering_input = NativeArcadeCarAssist.shape_steering_input(_steering_command)
+		steering_input = NativeArcadeCarAssist.shape_steering_input_with_preferences(_steering_command, _steering_sensitivity, _steering_dead_zone)
 
 	handbrake_active = Input.is_action_pressed(&"handbrake") or _touch_pressed("handbrake")
 	boost_active = (Input.is_action_pressed(&"boost") or _touch_pressed("boost")) and _throttle_command > 0.05 and _nitro > 0.02
+
+
+func _update_tilt_steering(delta: float) -> void:
+	var gravity := Input.get_gravity()
+	if gravity.length() < 0.5:
+		gravity = Input.get_accelerometer()
+	if gravity.length() < 0.5:
+		_tilt_sensor_available = false
+		_tilt_steering_value = move_toward(_tilt_steering_value, 0.0, 3.0 * maxf(delta, 0.0))
+		return
+	_tilt_sensor_available = true
+	var roll := atan2(gravity.x, -gravity.y)
+	if not _tilt_calibrated:
+		_tilt_neutral_roll = roll
+		_tilt_calibrated = true
+		_tilt_steering_value = 0.0
+		return
+	var delta_roll := wrapf(roll - _tilt_neutral_roll, -PI, PI)
+	# Device gravity roll decreases when the screen is tilted clockwise;
+	# clockwise must mean steer-right, matching the on-screen wheel.
+	var target := clampf(-sin(delta_roll) * 2.4, -1.0, 1.0)
+	_tilt_steering_value = lerpf(_tilt_steering_value, target, 1.0 - exp(-18.0 * maxf(delta, 0.0)))
 
 
 func _physics_process(delta: float) -> void:
@@ -1331,6 +1391,9 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	_steering_command = 0.0
 	_touch_steering_value = 0.0
 	_touch_steering_engaged = false
+	_touch_pedal_values["accelerate"] = 0.0
+	_touch_pedal_values["brake_reverse"] = 0.0
+	_tilt_steering_value = 0.0
 	_steering_speed_smooth = 0.0
 	_steering_limit_smooth = NativeArcadeCarAssist.MAX_STEER_RAD
 	_steering_visual_angle = 0.0
@@ -1477,6 +1540,11 @@ func get_smoothing_state() -> Dictionary:
 		"touch_steering_wheel_0232": true,
 		"touch_steering_value": _touch_steering_value,
 		"touch_steering_engaged": _touch_steering_engaged,
+		"control_type": _control_type,
+		"steering_sensitivity": _steering_sensitivity,
+		"steering_dead_zone": _steering_dead_zone,
+		"tilt_sensor_available": _tilt_sensor_available,
+		"analog_touch_pedals_0233": true,
 		"steering_limit_smooth": _steering_limit_smooth,
 		"throttle_command": _throttle_command,
 		"effective_throttle": throttle_input,
