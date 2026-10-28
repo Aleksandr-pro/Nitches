@@ -714,6 +714,7 @@ func _show_menu() -> void:
 	if _vehicle != null:
 		_vehicle.freeze = true
 		_vehicle.set_physics_process(false)
+		_vehicle.set_audio_suspended(true)
 	if _hud != null:
 		_hud.visible = false
 	_menu.refresh_profile(_profile_view())
@@ -741,6 +742,7 @@ func _enter_game() -> void:
 	if _vehicle != null:
 		_vehicle.freeze = false
 		_vehicle.set_physics_process(true)
+		_vehicle.set_audio_suspended(false)
 	_snap_camera = true
 
 
@@ -755,6 +757,7 @@ func _show_world_map() -> void:
 	if _vehicle != null:
 		_vehicle.freeze = true
 		_vehicle.set_physics_process(false)
+		_vehicle.set_audio_suspended(true)
 	if _hud != null:
 		_hud.visible = false
 	var first_map_open := not bool(_settings.get("map_hint_seen", false))
@@ -780,6 +783,7 @@ func _hide_world_map() -> void:
 	if _vehicle != null:
 		_vehicle.freeze = false
 		_vehicle.set_physics_process(true)
+		_vehicle.set_audio_suspended(false)
 	_snap_camera = true
 
 
@@ -1434,6 +1438,9 @@ func _run_smoke_checks() -> void:
 	var smoothing_state := _vehicle.get_smoothing_state()
 	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
 		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))
+	var vehicle_audio_state: Dictionary = smoothing_state.get("vehicle_audio", {})
+	if not bool(smoothing_state.get("ignition_0235", false)) or int(smoothing_state.get("engine_state", -1)) != NativeVehicle.ENGINE_OFF or bool(smoothing_state.get("engine_running", true)) or _vehicle.get_gear_label() != "N" or _vehicle.get_rpm_ratio() > 0.001 or not bool(vehicle_audio_state.get("recorded_audio_0235", false)) or not bool(vehicle_audio_state.get("recorded_gt500_bank", false)) or int(vehicle_audio_state.get("on_loop_count", 0)) != 16 or int(vehicle_audio_state.get("off_loop_count", 0)) != 16 or not bool(vehicle_audio_state.get("streams_ready", false)) or int(vehicle_audio_state.get("players_created", 0)) < 7 or not bool(vehicle_audio_state.get("bus_ready", false)):
+		failures.append("0.2.35 ignition-off spawn / recorded Shelby GT500 audio pass is incomplete: smoothing=%s audio=%s gear=%s rpm_ratio=%.3f" % [str(smoothing_state), str(vehicle_audio_state), _vehicle.get_gear_label(), _vehicle.get_rpm_ratio()])
 	var camera_control_state := get_camera_control_state()
 	if not bool(smoothing_state.get("physics_interpolation_vehicle", false)) or int(smoothing_state.get("contact_patch_samples", 0)) < 3 or not bool(smoothing_state.get("tyre_relaxation", false)) or not bool(smoothing_state.get("filtered_suspension_velocity", false)) or not bool(smoothing_state.get("precision_steering_0231", false)) or float(drive_base_state.get("steer_response", 0.0)) < 20.0 or float(drive_base_state.get("steer_actuator_rate_low", 0.0)) < 6.0 or float(drive_base_state.get("digital_steer_attack", 0.0)) < 5.0 or float(drive_base_state.get("digital_steer_initial_bite", 0.0)) < 0.15 or not bool(camera_control_state.get("free_orbit_0231", false)) or not bool(camera_control_state.get("camera_interpolation_off", false)) or not bool(camera_control_state.get("camera_top_level", false)) or not bool(camera_control_state.get("target_interpolated", false)) or not bool(camera_control_state.get("physics_interpolation_project", false)) or not bool(camera_control_state.get("touch_orbit", false)) or not bool(camera_control_state.get("mouse_orbit", false)) or not bool(camera_control_state.get("gamepad_orbit", false)) or not is_finite(float(camera_control_state.get("orbit_yaw", 0.0))) or not is_finite(float(camera_control_state.get("orbit_pitch", 0.0))):
 		failures.append("0.2.31 anti-jitter / precision steering / free-orbit camera pass is incomplete: smoothing=%s drive=%s camera=%s" % [str(smoothing_state), str(drive_base_state), str(camera_control_state)])
@@ -1507,6 +1514,7 @@ func _run_smoke_checks() -> void:
 	var brake_pedal_state: Dictionary = hud_state.get("brake_pedal", {})
 	var nitro_button_state: Dictionary = hud_state.get("nitro_button", {})
 	var drift_button_state: Dictionary = hud_state.get("drift_button", {})
+	var ignition_button_state: Dictionary = hud_state.get("ignition_button", {})
 	var viewport_size: Vector2 = hud_state.get("viewport_size", Vector2.ZERO)
 	var minimap_rect: Rect2 = minimap_state.get("rect", Rect2())
 	var gauge_rect: Rect2 = gauge_state.get("rect", Rect2())
@@ -1514,14 +1522,17 @@ func _run_smoke_checks() -> void:
 	var brake_rect: Rect2 = brake_pedal_state.get("rect", Rect2())
 	var nitro_rect: Rect2 = nitro_button_state.get("rect", Rect2())
 	var drift_rect: Rect2 = drift_button_state.get("rect", Rect2())
+	var ignition_rect: Rect2 = ignition_button_state.get("rect", Rect2())
 	var safe_left := viewport_size.x * 0.03 - 1.0
 	var safe_top := viewport_size.y * 0.04 - 1.0
 	var safe_right := viewport_size.x * 0.97 + 1.0
 	var safe_bottom := viewport_size.y * 0.96 + 1.0
 	var hud_rects_safe := minimap_rect.position.x >= safe_left and minimap_rect.position.y >= safe_top and gauge_rect.end.x <= safe_right and gauge_rect.position.y >= safe_top and gas_rect.end.x <= safe_right and gas_rect.end.y <= safe_bottom
-	var hud_rects_visible := _rect_is_on_screen(minimap_rect, viewport_size) and _rect_is_on_screen(gauge_rect, viewport_size) and _rect_is_on_screen(gas_rect, viewport_size) and _rect_is_on_screen(brake_rect, viewport_size) and _rect_is_on_screen(nitro_rect, viewport_size) and _rect_is_on_screen(drift_rect, viewport_size)
+	var hud_rects_visible := _rect_is_on_screen(minimap_rect, viewport_size) and _rect_is_on_screen(gauge_rect, viewport_size) and _rect_is_on_screen(gas_rect, viewport_size) and _rect_is_on_screen(brake_rect, viewport_size) and _rect_is_on_screen(nitro_rect, viewport_size) and _rect_is_on_screen(drift_rect, viewport_size) and _rect_is_on_screen(ignition_rect, viewport_size)
 	if not bool(hud_state.get("hud_0233", false)) or not bool(hud_state.get("safe_area_3pct_4pct", false)) or not hud_rects_safe or not hud_rects_visible or not bool(minimap_state.get("circular_heading_up_0233", false)) or int(minimap_state.get("roads", 0)) < 35 or int(minimap_state.get("parks", 0)) < 3 or int(minimap_state.get("pois", 0)) < 20 or not bool(minimap_state.get("has_destination", false)) or not bool(gauge_state.get("circular_gauge_0233", false)) or String(gauge_state.get("speed_text", "")) != "0" or not bool(gas_pedal_state.get("analog_pedal_0233", false)) or not bool(brake_pedal_state.get("analog_pedal_0233", false)) or gas_rect.size.y < viewport_size.y * 0.28 or brake_rect.size.y < viewport_size.y * 0.28 or absf(gas_rect.position.x - brake_rect.end.x - 8.0) > 1.5 or not bool(nitro_button_state.get("round_action_0233", false)) or not bool(drift_button_state.get("round_action_0233", false)) or nitro_rect.position.x - drift_rect.end.x < 15.0 or bool(hud_state.get("performance_visible", true)) != bool(hud_state.get("developer_mode", false)):
 		failures.append("0.2.34 safe-area circular HUD / analog pedals / road route pass is incomplete: hud=%s minimap=%s gauge=%s" % [str(hud_state), str(minimap_state), str(gauge_state)])
+	if not bool(hud_state.get("hud_0235", false)) or not bool(ignition_button_state.get("ignition_button_0235", false)) or not bool(hud_state.get("ignition_under_minimap", false)) or not bool(hud_state.get("ignition_same_size_as_drift", false)) or ignition_rect.size.x < 56.0 or ignition_rect.size.y < 56.0:
+		failures.append("0.2.35 ignition button under the minimap / handbrake-size pass is incomplete: hud=%s ignition=%s drift_rect=%s" % [str(hud_state), str(ignition_button_state), str(drift_rect)])
 	var menu_state := _menu.get_smoke_state()
 	var spec_sheet := _vehicle.get_spec_sheet()
 	var world_map_state := _world_map.get_smoke_state()

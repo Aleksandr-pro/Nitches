@@ -45,6 +45,25 @@ const uiCopies = [
   ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
 ];
 
+// 0.2.35 recorded Shelby/Mustang bank.  The phase-aligned GT500 loops
+// are staged in both load layers; the long Mustang idle, starter,
+// shutdown and tyre recordings complete the vehicle-audio set.
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400];
+const shelbyAudioNames = [
+  ...shelbyAudioRpms.flatMap((rpm) => [
+    `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
+    `gt500_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  'mustang_idle.wav',
+  'mustang_start.wav',
+  'mustang_stop.wav',
+  'tire_squeal_loop.wav',
+];
+const audioCopies = shelbyAudioNames.map((name) => [
+  `src/assets/audio/shelby/${name}`,
+  `audio/shelby/${name}`,
+]);
+
 const textureNames = [
   'user_grass.jpg', 'user_grass_normal.jpg',
   'user_sand_rippled.jpg', 'user_sand_rippled_normal.jpg', 'user_sand_beach_white.jpg',
@@ -107,9 +126,22 @@ async function assertRealGlb(file, optionalRole = '') {
   return true;
 }
 
+async function assertRealWav(file) {
+  const info = await stat(file);
+  const header = await readHeader(file, 44);
+  const riff = header.subarray(0, 4).toString('utf8');
+  const wave = header.subarray(8, 12).toString('utf8');
+  if (info.size <= 44 || riff !== 'RIFF' || wave !== 'WAVE') {
+    throw new Error(`${file} is not a real WAV (riff: ${JSON.stringify(riff)}, wave: ${JSON.stringify(wave)}, size: ${info.size}).`);
+  }
+}
+
 async function copyOne(source, relativeDestination, role = '') {
   if (source.endsWith('.glb') && !(await assertRealGlb(source, role))) {
     return 0;
+  }
+  if (source.endsWith('.wav')) {
+    await assertRealWav(source);
   }
   const destination = path.join(destinationRoot, relativeDestination);
   await mkdir(path.dirname(destination), { recursive: true });
@@ -127,6 +159,9 @@ for (const [source, destination, role] of modelCopies) {
   totalBytes += await copyOne(source, destination, role ?? '');
 }
 for (const [source, destination] of uiCopies) {
+  totalBytes += await copyOne(source, destination);
+}
+for (const [source, destination] of audioCopies) {
   totalBytes += await copyOne(source, destination);
 }
 for (const name of textureNames) {
