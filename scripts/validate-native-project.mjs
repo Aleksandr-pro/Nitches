@@ -254,7 +254,7 @@ assert(!worldScript.includes('{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0') &&
 // Audi/Camaro/Mercedes GLBs, separate recorded banks, a photographic
 // replaceable HUD wheel, per-car customization/stats and a compulsory
 // in-game screenshot for every car.
-for (const marker of ['class_name NativeCarCatalog', 'get_menu_cars', 'car_count', 'get_cars', 'car_selection_requested', 'bind_car_catalog', 'multi_car_0240', 'configure_car', 'switch_car', 'car_changed', 'configure_for_car', 'multi_car_audio_0240', 'photo_steering_wheel_0240', 'replaceable_per_car_0240', 'set_wheel_texture_path', 'set_steering_wheel_texture_path', '08a_car_audi_r8', '08b_car_camaro_ss', '08c_car_mercedes_560_sel', '08d_car_shelby_gt500', 'audi_r8_v10_plus', 'chevrolet_camaro_ss', 'mercedes_560_sel', '_car_customizations', '_car_stats', 'selected_car_id', '_load_car_model']) {
+for (const marker of ['class_name NativeCarCatalog', 'get_menu_cars', 'car_count', 'get_cars', 'car_selection_requested', 'bind_car_catalog', 'multi_car_0240', 'configure_car', 'switch_car', 'car_changed', 'configure_for_car', 'multi_car_audio_0240', 'photo_steering_wheel_0240', 'replaceable_per_car_0240', 'set_wheel_texture_path', 'set_steering_wheel_texture_path', '08a_car_audi_r8', '08b_car_camaro_ss', '08c_car_mercedes_560_sel', '08d_car_shelby_gt500', 'audi_r8_v10_plus', 'chevrolet_camaro_ss', 'mercedes_560_sel', '_car_customizations', '_car_stats', 'selected_car_id', '_load_car_model', '_license_plate_font_size']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.40 multi-car marker is missing: ${marker}`);
 }
 for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207], ['audi_r8_v10_plus', 610, 560, 330], ['chevrolet_camaro_ss', 455, 617, 290], ['mercedes_560_sel', 300, 455, 250]]) {
@@ -262,7 +262,8 @@ for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207],
   assert(carCatalogScript.includes(`"power_hp": ${power}`) && carCatalogScript.includes(`"torque_nm": ${torque}`) && carCatalogScript.includes(`"top_speed_kmh": ${topSpeed}`), `Native catalogue spec sheet drifted for ${carId}`);
 }
 assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
-assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
+assert(mainScript.includes('"car_id": "audi_r8_v10_plus"') && mainScript.includes('"car_id": "chevrolet_camaro_ss"') && mainScript.includes('"car_id": "mercedes_560_sel"') && mainScript.includes('catalog_by_id.get("mercedes_560_sel"') && !mainScript.includes('"car_id": "mercedes_benz_560_sel"') && !mainScript.includes('catalog_by_id.get("mercedes_benz_560_sel"') && mainMenuScript.includes('"mercedes_560_sel":\n            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"'), 'Native screenshot/menu code must use the exact catalogue car IDs, distinct from GLB filenames');
+assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0') && mainMenuScript.includes('Altair78 (CC BY-SA 4.0)') && mainMenuScript.includes('docs/AUDIO_CREDITS.md'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых машин без моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
@@ -275,7 +276,7 @@ for (const marker of ['world_map_0234', 'zoom_label_tiers_0234', '_try_position_
   assert(combinedRuntime.includes(marker), `Native 0.2.34 map/route marker is missing: ${marker}`);
 }
 assert(!worldMapScript.includes('_canvas.draw_circle(centre, radius, color)'), 'Native 0.2.34 world map must not draw the removed debug district circles');
-assert(syncScript.includes('menu_play_gameplay.jpg') && syncScript.includes('menu_shelby_gameplay.jpg') && syncScript.includes('menu_richtown_gameplay.jpg') && syncScript.includes('menu_world_gameplay.jpg') && syncScript.includes('ui_click.wav') && !syncScript.includes("menu_garage.jpg"), 'Native asset sync must stage the 0.2.36 real-gameplay menu screenshots and click sound, not the retired photoreal renders');
+assert(syncScript.includes('menu_play_gameplay.jpg') && syncScript.includes('menu_shelby_gameplay.jpg') && syncScript.includes('menu_audi_r8_gameplay.jpg') && syncScript.includes('menu_camaro_ss_gameplay.jpg') && syncScript.includes('menu_mercedes_560_sel_gameplay.jpg') && syncScript.includes('menu_richtown_gameplay.jpg') && syncScript.includes('menu_world_gameplay.jpg') && syncScript.includes('ui_click.wav') && !syncScript.includes("menu_garage.jpg"), 'Native asset sync must stage real-gameplay menu screenshots for every car and the click sound, not retired photoreal renders');
 // 0.2.35 ignition + recorded Shelby audio: the car spawns off, a
 // handbrake-sized power button sits under the minimap, F/Enter also
 // toggles the engine, and the old synthesized 55 Hz loop is gone.
@@ -571,7 +572,7 @@ for (const marker of [
   assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
-for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
   const info = await stat(relative);
   assert(info.size > minimumSize, `Native 0.2.36 canonical UI asset is unexpectedly small: ${relative}`);
   if (relative.endsWith('.jpg')) {
@@ -771,6 +772,9 @@ if (requireAssets) {
     ...['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse'].flatMap((stem) => ['', '_normal', '_roughness'].map((suffix) => `assets/textures/${stem}${suffix}.jpg`)),
     'assets/ui/menu_play_gameplay.jpg',
     'assets/ui/menu_shelby_gameplay.jpg',
+    'assets/ui/menu_audi_r8_gameplay.jpg',
+    'assets/ui/menu_camaro_ss_gameplay.jpg',
+    'assets/ui/menu_mercedes_560_sel_gameplay.jpg',
     'assets/ui/menu_richtown_gameplay.jpg',
     'assets/ui/menu_world_gameplay.jpg',
     'assets/ui/steering_wheel_common.png',

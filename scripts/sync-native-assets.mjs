@@ -44,11 +44,16 @@ const modelCopies = [
   ['src/assets/models/props/ornamental_shrub.glb', 'vegetation/ornamental_shrub.glb'],
 ];
 
-// 0.2.36 menu cards are cropped from real 0.2.35 in-game CI frames;
-// the retired photoreal menu renders are deliberately no longer staged.
+// Menu cards are cropped from real in-game CI frames (0.2.36 cards
+// from 0.2.35; the three 0.2.40 supplied-car cards are made by
+// scripts/make_car_menu_cards.py from shots 08a-08c).  The retired
+// photoreal menu renders are deliberately no longer staged.
 const uiCopies = [
   ['src/assets/ui/menu_play_gameplay.jpg', 'ui/menu_play_gameplay.jpg'],
   ['src/assets/ui/menu_shelby_gameplay.jpg', 'ui/menu_shelby_gameplay.jpg'],
+  ['src/assets/ui/menu_audi_r8_gameplay.jpg', 'ui/menu_audi_r8_gameplay.jpg'],
+  ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 'ui/menu_camaro_ss_gameplay.jpg'],
+  ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 'ui/menu_mercedes_560_sel_gameplay.jpg'],
   ['src/assets/ui/menu_richtown_gameplay.jpg', 'ui/menu_richtown_gameplay.jpg'],
   ['src/assets/ui/menu_world_gameplay.jpg', 'ui/menu_world_gameplay.jpg'],
   ['src/assets/ui/steering_wheel_common.png', 'ui/steering_wheel_common.png'],

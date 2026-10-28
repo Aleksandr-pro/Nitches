@@ -24,7 +24,7 @@ CARDS = {
 # starts just right of the 280 px steering-wheel control and ends
 # just left of the drift/N2O controls; vertically it starts below the
 # minimap/gauge and includes the rear bumper and contact shadow.
-CROP_960 = (288, 240, 744, 496)
+CROP_960 = (300, 240, 756, 496)
 OUTPUT_SIZE = (1024, 576)
 
 

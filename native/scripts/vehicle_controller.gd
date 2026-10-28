@@ -667,6 +667,14 @@ func set_license_plate(value: String) -> void:
 	_license_plate = cleaned.left(9)
 	for label in _plate_labels:
 		label.text = _license_plate
+		label.font_size = _license_plate_font_size(_license_plate)
+
+
+func _license_plate_font_size(text: String) -> int:
+	# The white plate is 0.54 m wide.  Keep the longest editable
+	# plates (9 chars, e.g. CAMARO-SS) inside that panel instead of
+	# letting the outer glyphs spill onto the bumper.
+	return clampi(int(round(720.0 / float(maxi(1, text.length())))), 64, 96)
 
 
 func _create_license_plates() -> void:
@@ -698,7 +706,7 @@ func _add_license_plate(position_value: Vector3, yaw: float) -> void:
 	label.text = _license_plate
 	label.position = Vector3(0.0, 0.0, 0.016)
 	label.pixel_size = 0.00135
-	label.font_size = 96
+	label.font_size = _license_plate_font_size(_license_plate)
 	label.modulate = Color(0.025, 0.035, 0.05)
 	label.outline_modulate = Color(0.94, 0.95, 0.96)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
