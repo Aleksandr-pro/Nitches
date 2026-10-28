@@ -762,6 +762,7 @@ func _show_world_map() -> void:
 	if first_map_open:
 		_settings["map_hint_seen"] = true
 		_save_settings()
+		_refresh_menu_settings()
 	_world_map.show_map()
 	_save_profile()
 
