@@ -65,8 +65,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=41'), 'Native 0.2.38 must bump Android versionCode to 41');
-assert(preset.includes('version/name="0.2.38-native-alpha"'), 'Native version name must be 0.2.38-native-alpha');
+assert(preset.includes('version/code=42'), 'Native 0.2.39 must bump Android versionCode to 42');
+assert(preset.includes('version/name="0.2.39-native-alpha"'), 'Native version name must be 0.2.39-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -154,6 +154,23 @@ assert(blenderScript.includes('def build_museum():') && blenderScript.includes('
 assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/buildings/museum.glb'), 'Native 0.2.29 must stage and load the Museum GLB');
 for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
+}
+// 0.2.39 Building Models No.10-12: three distinct fixed-scale Dubai
+// cottage estates on Sail Island with authored PBR roughness maps,
+// retaining podiums, multi-box colliders and an open SW lookout.
+for (const marker of ['def build_cottage_dune():', 'def build_cottage_courtyard():', 'def build_cottage_palm():', '(build_cottage_dune, "cottage_dune.glb")', '(build_cottage_courtyard, "cottage_courtyard.glb")', '(build_cottage_palm, "cottage_palm.glb")']) {
+  assert(blenderScript.includes(marker), `Blender cottage-estate builder/export is missing: ${marker}`);
+}
+for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottage_palm.glb']) {
+  assert(syncScript.includes(cottageModel), `Native asset sync is missing ${cottageModel}`);
+  assert(worldScript.includes(`res://assets/buildings/${cottageModel}`), `Native world does not load ${cottageModel}`);
+}
+for (const roughnessMap of ['cottage_basalt_roughness.jpg', 'cottage_limestone_blocks_roughness.jpg', 'cottage_paving_roughness.jpg', 'cottage_rammed_sand_roughness.jpg', 'cottage_roof_metal_roughness.jpg', 'cottage_teak_weathered_roughness.jpg', 'cottage_travertine_coarse_roughness.jpg']) {
+  assert(syncScript.includes(roughnessMap), `Native asset sync is missing the PBR roughness map ${roughnessMap}`);
+  assert(worldScript.includes(roughnessMap), `Native world does not use the PBR roughness map ${roughnessMap}`);
+}
+for (const marker of ['sail_cottage_estates_0239', 'sail_cottage_models_0239', 'sail_cottage_fixed_scale_0239', 'sail_cottage_exterior_only_0239', 'sail_cottage_pbr_roughness_0239', 'sail_cottage_material_pass_0239', 'sail_cottage_multi_box_colliders_0239', 'sail_cottage_podiums_0239', 'sail_cottage_dune_triangles_0239', 'sail_cottage_courtyard_triangles_0239', 'sail_cottage_palm_triangles_0239', 'sail_cottage_garden_palms_0239', 'sail_open_lookout_0239', 'sail_cottage_resort_fit_0239', 'SailCottageDune', 'SailCottageCourtyard', 'SailCottagePalm', 'SailCottagePodiums', 'cottage_rammed_sand', 'cottage_travertine_coarse', 'cottage_glass_physical', '_cottage_estate_ground_y_0239', '_add_cottage_estate_colliders_0239', 'roughness_texture_channel', '23_sail_cottage_dune', '24_sail_cottage_courtyard', '25_sail_cottage_palm', '26_sail_cottages_aerial']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.39 cottage-estate marker is missing: ${marker}`);
 }
 for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.32 steering-wheel/world-map marker is missing: ${marker}`);
@@ -583,6 +600,20 @@ const museumBytes = await readFile('src/assets/models/props/museum.glb');
 assert(museumBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Museum source is an LFS pointer or corrupt GLB');
 const museumLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-museum');
 assert(museumLandmark && museumLandmark.x === 665 && museumLandmark.z === -340, 'RichTown Museum landmark must stay at X665 Z-340');
+for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottage_palm.glb']) {
+  const cottageSource = `src/assets/models/props/${cottageModel}`;
+  const cottageInfo = await stat(cottageSource);
+  const cottageBytes = await readFile(cottageSource);
+  assert(cottageInfo.size > 1_000_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
+  assert(cottageBytes.subarray(0, 4).toString('utf8') === 'glTF', `${cottageModel} source is an LFS pointer or corrupt GLB`);
+}
+for (const cottageTextureStem of ['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse']) {
+  for (const cottageTextureSuffix of ['', '_normal', '_roughness']) {
+    const cottageTexture = `src/assets/textures/realworld/${cottageTextureStem}${cottageTextureSuffix}.jpg`;
+    const cottageTextureInfo = await stat(cottageTexture);
+    assert(cottageTextureInfo.size > 10_000, `${cottageTexture} is unexpectedly small`);
+  }
+}
 
 const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400];
 const shelbyAudioFiles = [
@@ -619,6 +650,9 @@ if (requireAssets) {
     'assets/buildings/mosque.glb',
     'assets/buildings/grand_hotel.glb',
     'assets/buildings/museum.glb',
+    'assets/buildings/cottage_dune.glb',
+    'assets/buildings/cottage_courtyard.glb',
+    'assets/buildings/cottage_palm.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
     'assets/props/park_bench.glb',
@@ -653,6 +687,7 @@ if (requireAssets) {
     'assets/textures/user_sky_night.jpg',
     'assets/textures/cafe_linen.jpg',
     'assets/textures/cafe_linen_normal.png',
+    ...['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse'].flatMap((stem) => ['', '_normal', '_roughness'].map((suffix) => `assets/textures/${stem}${suffix}.jpg`)),
     'assets/ui/menu_play_gameplay.jpg',
     'assets/ui/menu_shelby_gameplay.jpg',
     'assets/ui/menu_richtown_gameplay.jpg',

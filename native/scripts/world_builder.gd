@@ -1174,6 +1174,84 @@ func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> vo
 	_register_collider(collision, center)
 
 
+# --- 0.2.39 Sail cottage estates (Models No.10-12) -------------------
+# The flat authored estate must sit on the highest sampled point of
+# its rotated lot; the basalt retaining podium below then absorbs the
+# remaining 0.46-0.60 m island fall instead of a floating corner.
+func _cottage_estate_ground_y_0239(centre: Vector3, yaw: float) -> float:
+	var basis := Basis(Vector3.UP, yaw)
+	var ground_y := -INF
+	for fx_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+		var fx: float = fx_variant
+		for fz_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+			var fz: float = fz_variant
+			var point: Vector3 = centre + basis * Vector3(fx * 35.96, 0.0, fz * 27.01)
+			ground_y = maxf(ground_y, height_at(point.x, point.z))
+	return ground_y - 0.03
+
+
+func _cottage_podium_transforms_0239(origin: Vector3, yaw: float) -> Array[Transform3D]:
+	var root_transform := make_transform(origin, yaw, Vector3.ONE)
+	var result: Array[Transform3D] = []
+	# Same three-slab chamfered plan as the GLB site base, sunk into
+	# the slope so only a low dark retaining edge shows downhill.
+	for spec in [
+		[Vector3(0.0, -0.46, 0.0), Vector3(35.2, 0.95, 19.0)],
+		[Vector3(0.0, -0.46, 11.3), Vector3(28.2, 0.95, 3.7)],
+		[Vector3(0.0, -0.46, -11.3), Vector3(28.2, 0.95, 3.7)],
+	]:
+		var local_center: Vector3 = spec[0]
+		var local_size: Vector3 = spec[1]
+		result.append(root_transform * Transform3D(Basis.IDENTITY.scaled(local_size), local_center))
+	return result
+
+
+func _add_cottage_local_box_0239(origin: Vector3, yaw: float, local_center: Vector3, size: Vector3, local_yaw: float = 0.0) -> void:
+	var world_center: Vector3 = origin + Basis(Vector3.UP, yaw) * local_center
+	_add_box_collider(world_center, size, yaw + local_yaw)
+
+
+func _add_cottage_estate_colliders_0239(origin: Vector3, yaw: float, model: String) -> int:
+	var count := 0
+	# Real perimeter, not one invisible estate-sized cube: front wall
+	# with its closed gates, rear wall, both sides and the four
+	# chamfer runs (local +Z is the estate front in Godot space).
+	_add_cottage_local_box_0239(origin, yaw, Vector3(0.0, 1.19, 13.2), Vector3(28.0, 2.38, 0.55))
+	_add_cottage_local_box_0239(origin, yaw, Vector3(0.0, 1.19, -13.2), Vector3(28.0, 2.38, 0.55))
+	_add_cottage_local_box_0239(origin, yaw, Vector3(-17.7, 1.19, 0.0), Vector3(0.55, 2.38, 19.0))
+	_add_cottage_local_box_0239(origin, yaw, Vector3(17.7, 1.19, 0.0), Vector3(0.55, 2.38, 19.0))
+	_add_cottage_local_box_0239(origin, yaw, Vector3(-15.85, 1.19, 11.35), Vector3(5.25, 2.38, 0.55), -PI * 0.25)
+	_add_cottage_local_box_0239(origin, yaw, Vector3(15.85, 1.19, 11.35), Vector3(5.25, 2.38, 0.55), PI * 0.25)
+	_add_cottage_local_box_0239(origin, yaw, Vector3(-15.85, 1.19, -11.35), Vector3(5.25, 2.38, 0.55), PI * 0.25)
+	_add_cottage_local_box_0239(origin, yaw, Vector3(15.85, 1.19, -11.35), Vector3(5.25, 2.38, 0.55), -PI * 0.25)
+	count += 8
+	match model:
+		"cottage_dune":
+			_add_cottage_local_box_0239(origin, yaw, Vector3(3.8, 3.80, -1.8), Vector3(16.8, 7.60, 10.6))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-4.9, 4.23, -0.55), Vector3(2.35, 8.46, 12.1))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-10.6, 1.95, 1.15), Vector3(8.1, 3.90, 7.1))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-2.2, 1.88, 2.65), Vector3(5.2, 3.76, 4.35))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(2.5, 0.40, -10.35), Vector3(12.5, 0.80, 3.7))
+			count += 5
+		"cottage_courtyard":
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-9.7, 3.35, -2.0), Vector3(6.7, 6.70, 13.0))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(9.7, 3.35, -2.0), Vector3(6.7, 6.70, 13.0))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(0.0, 3.80, -7.15), Vector3(14.8, 7.60, 6.1))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-4.15, 3.10, 4.28), Vector3(4.0, 6.20, 0.72))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(4.15, 3.10, 4.28), Vector3(4.0, 6.20, 0.72))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-7.9, 5.82, -7.3), Vector3(3.15, 11.64, 3.15))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(15.05, 0.40, -6.8), Vector3(3.15, 0.80, 9.6))
+			count += 7
+		"cottage_palm":
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-6.4, 4.00, -1.0), Vector3(13.0, 8.00, 10.0))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(8.6, 3.70, -0.55), Vector3(9.2, 7.40, 8.6))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(1.0, 1.97, 1.05), Vector3(5.0, 3.94, 5.9))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-13.35, 4.40, -2.2), Vector3(1.55, 8.81, 4.7))
+			_add_cottage_local_box_0239(origin, yaw, Vector3(-1.5, 0.40, -10.25), Vector3(15.5, 0.80, 3.9))
+			count += 5
+	return count
+
+
 func _build_environment() -> void:
 	_dynamic_world = DynamicWorldScript.new() as NativeDynamicWorld
 	_dynamic_world.name = "DynamicWorld"
@@ -1276,7 +1354,8 @@ func _material(
 	roughness: float = 0.9,
 	metallic: float = 0.0,
 	uv_scale: Vector3 = Vector3.ONE,
-	triplanar: bool = false
+	triplanar: bool = false,
+	roughness_file: String = ""
 ) -> StandardMaterial3D:
 	if _materials.has(key):
 		return _materials[key] as StandardMaterial3D
@@ -1286,12 +1365,19 @@ func _material(
 	material.albedo_color = color
 	var albedo := _texture(albedo_file)
 	var normal := _texture(normal_file)
+	var roughness_map := _texture(roughness_file)
 	if albedo != null:
 		material.albedo_texture = albedo
 	if normal != null:
 		material.normal_enabled = true
 		material.normal_texture = normal
 		material.normal_scale = 0.72
+	if roughness_map != null:
+		# 0.2.39: authored cottage PBR sets carry absolute roughness
+		# in the red channel.  The scalar below stays as a calibrated
+		# multiplier (1.0 = use the map exactly as authored).
+		material.roughness_texture = roughness_map
+		material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 	material.roughness = roughness
 	material.metallic = metallic
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
@@ -1833,6 +1919,101 @@ func _prop_material(material_name: String) -> Material:
 			var villa_hedge := _material("villa_hedge", "hedge.jpg", "", Color(0.72, 0.84, 0.62), 1.0, 0.0, Vector3(0.90, 0.90, 0.90), true)
 			villa_hedge.metallic_specular = 0.25
 			return villa_hedge
+		# 0.2.39 Building Models No.10-12: the Sail cottage estates use
+		# their own seven authored PBR sets.  Roughness comes from the
+		# maps (rammed sand ~0.95 down to roof metal ~0.63), so a wall,
+		# a bronze gate and a metal roof no longer share one scalar.
+		"CottageSand":
+			var cottage_sand := _material("cottage_rammed_sand", "cottage_rammed_sand.jpg", "cottage_rammed_sand_normal.jpg", Color(0.94, 0.88, 0.76), 1.0, 0.0, Vector3(0.20, 0.20, 0.20), true, "cottage_rammed_sand_roughness.jpg")
+			cottage_sand.normal_scale = 1.25
+			cottage_sand.metallic_specular = 0.35
+			return cottage_sand
+		"CottageTravertine":
+			var cottage_travertine := _material("cottage_travertine_coarse", "cottage_travertine_coarse.jpg", "cottage_travertine_coarse_normal.jpg", Color(0.95, 0.90, 0.80), 1.0, 0.0, Vector3(0.24, 0.24, 0.24), true, "cottage_travertine_coarse_roughness.jpg")
+			cottage_travertine.normal_scale = 1.05
+			cottage_travertine.metallic_specular = 0.52
+			return cottage_travertine
+		"CottageLimestone":
+			var cottage_limestone := _material("cottage_limestone_blocks", "cottage_limestone_blocks.jpg", "cottage_limestone_blocks_normal.jpg", Color(0.93, 0.87, 0.74), 1.0, 0.0, Vector3(0.20, 0.20, 0.20), true, "cottage_limestone_blocks_roughness.jpg")
+			cottage_limestone.normal_scale = 1.20
+			cottage_limestone.metallic_specular = 0.42
+			return cottage_limestone
+		"CottageBasalt":
+			var cottage_basalt := _material("cottage_basalt", "cottage_basalt.jpg", "cottage_basalt_normal.jpg", Color(0.80, 0.84, 0.92), 1.0, 0.04, Vector3(0.22, 0.22, 0.22), true, "cottage_basalt_roughness.jpg")
+			cottage_basalt.normal_scale = 1.15
+			cottage_basalt.metallic_specular = 0.65
+			return cottage_basalt
+		"CottageTeak":
+			var cottage_teak := _material("cottage_teak_weathered", "cottage_teak_weathered.jpg", "cottage_teak_weathered_normal.jpg", Color(0.90, 0.78, 0.62), 1.0, 0.0, Vector3(0.34, 0.34, 0.34), true, "cottage_teak_weathered_roughness.jpg")
+			cottage_teak.normal_scale = 1.10
+			cottage_teak.metallic_specular = 0.42
+			return cottage_teak
+		"CottageBronze":
+			var cottage_bronze := _material("cottage_bronze", "cottage_roof_metal.jpg", "cottage_roof_metal_normal.jpg", Color(0.72, 0.45, 0.22), 0.60, 0.82, Vector3(0.50, 0.50, 0.50), true, "cottage_roof_metal_roughness.jpg")
+			cottage_bronze.normal_scale = 0.70
+			cottage_bronze.metallic_specular = 0.95
+			return cottage_bronze
+		"CottageRoofMetal":
+			var cottage_roof_metal := _material("cottage_roof_metal", "cottage_roof_metal.jpg", "cottage_roof_metal_normal.jpg", Color(0.64, 0.57, 0.50), 0.82, 0.66, Vector3(0.42, 0.42, 0.42), true, "cottage_roof_metal_roughness.jpg")
+			cottage_roof_metal.normal_scale = 0.80
+			cottage_roof_metal.metallic_specular = 0.90
+			return cottage_roof_metal
+		"CottagePaving":
+			var cottage_paving := _material("cottage_paving", "cottage_paving.jpg", "cottage_paving_normal.jpg", Color(0.91, 0.87, 0.77), 1.0, 0.0, Vector3(0.17, 0.17, 0.17), true, "cottage_paving_roughness.jpg")
+			cottage_paving.normal_scale = 1.10
+			cottage_paving.metallic_specular = 0.42
+			return cottage_paving
+		"CottageGravel":
+			var cottage_gravel := _material("cottage_gravel", "cottage_paving.jpg", "cottage_paving_normal.jpg", Color(0.70, 0.64, 0.55), 1.0, 0.0, Vector3(0.50, 0.50, 0.50), true, "cottage_paving_roughness.jpg")
+			cottage_gravel.normal_scale = 1.20
+			cottage_gravel.metallic_specular = 0.22
+			return cottage_gravel
+		"CottageGlass":
+			var cottage_glass := _material("cottage_glass_physical", "", "", Color(0.34, 0.55, 0.64, 0.52), 0.07, 0.0)
+			cottage_glass.metallic_specular = 1.0
+			cottage_glass.clearcoat_enabled = true
+			cottage_glass.clearcoat = 1.0
+			cottage_glass.clearcoat_roughness = 0.055
+			cottage_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			cottage_glass.emission_enabled = true
+			cottage_glass.emission = Color(1.0, 0.72, 0.44)
+			_register_night_material(cottage_glass, 0.0, 0.07, 0.30)
+			return cottage_glass
+		"CottageCore":
+			# Exterior-only backing behind the glass: a near-black
+			# volume so windows never show a hollow shell or sky.
+			var cottage_core := _material("cottage_core", "cottage_basalt.jpg", "cottage_basalt_normal.jpg", Color(0.16, 0.15, 0.14), 1.0, 0.0, Vector3(0.40, 0.40, 0.40), true, "cottage_basalt_roughness.jpg")
+			cottage_core.metallic_specular = 0.18
+			return cottage_core
+		"CottageBlind":
+			var cottage_blind := _material("cottage_blind", "cottage_rammed_sand.jpg", "cottage_rammed_sand_normal.jpg", Color(0.52, 0.46, 0.38), 1.0, 0.0, Vector3(0.70, 0.70, 0.70), true, "cottage_rammed_sand_roughness.jpg")
+			cottage_blind.normal_scale = 0.40
+			cottage_blind.metallic_specular = 0.22
+			return cottage_blind
+		"CottageLawn":
+			var cottage_lawn := _material("cottage_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.68, 0.76, 0.56), 1.0, 0.0, Vector3(0.50, 0.50, 0.50), true)
+			cottage_lawn.normal_scale = 0.90
+			cottage_lawn.metallic_specular = 0.22
+			return cottage_lawn
+		"CottageHedge":
+			var cottage_hedge := _material("cottage_hedge", "hedge.jpg", "", Color(0.70, 0.82, 0.60), 1.0, 0.0, Vector3(0.90, 0.90, 0.90), true)
+			cottage_hedge.metallic_specular = 0.25
+			return cottage_hedge
+		"CottageWater":
+			var cottage_water := _material("cottage_pool_water", "user_pool_mosaic.jpg", "user_pool_mosaic_normal.jpg", Color(0.30, 0.62, 0.72, 0.96), 0.075, 0.0, Vector3(0.55, 0.55, 0.55), true)
+			cottage_water.normal_scale = 0.42
+			cottage_water.metallic_specular = 1.0
+			cottage_water.clearcoat_enabled = true
+			cottage_water.clearcoat = 0.90
+			cottage_water.clearcoat_roughness = 0.045
+			cottage_water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			return cottage_water
+		"CottageLight":
+			var cottage_light := _material("cottage_warm_light", "", "", Color(1.0, 0.67, 0.32), 0.34, 0.0)
+			cottage_light.emission_enabled = true
+			cottage_light.emission = Color(0.78, 0.34, 0.09)
+			_register_night_material(cottage_light, 0.0, 0.10, 0.62)
+			return cottage_light
 		"TownPlaster":
 			# 0.2.9: Building Model No.2 gets the same world-scale
 			# triplanar treatment as the villa, but with a warmer sand
@@ -2556,11 +2737,18 @@ func _expand_sail_island_0237() -> void:
 		if bool(existing.get("sail_resort_0237", false)):
 			resort_villas += 1
 	if resort_villas == 0:
+		# 0.2.39: the four repeated 19 m villas become the three
+		# approved 36 x 27 m Dubai cottage estates (Models No.10-12).
+		# Dense runtime-terrain/road audit: each rotated full-size
+		# rectangle stays >=4.4 m clear of the loop asphalt, outside
+		# the raised sidewalk band and inside the promenade, with
+		# only 0.46-0.60 m of fall across the lot.  Every estate front
+		# (+Z) faces the loop centre; the south-west corner stays an
+		# open public lookout garden -- no fourth copy is placed.
 		for villa_spec in [
-			{"x": 1140.0, "z": 20.0, "rotY": 0.0},
-			{"x": 1238.0, "z": 20.0, "rotY": 0.0},
-			{"x": 1140.0, "z": 140.0, "rotY": PI},
-			{"x": 1238.0, "z": 140.0, "rotY": PI},
+			{"x": 1158.0, "z": 18.0, "rotY": 0.450661, "model": "cottage_dune", "h": 8.0, "roofH": 0.90},
+			{"x": 1218.0, "z": 18.0, "rotY": -0.450661, "model": "cottage_courtyard", "h": 10.8, "roofH": 0.84},
+			{"x": 1218.0, "z": 142.0, "rotY": -2.690931, "model": "cottage_palm", "h": 8.0, "roofH": 0.81},
 		]:
 			var vx := _f(villa_spec, "x")
 			var vz := _f(villa_spec, "z")
@@ -2569,15 +2757,16 @@ func _expand_sail_island_0237() -> void:
 				"y": height_at(vx, vz),
 				"z": vz,
 				"rotY": _f(villa_spec, "rotY"),
-				"w": 20.0,
-				"d": 15.24,
-				"h": 8.0,
-				"roofH": 0.84,
-				"kind": "rt-villa",
+				"w": 35.96,
+				"d": 27.01,
+				"h": _f(villa_spec, "h", 8.0),
+				"roofH": _f(villa_spec, "roofH", 0.85),
+				"kind": "rt-cottage-estate",
 				"facade": "userPlaster",
 				"tint": 1.0,
-				"model": "villa",
+				"model": String(villa_spec.get("model", "cottage_dune")),
 				"sail_resort_0237": true,
+				"sail_cottage_0239": true,
 			})
 			resort_villas += 1
 		data["buildings"] = buildings
@@ -2633,6 +2822,7 @@ func _expand_sail_island_0237() -> void:
 	_enhancement_stats["sail_island_land_area_m2_0237"] = float(land_cells) * step * step
 	_enhancement_stats["sail_island_radii_0237"] = SAIL_ISLAND_RADII
 	_enhancement_stats["sail_resort_villas_0237"] = resort_villas
+	_enhancement_stats["sail_cottage_estates_placed_0239"] = resort_villas
 	_enhancement_stats["sail_resort_pools_0237"] = resort_pools
 	_enhancement_stats["sail_removed_podium_lamps_0237"] = removed_podium_lamps
 
@@ -2646,6 +2836,10 @@ func _canonical_building_footprint_0237(building: Dictionary) -> Vector2:
 	var total_height := maxf(h + _f(building, "roofH"), 5.0)
 	if model == "villa":
 		return Vector2(19.20, 15.24)
+	if model.begins_with("cottage_"):
+		# Full fenced estate lot (36 x 27 m with chamfered corners);
+		# audit the whole rectangle, not just the house volume.
+		return Vector2(35.96, 27.01)
 	if model == "glass_tower":
 		return Vector2(34.00, 34.00)
 	if kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
@@ -4831,7 +5025,7 @@ func _multimesh_visual_range(node_name: String) -> float:
 ## casting exactly as before.
 func _is_flat_shadow_free_multimesh_0237(node_name: String) -> bool:
 	var key := node_name.to_lower()
-	return key.contains("curb") or key.contains("slab") or key.contains("promenadedeck")
+	return key.contains("curb") or key.contains("slab") or key.contains("promenadedeck") or key.contains("cottagegravel") or key.contains("cottagelawn") or key.contains("cottagepaving")
 
 
 func _add_multimesh(
@@ -4945,6 +5139,12 @@ func _canonical_batched_model_name(path: String, node_name: String) -> String:
 		return "BlenderGrandHotels"
 	if path.ends_with("museum.glb"):
 		return "RichTownMuseum"
+	if path.ends_with("cottage_dune.glb"):
+		return "SailCottageDune"
+	if path.ends_with("cottage_courtyard.glb"):
+		return "SailCottageCourtyard"
+	if path.ends_with("cottage_palm.glb"):
+		return "SailCottagePalm"
 	if path.ends_with("street_lamp.glb"):
 		return "BlenderStreetLamps"
 	if path.ends_with("bus_shelter.glb"):
@@ -5000,6 +5200,10 @@ func _batched_model_base_range(path: String) -> float:
 		return 340.0
 	if path.ends_with("museum.glb"):
 		return 340.0
+	if path.ends_with("cottage_dune.glb") or path.ends_with("cottage_courtyard.glb") or path.ends_with("cottage_palm.glb"):
+		# One 13.5-16.7k-triangle estate each: full architectural
+		# detail around the whole Sail loop, simple massing beyond.
+		return 240.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
 		return 390.0
 	if path.ends_with("dubai_premium_cafe.glb"):
@@ -5043,6 +5247,14 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 	var base_range := _batched_model_base_range(path)
 	if base_range <= 0.0:
 		return 0.0
+	if path.contains("cottage_"):
+		if key.contains("hedge") or key.contains("lawn") or key.contains("gravel") or key.contains("solar"):
+			return 150.0
+		if key.contains("paving") or key.contains("water") or key.contains("light"):
+			return 190.0
+		if key.contains("blind") or key.contains("core"):
+			return 210.0
+		return base_range
 	if key.contains("fruit"):
 		return minf(base_range, 220.0)
 	if key.contains("leafdry"):
@@ -5142,6 +5354,28 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		specs = [
 			{"size": Vector3(18.60, 8.00, 14.70), "center": Vector3(0.0, 4.00, 0.05), "material": _prop_material("VillaPlaster"), "name": "Mass"},
 			{"size": Vector3(19.20, 0.50, 15.24), "center": Vector3(0.0, 8.42, 0.05), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("cottage_dune.glb"):
+		specs = [
+			{"size": Vector3(34.50, 0.25, 25.50), "center": Vector3(0.0, 0.13, 0.0), "material": _prop_material("CottageGravel"), "name": "Lot"},
+			{"size": Vector3(16.40, 7.30, 10.20), "center": Vector3(3.8, 3.65, -1.8), "material": _prop_material("CottageSand"), "name": "Main"},
+			{"size": Vector3(2.10, 8.20, 11.70), "center": Vector3(-4.9, 4.10, -0.55), "material": _prop_material("CottageTravertine"), "name": "Blade"},
+			{"size": Vector3(7.70, 3.60, 6.70), "center": Vector3(-10.6, 1.80, 1.15), "material": _prop_material("CottageLimestone"), "name": "Garage"},
+		]
+	elif path.ends_with("cottage_courtyard.glb"):
+		specs = [
+			{"size": Vector3(34.50, 0.25, 25.50), "center": Vector3(0.0, 0.13, 0.01), "material": _prop_material("CottageGravel"), "name": "Lot"},
+			{"size": Vector3(6.30, 6.40, 12.60), "center": Vector3(-9.7, 3.20, -2.0), "material": _prop_material("CottageSand"), "name": "WestWing"},
+			{"size": Vector3(6.30, 6.40, 12.60), "center": Vector3(9.7, 3.20, -2.0), "material": _prop_material("CottageSand"), "name": "EastWing"},
+			{"size": Vector3(14.40, 7.30, 5.70), "center": Vector3(0.0, 3.65, -7.15), "material": _prop_material("CottageLimestone"), "name": "RearWing"},
+			{"size": Vector3(2.90, 11.30, 2.90), "center": Vector3(-7.9, 5.65, -7.3), "material": _prop_material("CottageTravertine"), "name": "Barjeel"},
+		]
+	elif path.ends_with("cottage_palm.glb"):
+		specs = [
+			{"size": Vector3(34.50, 0.25, 25.50), "center": Vector3(0.0, 0.13, 0.0), "material": _prop_material("CottageGravel"), "name": "Lot"},
+			{"size": Vector3(12.60, 7.70, 9.60), "center": Vector3(-6.4, 3.85, -1.0), "material": _prop_material("CottageSand"), "name": "WestPavilion"},
+			{"size": Vector3(8.80, 7.00, 8.20), "center": Vector3(8.6, 3.50, -0.55), "material": _prop_material("CottageLimestone"), "name": "EastPavilion"},
+			{"size": Vector3(1.35, 8.50, 4.40), "center": Vector3(-13.35, 4.25, -2.2), "material": _prop_material("CottageBasalt"), "name": "Chimney"},
 		]
 	elif path.ends_with("townhouse.glb"):
 		specs = [
@@ -5350,6 +5584,14 @@ func _build_buildings() -> void:
 	var hero_transforms: Array[Transform3D] = []
 	var hotel_items: Array[Dictionary] = []
 	var hotel_transforms: Array[Transform3D] = []
+	var cottage_dune_items: Array[Dictionary] = []
+	var cottage_dune_transforms: Array[Transform3D] = []
+	var cottage_courtyard_items: Array[Dictionary] = []
+	var cottage_courtyard_transforms: Array[Transform3D] = []
+	var cottage_palm_items: Array[Dictionary] = []
+	var cottage_palm_transforms: Array[Transform3D] = []
+	var cottage_podium_transforms: Array[Transform3D] = []
+	var cottage_collider_count := 0
 
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
@@ -5365,7 +5607,35 @@ func _build_buildings() -> void:
 		# Exact world-space AABBs of the user's Blender GLBs, measured with
 		# node transforms included.  These denominators preserve the JSON
 		# footprint/height instead of the earlier approximate 7-12% oversize.
-		if model == "villa":
+		if model.begins_with("cottage_"):
+			# Building Models No.10-12 are complete fenced estates,
+			# not stretch-to-parcel houses: exactly 35.96 x 27.01 m
+			# at scale 1.0 (AABB centre x = 0, z = +0.004/+0.014).
+			# The origin sits on the highest sampled lot point and
+			# the basalt podium below absorbs the island fall; the
+			# 8-part perimeter + per-volume colliders keep the closed
+			# gates honest without one estate-sized invisible cube.
+			var estate_position := position_value
+			estate_position.y = _cottage_estate_ground_y_0239(position_value, yaw)
+			var estate_transform := _centered_model_transform(
+				estate_position,
+				yaw,
+				Vector3.ONE,
+				Vector3(0.0, 0.0, 0.014 if model == "cottage_courtyard" else 0.004)
+			)
+			match model:
+				"cottage_dune":
+					cottage_dune_items.append(building)
+					cottage_dune_transforms.append(estate_transform)
+				"cottage_courtyard":
+					cottage_courtyard_items.append(building)
+					cottage_courtyard_transforms.append(estate_transform)
+				"cottage_palm":
+					cottage_palm_items.append(building)
+					cottage_palm_transforms.append(estate_transform)
+			cottage_podium_transforms.append_array(_cottage_podium_transforms_0239(estate_position, yaw))
+			cottage_collider_count += _add_cottage_estate_colliders_0239(estate_position, yaw, model)
+		elif model == "villa":
 			# Building Model No.1 is a fixed architectural design, not a
 			# massing proxy. Keeping scale exactly 1.0 preserves its
 			# 19.20 x 15.24 m footprint, 8.84 m height, door/window sizes
@@ -5469,6 +5739,31 @@ func _build_buildings() -> void:
 	if not premium_hotel_built:
 		for item in hotel_items:
 			_add_generic_building(buildings_root, item)
+	var cottage_dune_built := _add_batched_model(buildings_root, "res://assets/buildings/cottage_dune.glb", cottage_dune_transforms, "SailCottageDune")
+	if not cottage_dune_built:
+		for item in cottage_dune_items:
+			_add_generic_building(buildings_root, item)
+	var cottage_courtyard_built := _add_batched_model(buildings_root, "res://assets/buildings/cottage_courtyard.glb", cottage_courtyard_transforms, "SailCottageCourtyard")
+	if not cottage_courtyard_built:
+		for item in cottage_courtyard_items:
+			_add_generic_building(buildings_root, item)
+	var cottage_palm_built := _add_batched_model(buildings_root, "res://assets/buildings/cottage_palm.glb", cottage_palm_transforms, "SailCottagePalm")
+	if not cottage_palm_built:
+		for item in cottage_palm_items:
+			_add_generic_building(buildings_root, item)
+	var cottage_podium_box := BoxMesh.new()
+	cottage_podium_box.size = Vector3.ONE
+	var cottage_podiums_built := _add_multimesh(
+		buildings_root,
+		cottage_podium_box,
+		_prop_material("CottageBasalt"),
+		cottage_podium_transforms,
+		"SailCottagePodiums",
+		true,
+		0.0,
+		240.0,
+		180.0
+	)
 	_enhancement_stats["townhouse_models"] = townhouse_transforms.size()
 	_enhancement_stats["hero_building_models"] = hero_transforms.size()
 	_enhancement_stats["premium_villa_models"] = villa_transforms.size() if premium_villa_built else 0
@@ -5528,6 +5823,49 @@ func _build_buildings() -> void:
 	_enhancement_stats["premium_hotel_height_m"] = 49.07
 	_enhancement_stats["premium_hotel_width_m"] = 33.60
 	_enhancement_stats["premium_hotel_depth_m"] = 26.00
+	# The 0.2.39 smoke proves the full chain for Building Models
+	# No.10-12: three distinct fixed-scale estate GLBs, their Cottage*
+	# semantic materials with real roughness maps, retaining podiums
+	# and the multi-box perimeter/house colliders.
+	var cottage_triangles := {"cottage_dune": 0, "cottage_courtyard": 0, "cottage_palm": 0}
+	var cottage_model_parts := 0
+	for cottage_entry in [
+		["cottage_dune", "res://assets/buildings/cottage_dune.glb", cottage_dune_built],
+		["cottage_courtyard", "res://assets/buildings/cottage_courtyard.glb", cottage_courtyard_built],
+		["cottage_palm", "res://assets/buildings/cottage_palm.glb", cottage_palm_built],
+	]:
+		if not bool(cottage_entry[2]):
+			continue
+		var cottage_parts := _get_model_parts(String(cottage_entry[1]))
+		cottage_model_parts += cottage_parts.size()
+		var cottage_part_triangles := 0
+		for cottage_part_variant in cottage_parts:
+			var cottage_part: Dictionary = cottage_part_variant
+			cottage_part_triangles += _mesh_triangle_count(cottage_part.get("mesh") as Mesh)
+		cottage_triangles[String(cottage_entry[0])] = cottage_part_triangles
+	var cottage_roughness_materials := 0
+	for material_key_variant in _materials.keys():
+		var material_key := String(material_key_variant)
+		if not material_key.begins_with("cottage_"):
+			continue
+		var cottage_material := _materials[material_key] as StandardMaterial3D
+		if cottage_material != null and cottage_material.roughness_texture != null:
+			cottage_roughness_materials += 1
+	var cottage_models_built := cottage_dune_built and cottage_courtyard_built and cottage_palm_built
+	_enhancement_stats["sail_cottage_estates_0239"] = cottage_models_built and cottage_podiums_built and cottage_collider_count >= 39
+	_enhancement_stats["sail_cottage_models_0239"] = (cottage_dune_transforms.size() + cottage_courtyard_transforms.size() + cottage_palm_transforms.size()) if cottage_models_built else 0
+	_enhancement_stats["sail_cottage_fixed_scale_0239"] = cottage_models_built
+	_enhancement_stats["sail_cottage_exterior_only_0239"] = cottage_models_built and _materials.has("cottage_core") and _materials.has("cottage_blind")
+	_enhancement_stats["sail_cottage_pbr_roughness_0239"] = cottage_roughness_materials >= 7
+	_enhancement_stats["sail_cottage_roughness_materials_0239"] = cottage_roughness_materials
+	_enhancement_stats["sail_cottage_material_pass_0239"] = cottage_models_built and _materials.has("cottage_rammed_sand") and _materials.has("cottage_travertine_coarse") and _materials.has("cottage_limestone_blocks") and _materials.has("cottage_basalt") and _materials.has("cottage_teak_weathered") and _materials.has("cottage_glass_physical")
+	_enhancement_stats["sail_cottage_multi_box_colliders_0239"] = cottage_collider_count >= 39
+	_enhancement_stats["sail_cottage_colliders_0239"] = cottage_collider_count
+	_enhancement_stats["sail_cottage_podiums_0239"] = cottage_podium_transforms.size() if cottage_podiums_built else 0
+	_enhancement_stats["sail_cottage_model_parts_0239"] = cottage_model_parts
+	_enhancement_stats["sail_cottage_dune_triangles_0239"] = int(cottage_triangles.get("cottage_dune", 0))
+	_enhancement_stats["sail_cottage_courtyard_triangles_0239"] = int(cottage_triangles.get("cottage_courtyard", 0))
+	_enhancement_stats["sail_cottage_palm_triangles_0239"] = int(cottage_triangles.get("cottage_palm", 0))
 	_build_infill_buildings(buildings_root)
 
 
@@ -6462,10 +6800,18 @@ func _build_sail_island_resort_0237() -> void:
 		resort_villa_count += 1
 		var villa_pos := _item_position(building)
 		var villa_yaw := _f(building, "rotY")
-		var pad_clearance := _rect_road_clearance_0237(villa_pos, Vector2(24.0, 20.0), villa_yaw)
+		var is_cottage_estate := String(building.get("model", "")).begins_with("cottage_")
+		var pad_size := Vector2(35.96, 27.01) if is_cottage_estate else Vector2(24.0, 20.0)
+		var pad_clearance := _rect_road_clearance_0237(villa_pos, pad_size, villa_yaw)
 		resort_min_road_clearance = minf(resort_min_road_clearance, pad_clearance)
 		if pad_clearance < 0.9:
 			resort_rejected_road_overlaps += 1
+			continue
+		if is_cottage_estate:
+			# 0.2.39: each cottage GLB already carries its own
+			# mineral site, drive, paths and pool terrace on the
+			# basalt podium -- the old plain 24 x 20 m villa pad
+			# would only z-fight underneath it.
 			continue
 		paving_transforms.append(make_transform(
 			Vector3(villa_pos.x, villa_pos.y + 0.05, villa_pos.z),
@@ -6476,11 +6822,16 @@ func _build_sail_island_resort_0237() -> void:
 
 	var lawn_transforms: Array = []
 	for spec in [
-		{"x": 1185.0, "z": 8.0, "w": 54.0, "d": 22.0},
-		{"x": 1185.0, "z": 152.0, "w": 54.0, "d": 22.0},
+		# 0.2.39: the old 54 x 22 m north/south ellipses ran under
+		# the new 36 x 27 m estate lots.  Fit the public lawns to
+		# the real gaps between the estates and the promenade, and
+		# give the open south-west corner its own lookout lawn.
+		{"x": 1185.0, "z": 0.0, "w": 28.0, "d": 10.0},
+		{"x": 1185.0, "z": 160.0, "w": 28.0, "d": 10.0},
 		{"x": 1266.0, "z": 80.0, "w": 30.0, "d": 54.0},
 		{"x": 1104.0, "z": 35.0, "w": 36.0, "d": 28.0},
 		{"x": 1104.0, "z": 125.0, "w": 36.0, "d": 28.0},
+		{"x": 1145.0, "z": 141.0, "w": 30.0, "d": 21.0},
 	]:
 		var px := _f(spec, "x")
 		var pz := _f(spec, "z")
@@ -6598,6 +6949,28 @@ func _build_sail_island_resort_0237() -> void:
 			royal_palm_transforms.append(palm_transform)
 		_add_cylinder_collider(palm_pos + Vector3(0.0, 2.8, 0.0), 0.34, 5.8)
 		palm_index += 1
+	# One detailed garden palm per cottage estate, on the front lawn
+	# opposite its gate.  The GLBs deliberately ship without palms so
+	# the game reuses the high-detail date/royal vegetation models;
+	# these authored local points clear the house, drive and pool.
+	var cottage_garden_palms := 0
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		if not bool(building.get("sail_cottage_0239", false)):
+			continue
+		var cottage_model := String(building.get("model", ""))
+		var estate_pos := _item_position(building)
+		var estate_yaw := _f(building, "rotY")
+		estate_pos.y = _cottage_estate_ground_y_0239(estate_pos, estate_yaw)
+		var garden_local := Vector3(13.0, 0.05, 9.5) if cottage_model == "cottage_dune" else Vector3(-13.0, 0.05, 9.5)
+		var garden_palm_pos: Vector3 = estate_pos + Basis(Vector3.UP, estate_yaw) * garden_local
+		var garden_palm_transform := make_transform(garden_palm_pos, estate_yaw + 0.7 + float(cottage_garden_palms) * 0.85, Vector3.ONE * 0.95)
+		if cottage_model == "cottage_courtyard":
+			royal_palm_transforms.append(garden_palm_transform)
+		else:
+			date_palm_transforms.append(garden_palm_transform)
+		_add_cylinder_collider(garden_palm_pos + Vector3(0.0, 2.8, 0.0), 0.34, 5.8)
+		cottage_garden_palms += 1
 	var island_palms_built := _add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_palm_transforms, "BlenderDatePalms")
 	island_palms_built = _add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_palm_transforms, "BlenderRoyalPalms") or island_palms_built
 
@@ -6642,7 +7015,13 @@ func _build_sail_island_resort_0237() -> void:
 	_add_batched_model(root, "res://assets/props/park_bench.glb", bench_transforms, "BlenderParkBenches")
 
 	var pergola_transforms: Array = []
-	for spec in [{"x": 1185.0, "z": 8.0, "yaw": 0.0}, {"x": 1185.0, "z": 152.0, "yaw": PI}]:
+	for spec in [
+		{"x": 1185.0, "z": 8.0, "yaw": 0.0},
+		{"x": 1185.0, "z": 152.0, "yaw": PI},
+		# 0.2.39: the south-west corner stays an open lookout
+		# garden instead of a fourth cottage copy.
+		{"x": 1145.0, "z": 141.0, "yaw": 0.75},
+	]:
 		var px := _f(spec, "x")
 		var pz := _f(spec, "z")
 		var yaw := _f(spec, "yaw")
@@ -6714,6 +7093,9 @@ func _build_sail_island_resort_0237() -> void:
 	_enhancement_stats["sail_island_pergolas_0237"] = pergola_transforms.size()
 	_enhancement_stats["sail_island_cabanas_0237"] = cabana_pole_transforms.size()
 	_enhancement_stats["sail_resort_villas_built_0237"] = resort_villa_count
+	_enhancement_stats["sail_cottage_garden_palms_0239"] = cottage_garden_palms
+	_enhancement_stats["sail_open_lookout_0239"] = pergola_transforms.size() >= 3 and lawn_transforms.size() >= 6
+	_enhancement_stats["sail_cottage_resort_fit_0239"] = resort_villa_count == 3 and cottage_garden_palms == 3 and resort_rejected_road_overlaps == 0
 
 
 func _add_fountain_particles(parent: Node, origin: Vector3) -> void:
