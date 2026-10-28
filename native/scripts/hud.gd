@@ -363,7 +363,7 @@ func _layout_hud() -> void:
     _place(_steer_left_button, Rect2(Vector2(wheel_rect.position.x, arrow_y), Vector2(arrow_size, arrow_size)))
     _place(_steer_right_button, Rect2(Vector2(wheel_rect.position.x + arrow_size + 10.0, arrow_y), Vector2(arrow_size, arrow_size)))
 
-    var pedal_height := clampf(vh * 0.34, 160.0, 340.0)
+    var pedal_height := clampf(vh * 0.34, 160.0, vh * 0.52)
     var pedal_y := vh - margin_y - pedal_height
     var gas_width := clampf(vw * 0.09, 64.0, 118.0)
     var brake_width := clampf(vw * 0.08, 60.0, 106.0)
