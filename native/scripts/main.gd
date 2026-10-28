@@ -1421,10 +1421,17 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.36 real-arm road infrastructure/footprint repair pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("view_sector_streaming_0237", false)) or int(enhancement_stats.get("flat_shadow_casters_disabled_0237", 0)) < 500 or not bool(enhancement_stats.get("sail_island_expanded_0237", false)) or not bool(enhancement_stats.get("sail_island_loop_0237", false)) or not bool(enhancement_stats.get("sail_island_resort_0237", false)) or not bool(enhancement_stats.get("sail_island_infill_excluded_0237", false)) or float(enhancement_stats.get("sail_island_land_area_m2_0237", 0.0)) < 30000.0 or int(enhancement_stats.get("sail_resort_villas_0237", 0)) < 4 or int(enhancement_stats.get("sail_resort_pools_0237", 0)) < 3 or int(enhancement_stats.get("sail_island_palms_0237", 0)) < 12 or int(enhancement_stats.get("sail_island_promenade_segments_0237", 0)) < 48 or int(enhancement_stats.get("sail_island_lamps_0237", 0)) < 8 or not bool(enhancement_stats.get("canonical_building_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_buildings_relocated_0237", 0)) < 3 or float(enhancement_stats.get("canonical_building_min_clearance_0237", 0.0)) < 1.6 or not bool(enhancement_stats.get("canonical_pool_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_pools_relocated_0237", 0)) < 1 or float(enhancement_stats.get("canonical_pool_min_clearance_0237", 0.0)) < 1.2 or not bool(enhancement_stats.get("bridge_roadside_props_removed_0237", false)) or int(enhancement_stats.get("readable_road_signs_0237", 0)) < 20 or not bool(enhancement_stats.get("road_wear_scale_0237", false)):
 		failures.append("0.2.37 view-sector streaming / flat-shadow diet / Sail Island resort / canonical footprint repair pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("sail_loop_road_repair_0238", false)) or not bool(enhancement_stats.get("sail_loop_closed_0238", false)) or not bool(enhancement_stats.get("sail_loop_entry_pad_0238", false)) or not bool(enhancement_stats.get("sail_loop_clean_markings_0238", false)) or int(enhancement_stats.get("sail_loop_center_dashes_0238", 0)) < 40 or not bool(enhancement_stats.get("sail_loop_pristine_asphalt_0238", false)) or float(enhancement_stats.get("sail_resort_min_road_clearance_0238", 0.0)) < 0.9 or int(enhancement_stats.get("sail_resort_rejected_road_overlaps_0238", 1)) != 0 or int(enhancement_stats.get("sail_island_paving_0237", 0)) < 8 or int(enhancement_stats.get("sail_island_hedges_0238", 0)) < 14 or int(enhancement_stats.get("sail_pools_final_0238", 0)) < 3 or float(enhancement_stats.get("sail_pool_min_road_clearance_0238", 0.0)) < 1.2 or not bool(enhancement_stats.get("canonical_pool_rim_clearance_0238", false)) or not bool(enhancement_stats.get("canonical_pool_self_excluded_0238", false)) or not bool(enhancement_stats.get("sail_loop_generic_props_removed_0238", false)) or int(enhancement_stats.get("sail_loop_segments_without_props_0238", 0)) < 56:
+		failures.append("0.2.38 Sail Island loop road repair (entry pad/clean markings/pristine asphalt/resort footprints off the carriageway) is incomplete: %s" % str(enhancement_stats))
 	var sail_loop_surface := _world.get_surface_at(Vector3(1188.0, 3.0, 34.0))
 	var sail_lawn_surface := _world.get_surface_at(Vector3(1185.0, 3.0, 8.0))
 	if String(sail_loop_surface.get("kind", "")) != "asphalt" or String(sail_lawn_surface.get("kind", "")) != "grass":
 		failures.append("0.2.37 Sail Island loop/lawn surfaces are not drivable/landscaped as designed: loop=%s lawn=%s" % [str(sail_loop_surface), str(sail_lawn_surface)])
+	var sail_entry_surface := _world.get_surface_at(Vector3(1140.0, 3.0, 80.0))
+	var sail_west_branch_surface := _world.get_surface_at(Vector3(1144.8, 3.0, 61.0))
+	var sail_east_branch_surface := _world.get_surface_at(Vector3(1236.0, 3.0, 80.0))
+	if String(sail_entry_surface.get("kind", "")) != "asphalt" or String(sail_west_branch_surface.get("kind", "")) != "asphalt" or String(sail_east_branch_surface.get("kind", "")) != "asphalt":
+		failures.append("0.2.38 Sail Island entry/west/east loop branches are not drivable asphalt: entry=%s west=%s east=%s" % [str(sail_entry_surface), str(sail_west_branch_surface), str(sail_east_branch_surface)])
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
@@ -1739,6 +1746,14 @@ func _run_screenshot_tour() -> void:
 			"name": "20_sail_island_arrival", "time": "day", "vehicle": "road",
 			"vehicle_at": Vector3(1105.0, 0.0, 80.0),
 			"camera": Vector3(1086.0, 4.2, 104.0), "target": Vector3(1182.0, 30.0, 80.0),
+		},
+		{
+			"name": "21_sail_loop_entry", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1112.0, 10.0, 112.0), "target": Vector3(1148.0, 1.0, 78.0),
+		},
+		{
+			"name": "22_sail_loop_east", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1204.0, 8.0, 122.0), "target": Vector3(1230.0, 1.0, 84.0),
 		},
 		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
 		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},
