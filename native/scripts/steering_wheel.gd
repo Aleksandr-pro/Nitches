@@ -17,6 +17,8 @@ const MAX_LOCK_DEGREES := 135.0
 const CENTERING_RATE_PER_SEC := 4.2
 const NO_DRAG := -2
 const MOUSE_DRAG := -1
+const COMMON_WHEEL_TEXTURE: Texture2D = preload("res://assets/ui/steering_wheel_common.png")
+const COMMON_WHEEL_TEXTURE_ID := "common_sport"
 
 var _value := 0.0
 var _drag_index := NO_DRAG
@@ -24,7 +26,8 @@ var _last_pointer_angle := 0.0
 var _has_pointer_angle := false
 var _centering := false
 var _input_enabled := true
-var _hub_label: Label
+var _wheel_texture: Texture2D = COMMON_WHEEL_TEXTURE
+var _wheel_texture_id := COMMON_WHEEL_TEXTURE_ID
 
 
 func _ready() -> void:
@@ -34,19 +37,29 @@ func _ready() -> void:
     focus_mode = Control.FOCUS_NONE
     clip_contents = false
 
-    _hub_label = Label.new()
-    _hub_label.name = "SteeringWheelLabel"
-    _hub_label.text = "РУЛЬ"
-    _hub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _hub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    _hub_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _hub_label.add_theme_font_size_override("font_size", 13)
-    _hub_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0, 0.95))
-    _hub_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
-    _hub_label.add_theme_constant_override("shadow_offset_x", 1)
-    _hub_label.add_theme_constant_override("shadow_offset_y", 1)
-    add_child(_hub_label)
-    _layout_label()
+
+## 0.2.40: the HUD wheel is the owner's processed steering-wheel photo.
+## Every car currently uses the common sport wheel; the catalogue can
+## later point individual cars at their own transparent wheel PNG and
+## this one call swaps it without touching the analog input code.
+func set_wheel_texture(texture: Texture2D, texture_id: String = COMMON_WHEEL_TEXTURE_ID) -> void:
+    if texture == null:
+        return
+    _wheel_texture = texture
+    _wheel_texture_id = texture_id if not texture_id.is_empty() else COMMON_WHEEL_TEXTURE_ID
+    queue_redraw()
+
+
+func set_wheel_texture_path(path: String, texture_id: String = COMMON_WHEEL_TEXTURE_ID) -> void:
+    if path.is_empty() or not ResourceLoader.exists(path):
+        return
+    var texture := load(path) as Texture2D
+    if texture != null:
+        set_wheel_texture(texture, texture_id)
+
+
+func get_wheel_texture_id() -> String:
+    return _wheel_texture_id
 
 
 func get_steering_value() -> float:
@@ -95,6 +108,10 @@ func get_smoke_state() -> Dictionary:
         "engaged": is_engaged(),
         "input_enabled": _input_enabled,
         "configurable_size_0233": true,
+        "photo_steering_wheel_0240": _wheel_texture != null,
+        "replaceable_per_car_0240": true,
+        "wheel_texture_id": _wheel_texture_id,
+        "wheel_texture_size": _wheel_texture.get_size() if _wheel_texture != null else Vector2.ZERO,
         "max_lock_degrees": MAX_LOCK_DEGREES,
         "centering_rate": CENTERING_RATE_PER_SEC,
         "rect": get_global_rect(),
@@ -103,16 +120,7 @@ func get_smoke_state() -> Dictionary:
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_RESIZED:
-        _layout_label()
         queue_redraw()
-
-
-func _layout_label() -> void:
-    if _hub_label == null:
-        return
-    var centre := size * 0.5
-    _hub_label.position = centre - Vector2(34.0, 11.0)
-    _hub_label.size = Vector2(68.0, 22.0)
 
 
 func _centre() -> Vector2:
@@ -246,8 +254,27 @@ func _draw() -> void:
     var rotation := deg_to_rad(_value * MAX_LOCK_DEGREES)
     var engaged := is_engaged()
 
-    draw_circle(centre, radius * 1.08, Color(0.004, 0.012, 0.024, 0.52))
-    draw_arc(centre, radius * 1.08, 0.0, TAU, 72, Color(0.35, 0.85, 1.0, 0.20), 1.5, true)
+    # A soft dark disc behind the cut-out keeps the black leather readable
+    # over bright roads; the photograph itself stays transparent through
+    # the rim openings.
+    draw_circle(centre, radius * 1.08, Color(0.004, 0.012, 0.024, 0.42))
+    draw_arc(centre, radius * 1.08, 0.0, TAU, 72, Color(0.35, 0.85, 1.0, 0.16), 1.5, true)
+
+    if _wheel_texture != null:
+        var half := radius * 1.075
+        draw_set_transform(centre, rotation, Vector2.ONE)
+        draw_texture_rect(
+            _wheel_texture,
+            Rect2(Vector2(-half, -half), Vector2(half * 2.0, half * 2.0)),
+            false,
+            Color(1.0, 1.0, 1.0, 0.98 if engaged else 0.94)
+        )
+        draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+    else:
+        # Defensive fallback only; the shipped build always stages the
+        # processed common-wheel PNG.
+        draw_arc(centre, radius, 0.0, TAU, 96, Color(0.78, 0.86, 0.94, 0.96), 10.0, true)
+        draw_circle(centre, radius * 0.34, Color(0.025, 0.05, 0.09, 0.98))
 
     # Fixed centre tick and the swept lock arc show exactly where the
     # wheel is relative to straight-ahead before the rim is read.
@@ -257,29 +284,3 @@ func _draw() -> void:
         var start_angle := minf(top_angle, top_angle + rotation)
         var end_angle := maxf(top_angle, top_angle + rotation)
         draw_arc(centre, radius * 1.08, start_angle, end_angle, 48, Color(1.0, 0.58, 0.08, 0.95), 5.0, true)
-
-    draw_arc(centre, radius, 0.0, TAU, 96, Color(0.02, 0.025, 0.035, 0.94), 17.0, true)
-    draw_arc(centre, radius, 0.0, TAU, 96, Color(0.78, 0.86, 0.94, 0.96), 10.0, true)
-    draw_arc(centre, radius - 8.0, 0.0, TAU, 96, Color(0.05, 0.16, 0.28, 0.75), 2.0, true)
-
-    var spoke_angles: Array[float] = [
-        top_angle + rotation,
-        top_angle + rotation + PI * 0.72,
-        top_angle + rotation - PI * 0.72,
-    ]
-    for angle in spoke_angles:
-        draw_line(centre, centre + _direction(angle) * (radius - 8.0), Color(0.66, 0.74, 0.84, 0.98), 10.0, true)
-        draw_line(centre, centre + _direction(angle) * (radius - 8.0), Color(0.08, 0.14, 0.22, 0.95), 4.0, true)
-
-    # Rotating top-centre marker on the rim.
-    draw_line(
-        centre + _direction(top_angle + rotation) * radius * 0.84,
-        centre + _direction(top_angle + rotation) * radius * 1.02,
-        Color(1.0, 0.62, 0.08, 1.0),
-        6.0,
-        true
-    )
-
-    draw_circle(centre, radius * 0.34, Color(0.025, 0.05, 0.09, 0.98))
-    draw_arc(centre, radius * 0.34, 0.0, TAU, 64, Color(1.0, 0.66, 0.14, 0.95 if engaged else 0.62), 3.0, true)
-    draw_circle(centre, 4.0, Color(1.0, 0.72, 0.16, 1.0))

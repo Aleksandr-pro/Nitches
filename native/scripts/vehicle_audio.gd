@@ -61,6 +61,24 @@ const STOP_STREAM: AudioStream = preload("res://assets/audio/shelby/mustang_stop
 const TIRE_STREAM: AudioStream = preload("res://assets/audio/shelby/tire_squeal_loop.wav")
 
 var _bus_name := "VehicleAudio0235"
+var _car_id := "shelby_gt500"
+var _bank_id := "shelby_gt500"
+var _bank_rpms: Array[int] = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400]
+var _bank_cycles: Array[int] = [6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 19, 21, 22, 24, 26, 28]
+var _on_streams: Array[AudioStream] = []
+var _off_streams: Array[AudioStream] = []
+var _idle_stream: AudioStream
+var _start_stream: AudioStream
+var _stop_stream: AudioStream
+var _idle_pitch := 1.03
+var _pitch_min := 0.55
+var _pitch_max := 1.36
+var _sound_redline := 6400.0
+var _compression_start := 4400.0
+var _compression_factor := 0.72
+var _idle_crossfade_low := 1010.0
+var _idle_crossfade_high := 1330.0
+var _master_db_offset := 0.0
 var _idle_player: AudioStreamPlayer
 var _on_low_player: AudioStreamPlayer
 var _on_high_player: AudioStreamPlayer
@@ -79,21 +97,118 @@ var _high_index := 0
 var _segment_fraction := 0.0
 
 
+func configure_for_car(car_id: String) -> void:
+	# Called by NativeVehicle before this node enters the tree, both for
+	# the initial spawn and for a garage car switch (which rebuilds the
+	# audio node together with the rest of the vehicle).
+	_car_id = car_id
+	match car_id:
+		"audi_r8_v10_plus":
+			_apply_recorded_bank(
+				"audi_r8", "res://assets/audio/audi_r8",
+				[1231, 1602, 3735], [15, 33, 11],
+				0.56, 0.48, 2.30, 8500.0, 1250.0, 1650.0, 0.5
+			)
+		"chevrolet_camaro_ss":
+			_apply_recorded_bank(
+				"camaro_ss", "res://assets/audio/camaro_ss",
+				[635, 1444, 2265, 3747, 6478], [16, 24, 11, 62, 65],
+				1.18, 0.55, 1.52, 6500.0, 850.0, 1150.0, 0.0
+			)
+		"mercedes_560_sel":
+			_apply_recorded_bank(
+				"mercedes_560_sel", "res://assets/audio/mercedes_560_sel",
+				[805, 999, 1444, 2265, 3747, 4342], [23, 25, 24, 11, 62, 11],
+				0.87, 0.55, 1.55, 6000.0, 900.0, 1200.0, -2.0
+			)
+		_:
+			_apply_shelby_bank()
+
+
+func _apply_shelby_bank() -> void:
+	_bank_id = "shelby_gt500"
+	_bank_rpms.assign(BANK_RPMS)
+	_bank_cycles.assign(BANK_CYCLES)
+	_on_streams.assign(ON_STREAMS)
+	_off_streams.assign(OFF_STREAMS)
+	_idle_stream = IDLE_STREAM
+	_start_stream = START_STREAM
+	_stop_stream = STOP_STREAM
+	_idle_pitch = 1.03
+	_pitch_min = 0.55
+	_pitch_max = 1.36
+	_sound_redline = 6400.0
+	_compression_start = 4400.0
+	_compression_factor = 0.72
+	_idle_crossfade_low = 1010.0
+	_idle_crossfade_high = 1330.0
+	_master_db_offset = 0.0
+
+
+func _apply_recorded_bank(
+	bank_id: String,
+	folder: String,
+	rpms: Array,
+	cycles: Array,
+	idle_pitch: float,
+	pitch_min: float,
+	pitch_max: float,
+	sound_redline: float,
+	idle_crossfade_low: float,
+	idle_crossfade_high: float,
+	master_db_offset: float
+) -> void:
+	_bank_id = bank_id
+	_bank_rpms.clear()
+	_bank_cycles.clear()
+	_on_streams.clear()
+	_off_streams.clear()
+	for i in rpms.size():
+		var rpm := int(rpms[i])
+		_bank_rpms.append(rpm)
+		_bank_cycles.append(int(cycles[i]) if i < cycles.size() else 12)
+		_on_streams.append(_load_stream("%s/engine_on_%04d.wav" % [folder, rpm]))
+		_off_streams.append(_load_stream("%s/engine_off_%04d.wav" % [folder, rpm]))
+	_idle_stream = _load_stream("%s/engine_idle.wav" % folder)
+	_start_stream = _load_stream("%s/engine_start.wav" % folder)
+	_stop_stream = _load_stream("%s/engine_stop.wav" % folder)
+	_idle_pitch = idle_pitch
+	_pitch_min = pitch_min
+	_pitch_max = pitch_max
+	_sound_redline = sound_redline
+	_compression_start = sound_redline
+	_compression_factor = 1.0
+	_idle_crossfade_low = idle_crossfade_low
+	_idle_crossfade_high = idle_crossfade_high
+	_master_db_offset = master_db_offset
+
+
+func _load_stream(path: String) -> AudioStream:
+	if ResourceLoader.exists(path):
+		var stream := load(path) as AudioStream
+		if stream != null:
+			return stream
+	push_warning("Recorded vehicle audio stream is missing: %s" % path)
+	return null
+
+
 func _ready() -> void:
 	name = "VehicleAudio0235"
+	if _on_streams.is_empty():
+		_apply_shelby_bank()
 	_ensure_vehicle_bus()
-	for stream in ON_STREAMS:
+	for stream in _on_streams:
 		_prepare_loop(stream)
-	for stream in OFF_STREAMS:
+	for stream in _off_streams:
 		_prepare_loop(stream)
-	_prepare_loop(IDLE_STREAM)
+	_prepare_loop(_idle_stream)
 	_prepare_loop(TIRE_STREAM)
-	_idle_player = _make_player("RecordedMustangIdle", IDLE_STREAM)
-	_on_low_player = _make_player("GT500OnLow", ON_STREAMS[0])
-	_on_high_player = _make_player("GT500OnHigh", ON_STREAMS[0])
-	_off_low_player = _make_player("GT500OffLow", OFF_STREAMS[0])
-	_off_high_player = _make_player("GT500OffHigh", OFF_STREAMS[0])
-	_event_player = _make_player("MustangIgnitionEvent", null)
+	_idle_player = _make_player("RecordedEngineIdle", _idle_stream)
+	_on_low_player = _make_player("RecordedEngineOnLow", _on_streams[0] if not _on_streams.is_empty() else null)
+	_on_high_player = _make_player("RecordedEngineOnHigh", _on_streams[0] if not _on_streams.is_empty() else null)
+	_off_low_player = _make_player("RecordedEngineOffLow", _off_streams[0] if not _off_streams.is_empty() else null)
+	_off_high_player = _make_player("RecordedEngineOffHigh", _off_streams[0] if not _off_streams.is_empty() else null)
+	_event_player = _make_player("RecordedIgnitionEvent", null)
 	_tire_player = _make_player("RecordedTireSqueal", TIRE_STREAM)
 
 
@@ -155,7 +270,7 @@ func play_start() -> void:
 	if _event_player == null:
 		return
 	_event_player.stream_paused = _suspended
-	_event_player.stream = START_STREAM
+	_event_player.stream = _start_stream
 	_event_player.volume_db = 1.5
 	_event_player.pitch_scale = 1.0
 	_event_player.stop()
@@ -166,7 +281,7 @@ func play_stop() -> void:
 	if _event_player == null:
 		return
 	_event_player.stream_paused = _suspended
-	_event_player.stream = STOP_STREAM
+	_event_player.stream = _stop_stream
 	_event_player.volume_db = 1.0
 	_event_player.pitch_scale = 1.0
 	_event_player.stop()
@@ -208,12 +323,12 @@ func _assign_bank_stream(player: AudioStreamPlayer, stream: AudioStream, cycles:
 
 
 func _sound_rpm_for(engine_rpm: float) -> float:
-	var mapped := clampf(engine_rpm, 0.0, 6400.0)
-	# The openly licensed GT500 takes top out at 4,400 rpm.  Above
-	# that point compress the remaining climb instead of pitching a
-	# loop by an unnatural 1.45x all the way to the 6,400 rpm redline.
-	if mapped > 4400.0:
-		mapped = 4400.0 + (mapped - 4400.0) * 0.72
+	var mapped := clampf(engine_rpm, 0.0, _sound_redline)
+	# Only the Shelby bank needs compression: its openly licensed GT500
+	# takes top out at 4,400 rpm.  The 0.2.40 banks carry anchors close
+	# to each car's own redline, so their compression factor is 1.0.
+	if mapped > _compression_start:
+		mapped = _compression_start + (mapped - _compression_start) * _compression_factor
 	return mapped
 
 
@@ -251,31 +366,31 @@ func update_audio(delta: float, engine_state: int, engine_rpm: float, engine_loa
 	_low_index = 0
 	_high_index = 0
 	_segment_fraction = 0.0
-	if _sound_rpm >= float(BANK_RPMS[BANK_RPMS.size() - 1]):
-		_low_index = BANK_RPMS.size() - 1
+	if _sound_rpm >= float(_bank_rpms[_bank_rpms.size() - 1]):
+		_low_index = _bank_rpms.size() - 1
 		_high_index = _low_index
-	elif _sound_rpm > float(BANK_RPMS[0]):
-		for i in range(BANK_RPMS.size() - 1):
-			var low_rpm := float(BANK_RPMS[i])
-			var high_rpm := float(BANK_RPMS[i + 1])
+	elif _sound_rpm > float(_bank_rpms[0]):
+		for i in range(_bank_rpms.size() - 1):
+			var low_rpm := float(_bank_rpms[i])
+			var high_rpm := float(_bank_rpms[i + 1])
 			if _sound_rpm >= low_rpm and _sound_rpm <= high_rpm:
 				_low_index = i
 				_high_index = i + 1
 				_segment_fraction = clampf((_sound_rpm - low_rpm) / maxf(high_rpm - low_rpm, 1.0), 0.0, 1.0)
 				break
 
-	_assign_bank_stream(_on_low_player, ON_STREAMS[_low_index], BANK_CYCLES[_low_index])
-	_assign_bank_stream(_on_high_player, ON_STREAMS[_high_index], BANK_CYCLES[_high_index])
-	_assign_bank_stream(_off_low_player, OFF_STREAMS[_low_index], BANK_CYCLES[_low_index])
-	_assign_bank_stream(_off_high_player, OFF_STREAMS[_high_index], BANK_CYCLES[_high_index])
+	_assign_bank_stream(_on_low_player, _on_streams[_low_index], _bank_cycles[_low_index])
+	_assign_bank_stream(_on_high_player, _on_streams[_high_index], _bank_cycles[_high_index])
+	_assign_bank_stream(_off_low_player, _off_streams[_low_index], _bank_cycles[_low_index])
+	_assign_bank_stream(_off_high_player, _off_streams[_high_index], _bank_cycles[_high_index])
 	if not _idle_player.playing:
 		_idle_player.play()
 
-	_on_low_player.pitch_scale = clampf(_sound_rpm / float(BANK_RPMS[_low_index]), 0.55, 1.36)
-	_on_high_player.pitch_scale = clampf(_sound_rpm / float(BANK_RPMS[_high_index]), 0.55, 1.36)
+	_on_low_player.pitch_scale = clampf(_sound_rpm / float(_bank_rpms[_low_index]), _pitch_min, _pitch_max)
+	_on_high_player.pitch_scale = clampf(_sound_rpm / float(_bank_rpms[_high_index]), _pitch_min, _pitch_max)
 	_off_low_player.pitch_scale = _on_low_player.pitch_scale
 	_off_high_player.pitch_scale = _on_high_player.pitch_scale
-	_idle_player.pitch_scale = 1.03
+	_idle_player.pitch_scale = _idle_pitch
 
 	var segment_angle := _segment_fraction * PI * 0.5
 	var low_weight := cos(segment_angle)
@@ -284,13 +399,13 @@ func update_audio(delta: float, engine_state: int, engine_rpm: float, engine_loa
 	var on_weight := sin(load_angle)
 	var off_weight := cos(load_angle)
 
-	var idle_weight := 1.0 - smoothstep(1010.0, 1330.0, _sound_rpm)
+	var idle_weight := 1.0 - smoothstep(_idle_crossfade_low, _idle_crossfade_high, _sound_rpm)
 	idle_weight *= 1.0 - smoothstep(0.18, 0.46, _load_smooth) * 0.72
 	idle_weight = clampf(idle_weight, 0.0, 1.0)
 	var bank_weight := sqrt(maxf(1.0 - idle_weight * idle_weight, 0.0))
 
-	var rpm_mix := clampf((_sound_rpm - 850.0) / 5000.0, 0.0, 1.0)
-	var master_db := lerpf(-4.5, 1.2, rpm_mix) + _load_smooth * 1.4 + (2.0 if boost_active else 0.0)
+	var rpm_mix := clampf((_sound_rpm - 850.0) / maxf(_sound_redline - 850.0, 1000.0), 0.0, 1.0)
+	var master_db := lerpf(-4.5, 1.2, rpm_mix) + _load_smooth * 1.4 + (2.0 if boost_active else 0.0) + _master_db_offset
 	var master_gain := _state_gain * db_to_linear(master_db)
 
 	_set_gain(_idle_player, master_gain * idle_weight * 0.92)
@@ -301,17 +416,24 @@ func update_audio(delta: float, engine_state: int, engine_rpm: float, engine_loa
 
 
 func get_smoke_state() -> Dictionary:
-	var streams_ready := ON_STREAMS.size() == 16 and OFF_STREAMS.size() == 16
-	for stream in ON_STREAMS:
+	var streams_ready := not _on_streams.is_empty() and _on_streams.size() == _off_streams.size() and _on_streams.size() == _bank_rpms.size()
+	for stream in _on_streams:
 		streams_ready = streams_ready and stream != null
-	for stream in OFF_STREAMS:
+	for stream in _off_streams:
 		streams_ready = streams_ready and stream != null
 	return {
 		"recorded_audio_0235": RECORDED_AUDIO_0235,
-		"recorded_gt500_bank": true,
-		"on_loop_count": ON_STREAMS.size(),
-		"off_loop_count": OFF_STREAMS.size(),
-		"streams_ready": streams_ready and IDLE_STREAM != null and START_STREAM != null and STOP_STREAM != null and TIRE_STREAM != null,
+		"recorded_gt500_bank": _bank_id == "shelby_gt500",
+		"multi_car_audio_0240": true,
+		"car_id": _car_id,
+		"bank_id": _bank_id,
+		"anchor_rpms": _bank_rpms.duplicate(),
+		"pitch_min": _pitch_min,
+		"pitch_max": _pitch_max,
+		"sound_redline": _sound_redline,
+		"on_loop_count": _on_streams.size(),
+		"off_loop_count": _off_streams.size(),
+		"streams_ready": streams_ready and _idle_stream != null and _start_stream != null and _stop_stream != null and TIRE_STREAM != null,
 		"players_created": _all_players().size(),
 		"bus_ready": AudioServer.get_bus_index(_bus_name) >= 0,
 		"state_gain": _state_gain,

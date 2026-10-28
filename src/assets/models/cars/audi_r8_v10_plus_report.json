@@ -1,0 +1,137 @@
+{
+  "car": "audi",
+  "input": "r8_objects.obj",
+  "output": "audi_r8.glb",
+  "outputBytes": 5864504,
+  "inputTriangles": 72202,
+  "finalTriangles": 72202,
+  "finalMeshObjects": [
+    "Body",
+    "Wheel_RR_Spin",
+    "Wheel_FL_Spin",
+    "Wheel_FR_Spin",
+    "Wheel_RL_Spin"
+  ],
+  "materials": [
+    "BlackGloss",
+    "BlackTrim",
+    "BrakeCaliper",
+    "BrakeDisc",
+    "CarbonTrim",
+    "Chrome",
+    "GlassWindow",
+    "Headlight",
+    "InteriorCloth",
+    "InteriorDark",
+    "Paint",
+    "RedTrim",
+    "RimMetal",
+    "TailLight",
+    "TireRubber"
+  ],
+  "boundsBlender": {
+    "min": [
+      -0.983435,
+      -2.317496,
+      0.0
+    ],
+    "max": [
+      0.983437,
+      2.108504,
+      1.200647
+    ],
+    "sizeXYZ": [
+      1.966872,
+      4.426,
+      1.200647
+    ]
+  },
+  "boundsGltfSizeXYZ": [
+    1.966872,
+    1.200647,
+    4.426
+  ],
+  "wheelbaseM": 2.644354,
+  "frontTrackM": 1.63886,
+  "rearTrackM": 1.637007,
+  "wheels": {
+    "FL": {
+      "blenderHub": [
+        0.819429,
+        -1.322177,
+        0.313374
+      ],
+      "gltfHub": [
+        0.819429,
+        0.313374,
+        1.322177
+      ],
+      "tireSizeBlender": [
+        0.229954,
+        0.626747,
+        0.626748
+      ],
+      "radiusM": 0.313374,
+      "spinTriangles": 8480
+    },
+    "FR": {
+      "blenderHub": [
+        -0.81943,
+        -1.322177,
+        0.313374
+      ],
+      "gltfHub": [
+        -0.81943,
+        0.313374,
+        1.322177
+      ],
+      "tireSizeBlender": [
+        0.229953,
+        0.626747,
+        0.626748
+      ],
+      "radiusM": 0.313374,
+      "spinTriangles": 8480
+    },
+    "RL": {
+      "blenderHub": [
+        0.818504,
+        1.322177,
+        0.313374
+      ],
+      "gltfHub": [
+        0.818504,
+        0.313374,
+        -1.322177
+      ],
+      "tireSizeBlender": [
+        0.275944,
+        0.62675,
+        0.626748
+      ],
+      "radiusM": 0.313375,
+      "spinTriangles": 8480
+    },
+    "RR": {
+      "blenderHub": [
+        -0.818503,
+        1.322177,
+        0.313374
+      ],
+      "gltfHub": [
+        -0.818503,
+        0.313374,
+        -1.322177
+      ],
+      "tireSizeBlender": [
+        0.275943,
+        0.62675,
+        0.626748
+      ],
+      "radiusM": 0.313375,
+      "spinTriangles": 8480
+    }
+  },
+  "bodyTriangles": 38282,
+  "root": "AudiR8V10Plus"
+}

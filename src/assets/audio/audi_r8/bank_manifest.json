@@ -1,0 +1,97 @@
+{
+  "bank": "audi_r8",
+  "car": "Audi R8 V10 plus 5.2 FSI",
+  "format": "mono WAV 32000 Hz 16-bit",
+  "anchors": [
+    {
+      "rpm": 1231,
+      "cycles": 15,
+      "on": {
+        "file": "engine_on_1231.wav",
+        "seconds": 1.46275,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_1231.wav",
+        "seconds": 1.46275,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10b_idle",
+      "source_recording": "BMW M6 V10 start and idle",
+      "author": "Kinoton",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Kinoton/sounds/478597/",
+      "cylinders": 10
+    },
+    {
+      "rpm": 1602,
+      "cycles": 33,
+      "on": {
+        "file": "engine_on_1602.wav",
+        "seconds": 2.47266,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_1602.wav",
+        "seconds": 2.47266,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10a_idle",
+      "source_recording": "Lamborghini Huracan EVO 5.2 V10 start-up and idle",
+      "author": "JaimeLopes",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/JaimeLopes/sounds/564373/",
+      "cylinders": 10
+    },
+    {
+      "rpm": 3735,
+      "cycles": 11,
+      "on": {
+        "file": "engine_on_3735.wav",
+        "seconds": 0.35341,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_3735.wav",
+        "seconds": 0.35341,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10a_rev",
+      "source_recording": "Lamborghini Huracan EVO 5.2 V10 start-up and idle",
+      "author": "JaimeLopes",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/JaimeLopes/sounds/564373/",
+      "cylinders": 10
+    }
+  ],
+  "idle": {
+    "file": "engine_idle.wav",
+    "seconds": 2.47266,
+    "sample_rate": 32000,
+    "channels": 1,
+    "source_clip": "v10a_idle",
+    "source_rpm": 1602
+  },
+  "start": {
+    "file": "engine_start.wav",
+    "seconds": 1.62,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "Recorded CC0 starter motor (Therancher01, Freesound 610771) crossfaded into a pitch-ramped catch from this bank's own recorded idle/rev loop."
+  },
+  "stop": {
+    "file": "engine_stop.wav",
+    "seconds": 0.82,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "This bank's recorded idle loop pitch-ramped 1.0x -> 0.38x and faded over the 0.82 s runtime shutdown."
+  },
+  "off_throttle_derivation": "Same recording as the matching on-throttle loop, cyclically low-pass filtered (no seam break) and set 4.5 dB quieter.",
+  "tire": "Shared recorded tire_squeal_loop.wav from the Shelby bank (Tom Haigh, CC BY 3.0)."
+}

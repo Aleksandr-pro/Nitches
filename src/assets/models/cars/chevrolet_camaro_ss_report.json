@@ -1,0 +1,126 @@
+{
+  "car": "camaro",
+  "input": "Sports+Car.blend",
+  "output": "camaro_ss.glb",
+  "outputBytes": 4039960,
+  "inputTriangles": 6730,
+  "finalTriangles": 11942,
+  "finalMeshObjects": [
+    "Body",
+    "Wheel_RL_Spin",
+    "Wheel_FL_Spin",
+    "Wheel_FR_Spin",
+    "Wheel_RR_Spin"
+  ],
+  "materials": [
+    "GlassWindow",
+    "LiveryTexture",
+    "Paint",
+    "TireRimTexture"
+  ],
+  "boundsBlender": {
+    "min": [
+      -1.018872,
+      -2.356513,
+      0.0
+    ],
+    "max": [
+      1.018881,
+      2.433622,
+      1.346721
+    ],
+    "sizeXYZ": [
+      2.037753,
+      4.790135,
+      1.346721
+    ]
+  },
+  "boundsGltfSizeXYZ": [
+    2.037753,
+    1.346721,
+    4.790135
+  ],
+  "wheelbaseM": 2.791579,
+  "frontTrackM": 1.574414,
+  "rearTrackM": 1.574414,
+  "wheels": {
+    "FL": {
+      "blenderHub": [
+        0.787207,
+        -1.39579,
+        0.337734
+      ],
+      "gltfHub": [
+        0.787207,
+        0.337734,
+        1.39579
+      ],
+      "tireSizeBlender": [
+        0.292929,
+        0.675467,
+        0.675467
+      ],
+      "radiusM": 0.337733,
+      "spinTriangles": 336
+    },
+    "FR": {
+      "blenderHub": [
+        -0.787207,
+        -1.395789,
+        0.337734
+      ],
+      "gltfHub": [
+        -0.787207,
+        0.337734,
+        1.395789
+      ],
+      "tireSizeBlender": [
+        0.292929,
+        0.675467,
+        0.675467
+      ],
+      "radiusM": 0.337733,
+      "spinTriangles": 336
+    },
+    "RL": {
+      "blenderHub": [
+        0.787207,
+        1.39579,
+        0.337733
+      ],
+      "gltfHub": [
+        0.787207,
+        0.337733,
+        -1.39579
+      ],
+      "tireSizeBlender": [
+        0.292929,
+        0.675467,
+        0.675467
+      ],
+      "radiusM": 0.337733,
+      "spinTriangles": 336
+    },
+    "RR": {
+      "blenderHub": [
+        -0.787207,
+        1.39579,
+        0.337733
+      ],
+      "gltfHub": [
+        -0.787207,
+        0.337733,
+        -1.39579
+      ],
+      "tireSizeBlender": [
+        0.292929,
+        0.675467,
+        0.675467
+      ],
+      "radiusM": 0.337733,
+      "spinTriangles": 336
+    }
+  },
+  "bodyTriangles": 10598,
+  "root": "ChevroletCamaroSS"
+}

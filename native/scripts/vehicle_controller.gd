@@ -10,6 +10,7 @@ extends RigidBody3D
 
 signal reset_requested
 signal engine_state_changed(state: int)
+signal car_changed(car_id: String)
 
 const MUSTANG_PATH := "res://assets/vehicles/mustang.glb"
 const CAR_PAINT_SHADER: Shader = preload("res://shaders/car_paint.gdshader")
@@ -150,37 +151,235 @@ var _surface_mu := 1.16
 var _headlights_enabled := false
 var _brake_light_active := false
 
+# 0.2.40 per-car definition (NativeCarCatalog).  The Shelby constants
+# above remain the fallback/spec record; runtime physics reads these.
+var _car_id := "shelby_gt500"
+var _car_definition: Dictionary = {}
+var _model_path := MUSTANG_PATH
+var _model_loaded := false
+var _car_switch_pending := false
+var _wheel_radius := WHEEL_RADIUS
+var _wheelbase := WHEELBASE
+var _front_track := TRACK_WIDTH
+var _rear_track := TRACK_WIDTH
+var _idle_rpm := ENGINE_IDLE_RPM
+var _redline_rpm := ENGINE_REDLINE_RPM
+var _shift_up_rpm := 5950.0
+var _shift_down_rpm := 2050.0
+var _gear_ratios: Array[float] = [2.32, 1.69, 1.29, 1.00]
+var _reverse_ratio := REVERSE_RATIO
+var _final_drive := FINAL_DRIVE
+var _drag_area := DRAG_AREA
+var _downforce_area := DOWNFORCE_AREA
+var _spring_stiffness := SPRING_STIFFNESS
+var _spring_damping_compression := SPRING_DAMPING_COMPRESSION
+var _spring_damping_rebound := SPRING_DAMPING_REBOUND
+var _anti_roll_front := ANTI_ROLL_FRONT
+var _anti_roll_rear := ANTI_ROLL_REAR
+var _spring_force_limit := 26500.0
+var _tyre_grip_multiplier := 1.0
+var _brake_force := 21500.0
+var _driven_wheel_count := 2
+var _drive_peak_load_fraction := 0.47
+var _torque_curve_points: Array[Vector2] = []
+var _spec_power_hp := SPEC_POWER_HP
+var _spec_torque_nm := SPEC_TORQUE_NM
+var _spec_accel_0_100_s := SPEC_ACCEL_0_100_S
+var _spec_top_speed_kmh := SPEC_TOP_SPEED_KMH
+var _performance_index := TUNING_PERFORMANCE_INDEX[0]
+var _tuning_pi_add: Array[int] = [0, 36, 89]
 
-func _ready() -> void:
-	name = "PlayerMustang"
+
+func configure_car(car_id: String) -> void:
+	_car_id = NativeCarCatalog.normalize_id(car_id)
+	_car_definition = NativeCarCatalog.get_car(_car_id)
+	_apply_car_definition()
+
+
+func get_car_id() -> String:
+	return _car_id
+
+
+func get_car_definition() -> Dictionary:
+	return _car_definition.duplicate(true)
+
+
+func is_car_switch_pending() -> bool:
+	return _car_switch_pending
+
+
+func _apply_car_definition() -> void:
+	var car := _car_definition
+	_model_path = String(car.get("model_path", MUSTANG_PATH))
+	_wheel_radius = float(car.get("wheel_radius_m", WHEEL_RADIUS))
+	_wheelbase = float(car.get("wheelbase_m", WHEELBASE))
+	_front_track = float(car.get("front_track_m", TRACK_WIDTH))
+	_rear_track = float(car.get("rear_track_m", TRACK_WIDTH))
+	_idle_rpm = float(car.get("idle_rpm", ENGINE_IDLE_RPM))
+	_redline_rpm = float(car.get("redline_rpm", ENGINE_REDLINE_RPM))
+	_shift_up_rpm = float(car.get("shift_up_rpm", _redline_rpm * 0.93))
+	_shift_down_rpm = float(car.get("shift_down_rpm", 2050.0))
+	_gear_ratios.clear()
+	for ratio in car.get("gear_ratios", GEAR_RATIOS):
+		_gear_ratios.append(float(ratio))
+	if _gear_ratios.is_empty():
+		_gear_ratios.assign(GEAR_RATIOS)
+	_reverse_ratio = float(car.get("reverse_ratio", REVERSE_RATIO))
+	_final_drive = float(car.get("final_drive", FINAL_DRIVE))
+	_drag_area = float(car.get("drag_area", DRAG_AREA))
+	_downforce_area = float(car.get("downforce_area", DOWNFORCE_AREA))
+	_spring_stiffness = float(car.get("spring_stiffness", SPRING_STIFFNESS))
+	_spring_damping_compression = float(car.get("spring_damping_compression", SPRING_DAMPING_COMPRESSION))
+	_spring_damping_rebound = float(car.get("spring_damping_rebound", SPRING_DAMPING_REBOUND))
+	_anti_roll_front = float(car.get("anti_roll_front", ANTI_ROLL_FRONT))
+	_anti_roll_rear = float(car.get("anti_roll_rear", ANTI_ROLL_REAR))
+	_spring_force_limit = float(car.get("spring_force_limit", 26500.0))
+	_tyre_grip_multiplier = float(car.get("tyre_grip_multiplier", 1.0))
+	_brake_force = float(car.get("brake_force", 21500.0))
+	var all_wheel_drive := String(car.get("drivetrain", "rwd")) == "awd"
+	_driven_wheel_count = 4 if all_wheel_drive else 2
+	_drive_peak_load_fraction = 0.94 if all_wheel_drive else 0.47
+	_torque_curve_points.clear()
+	for point in car.get("torque_curve", []):
+		_torque_curve_points.append(point as Vector2)
+	_spec_power_hp = int(car.get("power_hp", SPEC_POWER_HP))
+	_spec_torque_nm = int(car.get("torque_nm", SPEC_TORQUE_NM))
+	_spec_accel_0_100_s = float(car.get("accel_0_100_s", SPEC_ACCEL_0_100_S))
+	_spec_top_speed_kmh = int(car.get("top_speed_kmh", SPEC_TOP_SPEED_KMH))
+	_performance_index = int(car.get("performance_index", TUNING_PERFORMANCE_INDEX[0]))
+	_tuning_pi_add.clear()
+	for value in car.get("tuning_pi_add", [0, 36, 89]):
+		_tuning_pi_add.append(int(value))
+	while _tuning_pi_add.size() < TUNING_TORQUE_MULTIPLIERS.size():
+		_tuning_pi_add.append(_tuning_pi_add[_tuning_pi_add.size() - 1] if not _tuning_pi_add.is_empty() else 0)
+	_paint_color = car.get("default_paint_color", Color(0.48, 0.025, 0.035)) as Color
+	_secondary_paint_color = car.get("secondary_paint_color", Color(0.92, 0.88, 0.80)) as Color
+	_wheel_finish_id = String(car.get("default_wheel_finish", "silver"))
+	_tuning_level = 0
+	_license_plate = String(car.get("default_plate", "NITCHES"))
+
+
+func _configure_body_properties() -> void:
 	# The RigidBody is the one object the camera must follow through
 	# Godot's physics interpolation; make that explicit instead of
 	# relying on an inherited scene default.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
-	mass = 1450.0
+	mass = float(_car_definition.get("mass_kg", 1450.0))
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, 0.38, 0.02)
+	center_of_mass = _car_definition.get("center_of_mass", Vector3(0.0, 0.38, 0.02)) as Vector3
 	linear_damp = 0.012
-	angular_damp = 0.38
+	angular_damp = float(_car_definition.get("angular_damp", 0.38))
 	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 10
 	can_sleep = false
 	collision_layer = 2
 	collision_mask = 1
-
 	var physics_material := PhysicsMaterial.new()
 	physics_material.friction = 0.12
 	physics_material.bounce = 0.0
 	physics_material_override = physics_material
 
-	_ensure_input_actions()
+
+func _build_vehicle_children() -> void:
 	_create_collision_shapes()
 	_create_suspension_raycasts()
 	_create_visual()
 	_create_headlights()
 	_create_vehicle_effects()
 	_create_engine_audio()
+
+
+func _reset_dynamic_state() -> void:
+	steering_angle = 0.0
+	throttle_input = 0.0
+	steering_input = 0.0
+	handbrake_active = false
+	boost_active = false
+	grounded_wheel_count = 0
+	for key in _touch_inputs.keys():
+		_touch_inputs[key] = false
+	_touch_steering_value = 0.0
+	_touch_steering_engaged = false
+	_touch_pedal_values = {"accelerate": 0.0, "brake_reverse": 0.0}
+	_forward_speed = 0.0
+	_lateral_speed = 0.0
+	_steering_visual_angle = 0.0
+	_steering_command = 0.0
+	_visual_forward_speed = 0.0
+	_visual_wheelspin_excess = 0.0
+	_current_gear = 0
+	_engine_rpm = 0.0
+	_engine_transition_timer = 0.0
+	_engine_stop_start_rpm = 0.0
+	_gear_shift_timer = 0.0
+	_gear_shift_duration = 0.0
+	_shift_torque_blend = 1.0
+	_throttle_command = 0.0
+	_smoothed_drive_force_per_wheel = 0.0
+	_drivetrain_forward_speed = 0.0
+	_reverse_engaged = false
+	_drive_force_per_wheel = 0.0
+	_engine_brake_force_per_wheel = 0.0
+	_wheelspin_excess_speed = 0.0
+	_rear_slip_ratio = 0.0
+	_brake_light_active = false
+	_set_engine_state(ENGINE_OFF)
+
+
+func switch_car(car_id: String) -> bool:
+	var next_id := NativeCarCatalog.normalize_id(car_id)
+	if _car_switch_pending or next_id == _car_id:
+		return false
+	_car_switch_pending = true
+	var was_frozen := freeze
+	if _vehicle_audio != null:
+		_vehicle_audio.cancel_event()
+		_vehicle_audio.stop_engine_loops()
+	_reset_dynamic_state()
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = true
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_wheels.clear()
+	_wheel_visuals.clear()
+	_headlights.clear()
+	_paint_materials.clear()
+	_primary_paint_material = null
+	_secondary_paint_material = null
+	_wheel_finish_surfaces.clear()
+	_plate_labels.clear()
+	_headlight_materials.clear()
+	_tail_light_materials.clear()
+	_smoke_emitters.clear()
+	_nitro_emitters.clear()
+	_contact_shadow_material = null
+	_vehicle_audio = null
+	_visual_root = null
+	_model_loaded = false
+	configure_car(next_id)
+	_configure_body_properties()
+	call_deferred("_finish_car_switch", was_frozen)
+	return true
+
+
+func _finish_car_switch(was_frozen: bool) -> void:
+	_build_vehicle_children()
+	freeze = was_frozen
+	reset_physics_interpolation()
+	_car_switch_pending = false
+	car_changed.emit(_car_id)
+
+
+func _ready() -> void:
+	name = "PlayerVehicle"
+	if _car_definition.is_empty():
+		configure_car(NativeCarCatalog.DEFAULT_CAR_ID)
+	_configure_body_properties()
+	_ensure_input_actions()
+	_build_vehicle_children()
 
 
 func set_world(world: NativeWorldBuilder) -> void:
@@ -220,7 +419,7 @@ func _ensure_action(action_name: StringName, keys: Array) -> void:
 
 func _create_collision_shapes() -> void:
 	var body_shape := BoxShape3D.new()
-	body_shape.size = Vector3(1.84, 0.68, 4.64)
+	body_shape.size = _car_definition.get("body_collision_size", Vector3(1.84, 0.68, 4.64)) as Vector3
 	var body_collision := CollisionShape3D.new()
 	body_collision.name = "BodyCollision"
 	body_collision.shape = body_shape
@@ -228,24 +427,29 @@ func _create_collision_shapes() -> void:
 	# maximum raycast-suspension compression the old box could intermittently
 	# scrape the heightmap, adding a second, much harsher ground contact
 	# on top of the tyre forces and making the body twitch under load.
-	body_collision.position = Vector3(0.0, 0.62, 0.0)
+	body_collision.position = _car_definition.get("body_collision_position", Vector3(0.0, 0.62, 0.0)) as Vector3
 	add_child(body_collision)
 
 	var cabin_shape := BoxShape3D.new()
-	cabin_shape.size = Vector3(1.58, 0.54, 2.05)
+	cabin_shape.size = _car_definition.get("cabin_collision_size", Vector3(1.58, 0.54, 2.05)) as Vector3
 	var cabin_collision := CollisionShape3D.new()
 	cabin_collision.name = "CabinCollision"
 	cabin_collision.shape = cabin_shape
-	cabin_collision.position = Vector3(0.0, 1.03, 0.18)
+	cabin_collision.position = _car_definition.get("cabin_collision_position", Vector3(0.0, 1.03, 0.18)) as Vector3
 	add_child(cabin_collision)
 
 
 func _create_suspension_raycasts() -> void:
+	var ray_y := float(_car_definition.get("wheel_ray_y", 0.58))
+	var half_wheelbase := _wheelbase * 0.5
+	var front_x := _front_track * 0.5
+	var rear_x := _rear_track * 0.5
+	var front_driven := _driven_wheel_count == 4
 	var definitions: Array[Dictionary] = [
-		{"name": "WheelFL", "position": Vector3(-0.82, 0.58, -1.43), "front": true, "driven": false, "side": -1, "axle": 0},
-		{"name": "WheelFR", "position": Vector3(0.82, 0.58, -1.43), "front": true, "driven": false, "side": 1, "axle": 0},
-		{"name": "WheelRL", "position": Vector3(-0.82, 0.58, 1.43), "front": false, "driven": true, "side": -1, "axle": 1},
-		{"name": "WheelRR", "position": Vector3(0.82, 0.58, 1.43), "front": false, "driven": true, "side": 1, "axle": 1},
+		{"name": "WheelFL", "position": Vector3(-front_x, ray_y, -half_wheelbase), "front": true, "driven": front_driven, "side": -1, "axle": 0},
+		{"name": "WheelFR", "position": Vector3(front_x, ray_y, -half_wheelbase), "front": true, "driven": front_driven, "side": 1, "axle": 0},
+		{"name": "WheelRL", "position": Vector3(-rear_x, ray_y, half_wheelbase), "front": false, "driven": true, "side": -1, "axle": 1},
+		{"name": "WheelRR", "position": Vector3(rear_x, ray_y, half_wheelbase), "front": false, "driven": true, "side": 1, "axle": 1},
 	]
 	for definition in definitions:
 		var rays: Array = []
@@ -295,32 +499,33 @@ func _create_visual() -> void:
 	_visual_root.rotation.y = PI
 	add_child(_visual_root)
 
-	if _load_mustang_model():
+	if _load_car_model():
 		_create_license_plates()
 		return
 	_create_fallback_visual()
 	_create_license_plates()
 
 
-func _load_mustang_model() -> bool:
-	if not ResourceLoader.exists(MUSTANG_PATH):
-		push_warning("Mustang GLB is not staged yet; using native fallback visual")
+func _load_car_model() -> bool:
+	if not ResourceLoader.exists(_model_path):
+		push_warning("Car GLB is not staged yet (%s); using native fallback visual" % _model_path)
 		return false
-	var packed := load(MUSTANG_PATH) as PackedScene
+	var packed := load(_model_path) as PackedScene
 	if packed == null:
-		push_warning("Mustang GLB could not be loaded as a PackedScene")
+		push_warning("Car GLB could not be loaded as a PackedScene: %s" % _model_path)
 		return false
 	var model := packed.instantiate()
 	if model == null:
 		return false
-	model.name = "MustangModel"
+	model.name = "CarModel"
 	if _count_mesh_instances(model) == 0:
-		push_warning("Mustang GLB contained no renderable meshes; using native fallback visual")
+		push_warning("Car GLB contained no renderable meshes; using native fallback visual")
 		model.free()
 		return false
 	_visual_root.add_child(model)
 	_apply_model_materials(model)
 	_collect_wheel_visuals(model)
+	_model_loaded = true
 	return true
 
 
@@ -433,17 +638,24 @@ func get_tuning_level() -> int:
 	return _tuning_level
 
 
+func _tuning_performance_index(level: int) -> int:
+	var safe_level := clampi(level, 0, TUNING_TORQUE_MULTIPLIERS.size() - 1)
+	var add := _tuning_pi_add[safe_level] if safe_level < _tuning_pi_add.size() else 0
+	return _performance_index + add
+
+
 func get_tuning_preview(level: int) -> Dictionary:
 	var safe_level := clampi(level, 0, TUNING_TORQUE_MULTIPLIERS.size() - 1)
 	var multiplier := TUNING_TORQUE_MULTIPLIERS[safe_level]
+	var pi := _tuning_performance_index(safe_level)
 	return {
 		"level": safe_level,
-		"power_hp": int(round(float(SPEC_POWER_HP) * multiplier)),
-		"torque_nm": int(round(float(SPEC_TORQUE_NM) * multiplier)),
-		"accel_0_100_s": SPEC_ACCEL_0_100_S / sqrt(multiplier),
-		"top_speed_kmh": SPEC_TOP_SPEED_KMH,
-		"performance_index": TUNING_PERFORMANCE_INDEX[safe_level],
-		"class_label": TUNING_CLASS_LABELS[safe_level],
+		"power_hp": int(round(float(_spec_power_hp) * multiplier)),
+		"torque_nm": int(round(float(_spec_torque_nm) * multiplier)),
+		"accel_0_100_s": _spec_accel_0_100_s / sqrt(multiplier),
+		"top_speed_kmh": _spec_top_speed_kmh,
+		"performance_index": pi,
+		"class_label": NativeCarCatalog.class_label_for_pi(pi),
 		"torque_multiplier": multiplier,
 	}
 
@@ -451,23 +663,33 @@ func get_tuning_preview(level: int) -> Dictionary:
 func set_license_plate(value: String) -> void:
 	var cleaned := value.strip_edges().to_upper()
 	if cleaned.is_empty():
-		cleaned = "GT500-67"
+		cleaned = String(_car_definition.get("default_plate", "NITCHES"))
 	_license_plate = cleaned.left(9)
 	for label in _plate_labels:
 		label.text = _license_plate
+		label.font_size = _license_plate_font_size(_license_plate)
+
+
+func _license_plate_font_size(text: String) -> int:
+	# The white plate is 0.54 m wide.  Keep the longest editable
+	# plates (9 chars, e.g. CAMARO-SS) inside that panel instead of
+	# letting the outer glyphs spill onto the bumper.
+	return clampi(int(round(720.0 / float(maxi(1, text.length())))), 64, 96)
 
 
 func _create_license_plates() -> void:
 	if not _plate_labels.is_empty():
 		return
-	_add_license_plate(2.335, 0.0)
-	_add_license_plate(-2.335, PI)
+	var rear := _car_definition.get("plate_rear_position", Vector3(0.0, 0.58, 2.335)) as Vector3
+	var front := _car_definition.get("plate_front_position", Vector3(0.0, 0.58, -2.335)) as Vector3
+	_add_license_plate(rear, 0.0)
+	_add_license_plate(front, PI)
 
 
-func _add_license_plate(z_position: float, yaw: float) -> void:
+func _add_license_plate(position_value: Vector3, yaw: float) -> void:
 	var root := Node3D.new()
-	root.name = "LicensePlateRear" if z_position > 0.0 else "LicensePlateFront"
-	root.position = Vector3(0.0, 0.58, z_position)
+	root.name = "LicensePlateRear" if position_value.z > 0.0 else "LicensePlateFront"
+	root.position = position_value
 	root.rotation.y = yaw
 	add_child(root)
 	var panel := MeshInstance3D.new()
@@ -484,7 +706,7 @@ func _add_license_plate(z_position: float, yaw: float) -> void:
 	label.text = _license_plate
 	label.position = Vector3(0.0, 0.0, 0.016)
 	label.pixel_size = 0.00135
-	label.font_size = 96
+	label.font_size = _license_plate_font_size(_license_plate)
 	label.modulate = Color(0.025, 0.035, 0.05)
 	label.outline_modulate = Color(0.94, 0.95, 0.96)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -496,6 +718,11 @@ func _add_license_plate(z_position: float, yaw: float) -> void:
 func get_customization_state() -> Dictionary:
 	return {
 		"customization_0234": true,
+		"multi_car_0240": true,
+		"car_id": _car_id,
+		"model_path": _model_path,
+		"model_loaded": _model_loaded,
+		"wheel_visuals": _wheel_visuals.size(),
 		"paint_color": _paint_color,
 		"wheel_finish": _wheel_finish_id,
 		"wheel_finish_surfaces": _wheel_finish_surfaces.size(),
@@ -519,7 +746,17 @@ func _apply_model_materials(node: Node) -> void:
 					continue
 				var material_name := String(material.resource_name)
 				var lower_name := material_name.to_lower()
-				if material_name == "Paint":
+				var authored_texture := false
+				if material is StandardMaterial3D:
+					authored_texture = (material as StandardMaterial3D).albedo_texture != null
+				if authored_texture and material_name != "Paint" and material_name != "PaintSecondary":
+					# 0.2.40 supplied-car GLBs carry real authored PBR
+					# textures (Mercedes interior/tyres/lights, the
+					# Camaro livery shell and atlas wheels).  Semantic
+					# flat replacements below are only for untextured
+					# surfaces; never flatten a textured one.
+					pass
+				elif material_name == "Paint":
 					_primary_paint_material = _paint_material(_paint_color)
 					mesh_instance.set_surface_override_material(surface_index, _primary_paint_material)
 				elif material_name == "PaintSecondary":
@@ -612,12 +849,13 @@ func _collect_wheel_visuals(model: Node) -> void:
 				"pivot": pivot,
 				"spin": spin,
 				"front": bool(definition.get("front", false)),
+				"driven": not bool(definition.get("front", false)) or _driven_wheel_count == 4,
 				"side": int(definition.get("side", 1)),
 				"pivot_y": pivot.rotation.y,
 				"base_position": pivot.position,
 			})
 	if _wheel_visuals.size() != 4:
-		push_warning("Mustang wheel pivots found: %d/4" % _wheel_visuals.size())
+		push_warning("Car wheel pivots found for %s: %d/4" % [_car_id, _wheel_visuals.size()])
 
 
 func _create_fallback_visual() -> void:
@@ -628,16 +866,16 @@ func _create_fallback_visual() -> void:
 	dark.metallic = 0.45
 	dark.roughness = 0.32
 
-	_add_visual_box(Vector3(1.82, 0.46, 4.58), Vector3(0.0, 0.50, 0.0), paint, "FallbackBody")
+	_add_visual_box(Vector3(float(_car_definition.get("width_m", 1.82)) * 0.96, 0.46, float(_car_definition.get("length_m", 4.58)) * 0.97), Vector3(0.0, 0.50, 0.0), paint, "FallbackBody")
 	_add_visual_box(Vector3(1.56, 0.42, 2.05), Vector3(0.0, 0.90, -0.16), dark, "FallbackCabin")
 	_add_visual_box(Vector3(1.70, 0.16, 0.55), Vector3(0.0, 0.72, 1.95), paint, "FallbackSpoiler")
 
 	_wheel_visuals.clear()
 	for definition in [
-		{"position": Vector3(-0.82, WHEEL_RADIUS, 1.43), "front": true, "side": -1},
-		{"position": Vector3(0.82, WHEEL_RADIUS, 1.43), "front": true, "side": 1},
-		{"position": Vector3(-0.82, WHEEL_RADIUS, -1.43), "front": false, "side": -1},
-		{"position": Vector3(0.82, WHEEL_RADIUS, -1.43), "front": false, "side": 1},
+		{"position": Vector3(-_front_track * 0.5, _wheel_radius, _wheelbase * 0.5), "front": true, "side": -1},
+		{"position": Vector3(_front_track * 0.5, _wheel_radius, _wheelbase * 0.5), "front": true, "side": 1},
+		{"position": Vector3(-_rear_track * 0.5, _wheel_radius, -_wheelbase * 0.5), "front": false, "side": -1},
+		{"position": Vector3(_rear_track * 0.5, _wheel_radius, -_wheelbase * 0.5), "front": false, "side": 1},
 	]:
 		var pivot := Node3D.new()
 		pivot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -649,8 +887,8 @@ func _create_fallback_visual() -> void:
 		var tyre := MeshInstance3D.new()
 		tyre.name = "FallbackTyre"
 		var cylinder := CylinderMesh.new()
-		cylinder.top_radius = WHEEL_RADIUS
-		cylinder.bottom_radius = WHEEL_RADIUS
+		cylinder.top_radius = _wheel_radius
+		cylinder.bottom_radius = _wheel_radius
 		cylinder.height = 0.28
 		cylinder.radial_segments = 24
 		tyre.mesh = cylinder
@@ -661,6 +899,7 @@ func _create_fallback_visual() -> void:
 			"pivot": pivot,
 			"spin": spin,
 			"front": bool(definition.get("front", false)),
+			"driven": not bool(definition.get("front", false)) or _driven_wheel_count == 4,
 			"side": int(definition.get("side", 1)),
 			"pivot_y": 0.0,
 			"base_position": pivot.position,
@@ -680,10 +919,11 @@ func _add_visual_box(size: Vector3, center: Vector3, material: Material, node_na
 
 
 func _create_headlights() -> void:
-	for x in [-0.62, 0.62]:
+	var anchor := _car_definition.get("headlight_position", Vector3(0.62, 0.74, -2.22)) as Vector3
+	for x in [-anchor.x, anchor.x]:
 		var light := SpotLight3D.new()
 		light.name = "Headlight"
-		light.position = Vector3(x, 0.74, -2.22)
+		light.position = Vector3(x, anchor.y, anchor.z)
 		light.light_color = Color(1.0, 0.92, 0.76)
 		light.light_energy = 0.0
 		light.spot_range = 48.0
@@ -801,7 +1041,7 @@ func _create_vehicle_effects() -> void:
 	_contact_shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_contact_shadow_material.metallic_specular = 0.0
 	var shadow_mesh := PlaneMesh.new()
-	shadow_mesh.size = Vector2(2.28, 5.08)
+	shadow_mesh.size = _car_definition.get("contact_shadow_size", Vector2(2.28, 5.08)) as Vector2
 	shadow_mesh.material = _contact_shadow_material
 	var contact_shadow := MeshInstance3D.new()
 	contact_shadow.name = "ContactShadow"
@@ -811,10 +1051,12 @@ func _create_vehicle_effects() -> void:
 	contact_shadow.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(contact_shadow)
 
-	for x in [-0.82, 0.82]:
+	var smoke_x := float(_car_definition.get("smoke_x", 0.82))
+	var smoke_z := float(_car_definition.get("smoke_z", 1.50))
+	for x in [-smoke_x, smoke_x]:
 		_smoke_emitters.append(_make_particle_emitter(
 			"RearTyreSmoke",
-			Vector3(x, 0.20, 1.50),
+			Vector3(x, 0.20, smoke_z),
 			52,
 			0.92,
 			Vector3(0.0, 0.24, 1.0),
@@ -827,10 +1069,11 @@ func _create_vehicle_effects() -> void:
 			_particle_material(Color(0.72, 0.72, 0.74, 0.34)),
 			Vector3(0.0, 0.45, 0.0)
 		))
-	for x in [-0.56, 0.56]:
+	var exhaust := _car_definition.get("exhaust_position", Vector3(0.56, 0.36, 2.34)) as Vector3
+	for x in [-exhaust.x, exhaust.x]:
 		_nitro_emitters.append(_make_particle_emitter(
 			"NitroFlame",
-			Vector3(x, 0.36, 2.34),
+			Vector3(x, exhaust.y, exhaust.z),
 			38,
 			0.30,
 			Vector3(0.0, 0.0, 1.0),
@@ -846,6 +1089,7 @@ func _create_vehicle_effects() -> void:
 
 func _create_engine_audio() -> void:
 	_vehicle_audio = NativeVehicleAudio.new()
+	_vehicle_audio.configure_for_car(_car_id)
 	add_child(_vehicle_audio)
 	_vehicle_audio.set_suspended(_audio_suspended)
 	engine_state_changed.emit(_engine_state)
@@ -885,7 +1129,7 @@ func start_engine() -> void:
 func stop_engine(play_sound: bool = true) -> void:
 	if _engine_state == ENGINE_OFF or _engine_state == ENGINE_STOPPING:
 		return
-	_engine_stop_start_rpm = maxf(_engine_rpm, ENGINE_IDLE_RPM if _engine_state == ENGINE_RUNNING else CRANK_RPM)
+	_engine_stop_start_rpm = maxf(_engine_rpm, _idle_rpm if _engine_state == ENGINE_RUNNING else CRANK_RPM)
 	_engine_transition_timer = STOP_DURATION_S
 	boost_active = false
 	_reverse_engaged = false
@@ -956,11 +1200,11 @@ func _update_engine_state(delta: float) -> void:
 				_engine_rpm = move_toward(_engine_rpm, crank_target, 1500.0 * delta)
 			else:
 				# The recorded catch flares briefly, then settles onto
-				# the 850 rpm idle used by the drivetrain and gauge.
+				# this car's idle used by the drivetrain and gauge.
 				var settle := smoothstep(0.62, 1.0, progress)
-				_engine_rpm = lerpf(1220.0, ENGINE_IDLE_RPM, settle)
+				_engine_rpm = lerpf(_idle_rpm * 1.42, _idle_rpm, settle)
 			if _engine_transition_timer <= 0.0:
-				_engine_rpm = maxf(_engine_rpm, ENGINE_IDLE_RPM)
+				_engine_rpm = maxf(_engine_rpm, _idle_rpm)
 				_set_engine_state(ENGINE_RUNNING)
 		ENGINE_STOPPING:
 			_engine_transition_timer = maxf(_engine_transition_timer - delta, 0.0)
@@ -1166,27 +1410,20 @@ func _physics_process(delta: float) -> void:
 
 
 func _engine_torque_curve(rpm: float) -> float:
-	# 428 big-block shape: peak 569 Nm at 3200 rpm, still 88% at the
-	# 5400 rpm power peak (569*0.88 at 5400 rpm = 380 hp gross, close
-	# to the 365 hp SAE gross rating once accessory losses land).
-	var points: Array[Vector2] = [
-		Vector2(850.0, 0.62),
-		Vector2(1800.0, 0.80),
-		Vector2(3200.0, 1.00),
-		Vector2(4400.0, 0.97),
-		Vector2(5400.0, 0.88),
-		Vector2(6000.0, 0.78),
-		Vector2(6400.0, 0.66),
-	]
+	# Per-car normalized curve from NativeCarCatalog, scaled by that
+	# car's real peak torque (Shelby 569 Nm @ 3200, LT1 617 @ 4400,
+	# M117 455 @ 3750, R8 V10 560 @ 6500).
+	var points := _torque_curve_points
 	var tuning_multiplier := TUNING_TORQUE_MULTIPLIERS[_tuning_level]
+	if points.is_empty():
+		return float(_spec_torque_nm) * tuning_multiplier
 	if rpm <= points[0].x:
-		return 569.0 * tuning_multiplier * points[0].y
+		return float(_spec_torque_nm) * tuning_multiplier * points[0].y
 	for i in range(1, points.size()):
 		if rpm <= points[i].x:
 			var t := (rpm - points[i - 1].x) / maxf(points[i].x - points[i - 1].x, 1.0)
-			return 569.0 * tuning_multiplier * lerpf(points[i - 1].y, points[i].y, t)
-	return 569.0 * tuning_multiplier * points[points.size() - 1].y
-
+			return float(_spec_torque_nm) * tuning_multiplier * lerpf(points[i - 1].y, points[i].y, t)
+	return float(_spec_torque_nm) * tuning_multiplier * points[points.size() - 1].y
 
 func _pacejka(slip: float, stiffness: float, shape: float, curvature: float) -> float:
 	var bx := stiffness * slip
@@ -1200,10 +1437,10 @@ func _ackermann_angle(side: int) -> float:
 func _ackermann_angle_for(angle: float, side: int) -> float:
 	if absf(angle) < 0.0005:
 		return 0.0
-	var turn_radius := WHEELBASE / tan(absf(angle))
+	var turn_radius := _wheelbase / tan(absf(angle))
 	var is_inner := (angle > 0.0 and side < 0) or (angle < 0.0 and side > 0)
-	var denominator := maxf(turn_radius + (-TRACK_WIDTH * 0.5 if is_inner else TRACK_WIDTH * 0.5), 0.25)
-	return signf(angle) * atan(WHEELBASE / denominator)
+	var denominator := maxf(turn_radius + (-_front_track * 0.5 if is_inner else _front_track * 0.5), 0.25)
+	return signf(angle) * atan(_wheelbase / denominator)
 
 
 func _update_drivetrain(delta: float) -> void:
@@ -1229,26 +1466,26 @@ func _update_drivetrain(delta: float) -> void:
 		_reverse_engaged = false
 
 	_gear_shift_timer = maxf(_gear_shift_timer - delta, 0.0)
-	var ratio := REVERSE_RATIO if _reverse_engaged else GEAR_RATIOS[_current_gear]
-	var wheel_rpm := absf(_drivetrain_forward_speed) / WHEEL_RADIUS * 60.0 / TAU
-	var coupled_rpm := wheel_rpm * ratio * FINAL_DRIVE
-	var target_rpm := maxf(coupled_rpm, ENGINE_IDLE_RPM)
+	var ratio := _reverse_ratio if _reverse_engaged else _gear_ratios[_current_gear]
+	var wheel_rpm := absf(_drivetrain_forward_speed) / _wheel_radius * 60.0 / TAU
+	var coupled_rpm := wheel_rpm * ratio * _final_drive
+	var target_rpm := maxf(coupled_rpm, _idle_rpm)
 	if absf(throttle_input) > 0.03 and absf(_drivetrain_forward_speed) < 7.0:
-		target_rpm = maxf(target_rpm, ENGINE_IDLE_RPM + absf(throttle_input) * 1750.0)
-	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 4600.0 * delta), ENGINE_IDLE_RPM, ENGINE_REDLINE_RPM)
+		target_rpm = maxf(target_rpm, _idle_rpm + absf(throttle_input) * 1750.0)
+	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 4600.0 * delta), _idle_rpm, _redline_rpm)
 
 	if not _reverse_engaged and _gear_shift_timer <= 0.0:
-		if throttle_input > 0.04 and _engine_rpm > 5950.0 and _current_gear < GEAR_RATIOS.size() - 1:
-			var old_ratio := GEAR_RATIOS[_current_gear]
+		if throttle_input > 0.04 and _engine_rpm > _shift_up_rpm and _current_gear < _gear_ratios.size() - 1:
+			var old_ratio := _gear_ratios[_current_gear]
 			_current_gear += 1
-			ratio = GEAR_RATIOS[_current_gear]
+			ratio = _gear_ratios[_current_gear]
 			_engine_rpm *= ratio / old_ratio
 			_gear_shift_timer = 0.24
 			_gear_shift_duration = 0.24
-		elif _current_gear > 0 and _engine_rpm < 2050.0 and absf(_forward_speed) > 3.0:
-			var old_ratio_down := GEAR_RATIOS[_current_gear]
+		elif _current_gear > 0 and _engine_rpm < _shift_down_rpm and absf(_forward_speed) > 3.0:
+			var old_ratio_down := _gear_ratios[_current_gear]
 			_current_gear -= 1
-			ratio = GEAR_RATIOS[_current_gear]
+			ratio = _gear_ratios[_current_gear]
 			_engine_rpm *= ratio / old_ratio_down
 			_gear_shift_timer = 0.17
 			_gear_shift_duration = 0.17
@@ -1271,8 +1508,8 @@ func _update_drivetrain(delta: float) -> void:
 		torque *= _shift_torque_blend
 	elif _gear_shift_duration > 0.0:
 		_gear_shift_duration = 0.0
-	var total_drive_force := torque * ratio * FINAL_DRIVE * DRIVETRAIN_EFFICIENCY / WHEEL_RADIUS
-	var target_drive_force_per_wheel := total_drive_force * 0.5 * (-1.0 if _reverse_engaged else 1.0)
+	var total_drive_force := torque * ratio * _final_drive * DRIVETRAIN_EFFICIENCY / _wheel_radius
+	var target_drive_force_per_wheel := total_drive_force / float(_driven_wheel_count) * (-1.0 if _reverse_engaged else 1.0)
 	# One final 75 ms torque-actuator lag absorbs high-frequency changes
 	# from the RPM target and the wheelspin estimator without making the
 	# pedal feel disconnected.
@@ -1283,17 +1520,18 @@ func _update_drivetrain(delta: float) -> void:
 	)
 	_drive_force_per_wheel = _smoothed_drive_force_per_wheel
 
-	var engine_brake_torque := clampf((_engine_rpm - ENGINE_IDLE_RPM) * 0.018, 0.0, 110.0)
+	var engine_brake_torque := clampf((_engine_rpm - _idle_rpm) * 0.018, 0.0, 110.0)
 	_engine_brake_force_per_wheel = 0.0
 	if absf(throttle_input) <= 0.03 and not _reverse_engaged and absf(_forward_speed) > 0.4:
-		_engine_brake_force_per_wheel = engine_brake_torque * ratio * FINAL_DRIVE * DRIVETRAIN_EFFICIENCY / WHEEL_RADIUS * 0.5
+		_engine_brake_force_per_wheel = engine_brake_torque * ratio * _final_drive * DRIVETRAIN_EFFICIENCY / _wheel_radius / float(_driven_wheel_count)
 
-	# A single limited-slip rear axle state is enough for believable
-	# launches: requested force beyond the available rear-axle friction
-	# becomes wheelspin, then the longitudinal Pacejka curve and traction
+	# A single limited-slip driven-axle state is enough for believable
+	# launches: requested force beyond the available driven-tyre
+	# friction (rear axle on RWD cars, both axles on the R8) becomes
+	# wheelspin, then the longitudinal Pacejka curve and traction
 	# control decide how much of it reaches the road.
-	var approximate_rear_peak := mass * 9.81 * 0.47 * maxf(_surface_mu, 0.05)
-	var load_ratio := absf(_smoothed_drive_force_per_wheel) * 2.0 / maxf(approximate_rear_peak, 1.0)
+	var approximate_rear_peak := mass * 9.81 * _drive_peak_load_fraction * maxf(_surface_mu, 0.05)
+	var load_ratio := absf(_smoothed_drive_force_per_wheel) * float(_driven_wheel_count) / maxf(approximate_rear_peak, 1.0)
 	var target_excess := clampf((load_ratio - 0.72) * 7.0, 0.0, 11.0)
 	if _reverse_engaged:
 		target_excess = -target_excess
@@ -1416,7 +1654,7 @@ func _apply_suspension_and_tyres(delta: float) -> void:
 		# airborne wheel as displacement 0 used to invent a large roll
 		# correction on the other side whenever one ray briefly unloaded.
 		if left_grounded and right_grounded:
-			axle_adjustments[axle] = (left_displacement - right_displacement) * (ANTI_ROLL_FRONT if axle == 0 else ANTI_ROLL_REAR)
+			axle_adjustments[axle] = (left_displacement - right_displacement) * (_anti_roll_front if axle == 0 else _anti_roll_rear)
 
 	# Second pass: spring/damper plus tyre forces at actual contacts.
 	for wheel in _wheels:
@@ -1435,12 +1673,12 @@ func _apply_suspension_and_tyres(delta: float) -> void:
 		wheel["filtered_suspension_velocity"] = filtered_suspension_velocity
 		var displacement := float(wheel.get("displacement", 0.0))
 		var compression_ratio := clampf(displacement / SUSPENSION_TRAVEL, 0.0, 1.0)
-		var progressive_force := displacement * SPRING_STIFFNESS + compression_ratio * compression_ratio * 7200.0
-		var damping := SPRING_DAMPING_COMPRESSION if filtered_suspension_velocity < 0.0 else SPRING_DAMPING_REBOUND
+		var progressive_force := displacement * _spring_stiffness + compression_ratio * compression_ratio * 7200.0
+		var damping := _spring_damping_compression if filtered_suspension_velocity < 0.0 else _spring_damping_rebound
 		var spring_force := progressive_force - filtered_suspension_velocity * damping
 		var adjustment := float(axle_adjustments.get(int(wheel.get("axle", 0)), 0.0))
 		spring_force += adjustment if int(wheel.get("side", 0)) < 0 else -adjustment
-		spring_force = clampf(spring_force, 0.0, 26500.0)
+		spring_force = clampf(spring_force, 0.0, _spring_force_limit)
 		var previous_spring_force := float(wheel.get("filtered_spring_force", 0.0))
 		if previous_spring_force > 0.01:
 			spring_force = lerpf(previous_spring_force, spring_force, 1.0 - exp(-38.0 * maxf(delta, 0.0)))
@@ -1471,7 +1709,7 @@ func _apply_suspension_and_tyres(delta: float) -> void:
 		var surface: Dictionary = wheel.get("surface", {"mu": 1.16, "rolling_resistance": 0.014})
 		var surface_mu := float(surface.get("mu", 1.16))
 		var load_sensitivity := clampf(1.08 - spring_force / 45000.0, 0.88, 1.08)
-		var peak_force := spring_force * surface_mu * load_sensitivity
+		var peak_force := spring_force * surface_mu * load_sensitivity * _tyre_grip_multiplier
 		var grip_factor := 1.0
 		if handbrake_active and is_rear:
 			grip_factor = 0.22
@@ -1513,7 +1751,7 @@ func _apply_suspension_and_tyres(delta: float) -> void:
 			# preserves lateral force first, which is the ABS-like part of
 			# this model: steering grip is not consumed by locked brakes.
 			var brake_share := 0.32 if bool(wheel.get("front", false)) else 0.18
-			longitudinal_force += -signf(forward_velocity) * 21500.0 * brake_share * absf(throttle_input)
+			longitudinal_force += -signf(forward_velocity) * _brake_force * brake_share * absf(throttle_input)
 
 		if handbrake_active and is_rear:
 			longitudinal_force += clampf(-forward_velocity * 1800.0, -peak_force, peak_force)
@@ -1571,7 +1809,7 @@ func _apply_suspension_and_tyres(delta: float) -> void:
 		# released while handbraking or already in a controlled drift.
 		if grounded_wheel_count >= 2 and absf(_steering_speed_smooth) > 3.0:
 			var understeer_gradient := 0.0028
-			var desired_yaw_rate := _steering_speed_smooth / WHEELBASE * tan(steering_angle) / (1.0 + understeer_gradient * _steering_speed_smooth * _steering_speed_smooth)
+			var desired_yaw_rate := _steering_speed_smooth / _wheelbase * tan(steering_angle) / (1.0 + understeer_gradient * _steering_speed_smooth * _steering_speed_smooth)
 			var grip_limited_yaw_rate := clampf(_surface_mu * 9.81 * 0.92 / maxf(absf(_steering_speed_smooth), 1.0), 0.22, 1.15)
 			desired_yaw_rate = clampf(desired_yaw_rate, -grip_limited_yaw_rate, grip_limited_yaw_rate)
 			var yaw_error := desired_yaw_rate - _filtered_yaw_rate
@@ -1596,9 +1834,9 @@ func _apply_aerodynamics() -> void:
 	var velocity := linear_velocity
 	var speed := velocity.length()
 	if speed > 0.01:
-		var drag_force := 0.5 * AIR_DENSITY * DRAG_AREA * speed * speed
+		var drag_force := 0.5 * AIR_DENSITY * _drag_area * speed * speed
 		apply_central_force(-velocity.normalized() * drag_force)
-	var downforce := clampf(0.5 * AIR_DENSITY * DOWNFORCE_AREA * _forward_speed * _forward_speed, 0.0, 6500.0)
+	var downforce := clampf(0.5 * AIR_DENSITY * _downforce_area * _forward_speed * _forward_speed, 0.0, 6500.0)
 	if grounded_wheel_count > 0:
 		var rear_bias := global_transform.basis * Vector3(0.0, 0.0, 0.32)
 		apply_force(-global_transform.basis.y * downforce, rear_bias)
@@ -1655,9 +1893,9 @@ func _process(delta: float) -> void:
 		if bool(wheel_visual.get("front", false)):
 			pivot.rotation.y = float(wheel_visual.get("pivot_y", 0.0)) + _ackermann_angle_for(_steering_visual_angle, int(wheel_visual.get("side", 1)))
 		var visual_speed := _visual_forward_speed
-		if not bool(wheel_visual.get("front", false)):
+		if bool(wheel_visual.get("driven", not bool(wheel_visual.get("front", false)))):
 			visual_speed += _visual_wheelspin_excess
-		spin.rotation.x -= visual_speed * delta / WHEEL_RADIUS
+		spin.rotation.x -= visual_speed * delta / _wheel_radius
 
 	var smoke_intensity := 0.0
 	if grounded_wheel_count >= 2:
@@ -1704,7 +1942,7 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	sleeping = false
 	_current_gear = 0
 	if _engine_state == ENGINE_RUNNING:
-		_engine_rpm = ENGINE_IDLE_RPM
+		_engine_rpm = _idle_rpm
 	else:
 		_engine_rpm = 0.0
 		_engine_transition_timer = 0.0
@@ -1813,28 +2051,53 @@ func get_absolute_speed_kmh() -> float:
 	return absf(_forward_speed) * 3.6
 
 
-## Owner-supplied Shelby GT500 figures shown in the garage.  The
-## drivetrain constants above are tuned so the simulated car lands on
-## the same numbers (569 Nm peak, gearing-limited ~207 km/h).
+## Catalogue figures shown in the garage.  The drivetrain values in
+## NativeCarCatalog are chosen so each simulated car lands on its own
+## sheet (Shelby 569 Nm/~207 km/h, R8 560 Nm/330, LT1 617/290,
+## M117 455/250).
 func get_spec_sheet() -> Dictionary:
+	var car := _car_definition
+	var pi := _tuning_performance_index(_tuning_level)
+	var tuning_pis: Array[int] = []
+	var tuning_classes: Array[String] = []
+	for level in TUNING_TORQUE_MULTIPLIERS.size():
+		var level_pi := _tuning_performance_index(level)
+		tuning_pis.append(level_pi)
+		tuning_classes.append(NativeCarCatalog.class_label_for_pi(level_pi))
 	return {
-		"name": SPEC_NAME,
-		"year": SPEC_YEAR,
-		"engine": SPEC_ENGINE,
-		"power_hp": SPEC_POWER_HP,
-		"power_note": SPEC_POWER_NOTE,
-		"torque_nm": SPEC_TORQUE_NM,
-		"torque_rpm": SPEC_TORQUE_RPM,
-		"accel_0_100_s": SPEC_ACCEL_0_100_S,
-		"top_speed_kmh": SPEC_TOP_SPEED_KMH,
-		"gearbox": SPEC_GEARBOX,
-		"drive": SPEC_DRIVE,
-		"gears": GEAR_RATIOS.size(),
-		"performance_index": TUNING_PERFORMANCE_INDEX[_tuning_level],
-		"class_label": TUNING_CLASS_LABELS[_tuning_level],
+		"car_id": _car_id,
+		"name": String(car.get("name", SPEC_NAME)),
+		"short_name": String(car.get("short_name", car.get("name", SPEC_NAME))),
+		"year": int(car.get("year", SPEC_YEAR)),
+		"year_label": String(car.get("year_label", "'67")),
+		"category": String(car.get("category", "МАСЛКАР • ЗАДНИЙ ПРИВОД")),
+		"engine": String(car.get("engine", SPEC_ENGINE)),
+		"power_hp": int(car.get("power_hp", SPEC_POWER_HP)),
+		"power_note": String(car.get("power_note", SPEC_POWER_NOTE)),
+		"torque_nm": int(car.get("torque_nm", SPEC_TORQUE_NM)),
+		"torque_rpm": int(car.get("torque_rpm", SPEC_TORQUE_RPM)),
+		"accel_0_100_s": float(car.get("accel_0_100_s", SPEC_ACCEL_0_100_S)),
+		"top_speed_kmh": int(car.get("top_speed_kmh", SPEC_TOP_SPEED_KMH)),
+		"gearbox": String(car.get("gearbox", SPEC_GEARBOX)),
+		"drive": String(car.get("drive", SPEC_DRIVE)),
+		"drivetrain": String(car.get("drivetrain", "rwd")),
+		"gears": _gear_ratios.size(),
+		"mass_kg": float(car.get("mass_kg", 1450.0)),
+		"length_m": float(car.get("length_m", 4.64)),
+		"width_m": float(car.get("width_m", 1.84)),
+		"height_m": float(car.get("height_m", 1.32)),
+		"wheelbase_m": _wheelbase,
+		"ratings": (car.get("ratings", {}) as Dictionary).duplicate(true),
+		"performance_index": pi,
+		"base_performance_index": _performance_index,
+		"tuning_performance_index": tuning_pis,
+		"tuning_class_labels": tuning_classes,
+		"class_label": NativeCarCatalog.class_label_for_pi(pi),
 		"tuning_level": _tuning_level,
-		"effective_power_hp": int(round(float(SPEC_POWER_HP) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
-		"effective_torque_nm": int(round(float(SPEC_TORQUE_NM) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
+		"effective_power_hp": int(round(float(_spec_power_hp) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
+		"effective_torque_nm": int(round(float(_spec_torque_nm) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
+		"steering_wheel_texture": String(car.get("steering_wheel_texture", NativeCarCatalog.COMMON_STEERING_WHEEL_TEXTURE)),
+		"steering_wheel_id": String(car.get("steering_wheel_id", NativeCarCatalog.COMMON_STEERING_WHEEL_ID)),
 	}
 
 
@@ -1867,9 +2130,9 @@ func get_gear_label() -> String:
 
 
 func get_rpm_ratio() -> float:
-	if _engine_rpm <= ENGINE_IDLE_RPM:
-		return clampf(0.08 * _engine_rpm / ENGINE_IDLE_RPM, 0.0, 0.08)
-	return clampf(0.08 + 0.92 * (_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
+	if _engine_rpm <= _idle_rpm:
+		return clampf(0.08 * _engine_rpm / _idle_rpm, 0.0, 0.08)
+	return clampf(0.08 + 0.92 * (_engine_rpm - _idle_rpm) / maxf(_redline_rpm - _idle_rpm, 1.0), 0.08, 1.0)
 
 
 func get_smoothing_state() -> Dictionary:

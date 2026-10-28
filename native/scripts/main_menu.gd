@@ -1,12 +1,13 @@
 class_name NativeMainMenu
 extends CanvasLayer
 
-## 0.2.36 front end: the live 3D Shelby/RichTown scene stays visible
-## behind clean dark translucent panels.  Navigation is a single row
-## of labelled icon tabs, PLAY is the one dominant home action, and
-## both the garage and the real-content store expose the actual Shelby
-## in Main's studio scene.  The store sells/applies the tuning levels
-## that really exist in the game; no model-less fake cars are listed.
+## 0.2.40 front end: the live 3D selected-car/RichTown scene stays
+## visible behind clean dark translucent panels.  Navigation is a
+## single row of labelled icon tabs, PLAY is the one dominant home
+## action, and both the garage and the real-content store expose the
+## actual selected car in Main's studio scene.  Four catalogue cars
+## have real GLBs, physics, recorded audio and per-car customization;
+## no model-less fake cars are listed.
 
 signal play_requested
 signal world_map_requested
@@ -19,6 +20,7 @@ signal garage_zoomed(factor: float)
 signal customization_changed(customization: Dictionary)
 signal tuning_purchase_requested(level: int)
 signal profile_changed(player_name: String, avatar_id: String)
+signal car_selection_requested(car_id: String)
 
 const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
 const AvatarIconScript := preload("res://scripts/avatar_icon.gd")
@@ -52,13 +54,11 @@ const WORLD_MOUNTAINS_REQUIRED_LEVEL := 5
 const WORLD_CANYON_REQUIRED_CREDITS := 50000
 const TUNING_COSTS: Array[int] = [0, 5000, 12000]
 const TUNING_MULTIPLIERS: Array[float] = [1.0, 1.08, 1.16]
-const TUNING_PI: Array[int] = [612, 648, 701]
-const TUNING_CLASSES: Array[String] = ["A", "A", "S1"]
 const TUNING_NAMES: Array[String] = ["СТОК", "SPORT", "TRACK"]
 const TUNING_DESCRIPTIONS: Array[String] = [
-    "Заводская настройка Shelby GT500: исходные мощность и момент.",
-    "Уличный пакет: +8% к мощности и моменту без смены класса.",
-    "Трековый пакет: +16% к мощности и моменту, переход в класс S1.",
+    "Заводская настройка выбранного автомобиля: исходные мощность и момент.",
+    "Уличный пакет: +8% к мощности и моменту выбранного автомобиля.",
+    "Трековый пакет: +16% к мощности и моменту выбранного автомобиля.",
 ]
 const WHEEL_FINISH_COLORS := {
     "silver": Color(0.72, 0.75, 0.78),
@@ -82,6 +82,11 @@ var _hover_player: AudioStreamPlayer
 var _last_hover_msec := 0
 var _backdrop_blur_material: ShaderMaterial
 var _car_name := ""
+var _selected_car_id := NativeCarCatalog.DEFAULT_CAR_ID
+var _catalog_cars: Array = []
+var _catalog_by_id: Dictionary = {}
+var _catalog_bound := false
+var _car_texture_cache: Dictionary = {}
 var _specs: Dictionary = {}
 var _specs_bound := false
 var _profile_bound := false
@@ -112,6 +117,7 @@ var _version_taps := 0
 var _last_version_tap_msec := 0
 
 var _top_car_label: Label
+var _top_car_summary_label: Label
 var _top_car_icon: NativeCarSilhouetteIcon
 var _top_credits_label: Label
 var _top_name_label: Label
@@ -122,6 +128,7 @@ var _home_class_label: Label
 var _home_goal_label: Label
 var _home_world_card: Button
 var _home_car_card: Button
+var _home_play_button: Button
 
 var _p_name: Label
 var _p_level: Label
@@ -164,6 +171,19 @@ var _garage_class_label: Label
 var _garage_power_label: Label
 var _garage_torque_label: Label
 var _garage_accel_label: Label
+var _garage_title_label: Label
+var _garage_category_label: Label
+var _garage_engine_label: Label
+var _garage_top_speed_label: Label
+var _garage_gearbox_label: Label
+var _garage_drive_label: Label
+var _garage_mass_label: Label
+var _garage_dimensions_label: Label
+var _garage_rating_bars: Dictionary = {}
+var _garage_cars_title: Label
+var _garage_cars_box: VBoxContainer
+var _garage_car_buttons: Dictionary = {}
+var _garage_drive_button: Button
 var _garage_status_label: Label
 var _plate_edit: LineEdit
 var _garage_drag_surface: Control
@@ -183,16 +203,18 @@ var _store_sort_button: Button
 var _store_filter := "all"
 var _store_sort := "price"
 var _store_selected_id := "shelby_gt500"
+var _store_hint_label: Label
+var _store_drive_button: Button
 
 var _world_progress_label: Label
 var _world_detail_label: Label
 var _paint_options: Array[Dictionary] = [
-    {"id": "red", "name": "Candy Red", "color": Color(0.48, 0.025, 0.035)},
-    {"id": "blue", "name": "Acapulco Blue", "color": Color(0.03, 0.16, 0.55)},
-    {"id": "green", "name": "Highland Green", "color": Color(0.02, 0.30, 0.17)},
-    {"id": "yellow", "name": "Springtime Yellow", "color": Color(0.92, 0.64, 0.04)},
-    {"id": "silver", "name": "Silver Frost", "color": Color(0.62, 0.66, 0.70)},
-    {"id": "black", "name": "Raven Black", "color": Color(0.012, 0.014, 0.018)},
+    {"id": "red", "name": "Красный", "color": Color(0.48, 0.025, 0.035)},
+    {"id": "blue", "name": "Синий", "color": Color(0.03, 0.16, 0.55)},
+    {"id": "green", "name": "Зелёный", "color": Color(0.02, 0.30, 0.17)},
+    {"id": "yellow", "name": "Жёлтый", "color": Color(0.92, 0.64, 0.04)},
+    {"id": "silver", "name": "Серебристый", "color": Color(0.62, 0.66, 0.70)},
+    {"id": "black", "name": "Чёрный", "color": Color(0.012, 0.014, 0.018)},
 ]
 
 
@@ -254,6 +276,12 @@ func get_smoke_state() -> Dictionary:
         "developer_mode": bool(_settings.get("developer_mode", false)),
         "control_type": String(_settings.get("control_type", "wheel")),
         "clean_menu_0234": true,
+        "multi_car_0240": _catalog_entries().size() == 4 and _garage_car_buttons.size() == 4,
+        "catalog_cars": _catalog_entries().size(),
+        "catalog_bound": _catalog_bound,
+        "selected_car_id": _selected_car_id,
+        "garage_cars": _garage_car_buttons.size(),
+        "store_cars": _store_car_count(),
         "store_panel_0236": _panels.size() == 6 and _store_cards_box != null and _store_drag_surface != null,
         "store_items": _store_card_buttons.size(),
         "store_filter": _store_filter,
@@ -411,6 +439,7 @@ func _button(text: String, accent: Color, min_size: Vector2, font_size: int = 22
 func _add_picture_layers(control: Control, texture: Texture2D, title: String, subtitle: String, title_size: int) -> void:
     control.clip_contents = true
     var image := TextureRect.new()
+    image.name = "PictureImage"
     image.texture = texture
     image.set_anchors_preset(Control.PRESET_FULL_RECT)
     image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -443,9 +472,11 @@ func _add_picture_layers(control: Control, texture: Texture2D, title: String, su
     labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
     control.add_child(labels)
     var title_label := _label(labels, title, title_size, Color.WHITE, true)
+    title_label.name = "PictureTitle"
     title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     title_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
     var subtitle_label := _label(labels, subtitle, MIN_FONT_SIZE, Color(0.90, 0.94, 0.99))
+    subtitle_label.name = "PictureSubtitle"
     subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 
@@ -510,7 +541,8 @@ func _bar(parent: Node, caption: String, value: float, accent: Color) -> Progres
     bar.add_theme_stylebox_override("background", _style(Color(1, 1, 1, 0.10), COL_BORDER, 3, 0))
     bar.add_theme_stylebox_override("fill", _style(accent, accent, 3, 0))
     row.add_child(bar)
-    _label(row, "%.1f" % value, 14, COL_TEXT)
+    var value_label := _label(row, "%.1f" % value, 14, COL_TEXT)
+    value_label.name = "RatingValue"
     return bar
 
 
@@ -597,7 +629,7 @@ func _build_top_bar(parent: Node) -> void:
     var car_text := VBoxContainer.new()
     car_row.add_child(car_text)
     _top_car_label = _label(car_text, "Shelby GT500 '67", 16, COL_TEXT, true)
-    _label(car_text, "365 л.с. • 569 Нм • ~207 км/ч", 12, COL_MUTED)
+    _top_car_summary_label = _label(car_text, "365 л.с. • 569 Нм • 207 км/ч", 12, COL_MUTED)
 
     var spacer := Control.new()
     spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -737,6 +769,248 @@ func _new_panel(parent: Node, background_alpha: float = 0.46, use_backdrop_blur:
     return vbox
 
 
+func _catalog_entries() -> Array:
+    if not _catalog_cars.is_empty():
+        return _catalog_cars.duplicate(true)
+    var result: Array = []
+    for car_variant in NativeCarCatalog.get_cars():
+        var car: Dictionary = car_variant
+        var entry := car.duplicate(true)
+        entry["effective_power_hp"] = int(entry.get("power_hp", 0))
+        entry["effective_torque_nm"] = int(entry.get("torque_nm", 0))
+        entry["effective_accel_0_100_s"] = float(entry.get("accel_0_100_s", 6.0))
+        entry["base_performance_index"] = int(entry.get("performance_index", 612))
+        result.append(entry)
+    return result
+
+
+func _catalog_car(car_id: String) -> Dictionary:
+    var normalized := NativeCarCatalog.normalize_id(car_id)
+    if _catalog_by_id.has(normalized):
+        return (_catalog_by_id[normalized] as Dictionary).duplicate(true)
+    for entry_variant in _catalog_entries():
+        var entry: Dictionary = entry_variant
+        if String(entry.get("id", "")) == normalized:
+            return entry.duplicate(true)
+    return NativeCarCatalog.get_car(normalized)
+
+
+func _texture_for_car(car_id: String) -> Texture2D:
+    var normalized := NativeCarCatalog.normalize_id(car_id)
+    if _car_texture_cache.has(normalized):
+        return _car_texture_cache[normalized] as Texture2D
+    var path := ""
+    match normalized:
+        "audi_r8_v10_plus":
+            path = "res://assets/ui/menu_audi_r8_gameplay.jpg"
+        "chevrolet_camaro_ss":
+            path = "res://assets/ui/menu_camaro_ss_gameplay.jpg"
+        "mercedes_560_sel":
+            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"
+        _:
+            path = "res://assets/ui/menu_shelby_gameplay.jpg"
+    var texture: Texture2D = MENU_SHELBY_TEXTURE
+    if ResourceLoader.exists(path):
+        var loaded := load(path) as Texture2D
+        if loaded != null:
+            texture = loaded
+    _car_texture_cache[normalized] = texture
+    return texture
+
+
+func _set_picture_card(button: Button, texture: Texture2D, title: String, subtitle: String) -> void:
+    if button == null:
+        return
+    var image := button.get_node_or_null("PictureImage") as TextureRect
+    if image != null:
+        image.texture = texture
+    var title_label := button.find_child("PictureTitle", true, false) as Label
+    if title_label != null:
+        title_label.text = title
+    var subtitle_label := button.find_child("PictureSubtitle", true, false) as Label
+    if subtitle_label != null:
+        subtitle_label.text = subtitle
+
+
+func _car_display_name(specs: Dictionary) -> String:
+    var base_name := String(specs.get("short_name", specs.get("name", "Автомобиль")))
+    var year_label := String(specs.get("year_label", ""))
+    if year_label.is_empty() and int(specs.get("year", 0)) > 0:
+        year_label = "'%02d" % (int(specs.get("year", 0)) % 100)
+    return ("%s %s" % [base_name, year_label]).strip_edges()
+
+
+func _specs_for_car(car_id: String) -> Dictionary:
+    var normalized := NativeCarCatalog.normalize_id(car_id)
+    if String(_specs.get("car_id", "")) == normalized:
+        return _specs.duplicate(true)
+    return _catalog_car(normalized)
+
+
+func _tuning_values_for(specs: Dictionary, level: int) -> Dictionary:
+    var safe := clampi(level, 0, TUNING_MULTIPLIERS.size() - 1)
+    var base_power := float(specs.get("power_hp", 365))
+    var base_torque := float(specs.get("torque_nm", 569))
+    var base_accel := float(specs.get("accel_0_100_s", 6.0))
+    var multiplier := TUNING_MULTIPLIERS[safe]
+    var pi := 612
+    var class_label := "A"
+    var tuning_pis: Array = specs.get("tuning_performance_index", [])
+    var tuning_classes: Array = specs.get("tuning_class_labels", [])
+    if tuning_pis.size() > safe:
+        pi = int(tuning_pis[safe])
+    else:
+        var adds: Array = specs.get("tuning_pi_add", [0, 36, 89])
+        pi = int(specs.get("base_performance_index", specs.get("performance_index", 612))) + (int(adds[safe]) if adds.size() > safe else 0)
+    if tuning_classes.size() > safe:
+        class_label = String(tuning_classes[safe])
+    else:
+        class_label = NativeCarCatalog.class_label_for_pi(pi)
+    return {
+        "power": int(round(base_power * multiplier)),
+        "torque": int(round(base_torque * multiplier)),
+        "accel": base_accel / sqrt(multiplier),
+        "pi": pi,
+        "class": class_label,
+    }
+
+
+func _store_car_count() -> int:
+    var count := 0
+    for entry_variant in _catalog_entries():
+        var entry: Dictionary = entry_variant
+        if not String(entry.get("id", "")).is_empty():
+            count += 1
+    return count
+
+
+func bind_car_catalog(cars: Array) -> void:
+    _catalog_cars = cars.duplicate(true)
+    _catalog_by_id.clear()
+    var selected_found := false
+    for entry_variant in _catalog_cars:
+        var entry: Dictionary = entry_variant
+        var car_id := String(entry.get("id", entry.get("car_id", "")))
+        if car_id.is_empty():
+            continue
+        _catalog_by_id[car_id] = entry.duplicate(true)
+        if bool(entry.get("selected", false)):
+            _selected_car_id = car_id
+            selected_found = true
+    if not selected_found and not String(_specs.get("car_id", "")).is_empty():
+        _selected_car_id = String(_specs.get("car_id", _selected_car_id))
+    _catalog_bound = _catalog_by_id.size() == NativeCarCatalog.car_count()
+    _refresh_car_presentation()
+
+
+func _request_car_selection(car_id: String) -> void:
+    var next_id := NativeCarCatalog.normalize_id(car_id)
+    if next_id == _selected_car_id:
+        return
+    var entry := _catalog_car(next_id)
+    set_garage_status("Загружаю %s: модель, физику и звук…" % _car_display_name(entry))
+    car_selection_requested.emit(next_id)
+
+
+func _refresh_car_presentation() -> void:
+    var specs := _specs_for_car(_selected_car_id)
+    if specs.is_empty():
+        return
+    # Keep the store detail pane on the live studio car after a garage
+    # switch.  A tuning item for this same car stays selected; a car
+    # card or another car's tuning item follows the new selection.
+    if _catalog_by_id.has(_store_selected_id):
+        _store_selected_id = _selected_car_id
+    elif _store_selected_id.begins_with("tuning_") and not _store_selected_id.begins_with("tuning_%s_" % _selected_car_id):
+        _store_selected_id = _selected_car_id
+    var display_name := _car_display_name(specs)
+    var tuning := _tuning_values_for(specs, int(_customization.get("tuning_level", 0)))
+    if _top_car_label != null:
+        _top_car_label.text = display_name
+    if _top_car_summary_label != null:
+        _top_car_summary_label.text = "%d л.с. • %d Нм • %d км/ч" % [
+            int(specs.get("power_hp", tuning.get("power", 0))), int(specs.get("torque_nm", tuning.get("torque", 0))), int(specs.get("top_speed_kmh", 0)),
+        ]
+    if _home_play_button != null:
+        _set_picture_card(_home_play_button, MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • %s • свободная езда" % display_name)
+    if _home_car_card != null:
+        _set_picture_card(_home_car_card, _texture_for_car(_selected_car_id), display_name.to_upper(), "открыть гараж →")
+    if _garage_title_label != null:
+        _garage_title_label.text = "%s (%d)" % [String(specs.get("name", display_name)), int(specs.get("year", 1967))]
+    if _garage_category_label != null:
+        _garage_category_label.text = String(specs.get("category", "АВТОМОБИЛЬ"))
+    if _garage_engine_label != null:
+        _garage_engine_label.text = String(specs.get("engine", "—"))
+    if _garage_top_speed_label != null:
+        _garage_top_speed_label.text = "%d км/ч" % int(specs.get("top_speed_kmh", 0))
+    if _garage_gearbox_label != null:
+        _garage_gearbox_label.text = String(specs.get("gearbox", "—"))
+    if _garage_drive_label != null:
+        _garage_drive_label.text = String(specs.get("drive", "—"))
+    if _garage_mass_label != null:
+        _garage_mass_label.text = "%s кг" % _fmt_int(int(round(float(specs.get("mass_kg", 0.0)))))
+    if _garage_dimensions_label != null:
+        _garage_dimensions_label.text = "%.2f × %.2f × %.2f м" % [float(specs.get("length_m", 0.0)), float(specs.get("width_m", 0.0)), float(specs.get("height_m", 0.0))]
+    var ratings := specs.get("ratings", {}) as Dictionary
+    for rating_key in _garage_rating_bars.keys():
+        var bar := _garage_rating_bars[rating_key] as ProgressBar
+        if bar == null:
+            continue
+        var rating_value := clampf(float(ratings.get(String(rating_key), bar.value)), 0.0, 10.0)
+        bar.value = rating_value
+        var row := bar.get_parent() as HBoxContainer
+        if row != null:
+            var value_label := row.get_node_or_null("RatingValue") as Label
+            if value_label != null:
+                value_label.text = "%.1f" % rating_value
+    if _garage_drive_button != null:
+        _garage_drive_button.text = "▶  ИГРАТЬ НА %s" % display_name.to_upper()
+    if _store_hint_label != null:
+        _store_hint_label.text = "3D %s • ВРАЩАЙТЕ И МАСШТАБИРУЙТЕ" % display_name.to_upper()
+    if _store_drive_button != null:
+        _store_drive_button.text = "▶  ИГРАТЬ НА %s" % display_name.to_upper()
+    _refresh_garage_car_list()
+    _refresh_garage_specs()
+    _refresh_store()
+
+
+func _refresh_garage_car_list() -> void:
+    if _garage_cars_box == null:
+        return
+    for child in _garage_cars_box.get_children():
+        _garage_cars_box.remove_child(child)
+        child.queue_free()
+    _garage_car_buttons.clear()
+    var entries := _catalog_entries()
+    if _garage_cars_title != null:
+        _garage_cars_title.text = "МОИ АВТОМОБИЛИ (%d)" % entries.size()
+    for entry_variant in entries:
+        var entry: Dictionary = entry_variant
+        var car_id := String(entry.get("id", entry.get("car_id", "")))
+        var customization := entry.get("customization", {}) as Dictionary
+        var level := int(customization.get("tuning_level", int(entry.get("tuning_level", 0))))
+        var values := _tuning_values_for(entry, level)
+        var selected := car_id == _selected_car_id
+        var status := "выбран • живой 3D" if selected else "игровой кадр • выбрать авто"
+        var button := _picture_button(
+            _texture_for_car(car_id),
+            _car_display_name(entry),
+            "%s %d • %d л.с. • %s" % [String(values.get("class", "A")), int(values.get("pi", 612)), int(values.get("power", 0)), status],
+            Vector2(0.0, 88.0),
+            18
+        )
+        button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        button.modulate = Color(1.0, 0.84, 0.58) if selected else Color.WHITE
+        button.pressed.connect(func() -> void:
+            if car_id == _selected_car_id:
+                set_garage_status("%s уже выбран." % _car_display_name(entry))
+            else:
+                _request_car_selection(car_id)
+        )
+        _garage_cars_box.add_child(button)
+        _garage_car_buttons[car_id] = button
+
+
 func _build_home_panel(parent: Node) -> Control:
     var vbox := _new_panel(parent, 0.10, false)
     var spacer := Control.new()
@@ -756,10 +1030,10 @@ func _build_home_panel(parent: Node) -> Control:
     _label(left, "СВОБОДНЫЕ ДОРОГИ RICHTOWN", 16, Color(1.0, 0.78, 0.48), true)
     _home_goal_label = _label(left, "БЛИЖАЙШАЯ ЦЕЛЬ: до уровня 2 осталось 50.0 км", MIN_FONT_SIZE, Color(0.92, 0.96, 1.0))
     _home_goal_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    var play := _picture_button(MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • Shelby GT500 • свободная езда", Vector2(0.0, 172.0), 46)
-    play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    play.pressed.connect(func() -> void: play_requested.emit())
-    left.add_child(play)
+    _home_play_button = _picture_button(MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • Shelby GT500 • свободная езда", Vector2(0.0, 172.0), 46)
+    _home_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _home_play_button.pressed.connect(func() -> void: play_requested.emit())
+    left.add_child(_home_play_button)
 
     var right := VBoxContainer.new()
     right.add_theme_constant_override("separation", 10)
@@ -791,7 +1065,7 @@ func _build_garage_panel(parent: Node) -> Control:
     _label(header, "ГАРАЖ", 27, Color.WHITE, true)
     _garage_class_label = _label(header, "КЛАСС A • ИНДЕКС 612", 15, Color(1.0, 0.76, 0.44), true)
     _garage_class_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _garage_status_label = _label(header, "", 12, Color(1.0, 0.78, 0.48))
+    _garage_status_label = _label(header, "", MIN_FONT_SIZE, Color(1.0, 0.78, 0.48))
     _garage_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _garage_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _garage_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -808,24 +1082,30 @@ func _build_garage_panel(parent: Node) -> Control:
     var left := VBoxContainer.new()
     left.add_theme_constant_override("separation", 7)
     left_panel.add_child(left)
-    _label(left, "Shelby GT500 (1967)", 25, Color.WHITE, true)
-    _label(left, "МАСЛКАР • ЗАДНИЙ ПРИВОД", 12, COL_MUTED, true)
+    _garage_title_label = _label(left, "Shelby GT500 (1967)", 25, Color.WHITE, true)
+    _garage_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _garage_category_label = _label(left, "МАСЛКАР • ЗАДНИЙ ПРИВОД", MIN_FONT_SIZE, COL_MUTED, true)
+    _garage_category_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     var grid := GridContainer.new()
     grid.columns = 2
     grid.add_theme_constant_override("h_separation", 14)
     grid.add_theme_constant_override("v_separation", 3)
     left.add_child(grid)
-    _spec_row(grid, "Двигатель", "V8, 7.0 л (428 cid)")
+    _garage_engine_label = _spec_row(grid, "Двигатель", "V8, 7.0 л (428 cid)")
     _garage_power_label = _spec_row(grid, "Мощность", "365 л.с. (SAE gross)")
     _garage_torque_label = _spec_row(grid, "Момент", "569 Нм при 3200")
     _garage_accel_label = _spec_row(grid, "0–100 км/ч", "6.0 с")
-    _spec_row(grid, "Макс. скорость", "~207 км/ч")
-    _spec_row(grid, "Коробка", "4-ступенчатая механика")
-    _spec_row(grid, "Привод", "задний")
-    _bar(left, "Скорость", 6.4, COL_ACCENT)
-    _bar(left, "Разгон", 6.8, COL_ACCENT)
-    _bar(left, "Управление", 5.2, COL_ACCENT)
-    _bar(left, "Дрифт", 7.5, COL_ACCENT)
+    _garage_top_speed_label = _spec_row(grid, "Макс. скорость", "207 км/ч")
+    _garage_gearbox_label = _spec_row(grid, "Коробка", "4-ступенчатая механика")
+    _garage_drive_label = _spec_row(grid, "Привод", "задний")
+    _garage_mass_label = _spec_row(grid, "Масса", "1 450 кг")
+    _garage_dimensions_label = _spec_row(grid, "Габариты", "4.64 × 1.84 × 1.32 м")
+    for value_label in [_garage_engine_label, _garage_power_label, _garage_torque_label, _garage_accel_label, _garage_top_speed_label, _garage_gearbox_label, _garage_drive_label, _garage_mass_label, _garage_dimensions_label]:
+        value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _garage_rating_bars["speed"] = _bar(left, "Скорость", 6.4, COL_ACCENT)
+    _garage_rating_bars["accel"] = _bar(left, "Разгон", 6.8, COL_ACCENT)
+    _garage_rating_bars["handling"] = _bar(left, "Управление", 5.2, COL_ACCENT)
+    _garage_rating_bars["drift"] = _bar(left, "Дрифт", 7.5, COL_ACCENT)
     var left_spacer := Control.new()
     left_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
     left_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -869,9 +1149,12 @@ func _build_garage_panel(parent: Node) -> Control:
     right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroll.add_child(right)
 
-    _label(right, "МОИ АВТОМОБИЛИ (1)", 15, Color.WHITE, true)
-    var owned := _picture_button(MENU_SHELBY_TEXTURE, "Shelby GT500 '67", "выбран • игровой кадр Shelby", Vector2(0.0, 88.0), 18)
-    right.add_child(owned)
+    _garage_cars_title = _label(right, "МОИ АВТОМОБИЛИ (4)", 15, Color.WHITE, true)
+    _garage_cars_box = VBoxContainer.new()
+    _garage_cars_box.add_theme_constant_override("separation", 8)
+    _garage_cars_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    right.add_child(_garage_cars_box)
+    _refresh_garage_car_list()
     _build_garage_tuning_section(right)
 
     _label(right, "ЦВЕТ КУЗОВА", MIN_FONT_SIZE, COL_MUTED, true)
@@ -932,7 +1215,7 @@ func _build_garage_panel(parent: Node) -> Control:
     var plate_row := HBoxContainer.new()
     plate_row.add_theme_constant_override("separation", 6)
     right.add_child(plate_row)
-    _plate_edit = _line_edit("GT500-67", "НОМЕР")
+    _plate_edit = _line_edit(String(_customization.get("license_plate", "GT500-67")), "НОМЕР")
     _plate_edit.max_length = 9
     _plate_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _plate_edit.text_submitted.connect(func(_value: String) -> void: _apply_plate_edit())
@@ -942,10 +1225,10 @@ func _build_garage_panel(parent: Node) -> Control:
     plate_apply.pressed.connect(_apply_plate_edit)
     plate_row.add_child(plate_apply)
 
-    var drive := _button("▶  ИГРАТЬ НА ЭТОМ АВТО", COL_ACCENT, Vector2(0.0, 58.0), 19)
-    drive.alignment = HORIZONTAL_ALIGNMENT_CENTER
-    drive.pressed.connect(func() -> void: play_requested.emit())
-    vbox.add_child(drive)
+    _garage_drive_button = _button("▶  ИГРАТЬ НА ЭТОМ АВТО", COL_ACCENT, Vector2(0.0, 58.0), 19)
+    _garage_drive_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _garage_drive_button.pressed.connect(func() -> void: play_requested.emit())
+    vbox.add_child(_garage_drive_button)
     _refresh_customization_controls()
     return vbox.get_parent().get_parent() as Control
 
@@ -974,7 +1257,7 @@ func _build_garage_tuning_section(right: VBoxContainer) -> void:
 func _open_next_tuning_in_store() -> void:
     var owned_max := int(_customization.get("tuning_owned_max", 0))
     var next_level := clampi(owned_max + 1, 0, 2)
-    _store_selected_id = "tuning_%d" % next_level
+    _store_selected_id = "tuning_%s_%d" % [_selected_car_id, next_level]
     _store_filter = "tuning"
     _show_panel(PANEL_STORE)
 
@@ -1029,17 +1312,7 @@ func _on_tuning_action_pressed() -> void:
 
 
 func _tuning_values(level: int) -> Dictionary:
-    var safe := clampi(level, 0, 2)
-    var base_power := float(_specs.get("power_hp", 365))
-    var base_torque := float(_specs.get("torque_nm", 569))
-    var multiplier := TUNING_MULTIPLIERS[safe]
-    return {
-        "power": int(round(base_power * multiplier)),
-        "torque": int(round(base_torque * multiplier)),
-        "accel": 6.0 / sqrt(multiplier),
-        "pi": TUNING_PI[safe],
-        "class": TUNING_CLASSES[safe],
-    }
+    return _tuning_values_for(_specs_for_car(_selected_car_id), level)
 
 
 func _refresh_customization_controls() -> void:
@@ -1053,7 +1326,7 @@ func _refresh_customization_controls() -> void:
         if preview != null:
             preview.set_finish(WHEEL_FINISH_COLORS.get(String(key), Color(0.72, 0.75, 0.78)), String(key) == finish_id)
     if _plate_edit != null and not _plate_edit.has_focus():
-        _plate_edit.text = String(_customization.get("license_plate", "GT500-67"))
+        _plate_edit.text = String(_customization.get("license_plate", String(_catalog_car(_selected_car_id).get("default_plate", "NITCHES"))))
     if _top_car_icon != null:
         _top_car_icon.set_paint_color(_customization.get("paint_color", Color(0.48, 0.025, 0.035)))
 
@@ -1113,6 +1386,7 @@ func _refresh_customization_controls() -> void:
 
 
 func _refresh_garage_specs() -> void:
+    var specs := _specs_for_car(_selected_car_id)
     var values := _tuning_values(int(_customization.get("tuning_level", 0)))
     var class_text := "КЛАСС %s • ИНДЕКС %d" % [String(values.get("class", "A")), int(values.get("pi", 612))]
     if _garage_class_label != null:
@@ -1120,11 +1394,12 @@ func _refresh_garage_specs() -> void:
     if _home_class_label != null:
         _home_class_label.text = "%s %d" % [String(values.get("class", "A")), int(values.get("pi", 612))]
     if _garage_power_label != null:
-        _garage_power_label.text = "%d л.с.%s" % [int(values.get("power", 365)), " (SAE gross)" if int(_customization.get("tuning_level", 0)) == 0 else " (тюнинг)"]
+        var power_note := String(specs.get("power_note", ""))
+        _garage_power_label.text = "%d л.с.%s" % [int(values.get("power", 365)), (" (%s)" % power_note) if int(_customization.get("tuning_level", 0)) == 0 and not power_note.is_empty() else (" (тюнинг)" if int(_customization.get("tuning_level", 0)) > 0 else "")]
     if _garage_torque_label != null:
-        _garage_torque_label.text = "%d Нм при 3200" % int(values.get("torque", 569))
+        _garage_torque_label.text = "%d Нм при %d" % [int(values.get("torque", 569)), int(specs.get("torque_rpm", 3200))]
     if _garage_accel_label != null:
-        _garage_accel_label.text = "%.1f с" % float(values.get("accel", 6.0))
+        _garage_accel_label.text = "%.1f с" % float(values.get("accel", float(specs.get("accel_0_100_s", 6.0))))
 
 
 func set_garage_status(text: String) -> void:
@@ -1137,6 +1412,8 @@ func set_garage_status(text: String) -> void:
 func bind_customization(customization: Dictionary) -> void:
     for key in customization.keys():
         _customization[key] = customization[key]
+    if customization.has("car_id"):
+        _selected_car_id = NativeCarCatalog.normalize_id(String(customization.get("car_id", _selected_car_id)))
     _preview_tuning_level = int(_customization.get("tuning_level", 0))
     _customization_bound = true
     set_garage_status("")
@@ -1207,7 +1484,8 @@ func _build_store_panel(parent: Node) -> Control:
     _store_drag_surface.size_flags_stretch_ratio = 1.70
     _store_drag_surface.gui_input.connect(_on_garage_drag_input.bind(_store_drag_surface))
     columns.add_child(_store_drag_surface)
-    var store_hint := _label(_store_drag_surface, "3D SHELBY • ВРАЩАЙТЕ И МАСШТАБИРУЙТЕ", MIN_FONT_SIZE, Color(1, 1, 1, 0.84), true)
+    _store_hint_label = _label(_store_drag_surface, "3D АВТО • ВРАЩАЙТЕ И МАСШТАБИРУЙТЕ", MIN_FONT_SIZE, Color(1, 1, 1, 0.84), true)
+    var store_hint := _store_hint_label
     store_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
     store_hint.offset_left = -205.0
     store_hint.offset_top = -42.0
@@ -1232,45 +1510,57 @@ func _build_store_panel(parent: Node) -> Control:
     _store_action_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _store_action_button.pressed.connect(_on_store_action_pressed)
     details.add_child(_store_action_button)
-    var honesty_note := _label(details, "Магазин показывает только машину и тюнинг, которые уже есть в игре. Фейковых авто без 3D-моделей здесь нет.", MIN_FONT_SIZE, COL_MUTED)
+    var honesty_note := _label(details, "Магазин показывает только четыре машины с реальными 3D-моделями, физикой и звуком, а также тюнинг выбранного авто. Фейковых машин без моделей здесь нет.", MIN_FONT_SIZE, COL_MUTED)
     honesty_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-    var drive := _button("▶  ИГРАТЬ НА SHELBY GT500", COL_ACCENT, Vector2(0.0, 56.0), 18)
-    drive.alignment = HORIZONTAL_ALIGNMENT_CENTER
-    drive.pressed.connect(func() -> void: play_requested.emit())
-    vbox.add_child(drive)
+    _store_drive_button = _button("▶  ИГРАТЬ НА ВЫБРАННОМ АВТО", COL_ACCENT, Vector2(0.0, 56.0), 18)
+    _store_drive_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _store_drive_button.pressed.connect(func() -> void: play_requested.emit())
+    vbox.add_child(_store_drive_button)
     _refresh_store()
     return vbox.get_parent().get_parent() as Control
 
 
 func _store_items() -> Array[Dictionary]:
-    var current_level := int(_customization.get("tuning_level", 0))
-    var current := _tuning_values(current_level)
-    var items: Array[Dictionary] = [{
-        "id": "shelby_gt500",
-        "type": "cars",
-        "name": "Shelby GT500 '67",
-        "price": 0,
-        "power": int(current.get("power", 365)),
-        "torque": int(current.get("torque", 569)),
-        "accel": float(current.get("accel", 6.0)),
-        "pi": int(current.get("pi", 612)),
-        "class": String(current.get("class", "A")),
-        "level": -1,
-    }]
-    for level in 3:
+    var items: Array[Dictionary] = []
+    for entry_variant in _catalog_entries():
+        var entry: Dictionary = entry_variant
+        var car_id := String(entry.get("id", entry.get("car_id", "")))
+        var car_customization := entry.get("customization", {}) as Dictionary
+        var level := int(car_customization.get("tuning_level", int(entry.get("tuning_level", 0))))
+        if car_id == _selected_car_id:
+            level = int(_customization.get("tuning_level", level))
+        var values := _tuning_values_for(entry, level)
+        items.append({
+            "id": car_id,
+            "car_id": car_id,
+            "type": "cars",
+            "name": _car_display_name(entry),
+            "price": 0,
+            "power": int(values.get("power", entry.get("power_hp", 0))),
+            "torque": int(values.get("torque", entry.get("torque_nm", 0))),
+            "accel": float(values.get("accel", entry.get("accel_0_100_s", 6.0))),
+            "pi": int(values.get("pi", entry.get("performance_index", 612))),
+            "class": String(values.get("class", entry.get("class_label", "A"))),
+            "level": -1,
+            "specs": entry.duplicate(true),
+        })
+    var selected_specs := _specs_for_car(_selected_car_id)
+    for level in TUNING_NAMES.size():
         var values := _tuning_values(level)
         items.append({
-            "id": "tuning_%d" % level,
+            "id": "tuning_%s_%d" % [_selected_car_id, level],
+            "car_id": _selected_car_id,
             "type": "tuning",
-            "name": "Тюнинг %s" % TUNING_NAMES[level],
+            "name": "Тюнинг %s • %s" % [TUNING_NAMES[level], _car_display_name(selected_specs)],
             "price": TUNING_COSTS[level],
-            "power": int(values.get("power", 365)),
-            "torque": int(values.get("torque", 569)),
-            "accel": float(values.get("accel", 6.0)),
-            "pi": int(values.get("pi", 612)),
-            "class": String(values.get("class", "A")),
+            "power": int(values.get("power", selected_specs.get("power_hp", 365))),
+            "torque": int(values.get("torque", selected_specs.get("torque_nm", 569))),
+            "accel": float(values.get("accel", selected_specs.get("accel_0_100_s", 6.0))),
+            "pi": int(values.get("pi", selected_specs.get("performance_index", 612))),
+            "class": String(values.get("class", selected_specs.get("class_label", "A"))),
             "level": level,
+            "specs": selected_specs.duplicate(true),
         })
     return items
 
@@ -1303,7 +1593,7 @@ func _cycle_store_sort() -> void:
 
 func _store_item_status(item: Dictionary) -> String:
     if String(item.get("type", "")) == "cars":
-        return "В ГАРАЖЕ"
+        return "ВЫБРАН" if String(item.get("car_id", item.get("id", ""))) == _selected_car_id else "В ГАРАЖЕ"
     var level := int(item.get("level", 0))
     var current_level := int(_customization.get("tuning_level", 0))
     var owned_max := int(_customization.get("tuning_owned_max", 0))
@@ -1341,15 +1631,18 @@ func _refresh_store() -> void:
         var item_id := String(item.get("id", ""))
         var status := _store_item_status(item)
         var button: Button
+        var item_car_id := String(item.get("car_id", item_id))
         if String(item.get("type", "")) == "cars":
-            button = _picture_button(MENU_SHELBY_TEXTURE, String(item.get("name", "Shelby GT500")), "%s %d • %d л.с. • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 365)), status], Vector2(0.0, 98.0), 19)
+            button = _picture_button(_texture_for_car(item_car_id), String(item.get("name", "Автомобиль")), "%s %d • %d л.с. • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), status], Vector2(0.0, 98.0), 19)
         else:
-            button = _tile(String(item.get("name", "Тюнинг")), "%s %d • %d л.с. • %.1f с • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 365)), float(item.get("accel", 6.0)), status], COL_ACCENT, Vector2(0.0, 84.0), 20)
+            button = _tile(String(item.get("name", "Тюнинг")), "%s %d • %d л.с. • %.1f с • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), float(item.get("accel", 6.0)), status], COL_ACCENT, Vector2(0.0, 84.0), 20)
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         button.modulate = Color(1.0, 0.82, 0.56) if item_id == _store_selected_id else Color.WHITE
         button.pressed.connect(func() -> void:
             _store_selected_id = item_id
-            if item_id.begins_with("tuning_"):
+            if String(item.get("type", "")) == "cars":
+                _request_car_selection(item_car_id)
+            elif item_id.begins_with("tuning_"):
                 _preview_tuning_level = int(item.get("level", 0))
             _refresh_store()
         )
@@ -1371,12 +1664,22 @@ func _refresh_store_details() -> void:
             break
     if selected.is_empty():
         return
-    _store_detail_title.text = String(selected.get("name", "Shelby GT500 '67"))
+    _store_detail_title.text = String(selected.get("name", "Автомобиль"))
     if String(selected.get("type", "")) == "cars":
-        _store_detail_label.text = "СТАТУС: уже в вашем гараже\n\nКласс %s • индекс %d\nМощность: %d л.с.\nМомент: %d Нм\n0–100 км/ч: %.1f с\n\nЭто единственная реальная 3D-модель автомобиля в текущей сборке. Её можно осмотреть в студии по центру, настроить в гараже и сразу выехать в RichTown." % [
-            String(selected.get("class", "A")), int(selected.get("pi", 612)), int(selected.get("power", 365)), int(selected.get("torque", 569)), float(selected.get("accel", 6.0)),
+        var car_specs := selected.get("specs", {}) as Dictionary
+        var car_id := String(selected.get("car_id", selected.get("id", "")))
+        var is_selected_car := car_id == _selected_car_id
+        var ratings := car_specs.get("ratings", {}) as Dictionary
+        _store_detail_label.text = "СТАТУС: %s\n\n%s\nДвигатель: %s\nКласс %s • индекс %d\nМощность: %d л.с.\nМомент: %d Нм при %d\n0–100 км/ч: %.1f с\nМакс. скорость: %d км/ч\nКоробка: %s\nПривод: %s\nМасса: %s кг\nГабариты: %.2f × %.2f × %.2f м\n\nСкорость %.1f • Разгон %.1f\nУправление %.1f • Дрифт %.1f\n\nРеальная 3D-модель уже показана в студии по центру. Выбор меняет модель, физику, звук, камеру и отдельную кастомизацию этой машины." % [
+            "выбран сейчас" if is_selected_car else "уже в вашем гараже",
+            String(car_specs.get("category", "АВТОМОБИЛЬ")),
+            String(car_specs.get("engine", "—")),
+            String(selected.get("class", "A")), int(selected.get("pi", 612)), int(selected.get("power", 0)), int(selected.get("torque", 0)), int(car_specs.get("torque_rpm", 0)), float(selected.get("accel", 6.0)),
+            int(car_specs.get("top_speed_kmh", 0)), String(car_specs.get("gearbox", "—")), String(car_specs.get("drive", "—")),
+            _fmt_int(int(round(float(car_specs.get("mass_kg", 0.0))))), float(car_specs.get("length_m", 0.0)), float(car_specs.get("width_m", 0.0)), float(car_specs.get("height_m", 0.0)),
+            float(ratings.get("speed", 0.0)), float(ratings.get("accel", 0.0)), float(ratings.get("handling", 0.0)), float(ratings.get("drift", 0.0)),
         ]
-        _store_action_button.text = "ОТКРЫТЬ В ГАРАЖЕ"
+        _store_action_button.text = "ОТКРЫТЬ В ГАРАЖЕ" if is_selected_car else "ВЫБРАТЬ АВТО"
         _store_action_button.disabled = false
         return
     var level := int(selected.get("level", 0))
@@ -1409,16 +1712,21 @@ func _refresh_store_details() -> void:
 
 
 func _on_store_action_pressed() -> void:
-    if _store_selected_id == "shelby_gt500":
-        _show_panel(PANEL_GARAGE)
-        return
     for item in _store_items():
-        if String(item.get("id", "")) == _store_selected_id:
-            _preview_tuning_level = int(item.get("level", 0))
-            _refresh_customization_controls()
-            _on_tuning_action_pressed()
-            _refresh_store()
+        if String(item.get("id", "")) != _store_selected_id:
+            continue
+        if String(item.get("type", "")) == "cars":
+            var car_id := String(item.get("car_id", item.get("id", "")))
+            if car_id == _selected_car_id:
+                _show_panel(PANEL_GARAGE)
+            else:
+                _request_car_selection(car_id)
             return
+        _preview_tuning_level = int(item.get("level", 0))
+        _refresh_customization_controls()
+        _on_tuning_action_pressed()
+        _refresh_store()
+        return
 
 
 func _avatar_glyph(avatar_id: String) -> String:
@@ -1517,7 +1825,7 @@ func _build_profile_panel(parent: Node) -> Control:
     var car_box := VBoxContainer.new()
     car_panel.add_child(car_box)
     _label(car_box, "СТАТИСТИКА ПО МАШИНАМ", 15, Color.WHITE, true)
-    _car_stats_label = _label(car_box, "Shelby GT500 — 0.0 км", 13, COL_TEXT)
+    _car_stats_label = _label(car_box, "Автомобили — 0.0 км", MIN_FONT_SIZE, COL_TEXT)
     _car_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     return vbox.get_parent().get_parent() as Control
 
@@ -1565,7 +1873,7 @@ func _build_worlds_panel(parent: Node) -> Control:
     description_box.size_flags_stretch_ratio = 1.35
     detail_row.add_child(description_box)
     _label(description_box, "RICHTOWN — ТЕКУЩИЙ МИР", 18, Color.WHITE, true)
-    _world_detail_label = _label(description_box, "Открытый прибрежный город: центральный деловой район и главная башня, мечеть, опера и бульвары с кафе, центральный парк, набережная, порт и Остров-Пальма. Полноэкранная карта строит маршрут по настоящим дорогам, показывает районы и точки интереса, а быстрый переход переносит Shelby к выбранному месту.", MIN_FONT_SIZE, COL_TEXT)
+    _world_detail_label = _label(description_box, "Открытый прибрежный город: центральный деловой район и главная башня, мечеть, опера и бульвары с кафе, центральный парк, набережная, порт и Остров-Пальма. Полноэкранная карта строит маршрут по настоящим дорогам, показывает районы и точки интереса, а быстрый переход переносит выбранный автомобиль к выбранному месту.", MIN_FONT_SIZE, COL_TEXT)
     _world_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     var progress_box := VBoxContainer.new()
     progress_box.add_theme_constant_override("separation", 6)
@@ -1676,11 +1984,11 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.39-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.40-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
-    var audio_credit := _label(right, "Записи Mustang: VacekH и lmbubec (CC0) • шины: Tom Haigh (CC BY 3.0)", 10, COL_MUTED)
+    var audio_credit := _label(right, "Звук: Altair78 (CC BY-SA 4.0) • шины: Tom Haigh (CC BY 3.0) • остальные записи: CC0, список — docs/AUDIO_CREDITS.md", MIN_FONT_SIZE, COL_MUTED)
     audio_credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     audio_credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _refresh_settings_controls()
@@ -1750,10 +2058,11 @@ func bind_settings(settings: Dictionary) -> void:
 func bind_specs(specs: Dictionary) -> void:
     _specs = specs.duplicate(true)
     _car_name = String(specs.get("name", ""))
-    if _top_car_label != null and not _car_name.is_empty():
-        _top_car_label.text = "%s '%d" % [_car_name, int(specs.get("year", 1967)) % 100]
-    _specs_bound = int(specs.get("power_hp", 0)) == 365 and int(specs.get("torque_nm", 0)) == 569
+    if not String(specs.get("car_id", "")).is_empty():
+        _selected_car_id = NativeCarCatalog.normalize_id(String(specs.get("car_id", _selected_car_id)))
+    _specs_bound = not _selected_car_id.is_empty() and int(specs.get("power_hp", 0)) > 0 and int(specs.get("torque_nm", 0)) > 0 and int(specs.get("top_speed_kmh", 0)) > 0 and int(specs.get("gears", 0)) > 0
     _refresh_customization_controls()
+    _refresh_car_presentation()
 
 
 func _format_progress_value(value: float, unit: String) -> String:
@@ -1835,8 +2144,12 @@ func _refresh_history(items: Array) -> void:
         return
     for item_variant in items:
         var item: Dictionary = item_variant
+        var history_prefix := String(item.get("date", "заезд"))
+        var history_car := String(item.get("car_name", ""))
+        if not history_car.is_empty():
+            history_prefix += " • " + history_car
         var line := _label(_history_box, "%s • %.1f км • %d км/ч • дрифт %d° • %d мин" % [
-            String(item.get("date", "заезд")),
+            history_prefix,
             float(item.get("distance_km", 0.0)),
             int(round(float(item.get("top_speed_kmh", 0.0)))),
             int(round(float(item.get("drift_deg", 0.0)))),
@@ -1903,12 +2216,12 @@ func refresh_profile(view: Dictionary) -> void:
         for item_variant in view.get("car_stats", []):
             var item: Dictionary = item_variant
             car_lines.append("%s • %.1f км • рекорд %d км/ч • дрифт %d°" % [
-                String(item.get("name", "Shelby GT500")),
+                String(item.get("name", "Автомобиль")),
                 float(item.get("distance_km", 0.0)),
                 int(round(float(item.get("top_speed_kmh", 0.0)))),
                 int(round(float(item.get("drift_deg", 0.0)))),
             ])
-        _car_stats_label.text = "\n".join(car_lines) if not car_lines.is_empty() else "Shelby GT500 — 0.0 км"
+        _car_stats_label.text = "\n".join(car_lines) if not car_lines.is_empty() else "Автомобили — 0.0 км"
 
 
 func _fmt_int(value: int) -> String:

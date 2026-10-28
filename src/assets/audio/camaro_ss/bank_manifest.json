@@ -1,0 +1,141 @@
+{
+  "bank": "camaro_ss",
+  "car": "Chevrolet Camaro SS 6.2 LT1",
+  "format": "mono WAV 32000 Hz 16-bit",
+  "anchors": [
+    {
+      "rpm": 635,
+      "cycles": 16,
+      "on": {
+        "file": "engine_on_0635.wav",
+        "seconds": 3.02169,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_0635.wav",
+        "seconds": 3.02169,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8x62_idle",
+      "source_recording": "Chevrolet Corvette V8 start/idle/revs",
+      "author": "kyles",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/kyles/sounds/637184/",
+      "cylinders": 8
+    },
+    {
+      "rpm": 1444,
+      "cycles": 24,
+      "on": {
+        "file": "engine_on_1444.wav",
+        "seconds": 1.99406,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_1444.wav",
+        "seconds": 1.99406,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8x57_rev",
+      "source_recording": "Chevrolet Caprice V8 at different speeds",
+      "author": "romanholtwick",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/romanholtwick/sounds/391671/",
+      "cylinders": 8
+    },
+    {
+      "rpm": 2265,
+      "cycles": 11,
+      "on": {
+        "file": "engine_on_2265.wav",
+        "seconds": 0.58278,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_2265.wav",
+        "seconds": 0.58278,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8xbb_rev",
+      "source_recording": "Ford 460 big-block V8 rev",
+      "author": "Henaway",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Henaway/sounds/127980/",
+      "cylinders": 8
+    },
+    {
+      "rpm": 3747,
+      "cycles": 62,
+      "on": {
+        "file": "engine_on_3747.wav",
+        "seconds": 1.98556,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_3747.wav",
+        "seconds": 1.98556,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8x50_mid",
+      "source_recording": "Lexus IS F 2UR-GSE V8 on a dynamometer",
+      "author": "Altair78",
+      "license": "CC BY-SA 4.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Lexus_IS-F_dynamometer_2UR-GSE_(2008).ogg",
+      "cylinders": 8
+    },
+    {
+      "rpm": 6478,
+      "cycles": 65,
+      "on": {
+        "file": "engine_on_6478.wav",
+        "seconds": 1.204,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_6478.wav",
+        "seconds": 1.204,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8xsc_hi",
+      "source_recording": "Supercharged Holden V8 dyno run-up",
+      "author": "Ears68",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Ears68/sounds/177184/",
+      "cylinders": 8
+    }
+  ],
+  "idle": {
+    "file": "engine_idle.wav",
+    "seconds": 3.02169,
+    "sample_rate": 32000,
+    "channels": 1,
+    "source_clip": "v8x62_idle",
+    "source_rpm": 635
+  },
+  "start": {
+    "file": "engine_start.wav",
+    "seconds": 1.62,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "Recorded CC0 starter motor (Therancher01, Freesound 610771) crossfaded into a pitch-ramped catch from this bank's own recorded idle/rev loop."
+  },
+  "stop": {
+    "file": "engine_stop.wav",
+    "seconds": 0.82,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "This bank's recorded idle loop pitch-ramped 1.0x -> 0.38x and faded over the 0.82 s runtime shutdown."
+  },
+  "off_throttle_derivation": "Same recording as the matching on-throttle loop, cyclically low-pass filtered (no seam break) and set 4.5 dB quieter.",
+  "tire": "Shared recorded tire_squeal_loop.wav from the Shelby bank (Tom Haigh, CC BY 3.0)."
+}
