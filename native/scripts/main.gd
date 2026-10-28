@@ -45,7 +45,7 @@ var _garage_return_transform := Transform3D.IDENTITY
 var _has_garage_return := false
 var _garage_yaw := 0.65
 var _garage_pitch := 0.30
-var _garage_distance := 8.2
+var _garage_distance := 10.8
 var _garage_idle_time := 0.0
 var _session_distance_m := 0.0
 var _session_top_speed_kmh := 0.0
@@ -479,8 +479,8 @@ func _create_garage_studio() -> void:
 	_garage_stage.name = "GarageStudio0234"
 	_garage_stage.position = GARAGE_STUDIO_ORIGIN
 	add_child(_garage_stage)
-	var floor_material := _studio_material(Color(0.055, 0.06, 0.07), 0.38, 0.08)
-	var wall_material := _studio_material(Color(0.10, 0.11, 0.13), 0.82)
+	var floor_material := _studio_material(Color(0.20, 0.215, 0.235), 0.16, 0.34)
+	var wall_material := _studio_material(Color(0.13, 0.14, 0.16), 0.72)
 	var accent_material := _studio_material(Color(1.0, 0.55, 0.07), 0.45, 0.0, 1.5)
 	var white_light_material := _studio_material(Color(0.92, 0.96, 1.0), 0.3, 0.0, 2.4)
 	_add_studio_box("StudioFloor", Vector3(30.0, 0.2, 24.0), Vector3(0.0, -0.1, 0.0), floor_material)
@@ -489,10 +489,16 @@ func _create_garage_studio() -> void:
 	_add_studio_box("StudioWallLeft", Vector3(0.3, 7.0, 24.0), Vector3(-15.0, 3.5, 0.0), wall_material)
 	_add_studio_box("StudioWallRight", Vector3(0.3, 7.0, 24.0), Vector3(15.0, 3.5, 0.0), wall_material)
 	_add_studio_box("StudioCeiling", Vector3(30.0, 0.25, 24.0), Vector3(0.0, 7.0, 0.0), wall_material)
-	for x_value in [-8.0, 0.0, 8.0]:
-		_add_studio_box("StudioCeilingLight", Vector3(4.6, 0.08, 0.45), Vector3(float(x_value), 6.84, 0.0), white_light_material)
+	for z_value in [-6.5, 0.0, 6.5]:
+		for x_value in [-8.0, 0.0, 8.0]:
+			_add_studio_box("StudioCeilingLight", Vector3(4.6, 0.08, 0.45), Vector3(float(x_value), 6.84, float(z_value)), white_light_material)
 	_add_studio_box("StudioAccentBack", Vector3(18.0, 0.14, 0.08), Vector3(0.0, 1.15, 11.82), accent_material)
 	_add_studio_box("StudioAccentFront", Vector3(18.0, 0.14, 0.08), Vector3(0.0, 1.15, -11.82), accent_material)
+	_add_studio_box("StudioAccentLeft", Vector3(0.08, 0.14, 18.0), Vector3(-14.82, 1.15, 0.0), accent_material)
+	_add_studio_box("StudioAccentRight", Vector3(0.08, 0.14, 18.0), Vector3(14.82, 1.15, 0.0), accent_material)
+	for x_value in [-9.0, -3.0, 3.0, 9.0]:
+		_add_studio_box("StudioWallLightBack", Vector3(0.32, 4.6, 0.08), Vector3(float(x_value), 3.7, 11.80), white_light_material)
+		_add_studio_box("StudioWallLightFront", Vector3(0.32, 4.6, 0.08), Vector3(float(x_value), 3.7, -11.80), white_light_material)
 	var platform := MeshInstance3D.new()
 	platform.name = "StudioTurntable"
 	var cylinder := CylinderMesh.new()
@@ -502,8 +508,23 @@ func _create_garage_studio() -> void:
 	cylinder.radial_segments = 64
 	platform.mesh = cylinder
 	platform.position = Vector3(0.0, 0.09, 0.0)
-	platform.material_override = _studio_material(Color(0.16, 0.17, 0.19), 0.30, 0.22)
+	platform.material_override = _studio_material(Color(0.24, 0.25, 0.27), 0.14, 0.46)
 	_garage_stage.add_child(platform)
+	var reflection_probe := ReflectionProbe.new()
+	reflection_probe.name = "StudioReflectionProbe0236"
+	reflection_probe.position = Vector3(0.0, 2.2, 0.0)
+	reflection_probe.size = Vector3(20.0, 6.5, 20.0)
+	reflection_probe.blend_distance = 2.0
+	reflection_probe.origin_offset = Vector3.ZERO
+	reflection_probe.box_projection = true
+	reflection_probe.enable_shadows = false
+	reflection_probe.intensity = 0.85
+	reflection_probe.max_distance = 28.0
+	reflection_probe.mesh_lod_threshold = 0.65
+	reflection_probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+	reflection_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	reflection_probe.cull_mask = (1 << 19) - 1
+	_garage_stage.add_child(reflection_probe)
 	var omni := OmniLight3D.new()
 	omni.position = Vector3(0.0, 5.6, 0.0)
 	omni.light_color = Color(0.88, 0.94, 1.0)
@@ -512,6 +533,7 @@ func _create_garage_studio() -> void:
 	_garage_stage.add_child(omni)
 	_add_studio_spot(Vector3(6.5, 6.2, 5.0), Color(1.0, 0.94, 0.86), 2.4)
 	_add_studio_spot(Vector3(-6.5, 6.2, -4.0), Color(0.78, 0.88, 1.0), 1.7)
+	_add_studio_spot(Vector3(0.0, 6.4, -7.5), Color(1.0, 0.98, 0.94), 1.45)
 	_garage_stage.visible = false
 
 
@@ -540,7 +562,8 @@ func _set_garage_active(active: bool) -> void:
 
 
 func _on_menu_panel_changed(panel: int) -> void:
-	_set_garage_active(panel == 1)
+	# Garage (1) and Store (2) both present the live Shelby studio.
+	_set_garage_active(panel == NativeMainMenu.PANEL_GARAGE or panel == NativeMainMenu.PANEL_STORE)
 
 
 func _on_garage_dragged(relative: Vector2) -> void:
@@ -550,7 +573,7 @@ func _on_garage_dragged(relative: Vector2) -> void:
 
 
 func _on_garage_zoomed(factor: float) -> void:
-	_garage_distance = clampf(_garage_distance * factor, 6.0, 11.0)
+	_garage_distance = clampf(_garage_distance * factor, 7.0, 14.0)
 	_garage_idle_time = 0.0
 
 
@@ -560,6 +583,9 @@ func _get_frontend_smoke_state() -> Dictionary:
 		"garage_stage_created": _garage_stage != null,
 		"garage_stage_children": _garage_stage.get_child_count() if _garage_stage != null else 0,
 		"garage_active": _garage_active,
+		"studio_reflection_probe_0236": _garage_stage != null and _garage_stage.get_node_or_null("StudioReflectionProbe0236") != null,
+		"garage_distance_0236": _garage_distance,
+		"store_uses_studio_0236": NativeMainMenu.PANEL_STORE == 2,
 		"route_guide": _route_guide.get_smoke_state() if _route_guide != null else {},
 		"customization": _customization_view(),
 		"profile_history_entries": (_profile.get("history", []) as Array).size(),
@@ -630,13 +656,14 @@ func _notification(what: int) -> void:
 
 
 func _achievement_specs(distance_km: float, top_speed: float, drift_record: float, play_seconds: float) -> Array:
+	var play_minutes := play_seconds / 60.0
 	return [
-		{"id": "first_km", "title": "Первый километр", "detail": "Проехать 1 км по RichTown • награда CR 250", "reward": 250, "unlocked": distance_km >= 1.0},
-		{"id": "distance_50", "title": "Городской марафон", "detail": "Проехать 50 км и открыть уровень 2 • награда CR 2 500", "reward": 2500, "unlocked": distance_km >= 50.0},
-		{"id": "speed_150", "title": "Штурм скорости", "detail": "Разогнаться до 150 км/ч • награда CR 750", "reward": 750, "unlocked": top_speed >= 150.0},
-		{"id": "speed_200", "title": "Почти предел Shelby", "detail": "Разогнаться до 200 км/ч • награда CR 1 500", "reward": 1500, "unlocked": top_speed >= 200.0},
-		{"id": "drift_25", "title": "Боковой стиль", "detail": "Дрифт с углом не меньше 25° • награда CR 750", "reward": 750, "unlocked": drift_record >= 25.0},
-		{"id": "hour", "title": "Час за рулём", "detail": "60 минут свободного заезда • награда CR 2 000", "reward": 2000, "unlocked": play_seconds >= 3600.0},
+		{"id": "first_km", "title": "Первый километр", "detail": "Проехать 1 км по RichTown", "reward": 250, "unlocked": distance_km >= 1.0, "current": distance_km, "target": 1.0, "unit": "км", "progress": clampf(distance_km / 1.0, 0.0, 1.0)},
+		{"id": "distance_50", "title": "Городской марафон", "detail": "Проехать 50 км и открыть уровень 2", "reward": 2500, "unlocked": distance_km >= 50.0, "current": distance_km, "target": 50.0, "unit": "км", "progress": clampf(distance_km / 50.0, 0.0, 1.0)},
+		{"id": "speed_150", "title": "Штурм скорости", "detail": "Разогнаться до 150 км/ч", "reward": 750, "unlocked": top_speed >= 150.0, "current": top_speed, "target": 150.0, "unit": "км/ч", "progress": clampf(top_speed / 150.0, 0.0, 1.0)},
+		{"id": "speed_200", "title": "Почти предел Shelby", "detail": "Разогнаться до 200 км/ч", "reward": 1500, "unlocked": top_speed >= 200.0, "current": top_speed, "target": 200.0, "unit": "км/ч", "progress": clampf(top_speed / 200.0, 0.0, 1.0)},
+		{"id": "drift_25", "title": "Боковой стиль", "detail": "Дрифт с углом не меньше 25°", "reward": 750, "unlocked": drift_record >= 25.0, "current": drift_record, "target": 25.0, "unit": "°", "progress": clampf(drift_record / 25.0, 0.0, 1.0)},
+		{"id": "hour", "title": "Час за рулём", "detail": "60 минут свободного заезда", "reward": 2000, "unlocked": play_seconds >= 3600.0, "current": play_minutes, "target": 60.0, "unit": "мин", "progress": clampf(play_minutes / 60.0, 0.0, 1.0)},
 	]
 
 
@@ -1383,6 +1410,8 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.28 paving variety pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("directional_streaming_0230", false)) or int(enhancement_stats.get("streaming_chunks_total", 0)) < 60 or int(enhancement_stats.get("streaming_colliders_total", 0)) < 300 or int(enhancement_stats.get("streaming_colliders_active", 0)) >= int(enhancement_stats.get("streaming_colliders_total", 0)):
 		failures.append("0.2.30 directional streaming pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("road_infrastructure_repair_0236", false)) or not bool(enhancement_stats.get("real_junction_arms_0236", false)) or not bool(enhancement_stats.get("traffic_signals_on_real_arms_0236", false)) or not bool(enhancement_stats.get("continuous_arterial_curbs_0236", false)) or not bool(enhancement_stats.get("rounded_curb_edge_alignment_0236", false)) or not bool(enhancement_stats.get("bike_lane_junction_breaks_0236", false)) or not bool(enhancement_stats.get("bus_shelter_footprints_clear_0236", false)) or not bool(enhancement_stats.get("roadside_footprints_clear_0236", false)) or int(enhancement_stats.get("rejected_fake_junction_pads_0236", 0)) < 1 or int(enhancement_stats.get("real_crosswalk_groups_0236", 0)) < 50 or int(enhancement_stats.get("rejected_fake_crosswalks_0236", 0)) < 10 or int(enhancement_stats.get("rejected_fake_signal_approaches_0236", 0)) < 10 or int(enhancement_stats.get("road_junction_subsegments_0236", 0)) < 100 or int(enhancement_stats.get("rejected_road_palms_0236", 0)) < 1:
+		failures.append("0.2.36 real-arm road infrastructure/footprint repair pass is incomplete: %s" % str(enhancement_stats))
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
@@ -1540,15 +1569,15 @@ func _run_smoke_checks() -> void:
 	var steering_wheel_rect: Rect2 = steering_wheel_state.get("rect", Rect2())
 	if not bool(world_map_state.get("world_map_0232", false)) or not bool(world_map_state.get("created", false)) or not bool(world_map_state.get("data_bound", false)) or bool(world_map_state.get("visible_now", true)) or int(world_map_state.get("districts", 0)) < 5 or int(world_map_state.get("district_labels", 0)) < 5 or int(world_map_state.get("roads", 0)) < 50 or int(world_map_state.get("road_labels", 0)) < 6 or int(world_map_state.get("pois", 0)) < 20 or int(world_map_state.get("poi_labels", 0)) < 20 or int(world_map_state.get("parks", 0)) < 3 or not bool(steering_wheel_state.get("touch_steering_wheel_0232", false)) or not bool(steering_wheel_state.get("created", false)) or float(steering_wheel_state.get("max_lock_degrees", 0.0)) < 130.0 or float(steering_wheel_state.get("centering_rate", 0.0)) < 4.0 or not _rect_is_on_screen(steering_wheel_rect, viewport_size) or steering_wheel_rect.size.x < 230.0 or not bool(steering_wheel_state.get("configurable_size_0233", false)) or not bool(smoothing_state.get("touch_steering_wheel_0232", false)) or not bool(smoothing_state.get("analog_touch_pedals_0233", false)) or int(world_map_state.get("minimap_points", 0)) < 20 or not bool(world_map_state.get("world_map_0234", false)) or not bool(world_map_state.get("route_button_created", false)) or not bool(world_map_state.get("fast_travel_button_created", false)) or int(world_map_state.get("filter_buttons", 0)) < 5 or not bool(world_map_state.get("district_circles_removed", false)) or not bool(world_map_state.get("zoom_label_tiers_0234", false)):
 		failures.append("0.2.34 steering-wheel / filtered zoom-tier world-map pass is incomplete: map=%s wheel=%s smoothing=%s" % [str(world_map_state), str(steering_wheel_state), str(smoothing_state)])
-	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 5 or int(menu_state.get("tabs", 0)) < 5 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or not bool(menu_state.get("settings_panel_0233", false)) or int(menu_state.get("control_buttons", 0)) < 3 or not bool(menu_state.get("settings_bound", false)) or not bool(menu_state.get("version_button_created", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
+	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 6 or int(menu_state.get("tabs", 0)) < 6 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or not bool(menu_state.get("settings_panel_0233", false)) or int(menu_state.get("control_buttons", 0)) < 3 or not bool(menu_state.get("settings_bound", false)) or not bool(menu_state.get("version_button_created", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
 		failures.append("0.2.34 main menu/settings / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
 
 	var frontend_state := _get_frontend_smoke_state()
 	var route_state: Dictionary = frontend_state.get("route_guide", {})
 	var customization_state := _vehicle.get_customization_state()
 	var tuning_preview := _vehicle.get_tuning_preview(2)
-	if not bool(frontend_state.get("frontend_0234", false)) or not bool(frontend_state.get("garage_stage_created", false)) or int(frontend_state.get("garage_stage_children", 0)) < 12 or not bool(menu_state.get("clean_menu_0234", false)) or not bool(menu_state.get("store_hidden_0234", false)) or not bool(menu_state.get("icon_tabs_0234", false)) or not bool(menu_state.get("backdrop_blur_0234", false)) or not bool(menu_state.get("customization_bound", false)) or not bool(route_state.get("route_guide_0234", false)) or int(route_state.get("graph_nodes", 0)) < 300 or int(route_state.get("graph_edges", 0)) < 300 or not bool(route_state.get("has_route", false)) or int(route_state.get("path_points", 0)) < 8 or float(route_state.get("path_distance_m", 0.0)) < 350.0 or int(minimap_state.get("route_points", 0)) < 8 or not bool(minimap_state.get("road_route_0234", false)) or not bool(customization_state.get("customization_0234", false)) or int(tuning_preview.get("power_hp", 0)) != 423 or int(tuning_preview.get("torque_nm", 0)) != 660 or int(tuning_preview.get("performance_index", 0)) != 701 or String(tuning_preview.get("class_label", "")) != "S1":
-		failures.append("0.2.34 clean menu / garage studio / Shelby customization / AStar road-route pass is incomplete: frontend=%s route=%s custom=%s tuning=%s" % [str(frontend_state), str(route_state), str(customization_state), str(tuning_preview)])
+	if not bool(frontend_state.get("frontend_0234", false)) or not bool(frontend_state.get("garage_stage_created", false)) or int(frontend_state.get("garage_stage_children", 0)) < 12 or not bool(menu_state.get("clean_menu_0234", false)) or not bool(menu_state.get("store_panel_0236", false)) or int(menu_state.get("store_items", 0)) < 4 or not bool(menu_state.get("labeled_tabs_0236", false)) or not bool(menu_state.get("top_xp_bar_0236", false)) or not bool(menu_state.get("clickable_home_cards_0236", false)) or not bool(menu_state.get("wheel_previews_0236", false)) or not bool(menu_state.get("profile_single_scroll_0236", false)) or int(menu_state.get("achievement_cards_0236", 0)) < 6 or not bool(menu_state.get("locked_world_conditions_0236", false)) or not bool(menu_state.get("hover_sound_0236", false)) or not bool(menu_state.get("gameplay_card_textures_0236", false)) or not bool(frontend_state.get("studio_reflection_probe_0236", false)) or float(frontend_state.get("garage_distance_0236", 0.0)) < 10.0 or not bool(menu_state.get("backdrop_blur_0234", false)) or not bool(menu_state.get("customization_bound", false)) or not bool(route_state.get("route_guide_0234", false)) or int(route_state.get("graph_nodes", 0)) < 300 or int(route_state.get("graph_edges", 0)) < 300 or not bool(route_state.get("has_route", false)) or int(route_state.get("path_points", 0)) < 8 or float(route_state.get("path_distance_m", 0.0)) < 350.0 or int(minimap_state.get("route_points", 0)) < 8 or not bool(minimap_state.get("road_route_0234", false)) or not bool(customization_state.get("customization_0234", false)) or int(tuning_preview.get("power_hp", 0)) != 423 or int(tuning_preview.get("torque_nm", 0)) != 660 or int(tuning_preview.get("performance_index", 0)) != 701 or String(tuning_preview.get("class_label", "")) != "S1":
+		failures.append("0.2.36 labelled menu / real-content store / reflective garage studio / Shelby customization / AStar road-route pass is incomplete: frontend=%s route=%s custom=%s tuning=%s menu=%s" % [str(frontend_state), str(route_state), str(customization_state), str(tuning_preview), str(menu_state)])
 
 	if failures.is_empty():
 		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
@@ -1673,6 +1702,28 @@ func _run_screenshot_tour() -> void:
 			"name": "08_city_aerial_sunset", "time": "sunset", "vehicle": "hide",
 			"camera": Vector3(430.0, 165.0, 240.0), "target": Vector3(730.0, 8.0, -30.0),
 		},
+		{
+			"name": "15_corniche_t_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(895.0, 18.0, -335.0), "target": Vector3(930.0, 1.0, -300.0),
+		},
+		{
+			"name": "16_corniche_l_corner", "time": "day", "vehicle": "hide",
+			"camera": Vector3(895.0, 18.0, -395.0), "target": Vector3(930.0, 1.0, -430.0),
+		},
+		{
+			"name": "17_boulevard_full_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(725.0, 18.0, -145.0), "target": Vector3(760.0, 1.0, -110.0),
+		},
+		{
+			"name": "18_west_t_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(525.0, 16.0, -335.0), "target": Vector3(560.0, 1.0, -300.0),
+		},
+		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
+		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},
+		{"name": "11_menu_store", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_STORE, "frames": 5},
+		{"name": "12_menu_profile", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_PROFILE, "frames": 5},
+		{"name": "13_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
+		{"name": "14_menu_settings", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_SETTINGS, "frames": 5},
 	]
 
 	# Warm-up: import/runtime LOD, reflection probes and visibility
@@ -1695,8 +1746,9 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 	if wanted_time_index != _time_index:
 		_time_index = wanted_time_index
 		_apply_time_mode()
+	var is_menu_shot := shot.has("menu_panel")
 	if _hud != null:
-		_hud.visible = bool(shot.get("hud", false))
+		_hud.visible = bool(shot.get("hud", false)) and not is_menu_shot
 
 	match String(shot.get("vehicle", "hide")):
 		"spawn":
@@ -1709,11 +1761,31 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 		_:
 			_vehicle.visible = false
 
-	if bool(shot.get("gameplay_camera", false)):
+	if is_menu_shot:
+		_screenshot_free_camera = false
+		_in_menu = true
+		_vehicle.visible = true
+		_vehicle.freeze = true
+		_vehicle.set_physics_process(false)
+		_vehicle.set_audio_suspended(true)
+		_snap_camera = true
+		if _menu != null:
+			_menu.refresh_profile(_profile_view())
+			_menu.bind_customization(_customization_view())
+			_menu.show_panel_index(int(shot.get("menu_panel", NativeMainMenu.PANEL_HOME)))
+	elif bool(shot.get("gameplay_camera", false)):
 		_screenshot_free_camera = false
 		_camera_mode = CAMERA_CHASE
 		_snap_camera = true
 	else:
+		if _in_menu:
+			_set_garage_active(false)
+			if _menu != null:
+				_menu.hide_menu()
+			_in_menu = false
+			_vehicle.freeze = false
+			_vehicle.set_physics_process(true)
+			_vehicle.set_audio_suspended(false)
 		_screenshot_free_camera = true
 		var cam_spec: Vector3 = shot.get("camera", Vector3.ZERO)
 		var target_spec: Vector3 = shot.get("target", Vector3.ZERO)
