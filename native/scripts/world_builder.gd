@@ -25,6 +25,15 @@ const COLLIDER_ACTIVE_RADIUS_M := 150.0
 const COLLIDER_RELEASE_RADIUS_M := 175.0
 const STREAM_HIDE_BEHIND_M := 85.0
 const STREAM_SHOW_BEHIND_M := 68.0
+## 0.2.37 view-sector streaming: the 0.2.30 pass only retired chunks
+## behind the camera.  A chunk whose whole bounding sphere is also
+## outside the *side* of the horizontal view cone cannot contribute a
+## pixel either, so it is retired with a wide safety margin while
+## everything inside the view direction keeps its full detail.
+const STREAM_SECTOR_HIDE_MARGIN_RAD := 0.34
+const STREAM_SECTOR_SHOW_MARGIN_RAD := 0.18
+const SAIL_ISLAND_CENTRE := Vector2(1185.0, 80.0)
+const SAIL_ISLAND_RADII := Vector2(132.0, 108.0)
 const ROAD_GRID_CELL_M := 40.0
 const ROAD_GRID_QUERY_CLEARANCE_M := 10.0
 const ROAD_SURFACE_OFFSET_M := 0.095
@@ -149,6 +158,9 @@ var _road_segment_ids: Array[String] = []
 var _road_segment_grid: Dictionary = {}
 var _road_junction_subsegments_0236 := 0
 var _multimesh_chunk_count := 0
+var _flat_shadow_free_instances_0237 := 0
+var _stream_horizontal_half_fov_rad := 1.05
+var _stream_sector_hidden_0237 := 0
 var _pending_batched_models: Dictionary = {}
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
@@ -196,8 +208,11 @@ func build_world() -> Dictionary:
 		return {"error": build_error}
 
 	_terrain = data.get("terrain", {})
+	_expand_sail_island_0237()
 	_compute_spawn_transform()
 	_build_road_surface_index()
+	_sanitize_canonical_buildings_0237()
+	_sanitize_canonical_pools_0237()
 	_create_collision_root()
 	_build_environment()
 	_build_terrain()
@@ -205,6 +220,7 @@ func build_world() -> Dictionary:
 	_build_roads()
 	_build_buildings()
 	_build_landmarks()
+	_build_sail_island_resort_0237()
 	_build_vegetation()
 	_build_ground_cover()
 	_build_street_lamps()
@@ -1017,7 +1033,9 @@ func _create_collision_root() -> void:
 ## velocity (lookahead), a whole-chunk clear distance (centre distance
 ## minus AABB radius, so tall shadow casters effectively stay), and
 ## separate hide/show thresholds against flicker.
-func update_streaming(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3, focus_velocity: Vector3, delta: float) -> void:
+func update_streaming(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3, focus_velocity: Vector3, delta: float, horizontal_half_fov_rad: float = 1.05) -> void:
+	if horizontal_half_fov_rad > 0.20:
+		_stream_horizontal_half_fov_rad = clampf(horizontal_half_fov_rad, 0.55, 1.45)
 	_streaming_timer += delta
 	if _streaming_initialized and _streaming_timer < 0.2:
 		return
@@ -1037,6 +1055,7 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 	# until they have seen the complete city.
 	var allow_hide := _elapsed > 2.5
 	var hidden_count := 0
+	var sector_hidden_count := 0
 	for chunk in _stream_chunks:
 		var node := chunk.get("node") as MultiMeshInstance3D
 		if node == null:
@@ -1055,16 +1074,33 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 		var dot := 1.0
 		if dist > 0.01:
 			dot = (to / dist).dot(fwd)
-		if allow_hide and not is_hidden and dot < -0.18 and clear > STREAM_HIDE_BEHIND_M:
+		# Angular test against the chunk's whole bounding sphere.  The
+		# 0.34 rad (~19.5 degree) hide margin beyond the real horizontal
+		# frustum is deliberately generous: a fast orbit/steering swing
+		# brings a side chunk back through the earlier show margin
+		# before any part of it can reach the screen edge, so the view
+		# direction itself is never degraded or popped.
+		var view_angle := acos(clampf(dot, -1.0, 1.0))
+		var angular_radius := asin(clampf(radius / maxf(dist, 1.0), 0.0, 1.0))
+		var outside_view_sector := view_angle - angular_radius > _stream_horizontal_half_fov_rad + STREAM_SECTOR_HIDE_MARGIN_RAD
+		var safely_in_view_sector := view_angle - angular_radius < _stream_horizontal_half_fov_rad + STREAM_SECTOR_SHOW_MARGIN_RAD
+		var was_sector_hidden := bool(chunk.get("sector_hidden_0237", false))
+		if allow_hide and not is_hidden and clear > STREAM_HIDE_BEHIND_M and (dot < -0.18 or outside_view_sector):
 			node.visible = false
 			chunk["hidden"] = true
+			chunk["sector_hidden_0237"] = outside_view_sector and dot >= -0.18
 			is_hidden = true
-		elif is_hidden and (dot > -0.05 or clear < STREAM_SHOW_BEHIND_M):
+		elif is_hidden and (clear < STREAM_SHOW_BEHIND_M or (dot > -0.05 and safely_in_view_sector)):
 			node.visible = true
 			chunk["hidden"] = false
+			chunk["sector_hidden_0237"] = false
 			is_hidden = false
+		else:
+			chunk["sector_hidden_0237"] = is_hidden and was_sector_hidden
 		if is_hidden:
 			hidden_count += 1
+			if bool(chunk.get("sector_hidden_0237", false)):
+				sector_hidden_count += 1
 
 	var focus_2d := Vector2(focus_pos.x, focus_pos.z)
 	var active_shapes := 0
@@ -1090,9 +1126,13 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 		if want_active:
 			active_shapes += (_collider_cells[cell] as Array).size()
 
+	_stream_sector_hidden_0237 = sector_hidden_count
 	_enhancement_stats["directional_streaming_0230"] = true
+	_enhancement_stats["view_sector_streaming_0237"] = true
 	_enhancement_stats["streaming_chunks_total"] = _stream_chunks.size()
 	_enhancement_stats["streaming_chunks_hidden"] = hidden_count
+	_enhancement_stats["streaming_sector_hidden_0237"] = sector_hidden_count
+	_enhancement_stats["streaming_horizontal_half_fov_0237"] = _stream_horizontal_half_fov_rad
 	_enhancement_stats["streaming_colliders_active"] = active_shapes
 
 
@@ -2399,6 +2439,353 @@ func _add_sphere(parent: Node, radius: float, height: float, center: Vector3, ma
 	return _mesh_instance(parent, mesh, material, make_transform(center), node_name)
 
 
+func _sail_island_q_0237(x: float, z: float) -> float:
+	return Vector2(
+		(x - SAIL_ISLAND_CENTRE.x) / SAIL_ISLAND_RADII.x,
+		(z - SAIL_ISLAND_CENTRE.y) / SAIL_ISLAND_RADII.y
+	).length()
+
+
+## 0.2.37 Sail Island expansion.  The exported island was only the
+## 1110-1250 x 10-150 m zone with dry land roughly 95 x 90 m, and the
+## causeway centreline ran to (1180,80) -- the centre of the sail
+## podium.  This pass reshapes the same 10 m height grid (visual mesh
+## and HeightMapShape3D therefore agree) into a 264 x 216 m elliptical
+## resort island, ends the causeway at a new oval loop around the
+## hotel, and registers the island's villas/pools before every other
+## builder so roads, vegetation, minimap and navigation all see the
+## same final layout.
+func _expand_sail_island_0237() -> void:
+	if _terrain.is_empty():
+		return
+	var heights: Array = _terrain.get("heights", [])
+	var cols := int(_terrain.get("cols", 0))
+	var rows := int(_terrain.get("rows", 0))
+	if heights.size() < cols * rows or cols < 2 or rows < 2:
+		return
+	var min_x := _f(_terrain, "minX", 520.0)
+	var min_z := _f(_terrain, "minZ", -500.0)
+	var step := _f(_terrain, "stepM", 10.0)
+	var land_cells := 0
+	for iz in rows:
+		var z := min_z + float(iz) * step
+		for ix in cols:
+			var x := min_x + float(ix) * step
+			var q := _sail_island_q_0237(x, z)
+			if q > 1.08:
+				continue
+			var index := iz * cols + ix
+			var shore_t := clampf((1.0 - q) / 0.30, 0.0, 1.0)
+			var shore_s := shore_t * shore_t * (3.0 - 2.0 * shore_t)
+			var desired := lerpf(-2.14, 2.14, shore_s)
+			heights[index] = maxf(float(heights[index]), desired)
+			if float(heights[index]) > 0.05:
+				land_cells += 1
+	_terrain["heights"] = heights
+	data["terrain"] = _terrain
+
+	var zones: Dictionary = data.get("zones", {})
+	zones["sailIsland"] = {
+		"minX": SAIL_ISLAND_CENTRE.x - SAIL_ISLAND_RADII.x,
+		"maxX": SAIL_ISLAND_CENTRE.x + SAIL_ISLAND_RADII.x,
+		"minZ": SAIL_ISLAND_CENTRE.y - SAIL_ISLAND_RADII.y,
+		"maxZ": SAIL_ISLAND_CENTRE.y + SAIL_ISLAND_RADII.y,
+	}
+	data["zones"] = zones
+
+	var districts: Array = data.get("districts", [])
+	var has_sail_district := false
+	for district_variant in districts:
+		var district: Dictionary = district_variant
+		if String(district.get("id", "")) == "sail-island":
+			has_sail_district = true
+			break
+	if not has_sail_district:
+		districts.append({
+			"id": "sail-island",
+			"name": "Остров Паруса",
+			"x": SAIL_ISLAND_CENTRE.x,
+			"z": SAIL_ISLAND_CENTRE.y,
+			"radiusM": 155.0,
+			"biome": "park",
+		})
+		data["districts"] = districts
+
+	var roads: Array = data.get("roads", [])
+	var has_loop := false
+	for road_variant in roads:
+		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
+		if road_id == "rt-sail-loop":
+			has_loop = true
+		elif road_id == "rt-sail-road":
+			var trimmed: Array = []
+			for sample_variant in road.get("samples", []):
+				var sample: Array = sample_variant
+				if sample.size() >= 3 and float(sample[0]) < 1140.0:
+					trimmed.append(sample)
+			trimmed.append([1140.0, height_at(1140.0, 80.0) + 0.11, 80.0])
+			road["samples"] = trimmed
+	if not has_loop:
+		var loop_samples: Array = []
+		var loop_centre := Vector2(1188.0, 80.0)
+		for step_index in range(57):
+			var angle := PI + TAU * float(step_index) / 56.0
+			var px := loop_centre.x + cos(angle) * 48.0
+			var pz := loop_centre.y + sin(angle) * 46.0
+			loop_samples.append([px, height_at(px, pz) + 0.10, pz])
+		roads.append({
+			"id": "rt-sail-loop",
+			"name": "Sail Island Loop",
+			"widthM": 9.0,
+			"lanes": 2,
+			"speedLimitKmh": 30,
+			"samples": loop_samples,
+		})
+		data["roads"] = roads
+
+	var buildings: Array = data.get("buildings", [])
+	var resort_villas := 0
+	for building_variant in buildings:
+		var existing: Dictionary = building_variant
+		if bool(existing.get("sail_resort_0237", false)):
+			resort_villas += 1
+	if resort_villas == 0:
+		for villa_spec in [
+			{"x": 1140.0, "z": 20.0, "rotY": 0.0},
+			{"x": 1238.0, "z": 20.0, "rotY": 0.0},
+			{"x": 1140.0, "z": 140.0, "rotY": PI},
+			{"x": 1238.0, "z": 140.0, "rotY": PI},
+		]:
+			var vx := _f(villa_spec, "x")
+			var vz := _f(villa_spec, "z")
+			buildings.append({
+				"x": vx,
+				"y": height_at(vx, vz),
+				"z": vz,
+				"rotY": _f(villa_spec, "rotY"),
+				"w": 20.0,
+				"d": 15.24,
+				"h": 8.0,
+				"roofH": 0.84,
+				"kind": "rt-villa",
+				"facade": "userPlaster",
+				"tint": 1.0,
+				"model": "villa",
+				"sail_resort_0237": true,
+			})
+			resort_villas += 1
+		data["buildings"] = buildings
+
+	var pools: Array = data.get("pools", [])
+	var resort_pools := 0
+	for pool_variant in pools:
+		var existing_pool: Dictionary = pool_variant
+		if bool(existing_pool.get("sail_resort_0237", false)):
+			resort_pools += 1
+	if resort_pools == 0:
+		for pool_spec in [
+			{"x": 1220.0, "z": 80.0, "w": 18.0, "d": 28.0},
+			{"x": 1184.0, "z": 50.0, "w": 36.0, "d": 6.0},
+			{"x": 1184.0, "z": 110.0, "w": 36.0, "d": 6.0},
+		]:
+			var px := _f(pool_spec, "x")
+			var pz := _f(pool_spec, "z")
+			pools.append({
+				"x": px,
+				"y": height_at(px, pz) + 0.10,
+				"z": pz,
+				"rotY": 0.0,
+				"w": _f(pool_spec, "w"),
+				"d": _f(pool_spec, "d"),
+				"sail_resort_0237": true,
+			})
+			resort_pools += 1
+		data["pools"] = pools
+
+	# One exported causeway lamp stood at (1154,73.6), inside the sail
+	# podium footprint (x1152-1208, z65-95), so its pole pierced the
+	# podium roof.  The loop gets its own lamps in the resort builder.
+	var kept_lamps: Array = []
+	var removed_podium_lamps := 0
+	for lamp_variant in data.get("lamps", []):
+		var lamp: Dictionary = lamp_variant
+		var lx := _f(lamp, "x")
+		var lz := _f(lamp, "z")
+		if lx >= 1147.0 and lx <= 1213.0 and lz >= 58.0 and lz <= 102.0:
+			removed_podium_lamps += 1
+			continue
+		kept_lamps.append(lamp)
+	data["lamps"] = kept_lamps
+
+	_enhancement_stats["sail_island_expanded_0237"] = true
+	_enhancement_stats["sail_island_loop_0237"] = true
+	_enhancement_stats["sail_island_land_area_m2_0237"] = float(land_cells) * step * step
+	_enhancement_stats["sail_island_radii_0237"] = SAIL_ISLAND_RADII
+	_enhancement_stats["sail_resort_villas_0237"] = resort_villas
+	_enhancement_stats["sail_resort_pools_0237"] = resort_pools
+	_enhancement_stats["sail_removed_podium_lamps_0237"] = removed_podium_lamps
+
+
+func _canonical_building_footprint_0237(building: Dictionary) -> Vector2:
+	var model := String(building.get("model", "generic"))
+	var kind := String(building.get("kind", "building"))
+	var w := _f(building, "w", 20.0)
+	var d := _f(building, "d", 16.0)
+	var h := _f(building, "h", 10.0)
+	var total_height := maxf(h + _f(building, "roofH"), 5.0)
+	if model == "villa":
+		return Vector2(19.20, 15.24)
+	if model == "glass_tower":
+		return Vector2(34.00, 34.00)
+	if kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
+		return Vector2(18.87, 16.37)
+	if kind == "rt-hotel" and h > 38.0 and w >= 33.0 and w <= 36.0 and d >= 25.0 and d <= 28.0:
+		return Vector2(33.60, 26.00)
+	if kind == "rt-hotel" and h >= 15.0 and h <= 38.0 and w <= 55.0 and d <= 38.0:
+		return Vector2(32.40, 24.60)
+	return Vector2(w, d)
+
+
+func _rect_road_clearance_0237(centre: Vector3, size: Vector2, yaw: float) -> float:
+	var basis := Basis(Vector3.UP, yaw)
+	var best := INF
+	for fx_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+		var fx: float = fx_variant
+		for fz_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+			var fz: float = fz_variant
+			var point := centre + basis * Vector3(fx * size.x, 0.0, fz * size.y)
+			best = minf(best, _road_clearance_xz(point))
+	return best
+
+
+## Map-wide canonical-building audit.  The phone captures showed the
+## Marina hero block's exported parcel overlapping the z430 carriage-
+## way; checking every exported building with the footprint of the
+## fixed-scale Blender replacement that will actually be built found
+## the same class of error on Palm Island.  Any parcel whose real
+## footprint comes within 1.6 m of asphalt is shifted by the smallest
+## whole offset that clears every road on level, dry terrain.
+func _sanitize_canonical_buildings_0237() -> void:
+	var relocated := 0
+	var unresolved := 0
+	var checked := 0
+	var minimum_after := INF
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		checked += 1
+		var centre := _item_position(building)
+		var yaw := _f(building, "rotY")
+		var footprint := _canonical_building_footprint_0237(building)
+		var clearance := _rect_road_clearance_0237(centre, footprint, yaw)
+		if clearance >= 1.6:
+			minimum_after = minf(minimum_after, clearance)
+			continue
+		var offsets: Array = [Vector3.ZERO]
+		for distance_variant in [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0]:
+			var distance: float = distance_variant
+			offsets.append_array([
+				Vector3(0.0, 0.0, -distance), Vector3(0.0, 0.0, distance),
+				Vector3(-distance, 0.0, 0.0), Vector3(distance, 0.0, 0.0),
+				Vector3(-distance, 0.0, -distance), Vector3(distance, 0.0, -distance),
+				Vector3(-distance, 0.0, distance), Vector3(distance, 0.0, distance),
+			])
+		var found := false
+		var basis := Basis(Vector3.UP, yaw)
+		for offset_variant in offsets:
+			var offset: Vector3 = offset_variant
+			var candidate := Vector3(centre.x + offset.x, 0.0, centre.z + offset.z)
+			candidate.y = height_at(candidate.x, candidate.z)
+			if candidate.y < 0.7:
+				continue
+			var candidate_clearance := _rect_road_clearance_0237(candidate, footprint, yaw)
+			if candidate_clearance < 1.6:
+				continue
+			var heights: Array[float] = [candidate.y]
+			for local_variant in [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(-0.5, 0.0, 0.5), Vector3(0.5, 0.0, 0.5)]:
+				var local: Vector3 = local_variant
+				var corner := candidate + basis * Vector3(local.x * footprint.x, 0.0, local.z * footprint.y)
+				heights.append(height_at(corner.x, corner.z))
+			if heights.max() - heights.min() > 1.2:
+				continue
+			building["x"] = candidate.x
+			building["y"] = candidate.y
+			building["z"] = candidate.z
+			clearance = candidate_clearance
+			relocated += 1
+			found = true
+			break
+		if not found:
+			unresolved += 1
+		minimum_after = minf(minimum_after, clearance)
+	_enhancement_stats["canonical_building_road_clearance_0237"] = unresolved == 0
+	_enhancement_stats["canonical_buildings_checked_0237"] = checked
+	_enhancement_stats["canonical_buildings_relocated_0237"] = relocated
+	_enhancement_stats["canonical_buildings_unresolved_0237"] = unresolved
+	_enhancement_stats["canonical_building_min_clearance_0237"] = minimum_after
+
+
+## Same audit for exported pools: one Palm Island pool lay across
+## the rt-palm-2 carriageway.  A relocated pool must clear roads by
+## 1.2 m and every sampled point of its rectangle must also clear
+## buildings, other pools and landmarks.
+func _sanitize_canonical_pools_0237() -> void:
+	var relocated := 0
+	var unresolved := 0
+	var minimum_after := INF
+	for pool_variant in data.get("pools", []):
+		var pool: Dictionary = pool_variant
+		var centre := _item_position(pool)
+		var yaw := _f(pool, "rotY")
+		var size := Vector2(_f(pool, "w", 8.0), _f(pool, "d", 5.0))
+		var clearance := _rect_road_clearance_0237(centre, size, yaw)
+		if clearance >= 1.2:
+			minimum_after = minf(minimum_after, clearance)
+			continue
+		var found := false
+		var basis := Basis(Vector3.UP, yaw)
+		for distance_variant in [4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 32.0]:
+			var distance: float = distance_variant
+			for offset in [Vector3(0.0, 0.0, -distance), Vector3(0.0, 0.0, distance), Vector3(-distance, 0.0, 0.0), Vector3(distance, 0.0, 0.0), Vector3(-distance, 0.0, -distance), Vector3(distance, 0.0, -distance), Vector3(-distance, 0.0, distance), Vector3(distance, 0.0, distance)]:
+				var candidate := Vector3(centre.x + offset.x, 0.0, centre.z + offset.z)
+				candidate.y = height_at(candidate.x, candidate.z)
+				if candidate.y < 0.7:
+					continue
+				var candidate_clearance := _rect_road_clearance_0237(candidate, size, yaw)
+				if candidate_clearance < 1.2:
+					continue
+				var clear_of_objects := true
+				for fx_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+					var fx: float = fx_variant
+					for fz_variant in [-0.5, -0.25, 0.0, 0.25, 0.5]:
+						var fz: float = fz_variant
+						var point := candidate + basis * Vector3(fx * size.x, 0.0, fz * size.y)
+						point.y = height_at(point.x, point.z)
+						if not _is_position_clear(point, 0.35, 0.0):
+							clear_of_objects = false
+							break
+					if not clear_of_objects:
+						break
+				if not clear_of_objects:
+					continue
+				pool["x"] = candidate.x
+				pool["y"] = candidate.y + 0.12
+				pool["z"] = candidate.z
+				clearance = candidate_clearance
+				relocated += 1
+				found = true
+				break
+			if found:
+				break
+		if not found:
+			unresolved += 1
+		minimum_after = minf(minimum_after, clearance)
+	_enhancement_stats["canonical_pool_road_clearance_0237"] = unresolved == 0
+	_enhancement_stats["canonical_pools_relocated_0237"] = relocated
+	_enhancement_stats["canonical_pools_unresolved_0237"] = unresolved
+	_enhancement_stats["canonical_pool_min_clearance_0237"] = minimum_after
+
+
 func _grid_height(ix: int, iz: int) -> float:
 	var heights: Array = _terrain.get("heights", [])
 	var cols := int(_terrain.get("cols", 0))
@@ -2438,6 +2825,15 @@ func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int
 		return "sand"
 	if slope > 0.34 or h > 17.0:
 		return "rock"
+	if _in_zone(x, z, "sailIsland"):
+		# Landscaped resort core, then a narrow grass/sand transition,
+		# then the beach ring -- not the old 10 m sand/grass checker.
+		var sail_q := _sail_island_q_0237(x, z)
+		if sail_q <= 0.78:
+			return "grass"
+		if sail_q <= 0.90:
+			return "grass" if _hash01(ix * 7 + 3, iz * 11 + 5) < 0.35 else "sand"
+		return "sand"
 	if (_in_zone(x, z, "palmIsland") or _in_zone(x, z, "sailIsland")) and h < 2.35:
 		return "sand" if _hash01(ix, iz) < 0.58 else "grass"
 	if x >= 520.0 and x < 945.0 and _in_zone(x, z, "richtown"):
@@ -3754,7 +4150,7 @@ func _build_road_details(parent: Node) -> void:
 				var patch_transform := make_transform(
 					Vector3(patch_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.008, patch_center.z),
 					yaw + (detail_roll - 0.055) * 0.7,
-					Vector3(1.9 + lane_roll * 1.5, 0.014, 3.6 + detail_roll * 24.0)
+					Vector3(1.3 + lane_roll * 0.9, 0.014, 2.4 + detail_roll * 14.0)
 				)
 				if detail_roll < 0.035:
 					patch_pothole_transforms.append(patch_transform)
@@ -3773,7 +4169,7 @@ func _build_road_details(parent: Node) -> void:
 				oil_transforms.append(make_transform(
 					Vector3(oil_center.x, _road_surface_y(midpoint.y, lane_offset, half_width, crown_scale) + 0.006, oil_center.z),
 					yaw,
-					Vector3(1.25 + lane_roll * 1.1, 0.012, 2.7 + detail_roll * 4.0)
+					Vector3(0.72 + lane_roll * 0.55, 0.012, 1.5 + detail_roll * 2.2)
 				))
 
 			var add_studs := (width >= 17.0 and i % 2 == 0) or (width < 17.0 and i % 3 == 0)
@@ -3913,7 +4309,7 @@ func _build_road_details(parent: Node) -> void:
 	var patch_city_material := _material("asphalt_patch_city", "asphalt_city.jpg", "", Color(0.44, 0.45, 0.46), 0.96)
 	var patch_pothole_material := _material("asphalt_patch_pothole", "user_asphalt_pothole.jpg", "user_asphalt_pothole_normal.jpg", Color(0.46, 0.46, 0.47), 0.98)
 	var tar_material := _material("tar_seam", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.10, 0.11), 0.82)
-	var oil_material := _material("oil_stain", "", "", Color(0.012, 0.014, 0.018, 0.36), 0.30)
+	var oil_material := _material("oil_stain", "", "", Color(0.012, 0.014, 0.018, 0.27), 0.30)
 	oil_material.metallic_specular = 0.80
 	var skid_material := _material("skid_mark", "", "", Color(0.010, 0.010, 0.012, 0.28), 0.55)
 	skid_material.metallic_specular = 0.35
@@ -3955,6 +4351,7 @@ func _build_road_details(parent: Node) -> void:
 	var signal_short_built := _add_batched_model(parent, "res://assets/props/traffic_signal_short.glb", signal_short_transforms, "BlenderTrafficSignalsShort")
 	var signal_long_built := _add_batched_model(parent, "res://assets/props/traffic_signal_long.glb", signal_long_transforms, "BlenderTrafficSignalsLong")
 
+	_enhancement_stats["road_wear_scale_0237"] = true
 	_enhancement_stats["manholes"] = manhole_transforms.size()
 	_enhancement_stats["drainage_grates"] = drainage_transforms.size()
 	_enhancement_stats["asphalt_patches"] = patch_city_transforms.size() + patch_pothole_transforms.size()
@@ -4359,6 +4756,19 @@ func _multimesh_visual_range(node_name: String) -> float:
 	return 0.0
 
 
+## 0.2.37 shadow-pass diet.  Kerbs, raised pavement slabs and deck
+## plates are only 0.10-0.18 m proud of the surface they sit on: their
+## cast shadow is a sub-centimetre contact line that is not readable
+## in game, yet every one of the thousands of instances was drawn a
+## second time into the 2048 px directional shadow map.  Removing
+## only these flat layers from the shadow pass changes no model, no
+## material and no shader; buildings, palms, lamps and furniture keep
+## casting exactly as before.
+func _is_flat_shadow_free_multimesh_0237(node_name: String) -> bool:
+	var key := node_name.to_lower()
+	return key.contains("curb") or key.contains("slab") or key.contains("promenadedeck")
+
+
 func _add_multimesh(
 	parent: Node,
 	mesh: Mesh,
@@ -4372,6 +4782,10 @@ func _add_multimesh(
 ) -> bool:
 	if mesh == null or transforms.is_empty():
 		return false
+	var effective_cast_shadow := cast_shadow and not _is_flat_shadow_free_multimesh_0237(node_name)
+	if cast_shadow and not effective_cast_shadow:
+		_flat_shadow_free_instances_0237 += transforms.size()
+		_enhancement_stats["flat_shadow_casters_disabled_0237"] = _flat_shadow_free_instances_0237
 
 	# Spatial chunks keep frustum/distance culling local. Detailed HLOD
 	# layers can request smaller cells so a whole 220 m block does not
@@ -4415,7 +4829,7 @@ func _add_multimesh(
 		instance.multimesh = multi
 		if material != null:
 			instance.material_override = material
-		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if effective_cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else WORLD_AABB
 		var visual_begin := visibility_begin_m
@@ -4437,6 +4851,7 @@ func _add_multimesh(
 			"centre": chunk_aabb.get_center(),
 			"radius": chunk_aabb.size.length() * 0.5,
 			"hidden": false,
+			"sector_hidden_0237": false,
 		})
 		_multimesh_chunk_count += 1
 		built_any = true
@@ -5200,6 +5615,10 @@ func _build_infill_buildings(parent: Node) -> void:
 					continue
 				if _is_in_park(x, z, 18.0):
 					continue
+				# The expanded Sail Island is a designed resort (loop,
+				# villas, pools, promenade), not a random infill field.
+				if _in_zone(x, z, "sailIsland"):
+					continue
 
 				var w := 15.0 + _hash01(ix, iz) * 9.0
 				var d := 13.0 + _hash01(iz, ix) * 8.0
@@ -5389,6 +5808,7 @@ func _build_infill_buildings(parent: Node) -> void:
 		})
 
 	_infill_buildings = accepted
+	_enhancement_stats["sail_island_infill_excluded_0237"] = true
 	_enhancement_stats["infill_buildings"] = accepted.size()
 	var boulevard_frontage_count := 0
 	for frontage_item in accepted:
@@ -5898,6 +6318,285 @@ func _build_landmarks() -> void:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
 				_add_box_collider(pos + Vector3(0.0, fallback_height * 0.5, 0.0), Vector3(24.0, fallback_height, 24.0))
+
+
+## 0.2.37 Sail Island resort landscaping.  Terrain, loop road, villas
+## and pools are registered by `_expand_sail_island_0237()`; this pass
+## dresses the enlarged island with a stone arrival forecourt, pool
+## terraces, clipped hedges, a continuous seaside promenade, a small
+## pier, palm alleys and real Blender lamps/benches/pergolas.  All
+## repeated geometry goes through the existing MultiMesh/model queues
+## (with their HLOD ranges), so the island does not become hundreds
+## of individual draw calls.
+func _build_sail_island_resort_0237() -> void:
+	var root := Node3D.new()
+	root.name = "SailIslandResort0237"
+	add_child(root)
+
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var unit_cylinder := CylinderMesh.new()
+	unit_cylinder.top_radius = 0.5
+	unit_cylinder.bottom_radius = 0.5
+	unit_cylinder.height = 1.0
+	unit_cylinder.radial_segments = 28
+	var umbrella_pole_mesh := CylinderMesh.new()
+	umbrella_pole_mesh.top_radius = 0.035
+	umbrella_pole_mesh.bottom_radius = 0.035
+	umbrella_pole_mesh.height = 2.1
+	umbrella_pole_mesh.radial_segments = 8
+	var umbrella_canopy_mesh := CylinderMesh.new()
+	umbrella_canopy_mesh.top_radius = 0.06
+	umbrella_canopy_mesh.bottom_radius = 1.35
+	umbrella_canopy_mesh.height = 0.42
+	umbrella_canopy_mesh.radial_segments = 10
+
+	var paving_material := _terrain_material("plaza")
+	var stone_material := _prop_material("VillaStone")
+	var hedge_material := _prop_material("VillaHedge")
+	var wood_material := _prop_material("PropsWood")
+	var metal_material := _prop_material("PropsMetal")
+	var lawn_material := _material("park_lawn", "user_grass.jpg", "user_grass_normal.jpg", Color(0.52, 0.74, 0.38), 0.96, 0.0, Vector3(0.55, 0.55, 0.55), true)
+
+	# Arrival forecourt west of the podium, the east infinity-pool
+	# deck, the north/south reflecting-pool terraces and a stone pad
+	# under every resort villa (read back from data so a sanitized
+	# parcel and its pad can never drift apart).
+	var paving_transforms: Array = []
+	for spec in [
+		{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0, "yaw": 0.0},
+		{"x": 1220.0, "z": 80.0, "w": 25.0, "d": 38.0, "yaw": 0.0},
+		{"x": 1184.0, "z": 50.0, "w": 76.0, "d": 10.0, "yaw": 0.0},
+		{"x": 1184.0, "z": 110.0, "w": 76.0, "d": 10.0, "yaw": 0.0},
+	]:
+		var px := _f(spec, "x")
+		var pz := _f(spec, "z")
+		paving_transforms.append(make_transform(
+			Vector3(px, height_at(px, pz) + 0.08, pz),
+			_f(spec, "yaw"),
+			Vector3(_f(spec, "w"), 0.16, _f(spec, "d"))
+		))
+	var resort_villa_count := 0
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		if not bool(building.get("sail_resort_0237", false)):
+			continue
+		resort_villa_count += 1
+		var villa_pos := _item_position(building)
+		paving_transforms.append(make_transform(
+			Vector3(villa_pos.x, villa_pos.y + 0.05, villa_pos.z),
+			_f(building, "rotY"),
+			Vector3(24.0, 0.12, 20.0)
+		))
+	_add_multimesh(root, unit_box, paving_material, paving_transforms, "SailIslandPaving", false, -1.0, 420.0, 180.0)
+
+	var lawn_transforms: Array = []
+	for spec in [
+		{"x": 1185.0, "z": 8.0, "w": 54.0, "d": 22.0},
+		{"x": 1185.0, "z": 152.0, "w": 54.0, "d": 22.0},
+		{"x": 1266.0, "z": 80.0, "w": 30.0, "d": 54.0},
+		{"x": 1104.0, "z": 35.0, "w": 36.0, "d": 28.0},
+		{"x": 1104.0, "z": 125.0, "w": 36.0, "d": 28.0},
+	]:
+		var px := _f(spec, "x")
+		var pz := _f(spec, "z")
+		lawn_transforms.append(make_transform(
+			Vector3(px, height_at(px, pz) + 0.05, pz),
+			0.0,
+			Vector3(_f(spec, "w"), 0.12, _f(spec, "d"))
+		))
+	_add_multimesh(root, unit_cylinder, lawn_material, lawn_transforms, "SailIslandLawns", false, -1.0, 420.0, 180.0)
+
+	var hedge_transforms: Array = []
+	for hx in range(1162, 1210, 11):
+		for hz in [57.5, 102.5]:
+			var hedge_pos := Vector3(float(hx), height_at(float(hx), hz) + 0.45, hz)
+			hedge_transforms.append(make_transform(hedge_pos, 0.0, Vector3(9.0, 0.9, 1.0)))
+	for spec in [
+		{"x": 1149.0, "z": 61.0, "w": 14.0, "d": 1.0},
+		{"x": 1149.0, "z": 99.0, "w": 14.0, "d": 1.0},
+		{"x": 1220.0, "z": 61.0, "w": 20.0, "d": 1.0},
+		{"x": 1220.0, "z": 99.0, "w": 20.0, "d": 1.0},
+	]:
+		var px := _f(spec, "x")
+		var pz := _f(spec, "z")
+		hedge_transforms.append(make_transform(
+			Vector3(px, height_at(px, pz) + 0.45, pz),
+			0.0,
+			Vector3(_f(spec, "w"), 0.9, _f(spec, "d"))
+		))
+	_add_multimesh(root, unit_box, hedge_material, hedge_transforms, "SailIslandHedges", false, -1.0, 260.0, 180.0)
+
+	# Continuous stone promenade on the beach ring with a low sea
+	# wall on its outer edge.  The terrain height is a function of the
+	# same elliptical coordinate, so each flat segment sits on the
+	# shore without floating ends.
+	var promenade_transforms: Array = []
+	var seawall_transforms: Array = []
+	var promenade_segments := 64
+	for i in promenade_segments:
+		var a0 := TAU * float(i) / float(promenade_segments)
+		var a1 := TAU * float(i + 1) / float(promenade_segments)
+		var p0 := Vector2(SAIL_ISLAND_CENTRE.x + cos(a0) * 112.0, SAIL_ISLAND_CENTRE.y + sin(a0) * 92.0)
+		var p1 := Vector2(SAIL_ISLAND_CENTRE.x + cos(a1) * 112.0, SAIL_ISLAND_CENTRE.y + sin(a1) * 92.0)
+		var mid := (p0 + p1) * 0.5
+		# The ellipse meets the causeway on the west shore; leave a
+		# clean gap there instead of laying a stone band across the
+		# carriageway.
+		if _road_clearance_xz(Vector3(mid.x, 0.0, mid.y)) < 2.5:
+			continue
+		var direction := Vector3(p1.x - p0.x, 0.0, p1.y - p0.y)
+		var segment_yaw := _yaw_for_x_direction(direction)
+		var segment_length := p0.distance_to(p1) + 0.35
+		promenade_transforms.append(make_transform(
+			Vector3(mid.x, height_at(mid.x, mid.y) + 0.10, mid.y),
+			segment_yaw,
+			Vector3(segment_length, 0.18, 3.2)
+		))
+		var am := (a0 + a1) * 0.5
+		var outer := Vector2(SAIL_ISLAND_CENTRE.x + cos(am) * 115.5, SAIL_ISLAND_CENTRE.y + sin(am) * 95.5)
+		seawall_transforms.append(make_transform(
+			Vector3(outer.x, height_at(outer.x, outer.y) + 0.28, outer.y),
+			segment_yaw,
+			Vector3(segment_length, 0.55, 0.55)
+		))
+	_add_multimesh(root, unit_box, stone_material, promenade_transforms, "SailIslandPromenade", false, -1.0, 560.0, 180.0)
+	_add_multimesh(root, unit_box, _terrain_material("concrete"), seawall_transforms, "SailIslandPromenadeCurbs", false, -1.0, 420.0, 180.0)
+
+	# East pier: deck, piles and a simple handrail over the water.
+	var pier_deck_transforms: Array = [make_transform(Vector3(1314.0, 0.68, 80.0), 0.0, Vector3(36.0, 0.28, 4.2))]
+	var pier_post_transforms: Array = []
+	for px in range(1298, 1331, 8):
+		for pz in [78.1, 81.9]:
+			pier_post_transforms.append(make_transform(Vector3(float(px), 0.05, pz), 0.0, Vector3(0.34, 1.7, 0.34)))
+	var pier_rail_transforms: Array = [
+		make_transform(Vector3(1314.0, 1.55, 78.0), 0.0, Vector3(36.0, 0.08, 0.08)),
+		make_transform(Vector3(1314.0, 1.55, 82.0), 0.0, Vector3(36.0, 0.08, 0.08)),
+	]
+	_add_multimesh(root, unit_box, wood_material, pier_deck_transforms, "SailIslandPierDeck", false, -1.0, 520.0, 180.0)
+	_add_multimesh(root, unit_cylinder, wood_material, pier_post_transforms, "SailIslandPierPosts", false, -1.0, 420.0, 180.0)
+	_add_multimesh(root, unit_box, metal_material, pier_rail_transforms, "SailIslandPierRails", false, -1.0, 420.0, 180.0)
+	_add_box_collider(Vector3(1314.0, 0.7, 80.0), Vector3(36.0, 1.4, 4.2))
+
+	# Palm alleys: one ring outside the loop (skipping the causeway
+	# axis to the west) plus two beach groves.  Detailed Blender
+	# palms only -- the far proxies are generated by the model queue.
+	var date_palm_transforms: Array = []
+	var royal_palm_transforms: Array = []
+	var palm_points: Array[Vector2] = []
+	for degree_variant in [-150.0, -120.0, -90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0, 120.0, 150.0]:
+		var angle := deg_to_rad(degree_variant)
+		palm_points.append(Vector2(1188.0 + cos(angle) * 57.0, 80.0 + sin(angle) * 55.0))
+	for point in [Vector2(1248, 150), Vector2(1215, 164), Vector2(1155, 164), Vector2(1122, 150), Vector2(1122, 10), Vector2(1155, -4), Vector2(1215, -4), Vector2(1248, 10)]:
+		palm_points.append(point)
+	var palm_index := 0
+	for point in palm_points:
+		var palm_pos := Vector3(point.x, height_at(point.x, point.y) - 0.03, point.y)
+		if not _is_position_clear(palm_pos, 1.5, 2.5):
+			continue
+		var palm_scale := 0.92 + _hash01(palm_index * 13 + 7, palm_index * 17 + 3) * 0.16
+		var palm_transform := make_transform(palm_pos, _hash01(palm_index * 19 + 5, palm_index * 23 + 11) * TAU, Vector3.ONE * palm_scale)
+		if palm_index % 2 == 0:
+			date_palm_transforms.append(palm_transform)
+		else:
+			royal_palm_transforms.append(palm_transform)
+		_add_cylinder_collider(palm_pos + Vector3(0.0, 2.8, 0.0), 0.34, 5.8)
+		palm_index += 1
+	var island_palms_built := _add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_palm_transforms, "BlenderDatePalms")
+	island_palms_built = _add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_palm_transforms, "BlenderRoyalPalms") or island_palms_built
+
+	# Real lamp/bench/pergola models around the loop and promenade.
+	var lamp_transforms: Array = []
+	var lamp_points: Array[Vector2] = []
+	for degree_variant in [-157.0, -112.0, -67.0, -22.0, 22.0, 67.0, 112.0, 157.0]:
+		var angle := deg_to_rad(degree_variant)
+		lamp_points.append(Vector2(1188.0 + cos(angle) * 56.0, 80.0 + sin(angle) * 54.0))
+	for degree_variant in [-90.0, 0.0, 90.0]:
+		var angle := deg_to_rad(degree_variant)
+		lamp_points.append(Vector2(SAIL_ISLAND_CENTRE.x + cos(angle) * 109.0, SAIL_ISLAND_CENTRE.y + sin(angle) * 89.0))
+	for point_index in lamp_points.size():
+		var point := lamp_points[point_index]
+		var lamp_pos := Vector3(point.x, height_at(point.x, point.y) + 0.02, point.y)
+		if not _is_position_clear(lamp_pos, 0.6, 1.0):
+			continue
+		var radial := Vector3(point.x - 1187.0, 0.0, point.y - 80.0)
+		# Lamp GLB arm reaches along local +Z: loop lamps reach
+		# inward over the carriageway, promenade lamps reach outward
+		# over the seaside path.
+		var lamp_target := -radial if point_index < 8 else radial
+		lamp_transforms.append(make_transform(lamp_pos, _yaw_for_z_normal(lamp_target), Vector3.ONE))
+		_add_cylinder_collider(lamp_pos + Vector3(0.0, 3.2, 0.0), 0.18, 6.6)
+	_add_batched_model(root, "res://assets/props/street_lamp.glb", lamp_transforms, "BlenderStreetLamps")
+
+	var bench_transforms: Array = []
+	var bench_index := 0
+	for degree_variant in [22.0, 67.0, 112.0, 157.0, 202.0, 247.0, 292.0, 337.0]:
+		var angle := deg_to_rad(degree_variant)
+		var point := Vector2(SAIL_ISLAND_CENTRE.x + cos(angle) * 109.0, SAIL_ISLAND_CENTRE.y + sin(angle) * 89.0)
+		var bench_pos := Vector3(point.x, height_at(point.x, point.y) + 0.04, point.y)
+		if not _is_position_clear(bench_pos, 0.8, 1.0):
+			continue
+		var outward := Vector3(cos(angle), 0.0, sin(angle))
+		# Park-bench GLB seat front faces local -Z: point local +Z
+		# back toward the island so sitters face the sea.
+		var bench_yaw := _yaw_for_z_normal(-outward)
+		bench_transforms.append(make_transform(bench_pos, bench_yaw, Vector3.ONE))
+		_add_box_collider(bench_pos + Vector3(0.0, 0.5, 0.0), Vector3(2.4, 1.0, 0.8), bench_yaw)
+		bench_index += 1
+	_add_batched_model(root, "res://assets/props/park_bench.glb", bench_transforms, "BlenderParkBenches")
+
+	var pergola_transforms: Array = []
+	for spec in [{"x": 1185.0, "z": 8.0, "yaw": 0.0}, {"x": 1185.0, "z": 152.0, "yaw": PI}]:
+		var px := _f(spec, "x")
+		var pz := _f(spec, "z")
+		var yaw := _f(spec, "yaw")
+		var pergola_pos := Vector3(px, height_at(px, pz) + 0.04, pz)
+		pergola_transforms.append(make_transform(pergola_pos, yaw, Vector3.ONE))
+		# The GLB is the hexagonal Museum pergola: six columns on a
+		# 5.2 m ring at 30-degree offset (see the parks pass).
+		for column_index in 6:
+			var column_angle := yaw + TAU * float(column_index) / 6.0 + PI / 6.0
+			var post_pos := pergola_pos + Vector3(cos(column_angle) * 5.2, 0.0, sin(column_angle) * 5.2)
+			post_pos.y = height_at(post_pos.x, post_pos.z)
+			_add_cylinder_collider(post_pos + Vector3(0.0, 1.55, 0.0), 0.4, 3.1)
+	_add_batched_model(root, "res://assets/props/park_pergola.glb", pergola_transforms, "BlenderParkPergola")
+
+	# A neat double row of beach umbrellas/loungers on the east
+	# beach, replacing the random mainland scatter on this shore.
+	var cabana_pole_transforms: Array = []
+	var cabana_canopy_transforms: Array = [[], [], []]
+	var cabana_lounger_transforms: Array = []
+	var cabana_materials: Array[StandardMaterial3D] = [
+		_material("beach_umbrella_red", "", "", Color(0.78, 0.12, 0.10), 0.78),
+		_material("beach_umbrella_blue", "", "", Color(0.08, 0.34, 0.74), 0.78),
+		_material("beach_umbrella_teal", "", "", Color(0.05, 0.58, 0.54), 0.78),
+	]
+	var cabana_index := 0
+	for degree_variant in [25.0, 40.0, 55.0, 125.0, 140.0, 155.0]:
+		var angle := deg_to_rad(degree_variant)
+		var point := Vector2(SAIL_ISLAND_CENTRE.x + cos(angle) * 118.0, SAIL_ISLAND_CENTRE.y + sin(angle) * 98.0)
+		var cabana_pos := Vector3(point.x, height_at(point.x, point.y), point.y)
+		cabana_pole_transforms.append(make_transform(cabana_pos + Vector3(0.0, 1.05, 0.0), angle, Vector3.ONE))
+		(cabana_canopy_transforms[cabana_index % 3] as Array).append(make_transform(cabana_pos + Vector3(0.0, 2.05, 0.0), angle, Vector3.ONE))
+		var outward := Vector2(cos(angle), sin(angle))
+		var lounger_point := point + outward * 2.1
+		var lounger_pos := Vector3(lounger_point.x, height_at(lounger_point.x, lounger_point.y) + 0.22, lounger_point.y)
+		cabana_lounger_transforms.append(make_transform(lounger_pos, _yaw_for_x_direction(Vector3(outward.x, 0.0, outward.y)), Vector3(1.8, 0.18, 0.65)))
+		cabana_index += 1
+	_add_multimesh(root, umbrella_pole_mesh, metal_material, cabana_pole_transforms, "SailIslandBeachPoles", false, -1.0, 360.0, 180.0)
+	for cabana_group in 3:
+		_add_multimesh(root, umbrella_canopy_mesh, cabana_materials[cabana_group], cabana_canopy_transforms[cabana_group], "SailIslandBeachUmbrellas_%d" % cabana_group, false, -1.0, 360.0, 180.0)
+	_add_multimesh(root, unit_box, _material("city_white_painted", "", "", Color(0.90, 0.92, 0.90), 0.52, 0.05), cabana_lounger_transforms, "SailIslandBeachLoungers", false, -1.0, 360.0, 180.0)
+
+	_enhancement_stats["sail_island_resort_0237"] = true
+	_enhancement_stats["sail_island_paving_0237"] = paving_transforms.size()
+	_enhancement_stats["sail_island_promenade_segments_0237"] = promenade_transforms.size()
+	_enhancement_stats["sail_island_palms_0237"] = date_palm_transforms.size() + royal_palm_transforms.size() if island_palms_built else 0
+	_enhancement_stats["sail_island_lamps_0237"] = lamp_transforms.size()
+	_enhancement_stats["sail_island_benches_0237"] = bench_transforms.size()
+	_enhancement_stats["sail_island_pergolas_0237"] = pergola_transforms.size()
+	_enhancement_stats["sail_island_cabanas_0237"] = cabana_pole_transforms.size()
+	_enhancement_stats["sail_resort_villas_built_0237"] = resort_villa_count
 
 
 func _add_fountain_particles(parent: Node, origin: Vector3) -> void:
@@ -7509,6 +8208,8 @@ func _build_city_details() -> void:
 	var bin_transforms: Array = []
 	var sign_post_transforms: Array = []
 	var sign_panel_transforms: Array = [[], [], []]
+	var sign_back_transforms_0237: Array = []
+	var sign_symbol_transforms_0237: Array = []
 
 	var segment_counter := 0
 	var bollard_counter := 0
@@ -7516,6 +8217,7 @@ func _build_city_details() -> void:
 	var bin_counter := 0
 	var sign_counter := 0
 	var rejected_roadside_footprints := 0
+	var bridge_segments_skipped_0237 := 0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var samples: Array = road.get("samples", [])
@@ -7523,6 +8225,10 @@ func _build_city_details() -> void:
 			continue
 		var width := _f(road, "widthM", 10.0)
 		var half_width := width * 0.5
+		# Bridges/causeways have guardrails, not pavements: the old
+		# scatter put planter crates, bins and sign posts on the sand
+		# or water just outside the Sail/Palm causeway rails.
+		var is_bridge_road_0237 := String(road.get("id", "")) in ["rt-sail-road", "rt-palm-1", "rt-highway-1"]
 		for i in range(samples.size() - 1):
 			var a := _sample_point(samples[i])
 			var b := _sample_point(samples[i + 1])
@@ -7534,6 +8240,10 @@ func _build_city_details() -> void:
 			var side_vector := Vector3(-direction.z, 0.0, direction.x)
 			var midpoint := (a + b) * 0.5
 			var road_yaw := _yaw_for_x_direction(direction)
+			if is_bridge_road_0237:
+				bridge_segments_skipped_0237 += 1
+				segment_counter += 1
+				continue
 
 			if width >= 17.0 and segment_counter % 3 == 0:
 				var bollard_side := -1.0 if bollard_counter % 2 == 0 else 1.0
@@ -7583,11 +8293,24 @@ func _build_city_details() -> void:
 						and _is_footprint_clear_of_roads(sign_pos, Vector2(1.35, 0.09), panel_yaw, 0.45)
 					):
 						sign_post_transforms.append(make_transform(sign_pos + Vector3(0.0, 1.4, 0.0), road_yaw, Vector3.ONE))
+						var panel_center := sign_pos + Vector3(0.0, 2.62, 0.0)
 						(sign_panel_transforms[sign_group] as Array).append(make_transform(
-							sign_pos + Vector3(0.0, 2.62, 0.0),
+							panel_center,
 							panel_yaw,
 							Vector3(1.35, 0.82, 0.09)
 						))
+						# A real sign is not a blank emissive slab from
+						# behind: galvanized back plate on the rear
+						# face, three white legend bars on the front.
+						var panel_basis := Basis(Vector3.UP, panel_yaw)
+						sign_back_transforms_0237.append(make_transform(
+							panel_center + panel_basis * Vector3(0.0, 0.0, -0.062),
+							panel_yaw,
+							Vector3(1.43, 0.90, 0.035)
+						))
+						sign_symbol_transforms_0237.append(make_transform(panel_center + panel_basis * Vector3(-0.08, 0.19, 0.056), panel_yaw, Vector3(0.88, 0.10, 0.018)))
+						sign_symbol_transforms_0237.append(make_transform(panel_center + panel_basis * Vector3(-0.08, 0.0, 0.056), panel_yaw, Vector3(0.88, 0.10, 0.018)))
+						sign_symbol_transforms_0237.append(make_transform(panel_center + panel_basis * Vector3(-0.23, -0.19, 0.056), panel_yaw, Vector3(0.58, 0.10, 0.018)))
 					else:
 						rejected_roadside_footprints += 1
 
@@ -7600,8 +8323,13 @@ func _build_city_details() -> void:
 	_add_multimesh(root, sign_post_mesh, metal, sign_post_transforms, "CityRoadSignPosts", false)
 	for group_index in 3:
 		_add_multimesh(root, unit_box, sign_materials[group_index], sign_panel_transforms[group_index], "CityRoadSigns_%d" % group_index, false)
+	_add_multimesh(root, unit_box, metal, sign_back_transforms_0237, "CityRoadSignBacks0237", false)
+	_add_multimesh(root, unit_box, white_painted, sign_symbol_transforms_0237, "CityRoadSignSymbols0237", false)
 
 	var roadside_prop_count := bollard_transforms.size() + planter_transforms.size() + bin_transforms.size() + sign_post_transforms.size()
+	_enhancement_stats["bridge_roadside_props_removed_0237"] = bridge_segments_skipped_0237 > 0
+	_enhancement_stats["bridge_segments_without_props_0237"] = bridge_segments_skipped_0237
+	_enhancement_stats["readable_road_signs_0237"] = sign_back_transforms_0237.size()
 	_enhancement_stats["city_detail_props"] = roadside_prop_count
 	_enhancement_stats["roadside_bollards"] = bollard_transforms.size()
 	_enhancement_stats["roadside_planters"] = planter_transforms.size()

@@ -8,6 +8,13 @@ extends Control
 ## small category icons/colours for nearby points of interest.
 
 const VIEW_RADIUS_M := 260.0
+## 0.2.37: the road/park network never changes while driving, so it is
+## rendered once into a 1024 px north-up cache.  The per-frame draw
+## then submits one textured quad under the existing circular mask
+## plus the dynamic route/markers, instead of re-tessellating more
+## than a thousand road samples into antialiased CanvasItem lines at
+## 30 Hz.  The old vector path remains as the first-frame fallback.
+const STATIC_CACHE_SIZE := 1024
 
 var _roads: Array = []
 var _parks: Array = []
@@ -20,6 +27,10 @@ var _route_points: Array[Vector2] = []
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _data: Dictionary = {}
+var _static_cache_mode := false
+var _static_cache_viewport: SubViewport
+var _static_cache_texture: Texture2D
+var _static_cache_ready := false
 
 
 func _ready() -> void:
@@ -82,7 +93,50 @@ func set_world_data(roads: Array, bounds: Rect2, parks: Array = []) -> void:
     _roads = roads.duplicate(true)
     _parks = parks.duplicate(true)
     _world_bounds = bounds
+    if not _static_cache_mode:
+        _build_static_cache()
     queue_redraw()
+
+
+func _build_static_cache() -> void:
+    if _roads.is_empty() or _world_bounds.size.x <= 1.0 or _world_bounds.size.y <= 1.0:
+        return
+    if _static_cache_viewport != null:
+        _static_cache_viewport.queue_free()
+        _static_cache_viewport = null
+    _static_cache_texture = null
+    _static_cache_ready = false
+
+    var viewport := SubViewport.new()
+    viewport.name = "StaticMinimapCache0237"
+    viewport.size = Vector2i(STATIC_CACHE_SIZE, STATIC_CACHE_SIZE)
+    viewport.transparent_bg = true
+    viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+    viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
+
+    var cache_control := NativeMinimap.new()
+    cache_control.name = "StaticMinimapCanvas0237"
+    cache_control._static_cache_mode = true
+    cache_control._roads = _roads.duplicate(true)
+    cache_control._parks = _parks.duplicate(true)
+    cache_control._world_bounds = _world_bounds
+    viewport.add_child(cache_control)
+    cache_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+    cache_control.size = Vector2(float(STATIC_CACHE_SIZE), float(STATIC_CACHE_SIZE))
+    add_child(viewport)
+    _static_cache_viewport = viewport
+    _mark_static_cache_ready_later(viewport)
+
+
+func _mark_static_cache_ready_later(viewport: SubViewport) -> void:
+    await RenderingServer.frame_post_draw
+    await RenderingServer.frame_post_draw
+    if not is_instance_valid(viewport) or viewport != _static_cache_viewport:
+        return
+    _static_cache_texture = viewport.get_texture()
+    _static_cache_ready = _static_cache_texture != null
+    if _static_cache_ready:
+        queue_redraw()
 
 
 func set_points_of_interest(points: Array) -> void:
@@ -132,6 +186,10 @@ func get_smoke_state() -> Dictionary:
         "has_destination": _destination != Vector2.INF,
         "route_points": _route_points.size(),
         "road_route_0234": true,
+        "static_map_cache_0237": true,
+        "static_cache_created": _static_cache_viewport != null,
+        "static_cache_ready": _static_cache_ready,
+        "static_cache_size": STATIC_CACHE_SIZE,
         "player_position": _player_position,
         "bounds": _world_bounds,
         "rect": get_global_rect(),
@@ -191,20 +249,71 @@ func _draw_rotated_rect(world_rect: Rect2, color: Color) -> void:
     draw_colored_polygon(corners, color)
 
 
-func _draw() -> void:
+func _static_world_to_cache(world_position: Vector2) -> Vector2:
+    return Vector2(
+        (world_position.x - _world_bounds.position.x) / maxf(_world_bounds.size.x, 1.0) * size.x,
+        (world_position.y - _world_bounds.position.y) / maxf(_world_bounds.size.y, 1.0) * size.y
+    )
+
+
+func _draw_static_cache() -> void:
     if size.x < 24.0 or size.y < 24.0:
         return
+    var pixels_per_meter := size.x / maxf(_world_bounds.size.x, 1.0)
+    for park_data in _parks:
+        if not (park_data is Dictionary):
+            continue
+        var rect: Rect2 = (park_data as Dictionary).get("rect", Rect2())
+        if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+            continue
+        var corners := PackedVector2Array([
+            _static_world_to_cache(Vector2(rect.position.x, rect.position.y)),
+            _static_world_to_cache(Vector2(rect.end.x, rect.position.y)),
+            _static_world_to_cache(Vector2(rect.end.x, rect.end.y)),
+            _static_world_to_cache(Vector2(rect.position.x, rect.end.y)),
+        ])
+        draw_colored_polygon(corners, Color(0.08, 0.42, 0.18, 0.68))
+
+    for road in _roads:
+        if not (road is Dictionary):
+            continue
+        var road_data := road as Dictionary
+        var samples: Array = road_data.get("samples", [])
+        if samples.size() < 2:
+            continue
+        var points := PackedVector2Array()
+        for sample_variant in samples:
+            var sample: Array = sample_variant
+            if sample.size() < 3:
+                continue
+            points.append(_static_world_to_cache(Vector2(float(sample[0]), float(sample[2]))))
+        if points.size() < 2:
+            continue
+        var width_world := float(road_data.get("widthM", road_data.get("width", 16.0)))
+        var road_width := clampf(width_world * pixels_per_meter, 2.0, 26.0)
+        draw_polyline(points, Color(0.48, 0.56, 0.66, 0.92), road_width, true)
+        draw_polyline(points, Color(0.90, 0.94, 1.0, 0.24), 1.2, true)
+
+
+func _draw_cached_world() -> bool:
+    if not _static_cache_ready or _static_cache_texture == null:
+        return false
     var centre := size * 0.5
     var radius := _clip_radius()
-    var font := get_theme_default_font()
-    var north_font_size := int(clampf(radius * 0.14, 11.0, 19.0))
+    var scale := radius / VIEW_RADIUS_M
+    var forward := _player_forward
+    var right := Vector2(-forward.y, forward.x)
+    var cache_size := Vector2(float(STATIC_CACHE_SIZE), float(STATIC_CACHE_SIZE))
+    var x_axis := Vector2(right.x, -forward.x) * scale * (_world_bounds.size.x / cache_size.x)
+    var y_axis := Vector2(right.y, -forward.y) * scale * (_world_bounds.size.y / cache_size.y)
+    var origin := centre + _rotate_to_vehicle(_world_bounds.position - _player_position) * scale
+    draw_set_transform_matrix(Transform2D(x_axis, y_axis, origin))
+    draw_texture(_static_cache_texture, Vector2.ZERO)
+    draw_set_transform_matrix(Transform2D.IDENTITY)
+    return true
 
-    # The parent applies a circular shader mask; drawing the base as
-    # a full disc also keeps the control correct without material.
-    draw_circle(centre, radius, Color(0.004, 0.012, 0.030, 0.50))
-    draw_arc(centre, radius * 0.72, 0.0, TAU, 72, Color(0.62, 0.74, 0.86, 0.10), 1.0, true)
-    draw_arc(centre, radius * 0.42, 0.0, TAU, 56, Color(0.62, 0.74, 0.86, 0.08), 1.0, true)
 
+func _draw_vector_world() -> void:
     for park_data in _parks:
         if park_data is Dictionary:
             _draw_rotated_rect((park_data as Dictionary).get("rect", Rect2()), Color(0.08, 0.42, 0.18, 0.68))
@@ -239,6 +348,28 @@ func _draw() -> void:
         var b := _world_to_map(to)
         _draw_clipped_line(a, b, Color(0.48, 0.56, 0.66, 0.92), road_width)
         _draw_clipped_line(a, b, Color(0.90, 0.94, 1.0, 0.24), 1.0)
+
+
+
+func _draw() -> void:
+    if _static_cache_mode:
+        _draw_static_cache()
+        return
+    if size.x < 24.0 or size.y < 24.0:
+        return
+    var centre := size * 0.5
+    var radius := _clip_radius()
+    var font := get_theme_default_font()
+    var north_font_size := int(clampf(radius * 0.14, 11.0, 19.0))
+
+    # The parent applies a circular shader mask; drawing the base as
+    # a full disc also keeps the control correct without material.
+    draw_circle(centre, radius, Color(0.004, 0.012, 0.030, 0.50))
+    draw_arc(centre, radius * 0.72, 0.0, TAU, 72, Color(0.62, 0.74, 0.86, 0.10), 1.0, true)
+    draw_arc(centre, radius * 0.42, 0.0, TAU, 56, Color(0.62, 0.74, 0.86, 0.08), 1.0, true)
+
+    if not _draw_cached_world():
+        _draw_vector_world()
 
     if _destination != Vector2.INF:
         if _route_points.size() >= 2:
