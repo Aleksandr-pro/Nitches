@@ -99,6 +99,11 @@ func set_destination(world_position: Vector2) -> void:
         _minimap.set_destination(world_position)
 
 
+func set_route_path(points: Array) -> void:
+    if _minimap != null:
+        _minimap.set_route_path(points)
+
+
 func clear_destination() -> void:
     if _minimap != null:
         _minimap.clear_destination()

@@ -53,6 +53,9 @@ const SPEC_ACCEL_0_100_S := 6.0
 const SPEC_TOP_SPEED_KMH := 207
 const SPEC_GEARBOX := "4-ступенчатая механика"
 const SPEC_DRIVE := "задний"
+const TUNING_TORQUE_MULTIPLIERS: Array[float] = [1.0, 1.08, 1.16]
+const TUNING_PERFORMANCE_INDEX: Array[int] = [612, 648, 701]
+const TUNING_CLASS_LABELS: Array[String] = ["A", "A", "S1"]
 
 var steering_angle := 0.0
 var throttle_input := 0.0
@@ -75,6 +78,15 @@ var _visual_root: Node3D
 var _world: NativeWorldBuilder
 var _headlights: Array[SpotLight3D] = []
 var _paint_materials: Dictionary = {}
+var _primary_paint_material: ShaderMaterial
+var _secondary_paint_material: ShaderMaterial
+var _paint_color := Color(0.48, 0.025, 0.035)
+var _secondary_paint_color := Color(0.92, 0.88, 0.80)
+var _wheel_finish_surfaces: Array[Dictionary] = []
+var _wheel_finish_id := "silver"
+var _tuning_level := 0
+var _license_plate := "GT500-67"
+var _plate_labels: Array[Label3D] = []
 var _headlight_materials: Array[StandardMaterial3D] = []
 var _tail_light_materials: Array[StandardMaterial3D] = []
 var _smoke_emitters: Array[GPUParticles3D] = []
@@ -270,8 +282,10 @@ func _create_visual() -> void:
 	add_child(_visual_root)
 
 	if _load_mustang_model():
+		_create_license_plates()
 		return
 	_create_fallback_visual()
+	_create_license_plates()
 
 
 func _load_mustang_model() -> bool:
@@ -310,12 +324,15 @@ func _paint_material(color: Color) -> ShaderMaterial:
 		return _paint_materials[color] as ShaderMaterial
 	var material := ShaderMaterial.new()
 	material.shader = CAR_PAINT_SHADER
+	_configure_paint_material(material, color)
+	_paint_materials[color] = material
+	return material
+
+
+func _configure_paint_material(material: ShaderMaterial, color: Color) -> void:
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("flake_color", color.lerp(Color(1.0, 0.86, 0.72), 0.58))
 	material.set_shader_parameter("fresnel_color", color.lerp(Color(1.0, 0.28, 0.08), 0.32))
-	# Automotive basecoat plus polished clear: slightly less metallic and
-	# considerably smoother than the old uniform/plasticky finish. Probe/sky
-	# specular carries the environment reflection in Godot's Mobile renderer.
 	material.set_shader_parameter("metallic_amount", 0.68)
 	material.set_shader_parameter("roughness_amount", 0.19)
 	material.set_shader_parameter("clearcoat_amount", 1.0)
@@ -323,8 +340,156 @@ func _paint_material(color: Color) -> ShaderMaterial:
 	material.set_shader_parameter("flake_density", 180.0)
 	material.set_shader_parameter("flake_strength", 0.5)
 	material.set_shader_parameter("fresnel_strength", 0.24)
-	_paint_materials[color] = material
-	return material
+
+
+func set_paint_color(color: Color) -> void:
+	_paint_color = color
+	if _primary_paint_material != null:
+		_configure_paint_material(_primary_paint_material, _paint_color)
+
+
+func set_secondary_paint_color(color: Color) -> void:
+	_secondary_paint_color = color
+	if _secondary_paint_material != null:
+		_configure_paint_material(_secondary_paint_material, _secondary_paint_color)
+
+
+func get_paint_color() -> Color:
+	return _paint_color
+
+
+func set_wheel_finish(finish_id: String) -> void:
+	_wheel_finish_id = finish_id
+	if _wheel_finish_surfaces.is_empty():
+		for wheel_variant in _wheel_visuals:
+			var spin := wheel_variant.get("spin", null) as Node
+			if spin != null:
+				_collect_wheel_finish_surfaces(spin)
+	var finish := StandardMaterial3D.new()
+	match finish_id:
+		"black":
+			finish.albedo_color = Color(0.018, 0.02, 0.024)
+			finish.metallic = 0.72
+			finish.roughness = 0.34
+		"bronze":
+			finish.albedo_color = Color(0.48, 0.27, 0.09)
+			finish.metallic = 0.95
+			finish.roughness = 0.24
+		"white":
+			finish.albedo_color = Color(0.88, 0.89, 0.90)
+			finish.metallic = 0.35
+			finish.roughness = 0.28
+		_:
+			_wheel_finish_id = "silver"
+			finish.albedo_color = Color(0.72, 0.75, 0.78)
+			finish.metallic = 1.0
+			finish.roughness = 0.16
+	for surface_variant in _wheel_finish_surfaces:
+		var mesh_instance := surface_variant.get("mesh", null) as MeshInstance3D
+		if mesh_instance != null:
+			mesh_instance.set_surface_override_material(int(surface_variant.get("surface", 0)), finish)
+
+
+func _collect_wheel_finish_surfaces(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		var node_name := String(mesh_instance.name).to_lower()
+		if mesh_instance.mesh != null and not node_name.contains("tyre") and not node_name.contains("tire"):
+			for surface_index in mesh_instance.mesh.get_surface_count():
+				var material := mesh_instance.get_surface_override_material(surface_index)
+				if material == null:
+					material = mesh_instance.mesh.surface_get_material(surface_index)
+				var material_name := String(material.resource_name).to_lower() if material != null else ""
+				if material_name.contains("tyre") or material_name.contains("tire") or material_name.contains("rubber") or material_name.contains("brake") or material_name.contains("disc") or material_name.contains("caliper"):
+					continue
+				if material is StandardMaterial3D:
+					var standard := material as StandardMaterial3D
+					if standard.roughness > 0.90 and standard.albedo_color.get_luminance() < 0.05:
+						continue
+				_wheel_finish_surfaces.append({"mesh": mesh_instance, "surface": surface_index})
+	for child in node.get_children():
+		_collect_wheel_finish_surfaces(child)
+
+
+func set_tuning_level(level: int) -> void:
+	_tuning_level = clampi(level, 0, TUNING_TORQUE_MULTIPLIERS.size() - 1)
+
+
+func get_tuning_level() -> int:
+	return _tuning_level
+
+
+func get_tuning_preview(level: int) -> Dictionary:
+	var safe_level := clampi(level, 0, TUNING_TORQUE_MULTIPLIERS.size() - 1)
+	var multiplier := TUNING_TORQUE_MULTIPLIERS[safe_level]
+	return {
+		"level": safe_level,
+		"power_hp": int(round(float(SPEC_POWER_HP) * multiplier)),
+		"torque_nm": int(round(float(SPEC_TORQUE_NM) * multiplier)),
+		"accel_0_100_s": SPEC_ACCEL_0_100_S / sqrt(multiplier),
+		"top_speed_kmh": SPEC_TOP_SPEED_KMH,
+		"performance_index": TUNING_PERFORMANCE_INDEX[safe_level],
+		"class_label": TUNING_CLASS_LABELS[safe_level],
+		"torque_multiplier": multiplier,
+	}
+
+
+func set_license_plate(value: String) -> void:
+	var cleaned := value.strip_edges().to_upper()
+	if cleaned.is_empty():
+		cleaned = "GT500-67"
+	_license_plate = cleaned.left(9)
+	for label in _plate_labels:
+		label.text = _license_plate
+
+
+func _create_license_plates() -> void:
+	if not _plate_labels.is_empty():
+		return
+	_add_license_plate(2.335, 0.0)
+	_add_license_plate(-2.335, PI)
+
+
+func _add_license_plate(z_position: float, yaw: float) -> void:
+	var root := Node3D.new()
+	root.name = "LicensePlateRear" if z_position > 0.0 else "LicensePlateFront"
+	root.position = Vector3(0.0, 0.58, z_position)
+	root.rotation.y = yaw
+	add_child(root)
+	var panel := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.54, 0.15, 0.018)
+	panel.mesh = box
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.94, 0.95, 0.96)
+	material.metallic = 0.08
+	material.roughness = 0.42
+	panel.material_override = material
+	root.add_child(panel)
+	var label := Label3D.new()
+	label.text = _license_plate
+	label.position = Vector3(0.0, 0.0, 0.016)
+	label.pixel_size = 0.00135
+	label.font_size = 96
+	label.modulate = Color(0.025, 0.035, 0.05)
+	label.outline_modulate = Color(0.94, 0.95, 0.96)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	root.add_child(label)
+	_plate_labels.append(label)
+
+
+func get_customization_state() -> Dictionary:
+	return {
+		"customization_0234": true,
+		"paint_color": _paint_color,
+		"wheel_finish": _wheel_finish_id,
+		"wheel_finish_surfaces": _wheel_finish_surfaces.size(),
+		"tuning_level": _tuning_level,
+		"tuning": get_tuning_preview(_tuning_level),
+		"license_plate": _license_plate,
+		"license_plate_labels": _plate_labels.size(),
+	}
 
 
 func _apply_model_materials(node: Node) -> void:
@@ -341,9 +506,11 @@ func _apply_model_materials(node: Node) -> void:
 				var material_name := String(material.resource_name)
 				var lower_name := material_name.to_lower()
 				if material_name == "Paint":
-					mesh_instance.set_surface_override_material(surface_index, _paint_material(Color(0.48, 0.025, 0.035)))
+					_primary_paint_material = _paint_material(_paint_color)
+					mesh_instance.set_surface_override_material(surface_index, _primary_paint_material)
 				elif material_name == "PaintSecondary":
-					mesh_instance.set_surface_override_material(surface_index, _paint_material(Color(0.94, 0.36, 0.05)))
+					_secondary_paint_material = _paint_material(_secondary_paint_color)
+					mesh_instance.set_surface_override_material(surface_index, _secondary_paint_material)
 				elif lower_name.contains("glass") or lower_name.contains("window"):
 					var glass := StandardMaterial3D.new()
 					glass.albedo_color = Color(0.025, 0.055, 0.078, 0.70)
@@ -440,7 +607,8 @@ func _collect_wheel_visuals(model: Node) -> void:
 
 
 func _create_fallback_visual() -> void:
-	var paint := _paint_material(Color(0.48, 0.025, 0.035))
+	var paint := _paint_material(_paint_color)
+	_primary_paint_material = paint
 	var dark := StandardMaterial3D.new()
 	dark.albedo_color = Color(0.025, 0.03, 0.04)
 	dark.metallic = 0.45
@@ -465,6 +633,7 @@ func _create_fallback_visual() -> void:
 		spin.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		pivot.add_child(spin)
 		var tyre := MeshInstance3D.new()
+		tyre.name = "FallbackTyre"
 		var cylinder := CylinderMesh.new()
 		cylinder.top_radius = WHEEL_RADIUS
 		cylinder.bottom_radius = WHEEL_RADIUS
@@ -861,13 +1030,14 @@ func _engine_torque_curve(rpm: float) -> float:
 		Vector2(6000.0, 0.78),
 		Vector2(6400.0, 0.66),
 	]
+	var tuning_multiplier := TUNING_TORQUE_MULTIPLIERS[_tuning_level]
 	if rpm <= points[0].x:
-		return 569.0 * points[0].y
+		return 569.0 * tuning_multiplier * points[0].y
 	for i in range(1, points.size()):
 		if rpm <= points[i].x:
 			var t := (rpm - points[i - 1].x) / maxf(points[i].x - points[i - 1].x, 1.0)
-			return 569.0 * lerpf(points[i - 1].y, points[i].y, t)
-	return 569.0 * points[points.size() - 1].y
+			return 569.0 * tuning_multiplier * lerpf(points[i - 1].y, points[i].y, t)
+	return 569.0 * tuning_multiplier * points[points.size() - 1].y
 
 
 func _pacejka(slip: float, stiffness: float, shape: float, curvature: float) -> float:
@@ -1491,6 +1661,11 @@ func get_spec_sheet() -> Dictionary:
 		"gearbox": SPEC_GEARBOX,
 		"drive": SPEC_DRIVE,
 		"gears": GEAR_RATIOS.size(),
+		"performance_index": TUNING_PERFORMANCE_INDEX[_tuning_level],
+		"class_label": TUNING_CLASS_LABELS[_tuning_level],
+		"tuning_level": _tuning_level,
+		"effective_power_hp": int(round(float(SPEC_POWER_HP) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
+		"effective_torque_nm": int(round(float(SPEC_TORQUE_NM) * TUNING_TORQUE_MULTIPLIERS[_tuning_level])),
 	}
 
 
@@ -1568,4 +1743,5 @@ func get_drive_base_state() -> Dictionary:
 	state["paint_reflections_ready"] = paint_reflections_ready
 	state["paint_roughness"] = paint_roughness
 	state["paint_clearcoat"] = paint_clearcoat
+	state["customization"] = get_customization_state()
 	return state

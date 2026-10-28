@@ -16,6 +16,7 @@ var _world_bounds := Rect2(520.0, -500.0, 980.0, 1000.0)
 var _player_position := Vector2(760.0, 330.0)
 var _player_forward := Vector2(0.0, -1.0)
 var _destination := Vector2.INF
+var _route_points: Array[Vector2] = []
 var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _data: Dictionary = {}
@@ -102,8 +103,18 @@ func set_destination(world_position: Vector2) -> void:
     queue_redraw()
 
 
+func set_route_path(points: Array) -> void:
+    _route_points.clear()
+    for point_variant in points:
+        _route_points.append(point_variant as Vector2)
+    if not _route_points.is_empty():
+        _destination = _route_points[_route_points.size() - 1]
+    queue_redraw()
+
+
 func clear_destination() -> void:
     _destination = Vector2.INF
+    _route_points.clear()
     queue_redraw()
 
 
@@ -119,6 +130,8 @@ func get_smoke_state() -> Dictionary:
         "pois": _pois.size(),
         "view_radius_m": VIEW_RADIUS_M,
         "has_destination": _destination != Vector2.INF,
+        "route_points": _route_points.size(),
+        "road_route_0234": true,
         "player_position": _player_position,
         "bounds": _world_bounds,
         "rect": get_global_rect(),
@@ -228,9 +241,19 @@ func _draw() -> void:
         _draw_clipped_line(a, b, Color(0.90, 0.94, 1.0, 0.24), 1.0)
 
     if _destination != Vector2.INF:
+        if _route_points.size() >= 2:
+            for i in range(1, _route_points.size()):
+                var from := _world_to_map(_route_points[i - 1])
+                var to := _world_to_map(_route_points[i])
+                if not _inside(from, -40.0) and not _inside(to, -40.0):
+                    continue
+                _draw_clipped_line(from, to, Color(0.08, 0.78, 1.0, 0.30), 7.0)
+                _draw_clipped_line(from, to, Color(0.18, 0.88, 1.0, 0.96), 3.0)
+        else:
+            var straight_destination := _world_to_map(_destination)
+            _draw_clipped_line(centre, straight_destination, Color(0.08, 0.78, 1.0, 0.34), 7.0)
+            _draw_clipped_line(centre, straight_destination, Color(0.18, 0.88, 1.0, 0.96), 3.0)
         var destination_point := _world_to_map(_destination)
-        _draw_clipped_line(centre, destination_point, Color(0.08, 0.78, 1.0, 0.34), 7.0)
-        _draw_clipped_line(centre, destination_point, Color(0.18, 0.88, 1.0, 0.96), 3.0)
         var marker := destination_point
         if not _inside(marker, 10.0):
             marker = centre + (marker - centre).normalized() * (radius - 13.0)
