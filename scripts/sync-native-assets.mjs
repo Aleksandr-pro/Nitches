@@ -38,6 +38,13 @@ const modelCopies = [
   ['src/assets/models/props/ornamental_shrub.glb', 'vegetation/ornamental_shrub.glb'],
 ];
 
+const uiCopies = [
+  ['src/assets/ui/menu_shelby.jpg', 'ui/menu_shelby.jpg'],
+  ['src/assets/ui/menu_richtown.jpg', 'ui/menu_richtown.jpg'],
+  ['src/assets/ui/menu_garage.jpg', 'ui/menu_garage.jpg'],
+  ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
+];
+
 const textureNames = [
   'user_grass.jpg', 'user_grass_normal.jpg',
   'user_sand_rippled.jpg', 'user_sand_rippled_normal.jpg', 'user_sand_beach_white.jpg',
@@ -118,6 +125,9 @@ await mkdir(destinationRoot, { recursive: true });
 let totalBytes = 0;
 for (const [source, destination, role] of modelCopies) {
   totalBytes += await copyOne(source, destination, role ?? '');
+}
+for (const [source, destination] of uiCopies) {
+  totalBytes += await copyOne(source, destination);
 }
 for (const name of textureNames) {
   totalBytes += await copyOne(

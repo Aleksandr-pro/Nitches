@@ -1,34 +1,64 @@
 class_name NativeMainMenu
 extends CanvasLayer
 
-## 0.2.29 main menu: the game no longer drops the player straight into
-## the world.  A tiled festival-style front end (home / garage /
-## profile / store / worlds) floats over a slow cinematic orbit of the
-## car; Play hands control to the driving HUD.  All layout is built in
-## code from the same Control toolkit as the HUD so phone touch and
-## desktop mouse behave identically.
+## 0.2.34 front end: the live 3D Shelby/RichTown scene stays visible
+## behind clean dark translucent panels.  Navigation is a single row
+## of icon tabs (no duplicated home tiles), PLAY is the one dominant
+## home action, and the garage exposes the real vehicle in Main's
+## separate studio scene with paint/wheel/tuning/plate controls.
+## The store tab is intentionally hidden until purchasable cars and
+## their real 3D models exist; empty "coming soon" tiles are gone.
 
 signal play_requested
 signal world_map_requested
 signal settings_changed(settings: Dictionary)
 signal camera_cycle_requested
 signal time_cycle_requested
+signal panel_changed(panel_index: int)
+signal garage_dragged(relative: Vector2)
+signal garage_zoomed(factor: float)
+signal customization_changed(customization: Dictionary)
+signal tuning_purchase_requested(level: int)
+signal profile_changed(player_name: String, avatar_id: String)
 
-const COL_BG := Color(0.008, 0.20, 0.22, 0.90)
-const COL_PANEL := Color(0.03, 0.14, 0.15, 0.97)
-const COL_PANEL_LIGHT := Color(0.05, 0.22, 0.23, 0.97)
-const COL_TEXT := Color(0.94, 0.98, 0.98)
-const COL_MUTED := Color(0.62, 0.78, 0.78)
-const COL_TEAL := Color(0.10, 0.72, 0.70)
-const COL_YELLOW := Color(0.98, 0.78, 0.10)
-const COL_MAGENTA := Color(0.88, 0.16, 0.55)
-const COL_LOCKED := Color(0.23, 0.30, 0.30)
+const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
+const MENU_SHELBY_TEXTURE: Texture2D = preload("res://assets/ui/menu_shelby.jpg")
+const MENU_RICHTOWN_TEXTURE: Texture2D = preload("res://assets/ui/menu_richtown.jpg")
+const MENU_GARAGE_TEXTURE: Texture2D = preload("res://assets/ui/menu_garage.jpg")
+const UI_CLICK_STREAM: AudioStream = preload("res://assets/audio/ui_click.wav")
+const BACKDROP_BLUR_SHADER: Shader = preload("res://shaders/backdrop_blur.gdshader")
+
+const COL_BG := Color(0.004, 0.008, 0.014, 0.16)
+const COL_PANEL := Color(0.008, 0.012, 0.020, 0.68)
+const COL_PANEL_LIGHT := Color(0.035, 0.045, 0.060, 0.78)
+const COL_TEXT := Color(0.96, 0.98, 1.0)
+const COL_MUTED := Color(0.72, 0.78, 0.85)
+const COL_ACCENT := Color(1.0, 0.58, 0.08)
+const COL_BORDER := Color(1.0, 1.0, 1.0, 0.22)
+const COL_LOCKED := Color(0.30, 0.34, 0.38)
+const PANEL_HOME := 0
+const PANEL_GARAGE := 1
+const PANEL_PROFILE := 2
+const PANEL_WORLDS := 3
+const PANEL_SETTINGS := 4
+const TUNING_COSTS: Array[int] = [0, 5000, 12000]
+const TUNING_MULTIPLIERS: Array[float] = [1.0, 1.08, 1.16]
+const TUNING_PI: Array[int] = [612, 648, 701]
+const TUNING_CLASSES: Array[String] = ["A", "A", "S1"]
+const TUNING_NAMES: Array[String] = ["СТОК", "SPORT", "TRACK"]
 
 var _root: Control
 var _built := false
 var _panels: Array[Control] = []
 var _tab_buttons: Array[Button] = []
+var _current_panel := 0
+var _panel_tween: Tween
+var _body_font: Font
+var _heading_font: Font
+var _click_player: AudioStreamPlayer
+var _backdrop_blur_material: ShaderMaterial
 var _car_name := ""
+var _specs: Dictionary = {}
 var _specs_bound := false
 var _profile_bound := false
 var _world_map_button: Button
@@ -58,19 +88,68 @@ var _version_taps := 0
 var _last_version_tap_msec := 0
 
 var _top_car_label: Label
+var _top_car_icon: NativeCarSilhouetteIcon
 var _top_credits_label: Label
 var _top_name_label: Label
-var _profile_tile_sub: Label
+var _top_avatar_label: Label
+var _home_class_label: Label
+
 var _p_name: Label
 var _p_level: Label
 var _p_credits: Label
 var _p_distance: Label
 var _p_top: Label
+var _p_drift: Label
 var _p_time: Label
+var _profile_avatar_label: Label
+var _nickname_edit: LineEdit
+var _xp_bar: ProgressBar
+var _xp_label: Label
+var _achievements_label: Label
+var _history_label: Label
+var _car_stats_label: Label
+var _profile_view: Dictionary = {}
+var _avatar_id := "wheel"
+
+var _customization: Dictionary = {
+    "paint_id": "red",
+    "paint_color": Color(0.48, 0.025, 0.035),
+    "wheel_finish": "silver",
+    "tuning_level": 0,
+    "tuning_owned_max": 0,
+    "license_plate": "GT500-67",
+}
+var _customization_bound := false
+var _preview_tuning_level := 0
+var _paint_buttons: Dictionary = {}
+var _wheel_finish_buttons: Dictionary = {}
+var _tuning_buttons: Array[Button] = []
+var _tuning_action_button: Button
+var _tuning_compare_label: Label
+var _garage_class_label: Label
+var _garage_power_label: Label
+var _garage_torque_label: Label
+var _garage_accel_label: Label
+var _garage_status_label: Label
+var _plate_edit: LineEdit
+var _garage_drag_surface: Control
+var _garage_drag_index := -2
+var _garage_mouse_dragging := false
+var _paint_options: Array[Dictionary] = [
+    {"id": "red", "name": "Candy Red", "color": Color(0.48, 0.025, 0.035)},
+    {"id": "blue", "name": "Acapulco Blue", "color": Color(0.03, 0.16, 0.55)},
+    {"id": "green", "name": "Highland Green", "color": Color(0.02, 0.30, 0.17)},
+    {"id": "yellow", "name": "Springtime Yellow", "color": Color(0.92, 0.64, 0.04)},
+    {"id": "silver", "name": "Silver Frost", "color": Color(0.62, 0.66, 0.70)},
+    {"id": "black", "name": "Raven Black", "color": Color(0.012, 0.014, 0.018)},
+]
 
 
 func _ready() -> void:
     layer = 6
+    _make_fonts()
+    _make_backdrop_material()
+    _setup_audio()
     _build_ui()
     _built = true
     hide_menu()
@@ -79,11 +158,13 @@ func _ready() -> void:
 func show_menu() -> void:
     if _root != null:
         _root.visible = true
+        if _current_panel >= 0 and _current_panel < _panels.size():
+            call_deferred("_animate_panel", _panels[_current_panel])
 
 
 func show_settings() -> void:
     show_menu()
-    _show_panel(5)
+    _show_panel(PANEL_SETTINGS)
 
 
 func hide_menu() -> void:
@@ -95,11 +176,16 @@ func is_menu_visible() -> bool:
     return _root != null and _root.visible
 
 
+func get_current_panel() -> int:
+    return _current_panel
+
+
 func get_smoke_state() -> Dictionary:
     return {
         "created": _built,
         "panels": _panels.size(),
         "tabs": _tab_buttons.size(),
+        "current_panel": _current_panel,
         "car_name": _car_name,
         "specs_bound": _specs_bound,
         "profile_bound": _profile_bound,
@@ -111,31 +197,93 @@ func get_smoke_state() -> Dictionary:
         "version_button_created": _version_button != null,
         "developer_mode": bool(_settings.get("developer_mode", false)),
         "control_type": String(_settings.get("control_type", "wheel")),
+        "clean_menu_0234": true,
+        "store_hidden_0234": true,
+        "icon_tabs_0234": _tab_buttons.size() == 5,
+        "car_icon_created": _top_car_icon != null,
+        "garage_drag_surface": _garage_drag_surface != null,
+        "customization_bound": _customization_bound,
+        "paint_options": _paint_buttons.size(),
+        "wheel_finish_options": _wheel_finish_buttons.size(),
+        "tuning_options": _tuning_buttons.size(),
+        "profile_xp_created": _xp_bar != null,
+        "click_sound_created": _click_player != null and UI_CLICK_STREAM != null,
+        "garage_status_created": _garage_status_label != null,
+        "backdrop_blur_0234": _backdrop_blur_material != null,
     }
 
 
 # --------------------------------------------------------------------- #
 # construction helpers
 # --------------------------------------------------------------------- #
-func _style(bg: Color, border: Color, radius: int = 10, border_w: int = 0) -> StyleBoxFlat:
+func _make_fonts() -> void:
+    var body := FontVariation.new()
+    body.base_font = ThemeDB.fallback_font
+    body.variation_embolden = 0.08
+    _body_font = body
+    var heading := FontVariation.new()
+    heading.base_font = ThemeDB.fallback_font
+    heading.variation_embolden = 0.62
+    heading.variation_transform = Transform2D(Vector2(1.0, 0.0), Vector2(-0.14, 1.0), Vector2.ZERO)
+    _heading_font = heading
+
+
+func _make_backdrop_material() -> void:
+    _backdrop_blur_material = ShaderMaterial.new()
+    _backdrop_blur_material.shader = BACKDROP_BLUR_SHADER
+    _backdrop_blur_material.set_shader_parameter("blur_lod", 2.6)
+
+
+func _add_backdrop_blur(panel: PanelContainer, tint: Color) -> void:
+    var blur_panel := Panel.new()
+    blur_panel.name = "BackdropBlur0234"
+    blur_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    blur_panel.add_theme_stylebox_override("panel", _style(tint, Color.TRANSPARENT, 7, 0))
+    blur_panel.material = _backdrop_blur_material
+    panel.add_child(blur_panel)
+
+
+func _setup_audio() -> void:
+    _click_player = AudioStreamPlayer.new()
+    _click_player.name = "MenuClickPlayer"
+    _click_player.stream = UI_CLICK_STREAM
+    _click_player.volume_db = -9.0
+    add_child(_click_player)
+
+
+func _play_click() -> void:
+    if _click_player != null and bool(_settings.get("sound_enabled", true)):
+        _click_player.stop()
+        _click_player.play()
+
+
+func _style(bg: Color, border: Color, radius: int = 8, border_w: int = 0) -> StyleBoxFlat:
     var sb := StyleBoxFlat.new()
     sb.bg_color = bg
-    sb.set_corner_radius_all(radius)
+    sb.corner_detail = 1
+    sb.corner_radius_top_left = 4
+    sb.corner_radius_top_right = maxi(radius * 2, 14)
+    sb.corner_radius_bottom_right = 4
+    sb.corner_radius_bottom_left = maxi(radius * 2, 14)
     if border_w > 0:
         sb.set_border_width_all(border_w)
         sb.border_color = border
-    sb.content_margin_left = 16.0
-    sb.content_margin_right = 16.0
-    sb.content_margin_top = 10.0
-    sb.content_margin_bottom = 10.0
+    sb.content_margin_left = 14.0
+    sb.content_margin_right = 14.0
+    sb.content_margin_top = 8.0
+    sb.content_margin_bottom = 8.0
     return sb
 
 
-func _label(parent: Node, text: String, size: int, color: Color = COL_TEXT) -> Label:
+func _label(parent: Node, text: String, size: int, color: Color = COL_TEXT, heading: bool = false) -> Label:
     var label := Label.new()
     label.text = text
+    label.add_theme_font_override("font", _heading_font if heading else _body_font)
     label.add_theme_font_size_override("font_size", size)
     label.add_theme_color_override("font_color", color)
+    label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
+    label.add_theme_constant_override("shadow_offset_x", 1)
+    label.add_theme_constant_override("shadow_offset_y", 1)
     label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     parent.add_child(label)
     return label
@@ -145,67 +293,137 @@ func _button(text: String, accent: Color, min_size: Vector2, font_size: int = 22
     var button := Button.new()
     button.text = text
     button.custom_minimum_size = min_size
+    button.focus_mode = Control.FOCUS_NONE
     button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    button.add_theme_font_override("font", _heading_font if font_size >= 17 else _body_font)
     button.add_theme_font_size_override("font_size", font_size)
     button.add_theme_color_override("font_color", COL_TEXT)
-    button.add_theme_color_override("font_hover_color", COL_TEXT)
-    button.add_theme_color_override("font_pressed_color", COL_TEXT)
+    button.add_theme_color_override("font_hover_color", Color.WHITE)
+    button.add_theme_color_override("font_pressed_color", Color.WHITE)
     button.add_theme_color_override("font_disabled_color", COL_MUTED)
-    button.add_theme_stylebox_override("normal", _style(COL_PANEL, accent, 10, 2))
-    button.add_theme_stylebox_override("hover", _style(COL_PANEL_LIGHT, accent, 10, 3))
-    button.add_theme_stylebox_override("pressed", _style(accent.darkened(0.25), accent, 10, 2))
-    button.add_theme_stylebox_override("disabled", _style(COL_PANEL, COL_LOCKED, 10, 2))
+    button.add_theme_stylebox_override("normal", _style(COL_PANEL, COL_BORDER, 7, 1))
+    button.add_theme_stylebox_override("hover", _style(COL_PANEL_LIGHT, accent, 7, 2))
+    button.add_theme_stylebox_override("pressed", _style(accent.darkened(0.18), accent.lightened(0.25), 7, 2))
+    button.add_theme_stylebox_override("disabled", _style(Color(0.01, 0.015, 0.02, 0.52), COL_LOCKED, 7, 1))
     button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+    button.pressed.connect(_play_click)
+    button.button_down.connect(func() -> void:
+        button.pivot_offset = button.size * 0.5
+        button.scale = Vector2.ONE * 0.97
+    )
+    button.button_up.connect(func() -> void:
+        button.scale = Vector2.ONE
+    )
     return button
+
+
+func _add_picture_layers(control: Control, texture: Texture2D, title: String, subtitle: String, title_size: int) -> void:
+    control.clip_contents = true
+    var image := TextureRect.new()
+    image.texture = texture
+    image.set_anchors_preset(Control.PRESET_FULL_RECT)
+    image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+    image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    control.add_child(image)
+    var shade := ColorRect.new()
+    shade.color = Color(0.0, 0.0, 0.0, 0.28)
+    shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+    shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    control.add_child(shade)
+    var labels := VBoxContainer.new()
+    labels.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+    labels.offset_left = 16.0
+    labels.offset_top = -78.0
+    labels.offset_right = 520.0
+    labels.offset_bottom = -12.0
+    labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    control.add_child(labels)
+    _label(labels, title, title_size, Color.WHITE, true)
+    _label(labels, subtitle, 13, Color(0.88, 0.93, 0.98))
+
+
+func _picture_button(texture: Texture2D, title: String, subtitle: String, min_size: Vector2, title_size: int = 34) -> Button:
+    var button := _button("", COL_ACCENT, min_size, title_size)
+    button.add_theme_stylebox_override("normal", _style(Color(0, 0, 0, 0.18), COL_BORDER, 8, 1))
+    button.add_theme_stylebox_override("hover", _style(Color(0, 0, 0, 0.10), COL_ACCENT, 8, 2))
+    button.add_theme_stylebox_override("pressed", _style(Color(0, 0, 0, 0.12), Color.WHITE, 8, 2))
+    _add_picture_layers(button, texture, title, subtitle, title_size)
+    return button
+
+
+func _picture_card(parent: Node, texture: Texture2D, title: String, subtitle: String, min_size: Vector2) -> Control:
+    var card := Control.new()
+    card.custom_minimum_size = min_size
+    card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    parent.add_child(card)
+    _add_picture_layers(card, texture, title, subtitle, 20)
+    return card
 
 
 func _tile(title: String, subtitle: String, accent: Color, min_size: Vector2, font_size: int = 30) -> Button:
     var button := _button(title, accent, min_size, font_size)
     var sub := Label.new()
     sub.text = subtitle
-    sub.add_theme_font_size_override("font_size", 15)
+    sub.add_theme_font_override("font", _body_font)
+    sub.add_theme_font_size_override("font_size", 14)
     sub.add_theme_color_override("font_color", COL_MUTED)
     sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
     sub.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-    sub.offset_left = 16.0
-    sub.offset_top = -34.0
+    sub.offset_left = 15.0
+    sub.offset_top = -32.0
     sub.offset_right = 420.0
-    sub.offset_bottom = -10.0
+    sub.offset_bottom = -9.0
     button.add_child(sub)
-    if title == "ПРОФИЛЬ":
-        _profile_tile_sub = sub
     return button
 
 
 func _panel_box(parent: Node) -> PanelContainer:
     var panel := PanelContainer.new()
-    panel.add_theme_stylebox_override("panel", _style(COL_PANEL, COL_TEAL.darkened(0.35), 12, 1))
+    panel.add_theme_stylebox_override("panel", _style(COL_PANEL, COL_BORDER, 7, 1))
     parent.add_child(panel)
+    _add_backdrop_blur(panel, COL_PANEL)
     return panel
 
 
-func _bar(parent: Node, caption: String, value: float, accent: Color) -> void:
+func _bar(parent: Node, caption: String, value: float, accent: Color) -> ProgressBar:
     var row := HBoxContainer.new()
     row.add_theme_constant_override("separation", 10)
     parent.add_child(row)
-    var cap := _label(row, caption, 15, COL_MUTED)
-    cap.custom_minimum_size = Vector2(150.0, 0.0)
+    var cap := _label(row, caption, 14, COL_MUTED)
+    cap.custom_minimum_size = Vector2(118.0, 0.0)
     var bar := ProgressBar.new()
     bar.min_value = 0.0
     bar.max_value = 10.0
     bar.value = value
     bar.show_percentage = false
-    bar.custom_minimum_size = Vector2(0.0, 14.0)
+    bar.custom_minimum_size = Vector2(0.0, 12.0)
     bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    bar.add_theme_stylebox_override("background", _style(Color(0.02, 0.08, 0.09, 0.95), COL_LOCKED, 4, 0))
-    bar.add_theme_stylebox_override("fill", _style(accent, accent, 4, 0))
+    bar.add_theme_stylebox_override("background", _style(Color(1, 1, 1, 0.10), COL_BORDER, 3, 0))
+    bar.add_theme_stylebox_override("fill", _style(accent, accent, 3, 0))
     row.add_child(bar)
-    _label(row, "%.1f" % value, 15, COL_TEXT)
+    _label(row, "%.1f" % value, 14, COL_TEXT)
+    return bar
 
 
-func _spec_row(grid: GridContainer, key_text: String, value_text: String) -> void:
-    _label(grid, key_text, 16, COL_MUTED)
-    _label(grid, value_text, 16, COL_TEXT)
+func _spec_row(grid: GridContainer, key_text: String, value_text: String) -> Label:
+    _label(grid, key_text, 14, COL_MUTED)
+    return _label(grid, value_text, 14, COL_TEXT)
+
+
+func _line_edit(text: String, placeholder: String) -> LineEdit:
+    var edit := LineEdit.new()
+    edit.text = text
+    edit.placeholder_text = placeholder
+    edit.custom_minimum_size = Vector2(0.0, 42.0)
+    edit.add_theme_font_override("font", _body_font)
+    edit.add_theme_font_size_override("font_size", 16)
+    edit.add_theme_color_override("font_color", COL_TEXT)
+    edit.add_theme_color_override("font_placeholder_color", COL_MUTED)
+    edit.add_theme_color_override("caret_color", COL_ACCENT)
+    edit.add_theme_stylebox_override("normal", _style(Color(0.0, 0.0, 0.0, 0.42), COL_BORDER, 6, 1))
+    edit.add_theme_stylebox_override("focus", _style(Color(0.02, 0.03, 0.04, 0.58), COL_ACCENT, 6, 2))
+    return edit
 
 
 # --------------------------------------------------------------------- #
@@ -215,63 +433,62 @@ func _build_ui() -> void:
     _root = Control.new()
     _root.name = "MainMenuRoot"
     _root.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _root.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(_root)
 
     var bg := ColorRect.new()
     bg.color = COL_BG
     bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+    bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _root.add_child(bg)
 
     var margin := MarginContainer.new()
     margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-    margin.add_theme_constant_override("margin_left", 26)
-    margin.add_theme_constant_override("margin_right", 26)
-    margin.add_theme_constant_override("margin_top", 18)
+    margin.add_theme_constant_override("margin_left", 24)
+    margin.add_theme_constant_override("margin_right", 24)
+    margin.add_theme_constant_override("margin_top", 16)
     margin.add_theme_constant_override("margin_bottom", 16)
     _root.add_child(margin)
 
     var column := VBoxContainer.new()
-    column.add_theme_constant_override("separation", 12)
+    column.add_theme_constant_override("separation", 10)
     margin.add_child(column)
 
     _build_top_bar(column)
     _build_tabs(column)
 
     var panels_root := Control.new()
+    panels_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
     panels_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
     column.add_child(panels_root)
 
     _panels.append(_build_home_panel(panels_root))
     _panels.append(_build_garage_panel(panels_root))
     _panels.append(_build_profile_panel(panels_root))
-    _panels.append(_build_store_panel(panels_root))
     _panels.append(_build_worlds_panel(panels_root))
     _panels.append(_build_settings_panel(panels_root))
-    _show_panel(0)
-
-    _label(column, "ИГРАТЬ — выезд в RichTown   •   Esc или ⏸ в игре — пауза и настройки", 14, COL_MUTED)
+    _show_panel(PANEL_HOME)
 
 
 func _build_top_bar(parent: Node) -> void:
     var bar := HBoxContainer.new()
-    bar.add_theme_constant_override("separation", 14)
+    bar.add_theme_constant_override("separation", 12)
     parent.add_child(bar)
 
-    var logo := _label(bar, "NITCHES HORIZON", 30, COL_YELLOW)
+    var logo := _label(bar, "NITCHES HORIZON", 29, Color.WHITE, true)
     logo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
     var car_chip := _panel_box(bar)
     var car_row := HBoxContainer.new()
     car_row.add_theme_constant_override("separation", 10)
     car_chip.add_child(car_row)
-    var swatch := ColorRect.new()
-    swatch.color = Color(0.62, 0.05, 0.08)
-    swatch.custom_minimum_size = Vector2(44.0, 44.0)
-    car_row.add_child(swatch)
+    _top_car_icon = CarSilhouetteScript.new()
+    _top_car_icon.custom_minimum_size = Vector2(78.0, 38.0)
+    car_row.add_child(_top_car_icon)
     var car_text := VBoxContainer.new()
     car_row.add_child(car_text)
-    _top_car_label = _label(car_text, "Shelby GT500 '67", 17, COL_TEXT)
-    _label(car_text, "365 л.с. • 569 Нм • ~207 км/ч", 13, COL_MUTED)
+    _top_car_label = _label(car_text, "Shelby GT500 '67", 16, COL_TEXT, true)
+    _label(car_text, "365 л.с. • 569 Нм • ~207 км/ч", 12, COL_MUTED)
 
     var spacer := Control.new()
     spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -283,210 +500,538 @@ func _build_top_bar(parent: Node) -> void:
     profile_chip.add_child(profile_row)
     var avatar := PanelContainer.new()
     avatar.custom_minimum_size = Vector2(44.0, 44.0)
-    avatar.add_theme_stylebox_override("panel", _style(COL_MAGENTA, COL_MAGENTA, 8, 0))
+    avatar.add_theme_stylebox_override("panel", _style(Color(0.95, 0.42, 0.04, 0.88), Color.WHITE, 7, 1))
     profile_row.add_child(avatar)
-    var initial := _label(avatar, "N", 22, COL_TEXT)
-    initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _top_avatar_label = _label(avatar, "◎", 23, COL_TEXT, true)
+    _top_avatar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _top_avatar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     var profile_text := VBoxContainer.new()
     profile_row.add_child(profile_text)
-    _top_name_label = _label(profile_text, "ИГРОК • ур. 1", 16, COL_TEXT)
-    _top_credits_label = _label(profile_text, "CR 35 000", 14, COL_YELLOW)
+    _top_name_label = _label(profile_text, "ИГРОК • ур. 1", 15, COL_TEXT, true)
+    _top_credits_label = _label(profile_text, "CR 35 000", 13, Color(1.0, 0.78, 0.42))
 
 
 func _build_tabs(parent: Node) -> void:
     var tabs := HBoxContainer.new()
-    tabs.add_theme_constant_override("separation", 8)
+    tabs.add_theme_constant_override("separation", 7)
     parent.add_child(tabs)
     var group := ButtonGroup.new()
-    var names := ["ГЛАВНАЯ", "ГАРАЖ", "ПРОФИЛЬ", "МАГАЗИН", "КАРТЫ И МИРЫ", "НАСТРОЙКИ"]
-    for i in names.size():
-        var tab := _button(names[i], COL_TEAL, Vector2(0.0, 46.0), 17)
+    var specs := [
+        ["⌂", "Главная"],
+        ["◎", "Гараж"],
+        ["◉", "Профиль"],
+        ["⌖", "Карты и миры"],
+        ["⚙", "Настройки"],
+    ]
+    for i in specs.size():
+        var tab := _button(String(specs[i][0]), COL_ACCENT, Vector2(58.0, 48.0), 25)
+        tab.tooltip_text = String(specs[i][1])
         tab.alignment = HORIZONTAL_ALIGNMENT_CENTER
         tab.toggle_mode = true
         tab.button_group = group
-        tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         tab.pressed.connect(_show_panel.bind(i))
         tabs.add_child(tab)
         _tab_buttons.append(tab)
+    var spacer := Control.new()
+    spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    tabs.add_child(spacer)
     _tab_buttons[0].button_pressed = true
 
 
 func _show_panel(index: int) -> void:
+    if index < 0 or index >= _panels.size():
+        return
+    _current_panel = index
     for i in _panels.size():
         _panels[i].visible = i == index
-    if index >= 0 and index < _tab_buttons.size() and not _tab_buttons[index].button_pressed:
+    if index < _tab_buttons.size() and not _tab_buttons[index].button_pressed:
         _tab_buttons[index].button_pressed = true
+    panel_changed.emit(index)
+    call_deferred("_animate_panel", _panels[index])
 
 
-func _new_panel(parent: Node) -> VBoxContainer:
+func _animate_panel(panel: Control) -> void:
+    if panel == null or not is_inside_tree():
+        return
+    if _panel_tween != null and _panel_tween.is_valid():
+        _panel_tween.kill()
+    panel.pivot_offset = panel.size * 0.5
+    panel.modulate.a = 0.0
+    panel.scale = Vector2.ONE * 0.985
+    _panel_tween = create_tween()
+    _panel_tween.set_parallel(true)
+    _panel_tween.tween_property(panel, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+    _panel_tween.tween_property(panel, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _new_panel(parent: Node, background_alpha: float = 0.46, use_backdrop_blur: bool = true) -> VBoxContainer:
     var panel := PanelContainer.new()
     panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-    panel.add_theme_stylebox_override("panel", _style(Color(0.02, 0.11, 0.12, 0.65), COL_TEAL.darkened(0.45), 12, 1))
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    panel.add_theme_stylebox_override("panel", _style(Color(0.004, 0.008, 0.014, background_alpha), Color(1, 1, 1, 0.10), 8, 1))
     parent.add_child(panel)
+    if use_backdrop_blur:
+        _add_backdrop_blur(panel, Color(0.004, 0.008, 0.014, background_alpha))
     var margin := MarginContainer.new()
-    margin.add_theme_constant_override("margin_left", 18)
-    margin.add_theme_constant_override("margin_right", 18)
-    margin.add_theme_constant_override("margin_top", 14)
-    margin.add_theme_constant_override("margin_bottom", 14)
+    margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    margin.add_theme_constant_override("margin_left", 16)
+    margin.add_theme_constant_override("margin_right", 16)
+    margin.add_theme_constant_override("margin_top", 12)
+    margin.add_theme_constant_override("margin_bottom", 12)
     panel.add_child(margin)
     var vbox := VBoxContainer.new()
-    vbox.add_theme_constant_override("separation", 12)
+    vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    vbox.add_theme_constant_override("separation", 10)
     margin.add_child(vbox)
     return vbox
 
 
 func _build_home_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
+    var vbox := _new_panel(parent, 0.10, false)
+    var spacer := Control.new()
+    spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    vbox.add_child(spacer)
 
-    var row1 := HBoxContainer.new()
-    row1.add_theme_constant_override("separation", 12)
-    row1.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(row1)
-    var play := _tile("ИГРАТЬ", "RichTown • свободная езда • день/закат/ночь", COL_YELLOW, Vector2(0.0, 170.0), 44)
-    play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    play.size_flags_stretch_ratio = 2.0
-    play.pressed.connect(func() -> void: play_requested.emit())
-    row1.add_child(play)
-    var garage := _tile("ГАРАЖ", "1 автомобиль • Shelby GT500", COL_MAGENTA, Vector2(0.0, 170.0), 30)
-    garage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    garage.pressed.connect(_show_panel.bind(1))
-    row1.add_child(garage)
-
-    var row2 := HBoxContainer.new()
-    row2.add_theme_constant_override("separation", 12)
-    row2.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(row2)
-    var profile := _tile("ПРОФИЛЬ", "ур. 1 • CR 35 000", COL_TEAL, Vector2(0.0, 130.0), 26)
-    profile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    profile.pressed.connect(_show_panel.bind(2))
-    row2.add_child(profile)
-    var store := _tile("МАГАЗИН", "скоро открытие", COL_TEAL.darkened(0.2), Vector2(0.0, 130.0), 26)
-    store.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    store.pressed.connect(_show_panel.bind(3))
-    row2.add_child(store)
-    var worlds := _tile("КАРТЫ И МИРЫ", "RichTown доступен", COL_TEAL, Vector2(0.0, 130.0), 26)
-    worlds.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    worlds.pressed.connect(_show_panel.bind(4))
-    row2.add_child(worlds)
-    return vbox.get_parent().get_parent() as Control
-
-
-func _build_garage_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
-    _label(vbox, "ГАРАЖ", 28, COL_TEXT)
-    var columns := HBoxContainer.new()
-    columns.add_theme_constant_override("separation", 18)
-    columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(columns)
+    var bottom := HBoxContainer.new()
+    bottom.add_theme_constant_override("separation", 14)
+    vbox.add_child(bottom)
 
     var left := VBoxContainer.new()
     left.add_theme_constant_override("separation", 8)
     left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     left.size_flags_stretch_ratio = 1.55
-    columns.add_child(left)
-    _label(left, "Shelby GT500 (1967)", 30, COL_YELLOW)
-    _label(left, "КЛАСС A • ИНДЕКС 612 • МАСЛКАР", 15, COL_MAGENTA)
-    var grid := GridContainer.new()
-    grid.columns = 2
-    grid.add_theme_constant_override("h_separation", 18)
-    grid.add_theme_constant_override("v_separation", 4)
-    left.add_child(grid)
-    _spec_row(grid, "Двигатель", "V8, 7.0 л (428 cid)")
-    _spec_row(grid, "Мощность", "365 л.с. (SAE gross)")
-    _spec_row(grid, "Крутящий момент", "569 Нм при 3200 об/мин")
-    _spec_row(grid, "Разгон 0–100 км/ч", "6.0 с")
-    _spec_row(grid, "Макс. скорость", "~207 км/ч")
-    _spec_row(grid, "Коробка передач", "4-ступенчатая механика")
-    _spec_row(grid, "Привод", "задний")
-    _label(left, "", 8)
-    _bar(left, "Скорость", 6.4, COL_TEAL)
-    _bar(left, "Разгон", 6.8, COL_YELLOW)
-    _bar(left, "Управление", 5.2, COL_MAGENTA)
-    _bar(left, "Дрифт", 7.5, Color(0.95, 0.45, 0.15))
+    bottom.add_child(left)
+    _label(left, "СВОБОДНЫЕ ДОРОГИ RICHTOWN", 16, Color(1.0, 0.78, 0.48), true)
+    var play := _picture_button(MENU_SHELBY_TEXTURE, "▶  ИГРАТЬ", "RichTown • Shelby GT500 • свободная езда", Vector2(0.0, 172.0), 46)
+    play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    play.pressed.connect(func() -> void: play_requested.emit())
+    left.add_child(play)
 
     var right := VBoxContainer.new()
     right.add_theme_constant_override("separation", 10)
     right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    columns.add_child(right)
-    _label(right, "МОИ АВТОМОБИЛИ (1)", 18, COL_TEXT)
-    var owned := _button("Shelby GT500 '67 — выбран", COL_YELLOW, Vector2(0.0, 64.0), 18)
-    owned.disabled = true
+    bottom.add_child(right)
+    _picture_card(right, MENU_RICHTOWN_TEXTURE, "RICHTOWN", "город • побережье • Остров-Пальма", Vector2(0.0, 104.0))
+    var car_card := _picture_card(right, MENU_GARAGE_TEXTURE, "SHELBY GT500", "класс A • индекс 612", Vector2(0.0, 104.0))
+    _home_class_label = _label(car_card, "A 612", 18, Color.WHITE, true)
+    _home_class_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+    _home_class_label.offset_left = -86.0
+    _home_class_label.offset_top = 10.0
+    _home_class_label.offset_right = -12.0
+    _home_class_label.offset_bottom = 38.0
+    _home_class_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    return vbox.get_parent().get_parent() as Control
+
+
+func _build_garage_panel(parent: Node) -> Control:
+    var vbox := _new_panel(parent, 0.16, false)
+    var header := HBoxContainer.new()
+    header.add_theme_constant_override("separation", 14)
+    vbox.add_child(header)
+    _label(header, "ГАРАЖ", 27, Color.WHITE, true)
+    _garage_class_label = _label(header, "КЛАСС A • ИНДЕКС 612", 15, Color(1.0, 0.76, 0.44), true)
+    _garage_class_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _garage_status_label = _label(header, "", 12, Color(1.0, 0.78, 0.48))
+    _garage_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _garage_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    _garage_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+    var columns := HBoxContainer.new()
+    columns.add_theme_constant_override("separation", 12)
+    columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(columns)
+
+    var left_panel := _panel_box(columns)
+    left_panel.custom_minimum_size = Vector2(348.0, 0.0)
+    left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    left_panel.size_flags_stretch_ratio = 1.05
+    var left := VBoxContainer.new()
+    left.add_theme_constant_override("separation", 7)
+    left_panel.add_child(left)
+    _label(left, "Shelby GT500 (1967)", 25, Color.WHITE, true)
+    _label(left, "МАСЛКАР • ЗАДНИЙ ПРИВОД", 12, COL_MUTED, true)
+    var grid := GridContainer.new()
+    grid.columns = 2
+    grid.add_theme_constant_override("h_separation", 14)
+    grid.add_theme_constant_override("v_separation", 3)
+    left.add_child(grid)
+    _spec_row(grid, "Двигатель", "V8, 7.0 л (428 cid)")
+    _garage_power_label = _spec_row(grid, "Мощность", "365 л.с. (SAE gross)")
+    _garage_torque_label = _spec_row(grid, "Момент", "569 Нм при 3200")
+    _garage_accel_label = _spec_row(grid, "0–100 км/ч", "6.0 с")
+    _spec_row(grid, "Макс. скорость", "~207 км/ч")
+    _spec_row(grid, "Коробка", "4-ступенчатая механика")
+    _spec_row(grid, "Привод", "задний")
+    _bar(left, "Скорость", 6.4, COL_ACCENT)
+    _bar(left, "Разгон", 6.8, COL_ACCENT)
+    _bar(left, "Управление", 5.2, COL_ACCENT)
+    _bar(left, "Дрифт", 7.5, COL_ACCENT)
+
+    _garage_drag_surface = Control.new()
+    _garage_drag_surface.name = "GarageDragSurface"
+    _garage_drag_surface.mouse_filter = Control.MOUSE_FILTER_STOP
+    _garage_drag_surface.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _garage_drag_surface.size_flags_stretch_ratio = 1.45
+    _garage_drag_surface.gui_input.connect(_on_garage_drag_input)
+    columns.add_child(_garage_drag_surface)
+    var drag_hint := _label(_garage_drag_surface, "↔  ВРАЩАЙТЕ МАШИНУ", 13, Color(1, 1, 1, 0.78), true)
+    drag_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+    drag_hint.offset_left = -110.0
+    drag_hint.offset_top = -36.0
+    drag_hint.offset_right = 110.0
+    drag_hint.offset_bottom = -8.0
+    drag_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+    var right_panel := _panel_box(columns)
+    right_panel.custom_minimum_size = Vector2(330.0, 0.0)
+    right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var scroll := ScrollContainer.new()
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    right_panel.add_child(scroll)
+    var right := VBoxContainer.new()
+    right.add_theme_constant_override("separation", 8)
+    right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.add_child(right)
+
+    _label(right, "МОИ АВТОМОБИЛИ (1)", 15, Color.WHITE, true)
+    var owned := _picture_button(MENU_GARAGE_TEXTURE, "Shelby GT500 '67", "выбран • A 612", Vector2(0.0, 82.0), 18)
     right.add_child(owned)
-    var change := _button("СМЕНИТЬ АВТО", COL_LOCKED, Vector2(0.0, 54.0), 17)
-    change.disabled = true
-    right.add_child(change)
-    _label(right, "Новые автомобили появятся в магазине.", 14, COL_MUTED)
-    var spacer := Control.new()
-    spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    right.add_child(spacer)
-    var drive := _button("ИГРАТЬ НА ЭТОМ АВТО", COL_MAGENTA, Vector2(0.0, 62.0), 20)
+
+    _label(right, "ЦВЕТ КУЗОВА", 13, COL_MUTED, true)
+    var paint_row := HBoxContainer.new()
+    paint_row.add_theme_constant_override("separation", 6)
+    right.add_child(paint_row)
+    for option in _paint_options:
+        var paint_id := String(option.get("id", "red"))
+        var paint_color: Color = option.get("color", Color.RED)
+        var swatch := _button("", COL_ACCENT, Vector2(38.0, 38.0), 15)
+        swatch.tooltip_text = String(option.get("name", paint_id))
+        swatch.add_theme_stylebox_override("normal", _style(paint_color, COL_BORDER, 6, 1))
+        swatch.add_theme_stylebox_override("hover", _style(paint_color.lightened(0.12), Color.WHITE, 6, 2))
+        swatch.add_theme_stylebox_override("pressed", _style(paint_color.lightened(0.20), COL_ACCENT, 6, 2))
+        swatch.pressed.connect(func() -> void:
+            _customization["paint_id"] = paint_id
+            _customization["paint_color"] = paint_color
+            _refresh_customization_controls()
+            customization_changed.emit(_customization.duplicate(true))
+        )
+        paint_row.add_child(swatch)
+        _paint_buttons[paint_id] = swatch
+
+    _label(right, "КОЛЁСА", 13, COL_MUTED, true)
+    var wheel_row := GridContainer.new()
+    wheel_row.columns = 2
+    wheel_row.add_theme_constant_override("h_separation", 6)
+    wheel_row.add_theme_constant_override("v_separation", 6)
+    right.add_child(wheel_row)
+    for spec in [["silver", "Серебро"], ["black", "Чёрные"], ["bronze", "Бронза"], ["white", "Белые"]]:
+        var finish_id := String(spec[0])
+        var finish_button := _button(String(spec[1]), COL_ACCENT, Vector2(0.0, 38.0), 13)
+        finish_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        finish_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        finish_button.pressed.connect(func() -> void:
+            _customization["wheel_finish"] = finish_id
+            _refresh_customization_controls()
+            customization_changed.emit(_customization.duplicate(true))
+        )
+        wheel_row.add_child(finish_button)
+        _wheel_finish_buttons[finish_id] = finish_button
+
+    _label(right, "ТЮНИНГ • ДО / ПОСЛЕ", 13, COL_MUTED, true)
+    for level in 3:
+        var tuning_button := _button("", COL_ACCENT, Vector2(0.0, 42.0), 13)
+        tuning_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        tuning_button.pressed.connect(func() -> void:
+            _preview_tuning_level = level
+            _refresh_customization_controls()
+        )
+        right.add_child(tuning_button)
+        _tuning_buttons.append(tuning_button)
+    _tuning_compare_label = _label(right, "", 12, COL_TEXT)
+    _tuning_compare_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _tuning_action_button = _button("УСТАНОВИТЬ", COL_ACCENT, Vector2(0.0, 44.0), 14)
+    _tuning_action_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _tuning_action_button.pressed.connect(_on_tuning_action_pressed)
+    right.add_child(_tuning_action_button)
+
+    _label(right, "НОМЕР", 13, COL_MUTED, true)
+    var plate_row := HBoxContainer.new()
+    plate_row.add_theme_constant_override("separation", 6)
+    right.add_child(plate_row)
+    _plate_edit = _line_edit("GT500-67", "НОМЕР")
+    _plate_edit.max_length = 9
+    _plate_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _plate_edit.text_submitted.connect(func(_value: String) -> void: _apply_plate_edit())
+    plate_row.add_child(_plate_edit)
+    var plate_apply := _button("OK", COL_ACCENT, Vector2(54.0, 42.0), 14)
+    plate_apply.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    plate_apply.pressed.connect(_apply_plate_edit)
+    plate_row.add_child(plate_apply)
+
+    var drive := _button("▶  ИГРАТЬ НА ЭТОМ АВТО", COL_ACCENT, Vector2(0.0, 58.0), 19)
     drive.alignment = HORIZONTAL_ALIGNMENT_CENTER
     drive.pressed.connect(func() -> void: play_requested.emit())
-    right.add_child(drive)
+    vbox.add_child(drive)
+    _refresh_customization_controls()
     return vbox.get_parent().get_parent() as Control
+
+
+func _on_garage_drag_input(event: InputEvent) -> void:
+    if event is InputEventScreenTouch:
+        var touch := event as InputEventScreenTouch
+        if touch.pressed:
+            _garage_drag_index = touch.index
+        elif touch.index == _garage_drag_index:
+            _garage_drag_index = -2
+        _garage_drag_surface.accept_event()
+    elif event is InputEventScreenDrag:
+        var drag := event as InputEventScreenDrag
+        if drag.index == _garage_drag_index:
+            garage_dragged.emit(drag.relative)
+            _garage_drag_surface.accept_event()
+    elif event is InputEventMouseButton:
+        var button := event as InputEventMouseButton
+        if button.button_index == MOUSE_BUTTON_LEFT:
+            _garage_mouse_dragging = button.pressed
+            _garage_drag_surface.accept_event()
+        elif button.pressed and button.button_index == MOUSE_BUTTON_WHEEL_UP:
+            garage_zoomed.emit(0.90)
+            _garage_drag_surface.accept_event()
+        elif button.pressed and button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+            garage_zoomed.emit(1.10)
+            _garage_drag_surface.accept_event()
+    elif event is InputEventMouseMotion and _garage_mouse_dragging:
+        garage_dragged.emit((event as InputEventMouseMotion).relative)
+        _garage_drag_surface.accept_event()
+
+
+func _apply_plate_edit() -> void:
+    if _plate_edit == null:
+        return
+    _customization["license_plate"] = _plate_edit.text.strip_edges().to_upper()
+    _refresh_customization_controls()
+    customization_changed.emit(_customization.duplicate(true))
+
+
+func _on_tuning_action_pressed() -> void:
+    var owned_max := int(_customization.get("tuning_owned_max", 0))
+    if _preview_tuning_level <= owned_max:
+        _customization["tuning_level"] = _preview_tuning_level
+        _refresh_customization_controls()
+        customization_changed.emit(_customization.duplicate(true))
+    else:
+        tuning_purchase_requested.emit(_preview_tuning_level)
+
+
+func _tuning_values(level: int) -> Dictionary:
+    var safe := clampi(level, 0, 2)
+    var base_power := float(_specs.get("power_hp", 365))
+    var base_torque := float(_specs.get("torque_nm", 569))
+    var multiplier := TUNING_MULTIPLIERS[safe]
+    return {
+        "power": int(round(base_power * multiplier)),
+        "torque": int(round(base_torque * multiplier)),
+        "accel": 6.0 / sqrt(multiplier),
+        "pi": TUNING_PI[safe],
+        "class": TUNING_CLASSES[safe],
+    }
+
+
+func _refresh_customization_controls() -> void:
+    var paint_id := String(_customization.get("paint_id", "red"))
+    for key in _paint_buttons.keys():
+        var swatch := _paint_buttons[key] as Button
+        swatch.text = "✓" if String(key) == paint_id else ""
+    var finish_id := String(_customization.get("wheel_finish", "silver"))
+    for key in _wheel_finish_buttons.keys():
+        var button := _wheel_finish_buttons[key] as Button
+        button.modulate = Color(1.0, 0.78, 0.48) if String(key) == finish_id else Color.WHITE
+    if _plate_edit != null and not _plate_edit.has_focus():
+        _plate_edit.text = String(_customization.get("license_plate", "GT500-67"))
+    if _top_car_icon != null:
+        _top_car_icon.set_paint_color(_customization.get("paint_color", Color(0.48, 0.025, 0.035)))
+
+    var current_level := int(_customization.get("tuning_level", 0))
+    var owned_max := int(_customization.get("tuning_owned_max", 0))
+    var current := _tuning_values(current_level)
+    var preview := _tuning_values(_preview_tuning_level)
+    for level in _tuning_buttons.size():
+        var values := _tuning_values(level)
+        var suffix := " • выбран" if level == current_level else (" • открыт" if level <= owned_max else " • CR %s" % _fmt_int(TUNING_COSTS[level]))
+        _tuning_buttons[level].text = "%s • %s %d • %d л.с.%s" % [TUNING_NAMES[level], String(values.get("class", "A")), int(values.get("pi", 612)), int(values.get("power", 365)), suffix]
+        _tuning_buttons[level].modulate = Color(1.0, 0.80, 0.52) if level == _preview_tuning_level else Color.WHITE
+    if _tuning_compare_label != null:
+        _tuning_compare_label.text = "ДО: %d л.с. • %d Нм • %.1f с\nПОСЛЕ: %d л.с. • %d Нм • %.1f с\nСРАВНЕНИЕ: Shelby %s %d против эталона Concept GT S1 720 (420 л.с. • 5.4 с • 225 км/ч)" % [
+            int(current.get("power", 365)), int(current.get("torque", 569)), float(current.get("accel", 6.0)),
+            int(preview.get("power", 365)), int(preview.get("torque", 569)), float(preview.get("accel", 6.0)),
+            String(preview.get("class", "A")), int(preview.get("pi", 612)),
+        ]
+    if _tuning_action_button != null:
+        if _preview_tuning_level == current_level:
+            _tuning_action_button.text = "%s УЖЕ ВЫБРАН" % TUNING_NAMES[_preview_tuning_level]
+            _tuning_action_button.disabled = true
+        elif _preview_tuning_level <= owned_max:
+            _tuning_action_button.text = "ВЫБРАТЬ %s" % TUNING_NAMES[_preview_tuning_level]
+            _tuning_action_button.disabled = false
+        else:
+            _tuning_action_button.text = "КУПИТЬ %s • CR %s" % [TUNING_NAMES[_preview_tuning_level], _fmt_int(TUNING_COSTS[_preview_tuning_level])]
+            _tuning_action_button.disabled = false
+    _refresh_garage_specs()
+
+
+func _refresh_garage_specs() -> void:
+    var values := _tuning_values(int(_customization.get("tuning_level", 0)))
+    var class_text := "КЛАСС %s • ИНДЕКС %d" % [String(values.get("class", "A")), int(values.get("pi", 612))]
+    if _garage_class_label != null:
+        _garage_class_label.text = class_text
+    if _home_class_label != null:
+        _home_class_label.text = "%s %d" % [String(values.get("class", "A")), int(values.get("pi", 612))]
+    if _garage_power_label != null:
+        _garage_power_label.text = "%d л.с.%s" % [int(values.get("power", 365)), " (SAE gross)" if int(_customization.get("tuning_level", 0)) == 0 else " (тюнинг)"]
+    if _garage_torque_label != null:
+        _garage_torque_label.text = "%d Нм при 3200" % int(values.get("torque", 569))
+    if _garage_accel_label != null:
+        _garage_accel_label.text = "%.1f с" % float(values.get("accel", 6.0))
+
+
+func set_garage_status(text: String) -> void:
+    if _garage_status_label != null:
+        _garage_status_label.text = text
+
+
+func bind_customization(customization: Dictionary) -> void:
+    for key in customization.keys():
+        _customization[key] = customization[key]
+    _preview_tuning_level = int(_customization.get("tuning_level", 0))
+    _customization_bound = true
+    set_garage_status("")
+    _refresh_customization_controls()
+
+
+func _avatar_glyph(avatar_id: String) -> String:
+    match avatar_id:
+        "star":
+            return "★"
+        "flag":
+            return "⚑"
+        "helmet":
+            return "♞"
+        _:
+            return "◎"
 
 
 func _build_profile_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
-    _label(vbox, "ПРОФИЛЬ ВОДИТЕЛЯ", 28, COL_TEXT)
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 20)
-    vbox.add_child(row)
+    var vbox := _new_panel(parent, 0.52)
+    _label(vbox, "ПРОФИЛЬ ВОДИТЕЛЯ", 27, Color.WHITE, true)
+    var columns := HBoxContainer.new()
+    columns.add_theme_constant_override("separation", 14)
+    columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(columns)
+
+    var left_panel := _panel_box(columns)
+    left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var left_scroll := ScrollContainer.new()
+    left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    left_panel.add_child(left_scroll)
+    var left := VBoxContainer.new()
+    left.add_theme_constant_override("separation", 8)
+    left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    left_scroll.add_child(left)
     var avatar := PanelContainer.new()
-    avatar.custom_minimum_size = Vector2(150.0, 150.0)
-    avatar.add_theme_stylebox_override("panel", _style(COL_MAGENTA, COL_MAGENTA, 14, 0))
-    row.add_child(avatar)
-    var initial := _label(avatar, "N", 64, COL_TEXT)
-    initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    var stats := VBoxContainer.new()
-    stats.add_theme_constant_override("separation", 6)
-    row.add_child(stats)
-    _p_name = _label(stats, "ИГРОК", 26, COL_YELLOW)
-    _p_level = _label(stats, "Уровень: 1", 18, COL_TEXT)
-    _p_credits = _label(stats, "Кредиты: CR 35 000", 18, COL_TEXT)
-    _p_distance = _label(stats, "Пробег: 0.0 км", 18, COL_TEXT)
-    _p_top = _label(stats, "Рекорд скорости: 0 км/ч", 18, COL_TEXT)
-    _p_time = _label(stats, "Время за рулём: 0 мин", 18, COL_TEXT)
-    _label(stats, "Автомобилей в гараже: 1", 18, COL_TEXT)
-    _label(vbox, "Прогресс сохраняется автоматически: пробег, рекорды и кредиты переживут перезапуск.", 14, COL_MUTED)
-    return vbox.get_parent().get_parent() as Control
+    avatar.custom_minimum_size = Vector2(118.0, 118.0)
+    avatar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    avatar.add_theme_stylebox_override("panel", _style(Color(0.95, 0.42, 0.04, 0.88), Color.WHITE, 8, 1))
+    left.add_child(avatar)
+    _profile_avatar_label = _label(avatar, "◎", 54, COL_TEXT, true)
+    _profile_avatar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _profile_avatar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    var avatar_row := HBoxContainer.new()
+    avatar_row.add_theme_constant_override("separation", 6)
+    avatar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    left.add_child(avatar_row)
+    for spec in [["wheel", "◎"], ["star", "★"], ["flag", "⚑"], ["helmet", "♞"]]:
+        var avatar_id := String(spec[0])
+        var avatar_button := _button(String(spec[1]), COL_ACCENT, Vector2(48.0, 42.0), 20)
+        avatar_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        avatar_button.pressed.connect(func() -> void:
+            _avatar_id = avatar_id
+            profile_changed.emit(_nickname_edit.text.strip_edges(), _avatar_id)
+        )
+        avatar_row.add_child(avatar_button)
+    _nickname_edit = _line_edit("ИГРОК", "НИК")
+    _nickname_edit.max_length = 18
+    left.add_child(_nickname_edit)
+    var save_name := _button("СОХРАНИТЬ НИК И АВАТАР", COL_ACCENT, Vector2(0.0, 42.0), 13)
+    save_name.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    save_name.pressed.connect(func() -> void: profile_changed.emit(_nickname_edit.text.strip_edges(), _avatar_id))
+    left.add_child(save_name)
+    _p_name = _label(left, "ИГРОК", 24, Color.WHITE, true)
+    _p_level = _label(left, "Уровень: 1", 16, COL_TEXT)
+    _xp_bar = ProgressBar.new()
+    _xp_bar.min_value = 0.0
+    _xp_bar.max_value = 1.0
+    _xp_bar.value = 0.0
+    _xp_bar.show_percentage = false
+    _xp_bar.custom_minimum_size = Vector2(0.0, 14.0)
+    _xp_bar.add_theme_stylebox_override("background", _style(Color(1, 1, 1, 0.10), COL_BORDER, 3, 0))
+    _xp_bar.add_theme_stylebox_override("fill", _style(COL_ACCENT, COL_ACCENT, 3, 0))
+    left.add_child(_xp_bar)
+    _xp_label = _label(left, "XP: 0% до следующего уровня", 12, COL_MUTED)
+    _p_credits = _label(left, "Кредиты: CR 35 000", 16, COL_TEXT)
+    _p_distance = _label(left, "Пробег: 0.0 км", 16, COL_TEXT)
+    _p_top = _label(left, "Рекорд скорости: 0 км/ч", 16, COL_TEXT)
+    _p_drift = _label(left, "Рекорд дрифта: 0°", 16, COL_TEXT)
+    _p_time = _label(left, "Время за рулём: 0 мин", 16, COL_TEXT)
 
-
-func _build_store_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
-    _label(vbox, "МАГАЗИН", 28, COL_TEXT)
-    _label(vbox, "Скоро открытие. Автомобили, тюнинг и винилы уже в пути в RichTown.", 17, COL_MUTED)
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 12)
-    vbox.add_child(row)
-    for caption in ["АВТОМОБИЛИ", "ТЮНИНГ", "ВИНИЛЫ"]:
-        var locked := _tile(caption, "закрыто • скоро", COL_LOCKED, Vector2(0.0, 130.0), 24)
-        locked.disabled = true
-        locked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        row.add_child(locked)
+    var right := VBoxContainer.new()
+    right.add_theme_constant_override("separation", 12)
+    right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    right.size_flags_stretch_ratio = 1.35
+    columns.add_child(right)
+    var achievements_panel := _panel_box(right)
+    var achievements_box := VBoxContainer.new()
+    achievements_panel.add_child(achievements_box)
+    _label(achievements_box, "ДОСТИЖЕНИЯ И НАГРАДЫ", 15, Color.WHITE, true)
+    _achievements_label = _label(achievements_box, "—", 13, COL_TEXT)
+    _achievements_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var history_panel := _panel_box(right)
+    var history_box := VBoxContainer.new()
+    history_panel.add_child(history_box)
+    _label(history_box, "ИСТОРИЯ ЗАЕЗДОВ", 15, Color.WHITE, true)
+    _history_label = _label(history_box, "Пока нет завершённых заездов.", 13, COL_TEXT)
+    _history_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var car_panel := _panel_box(right)
+    var car_box := VBoxContainer.new()
+    car_panel.add_child(car_box)
+    _label(car_box, "СТАТИСТИКА ПО МАШИНАМ", 15, Color.WHITE, true)
+    _car_stats_label = _label(car_box, "Shelby GT500 — 0.0 км", 13, COL_TEXT)
+    _car_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     return vbox.get_parent().get_parent() as Control
 
 
 func _build_worlds_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
-    _label(vbox, "КАРТЫ И МИРЫ", 28, COL_TEXT)
+    var vbox := _new_panel(parent, 0.30)
+    _label(vbox, "КАРТЫ И МИРЫ", 27, Color.WHITE, true)
     var row := HBoxContainer.new()
     row.add_theme_constant_override("separation", 12)
     row.size_flags_vertical = Control.SIZE_EXPAND_FILL
     vbox.add_child(row)
-    var richtown := _tile("RICHTOWN", "открытый город • побережье • остров-Пальма", COL_YELLOW, Vector2(0.0, 160.0), 30)
+    var richtown := _picture_button(MENU_RICHTOWN_TEXTURE, "RICHTOWN", "открытый город • побережье • Остров-Пальма", Vector2(0.0, 230.0), 34)
     richtown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    richtown.size_flags_stretch_ratio = 1.4
+    richtown.size_flags_stretch_ratio = 1.7
     richtown.pressed.connect(func() -> void: play_requested.emit())
     row.add_child(richtown)
+    var locked_column := VBoxContainer.new()
+    locked_column.add_theme_constant_override("separation", 12)
+    locked_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.add_child(locked_column)
     for caption in ["СЕВЕРНЫЕ ГОРЫ", "ПУСТЫННЫЙ КАНЬОН"]:
-        var locked := _tile(caption, "закрыто • скоро", COL_LOCKED, Vector2(0.0, 160.0), 24)
+        var locked := _tile(caption, "закрыто", COL_LOCKED, Vector2(0.0, 108.0), 21)
         locked.disabled = true
         locked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        row.add_child(locked)
-    _world_map_button = _button("ОТКРЫТЬ КАРТУ RICHTOWN", COL_TEAL, Vector2(0.0, 58.0), 20)
+        locked_column.add_child(locked)
+    _world_map_button = _button("⌖  ОТКРЫТЬ КАРТУ RICHTOWN", COL_ACCENT, Vector2(0.0, 56.0), 18)
     _world_map_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _world_map_button.pressed.connect(func() -> void: world_map_requested.emit())
     vbox.add_child(_world_map_button)
@@ -497,7 +1042,7 @@ func _slider_row(parent: Node, key: String, caption: String, minimum: float, max
     var row := HBoxContainer.new()
     row.add_theme_constant_override("separation", 10)
     parent.add_child(row)
-    var cap := _label(row, caption, 15, COL_MUTED)
+    var cap := _label(row, caption, 14, COL_MUTED)
     cap.custom_minimum_size = Vector2(190.0, 0.0)
     cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     var slider := HSlider.new()
@@ -508,7 +1053,7 @@ func _slider_row(parent: Node, key: String, caption: String, minimum: float, max
     slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     row.add_child(slider)
-    var value_label := _label(row, "", 15, COL_TEXT)
+    var value_label := _label(row, "", 14, COL_TEXT)
     value_label.custom_minimum_size = Vector2(72.0, 0.0)
     value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -522,10 +1067,10 @@ func _slider_row(parent: Node, key: String, caption: String, minimum: float, max
 
 
 func _build_settings_panel(parent: Node) -> Control:
-    var vbox := _new_panel(parent)
-    _label(vbox, "НАСТРОЙКИ", 28, COL_TEXT)
+    var vbox := _new_panel(parent, 0.58)
+    _label(vbox, "НАСТРОЙКИ", 27, Color.WHITE, true)
     var columns := HBoxContainer.new()
-    columns.add_theme_constant_override("separation", 22)
+    columns.add_theme_constant_override("separation", 20)
     columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
     vbox.add_child(columns)
 
@@ -534,15 +1079,15 @@ func _build_settings_panel(parent: Node) -> Control:
     left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     left.size_flags_stretch_ratio = 1.25
     columns.add_child(left)
-    _label(left, "УПРАВЛЕНИЕ", 19, COL_YELLOW)
-    _label(left, "Тип управления", 15, COL_MUTED)
+    _label(left, "УПРАВЛЕНИЕ", 18, Color.WHITE, true)
+    _label(left, "Тип управления", 14, COL_MUTED)
     var type_row := HBoxContainer.new()
     type_row.add_theme_constant_override("separation", 8)
     left.add_child(type_row)
     var group := ButtonGroup.new()
     for spec in [["wheel", "РУЛЬ"], ["tilt", "НАКЛОН"], ["arrows", "СТРЕЛКИ"]]:
         var control_type := String(spec[0])
-        var button := _button(String(spec[1]), COL_TEAL, Vector2(0.0, 52.0), 16)
+        var button := _button(String(spec[1]), COL_ACCENT, Vector2(0.0, 50.0), 15)
         button.alignment = HORIZONTAL_ALIGNMENT_CENTER
         button.toggle_mode = true
         button.button_group = group
@@ -556,35 +1101,35 @@ func _build_settings_panel(parent: Node) -> Control:
     _sensitivity_slider = _slider_row(left, "steering_sensitivity", "Чувствительность руля", 0.5, 1.8, 0.05)
     _dead_zone_slider = _slider_row(left, "steering_dead_zone", "Мёртвая зона", 0.0, 0.25, 0.01)
     _wheel_size_slider = _slider_row(left, "wheel_size_multiplier", "Размер руля", 0.75, 1.25, 0.05)
-    _label(left, "НАКЛОН автоматически запоминает текущее положение телефона как центр при включении.", 13, COL_MUTED)
+    _label(left, "НАКЛОН автоматически запоминает текущее положение телефона как центр при включении.", 12, COL_MUTED)
 
     var right := VBoxContainer.new()
-    right.add_theme_constant_override("separation", 10)
+    right.add_theme_constant_override("separation", 9)
     right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     columns.add_child(right)
-    _label(right, "ИГРА И ПАУЗА", 19, COL_YELLOW)
-    _camera_setting_button = _button("КАМЕРА: ВИД СЗАДИ", COL_TEAL, Vector2(0.0, 54.0), 17)
+    _label(right, "ИГРА И ПАУЗА", 18, Color.WHITE, true)
+    _camera_setting_button = _button("КАМЕРА: ВИД СЗАДИ", COL_ACCENT, Vector2(0.0, 52.0), 16)
     _camera_setting_button.pressed.connect(func() -> void: camera_cycle_requested.emit())
     right.add_child(_camera_setting_button)
-    _time_setting_button = _button("ВРЕМЯ СУТОК: ДЕНЬ", COL_TEAL, Vector2(0.0, 54.0), 17)
+    _time_setting_button = _button("ВРЕМЯ СУТОК: ДЕНЬ", COL_ACCENT, Vector2(0.0, 52.0), 16)
     _time_setting_button.pressed.connect(func() -> void: time_cycle_requested.emit())
     right.add_child(_time_setting_button)
-    _sound_toggle = _button("ЗВУК: ВКЛ", COL_MAGENTA, Vector2(0.0, 54.0), 17)
+    _sound_toggle = _button("ЗВУК: ВКЛ", COL_ACCENT, Vector2(0.0, 52.0), 16)
     _sound_toggle.pressed.connect(func() -> void:
         _settings["sound_enabled"] = not bool(_settings.get("sound_enabled", true))
         _refresh_settings_controls()
         _emit_settings()
     )
     right.add_child(_sound_toggle)
-    var continue_button := _button("ПРОДОЛЖИТЬ", COL_YELLOW, Vector2(0.0, 58.0), 19)
+    var continue_button := _button("▶  ПРОДОЛЖИТЬ", COL_ACCENT, Vector2(0.0, 56.0), 18)
     continue_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     continue_button.pressed.connect(func() -> void: play_requested.emit())
     right.add_child(continue_button)
     var spacer := Control.new()
     spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
     right.add_child(spacer)
-    _developer_status_label = _label(right, "режим разработчика выключен", 13, COL_MUTED)
-    _version_button = _button("Nitches 0.2.33-native-alpha", COL_LOCKED, Vector2(0.0, 42.0), 13)
+    _developer_status_label = _label(right, "режим разработчика выключен", 12, COL_MUTED)
+    _version_button = _button("Nitches 0.2.34-native-alpha", COL_LOCKED, Vector2(0.0, 40.0), 12)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -653,30 +1198,72 @@ func bind_settings(settings: Dictionary) -> void:
 # data binding
 # --------------------------------------------------------------------- #
 func bind_specs(specs: Dictionary) -> void:
+    _specs = specs.duplicate(true)
     _car_name = String(specs.get("name", ""))
     if _top_car_label != null and not _car_name.is_empty():
         _top_car_label.text = "%s '%d" % [_car_name, int(specs.get("year", 1967)) % 100]
     _specs_bound = int(specs.get("power_hp", 0)) == 365 and int(specs.get("torque_nm", 0)) == 569
+    _refresh_customization_controls()
 
 
 func refresh_profile(view: Dictionary) -> void:
+    _profile_view = view.duplicate(true)
     _profile_bound = true
     var player_name := String(view.get("name", "ИГРОК"))
     var level := int(view.get("level", 1))
     var credits := int(view.get("credits", 35000))
+    _avatar_id = String(view.get("avatar_id", _avatar_id))
     if _top_name_label != null:
         _top_name_label.text = "%s • ур. %d" % [player_name, level]
     if _top_credits_label != null:
         _top_credits_label.text = "CR %s" % _fmt_int(credits)
-    if _profile_tile_sub != null:
-        _profile_tile_sub.text = "ур. %d • CR %s" % [level, _fmt_int(credits)]
+    if _top_avatar_label != null:
+        _top_avatar_label.text = _avatar_glyph(_avatar_id)
+    if _profile_avatar_label != null:
+        _profile_avatar_label.text = _avatar_glyph(_avatar_id)
+    if _nickname_edit != null and not _nickname_edit.has_focus():
+        _nickname_edit.text = player_name
     if _p_name != null:
         _p_name.text = player_name
         _p_level.text = "Уровень: %d" % level
         _p_credits.text = "Кредиты: CR %s" % _fmt_int(credits)
         _p_distance.text = "Пробег: %.1f км" % float(view.get("distance_km", 0.0))
         _p_top.text = "Рекорд скорости: %d км/ч" % int(round(float(view.get("top_speed_kmh", 0.0))))
+        _p_drift.text = "Рекорд дрифта: %d°" % int(round(float(view.get("drift_record_deg", 0.0))))
         _p_time.text = "Время за рулём: %d мин" % int(float(view.get("play_seconds", 0.0)) / 60.0)
+    if _xp_bar != null:
+        var progress := clampf(float(view.get("xp_progress", 0.0)), 0.0, 1.0)
+        _xp_bar.value = progress
+        _xp_label.text = "XP: %d%% • до уровня %d осталось %.1f км" % [int(round(progress * 100.0)), level + 1, float(view.get("xp_to_next_km", 50.0))]
+    if _achievements_label != null:
+        var lines: Array[String] = []
+        for item_variant in view.get("achievements", []):
+            var item: Dictionary = item_variant
+            lines.append("%s %s — %s" % ["★" if bool(item.get("unlocked", false)) else "☆", String(item.get("title", "")), String(item.get("detail", ""))])
+        _achievements_label.text = "\n".join(lines) if not lines.is_empty() else "Достижения появятся после первых заездов."
+    if _history_label != null:
+        var history_lines: Array[String] = []
+        for item_variant in view.get("history", []):
+            var item: Dictionary = item_variant
+            history_lines.append("%s • %.1f км • %d км/ч • дрифт %d° • %d мин" % [
+                String(item.get("date", "заезд")),
+                float(item.get("distance_km", 0.0)),
+                int(round(float(item.get("top_speed_kmh", 0.0)))),
+                int(round(float(item.get("drift_deg", 0.0)))),
+                int(round(float(item.get("duration_sec", 0.0)) / 60.0)),
+            ])
+        _history_label.text = "\n".join(history_lines) if not history_lines.is_empty() else "Пока нет завершённых заездов. Заезд появится здесь после возвращения в меню."
+    if _car_stats_label != null:
+        var car_lines: Array[String] = []
+        for item_variant in view.get("car_stats", []):
+            var item: Dictionary = item_variant
+            car_lines.append("%s • %.1f км • рекорд %d км/ч • дрифт %d°" % [
+                String(item.get("name", "Shelby GT500")),
+                float(item.get("distance_km", 0.0)),
+                int(round(float(item.get("top_speed_kmh", 0.0)))),
+                int(round(float(item.get("drift_deg", 0.0)))),
+            ])
+        _car_stats_label.text = "\n".join(car_lines) if not car_lines.is_empty() else "Shelby GT500 — 0.0 км"
 
 
 func _fmt_int(value: int) -> String:

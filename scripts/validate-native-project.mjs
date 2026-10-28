@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -44,6 +44,9 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/touch_pedal.gd'),
   readText('scripts/round_action_button.gd'),
   readText('shaders/circular_mask.gdshader'),
+  readText('scripts/route_guide.gd'),
+  readText('scripts/car_silhouette_icon.gd'),
+  readText('shaders/backdrop_blur.gdshader'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -56,8 +59,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=36'), 'Native 0.2.33 must bump Android versionCode to 36');
-assert(preset.includes('version/name="0.2.33-native-alpha"'), 'Native version name must be 0.2.33-native-alpha');
+assert(preset.includes('version/code=37'), 'Native 0.2.34 must bump Android versionCode to 37');
+assert(preset.includes('version/name="0.2.34-native-alpha"'), 'Native version name must be 0.2.34-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -78,7 +81,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}`;
 for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -175,7 +178,25 @@ for (const marker of ['class_name NativeDashboardGauge', 'class_name NativeTouch
 }
 assert(!hudScript.includes('NITCHES HORIZON • NATIVE') && !hudScript.includes('"CAM"') && !hudScript.includes('"TIME"') && !hudScript.includes('"RESET"') && !hudScript.includes('"MENU"'), 'Native 0.2.33 HUD must not restore the removed text panel/buttons');
 assert(hudScript.includes('_performance_label.visible = false') && hudScript.includes('set_developer_mode'), 'Native 0.2.33 performance text must stay hidden until developer mode');
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton']) {
+// 0.2.34 clean front end: one accent, icon tabs instead of duplicated
+// home shortcuts, picture-led PLAY/world cards, a hidden unfinished
+// store, frosted translucent panels, click/press feedback, a real
+// 3D garage studio and persisted Shelby paint/wheels/tuning/plate.
+for (const marker of ['clean_menu_0234', 'store_hidden_0234', 'icon_tabs_0234', 'backdrop_blur_0234', 'hint_screen_texture', 'textureLod(screen_texture', 'FontVariation', 'variation_embolden', 'variation_transform', 'MENU_SHELBY_TEXTURE', 'MENU_RICHTOWN_TEXTURE', 'MENU_GARAGE_TEXTURE', 'UI_CLICK_STREAM', 'class_name NativeCarSilhouetteIcon', 'car_silhouette_icon_0234', 'panel_changed', 'garage_dragged', 'garage_zoomed', 'customization_changed', 'tuning_purchase_requested', 'profile_changed', 'GarageStudio0234', '_create_garage_studio', '_set_garage_active', 'StudioTurntable', 'set_paint_color', 'set_wheel_finish', 'set_tuning_level', 'get_tuning_preview', 'set_license_plate', 'customization_0234', 'TUNING_TORQUE_MULTIPLIERS', 'xp_progress', 'drift_record_deg', 'achievements', 'car_stats', '_claim_achievement_rewards', '_credit_distance_bank_m']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.34 menu/garage/profile marker is missing: ${marker}`);
+}
+assert(!mainMenuScript.includes('_build_store_panel') && !mainMenuScript.includes('МАГАЗИН'), 'Native 0.2.34 must hide the unfinished store instead of showing empty coming-soon tiles');
+assert(!mainMenuScript.includes('COL_TEAL') && !mainMenuScript.includes('COL_MAGENTA') && !mainMenuScript.includes('COL_YELLOW'), 'Native 0.2.34 menu must not return to the rejected multi-neon palette');
+// 0.2.34 map/navigation: labels are selected by zoom tier and then
+// deconflicted by rectangle priority, debug district circles are
+// gone, and an explicit route is solved on the road graph for the
+// fullscreen map, minimap and an orange 3D road ribbon.
+for (const marker of ['world_map_0234', 'zoom_label_tiers_0234', '_try_position_label', 'district_circles_removed', 'fast_travel_requested', 'minimap_points_changed', '_set_filter', 'set_first_open_hint', 'map_hint_seen', 'class_name NativeRouteGuide', 'route_guide_0234', 'AStar2D', 'get_id_path', 'RouteRibbon', 'RouteDestinationBeacon', 'road_route_0234', 'set_route_path', '_on_fast_travel_requested', 'find_nearest_road_transform']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.34 map/route marker is missing: ${marker}`);
+}
+assert(!worldMapScript.includes('_canvas.draw_circle(centre, radius, color)'), 'Native 0.2.34 world map must not draw the removed debug district circles');
+assert(syncScript.includes('menu_shelby.jpg') && syncScript.includes('menu_richtown.jpg') && syncScript.includes('menu_garage.jpg') && syncScript.includes('ui_click.wav'), 'Native asset sync must stage the 0.2.34 menu artwork and click sound');
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -457,6 +478,11 @@ for (const marker of [
   assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
+for (const [relative, minimumSize] of [['src/assets/ui/menu_shelby.jpg', 100_000], ['src/assets/ui/menu_richtown.jpg', 100_000], ['src/assets/ui/menu_garage.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+  const info = await stat(relative);
+  assert(info.size > minimumSize, `Native 0.2.34 canonical UI asset is unexpectedly small: ${relative}`);
+}
+
 const data = JSON.parse(dataText);
 assert(data.schemaVersion === 1, 'Unexpected native world schema');
 assert(data.units === 'metres', 'Native world must use real metres');
@@ -546,6 +572,10 @@ if (requireAssets) {
     'assets/textures/user_sky_night.jpg',
     'assets/textures/cafe_linen.jpg',
     'assets/textures/cafe_linen_normal.png',
+    'assets/ui/menu_shelby.jpg',
+    'assets/ui/menu_richtown.jpg',
+    'assets/ui/menu_garage.jpg',
+    'assets/audio/ui_click.wav',
   ];
   for (const relative of required) {
     const file = path.join(root, relative);

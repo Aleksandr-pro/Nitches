@@ -12,6 +12,8 @@ extends CanvasLayer
 
 signal close_requested
 signal destination_changed(world_position: Vector2)
+signal fast_travel_requested(world_position: Vector2, cost: int, poi_name: String)
+signal minimap_points_changed(points: Array)
 
 const NO_DRAG := -2
 const MOUSE_DRAG := -1
@@ -60,6 +62,12 @@ var _vehicle: NativeVehicle
 var _data: Dictionary = {}
 var _pois: Array = []
 var _selected_poi: Dictionary = {}
+var _route_poi: Dictionary = {}
+var _route_active := false
+var _route_points: Array[Vector2] = []
+var _active_filter := "all"
+var _hint_visible := false
+var _travel_status := ""
 
 var _root: Control
 var _canvas: Control
@@ -69,6 +77,9 @@ var _title_label: Label
 var _player_label: Label
 var _detail_panel: PanelContainer
 var _detail_label: Label
+var _route_button: Button
+var _travel_button: Button
+var _filter_buttons: Dictionary = {}
 var _close_button: Button
 var _zoom_in_button: Button
 var _zoom_out_button: Button
@@ -162,6 +173,17 @@ func get_smoke_state() -> Dictionary:
         "selected_poi": String(_selected_poi.get("name", "")),
         "selected_destination": get_selected_destination(),
         "minimap_points": get_minimap_points().size(),
+        "world_map_0234": true,
+        "route_active": _route_active,
+        "route_destination": get_route_destination(),
+        "route_points": _route_points.size(),
+        "route_button_created": _route_button != null,
+        "fast_travel_button_created": _travel_button != null,
+        "active_filter": _active_filter,
+        "filter_buttons": _filter_buttons.size(),
+        "hint_visible": _hint_visible,
+        "district_circles_removed": true,
+        "zoom_label_tiers_0234": true,
     }
 
 
@@ -260,6 +282,21 @@ func _build_ui() -> void:
     _side_panel.add_child(side_box)
     var side_title := _make_label(side_box, "ОСНОВНЫЕ ТОЧКИ", 16, Color(1.0, 0.72, 0.22))
     side_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var filter_grid := GridContainer.new()
+    filter_grid.columns = 2
+    filter_grid.add_theme_constant_override("h_separation", 5)
+    filter_grid.add_theme_constant_override("v_separation", 5)
+    side_box.add_child(filter_grid)
+    for spec in [["all", "ВСЕ"], ["races", "ГОНКИ"], ["shops", "МАГАЗИНЫ"], ["landmarks", "МЕСТА"], ["homes", "ДОМА"]]:
+        var filter_id := String(spec[0])
+        var filter_button := _make_button(filter_grid, String(spec[1]))
+        filter_button.custom_minimum_size = Vector2(0.0, 34.0)
+        filter_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        filter_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        filter_button.pressed.connect(func() -> void: _set_filter(filter_id))
+        if filter_id == _active_filter:
+            filter_button.modulate = Color(1.0, 0.76, 0.42)
+        _filter_buttons[filter_id] = filter_button
     var scroll := ScrollContainer.new()
     scroll.name = "WorldMapPoiScroll"
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -275,9 +312,19 @@ func _build_ui() -> void:
     _detail_panel.name = "WorldMapDetailPanel"
     _detail_panel.add_theme_stylebox_override("panel", _panel_style())
     _root.add_child(_detail_panel)
-    _detail_label = _make_label(_detail_panel, "Выберите точку на карте или в списке", 14, Color(0.88, 0.96, 1.0))
+    var detail_box := HBoxContainer.new()
+    detail_box.add_theme_constant_override("separation", 8)
+    _detail_panel.add_child(detail_box)
+    _detail_label = _make_label(detail_box, "Выберите точку на карте или в списке", 13, Color(0.88, 0.96, 1.0))
     _detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _detail_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _route_button = _make_button(detail_box, "МАРШРУТ")
+    _route_button.custom_minimum_size = Vector2(118.0, 36.0)
+    _route_button.pressed.connect(_on_route_button_pressed)
+    _travel_button = _make_button(detail_box, "ПЕРЕЙТИ")
+    _travel_button.custom_minimum_size = Vector2(132.0, 36.0)
+    _travel_button.pressed.connect(_on_travel_button_pressed)
 
     _zoom_in_button = _make_button(_root, "+")
     _zoom_in_button.pressed.connect(func() -> void: _set_zoom_factor(_zoom_factor * 1.45, _canvas.size * 0.5))
@@ -310,7 +357,7 @@ func _layout() -> void:
     _place(_close_button, Rect2(viewport_size.x - 154.0, 12.0, 140.0, 42.0))
     _place(_canvas, map_rect)
     _place(_side_panel, Rect2(map_rect.end.x + 10.0, map_rect.position.y, side_width, map_rect.size.y))
-    _place(_detail_panel, Rect2(map_rect.position.x, viewport_size.y - 60.0, map_rect.size.x, 48.0))
+    _place(_detail_panel, Rect2(map_rect.position.x, viewport_size.y - 64.0, map_rect.size.x, 52.0))
     _place(_compass_label, Rect2(map_rect.position.x + 12.0, map_rect.position.y + 8.0, 54.0, 28.0))
     _place(_zoom_in_button, Rect2(map_rect.end.x - 58.0, map_rect.end.y - 158.0, 44.0, 40.0))
     _place(_zoom_out_button, Rect2(map_rect.end.x - 58.0, map_rect.end.y - 112.0, 44.0, 40.0))
@@ -403,6 +450,29 @@ func _set_zoom_factor(next_zoom: float, anchor: Vector2) -> void:
     _refresh_map()
 
 
+func _filter_for_category(category: String, id: String) -> String:
+    if category == "Гонка" or category == "Старт" or id.begins_with("race_"):
+        return "races"
+    if category in ["Кафе", "Отель", "Инфраструктура"]:
+        return "shops"
+    if category == "Дом":
+        return "homes"
+    return "landmarks"
+
+
+func _poi_passes_filter(poi: Dictionary) -> bool:
+    return _active_filter == "all" or String(poi.get("filter", "landmarks")) == _active_filter
+
+
+func _set_filter(filter_id: String) -> void:
+    _active_filter = filter_id
+    for key in _filter_buttons.keys():
+        (_filter_buttons[key] as Button).modulate = Color(1.0, 0.76, 0.42) if String(key) == filter_id else Color.WHITE
+    _rebuild_poi_list()
+    _refresh_map()
+    minimap_points_changed.emit(get_minimap_points())
+
+
 func _add_poi(id: String, name: String, category: String, x: float, z: float, priority: int, label_offset := Vector2(10.0, -10.0)) -> void:
     _pois.append({
         "id": id,
@@ -411,6 +481,7 @@ func _add_poi(id: String, name: String, category: String, x: float, z: float, pr
         "x": x,
         "z": z,
         "priority": priority,
+        "filter": _filter_for_category(category, id),
         "label_offset": label_offset,
     })
 
@@ -476,10 +547,30 @@ func _build_pois() -> void:
                 park_name = "Пальметум Корниш"
             _add_poi("park_" + park_id, park_name, "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 2)
 
+    _add_poi("race_boulevard", "Старт гонки: Бульвар", "Гонка", 760.0, 318.0, 2)
+    _add_poi("race_corniche", "Старт гонки: Корниш", "Гонка", 930.0, -318.0, 2)
+    _add_poi("race_palm_bridge", "Старт гонки: Мост Пальмы", "Гонка", 1085.0, -250.0, 2)
+    var home_targets := [Vector2(710.0, -344.0), Vector2(662.0, 306.0), Vector2(1348.0, -352.0)]
+    var home_names := ["Дом у музея", "Дом в Южном районе вилл", "Дом на Острове-Пальме"]
+    for home_index in home_targets.size():
+        var target := home_targets[home_index]
+        var best: Dictionary = {}
+        var best_distance := 40.0
+        for building_variant in _data.get("buildings", []):
+            var building: Dictionary = building_variant
+            if String(building.get("kind", "")) != "rt-villa" or String(building.get("model", "")) != "villa":
+                continue
+            var candidate := Vector2(float(building.get("x", 0.0)), float(building.get("z", 0.0)))
+            var distance := candidate.distance_to(target)
+            if distance < best_distance:
+                best_distance = distance
+                best = building
+        if not best.is_empty():
+            _add_poi("home_%d" % home_index, home_names[home_index], "Дом", float(best.get("x", target.x)), float(best.get("z", target.y)), 2)
+
     _pois.sort_custom(_poi_sort)
     if not _pois.is_empty():
         _selected_poi = _pois[0]
-        _emit_destination_changed()
 
 
 func _label_style() -> StyleBoxFlat:
@@ -541,6 +632,7 @@ func _build_labels() -> void:
             poi_dict.get("label_offset", Vector2(10.0, -10.0))
         )
         label.set_meta("poi_id", String(poi_dict.get("id", "")))
+        label.set_meta("filter", String(poi_dict.get("filter", "landmarks")))
         label.set_meta("priority", int(poi_dict.get("priority", 3)))
         _poi_labels.append(label)
 
@@ -565,6 +657,8 @@ func _rebuild_poi_list() -> void:
         child.queue_free()
     for poi in _pois:
         var poi_dict: Dictionary = poi
+        if not _poi_passes_filter(poi_dict):
+            continue
         var button := _make_button(_poi_list, "◆  %s\n%s • X %.0f • Z %.0f" % [
             String(poi_dict.get("name", "Точка")),
             String(poi_dict.get("category", "Точка")),
@@ -590,7 +684,7 @@ func _select_poi_by_id(id: String, focus: bool) -> void:
     if poi.is_empty():
         return
     _selected_poi = poi
-    _emit_destination_changed()
+    _travel_status = ""
     if focus:
         _centre_world = Vector2(float(poi.get("x", _centre_world.x)), float(poi.get("z", _centre_world.y)))
         _zoom_factor = maxf(_zoom_factor, 2.7)
@@ -599,10 +693,79 @@ func _select_poi_by_id(id: String, focus: bool) -> void:
     _refresh_map()
 
 
+func set_first_open_hint(visible_hint: bool) -> void:
+    _hint_visible = visible_hint
+    _update_player_info()
+
+
+func set_travel_status(text: String) -> void:
+    _travel_status = text
+    _update_detail()
+    _refresh_map()
+
+
+func set_route_path(points: Array) -> void:
+    _route_points.clear()
+    for point_variant in points:
+        _route_points.append(point_variant as Vector2)
+    _refresh_map()
+
+
+func get_route_destination() -> Vector2:
+    if not _route_active or _route_poi.is_empty():
+        return Vector2.INF
+    return Vector2(float(_route_poi.get("x", 0.0)), float(_route_poi.get("z", 0.0)))
+
+
+func clear_route() -> void:
+    _route_active = false
+    _route_poi = {}
+    _route_points.clear()
+    destination_changed.emit(Vector2.INF)
+    _update_detail()
+    _refresh_map()
+
+
+func _travel_cost_for_selected() -> int:
+    if _selected_poi.is_empty():
+        return 0
+    var destination := Vector2(float(_selected_poi.get("x", 0.0)), float(_selected_poi.get("z", 0.0)))
+    var spawn: Dictionary = _data.get("spawn", {"x": 760.0, "z": 330.0})
+    var home := Vector2(float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)))
+    if String(_selected_poi.get("id", "")) == "spawn" or destination.distance_to(home) <= 100.0:
+        return 0
+    var distance := 0.0
+    if _vehicle != null:
+        distance = Vector2(_vehicle.global_position.x, _vehicle.global_position.z).distance_to(destination)
+    return mini(250 + int(round(distance / 100.0)) * 10, 900)
+
+
+func _on_route_button_pressed() -> void:
+    if _selected_poi.is_empty():
+        return
+    if _route_active and String(_route_poi.get("id", "")) == String(_selected_poi.get("id", "")):
+        clear_route()
+        return
+    _route_poi = _selected_poi.duplicate(true)
+    _route_active = true
+    _route_points.clear()
+    destination_changed.emit(get_route_destination())
+    _update_detail()
+    _refresh_map()
+
+
+func _on_travel_button_pressed() -> void:
+    if _selected_poi.is_empty():
+        return
+    fast_travel_requested.emit(get_selected_destination(), _travel_cost_for_selected(), String(_selected_poi.get("name", "Точка")))
+
+
 func get_minimap_points() -> Array:
     var result: Array = []
     for poi in _pois:
         var poi_dict: Dictionary = poi
+        if not _poi_passes_filter(poi_dict) and String(poi_dict.get("id", "")) != String(_route_poi.get("id", "")):
+            continue
         result.append({
             "name": String(poi_dict.get("name", "")),
             "category": String(poi_dict.get("category", "")),
@@ -618,7 +781,9 @@ func get_selected_destination() -> Vector2:
 
 
 func _emit_destination_changed() -> void:
-    destination_changed.emit(get_selected_destination())
+    # Kept as a compatibility helper: only an explicitly created
+    # route is a navigation destination, mere inspection is not.
+    destination_changed.emit(get_route_destination())
 
 
 func _district_name_at(x: float, z: float) -> String:
@@ -643,10 +808,11 @@ func _update_player_info() -> void:
         _player_label.text = "ИГРОК: нет данных"
         return
     var p := _vehicle.global_position
-    _player_label.text = "ИГРОК: %s  •  X %.1f  •  Z %.1f  •  ↑ север −Z  •  перетаскивайте карту, масштаб — колесо/пинч" % [
+    _player_label.text = "ИГРОК: %s  •  X %.1f  •  Z %.1f  •  ↑ север −Z%s" % [
         _district_name_at(p.x, p.z),
         p.x,
         p.z,
+        "  •  перетаскивайте карту, масштаб — колесо/пинч" if _hint_visible else "",
     ]
 
 
@@ -678,6 +844,16 @@ func _update_detail() -> void:
         _detail_label.text = "Координаты под указателем: X %.1f • Z %.1f  •  район: %s" % [_hover_world.x, _hover_world.y, _district_name_at(_hover_world.x, _hover_world.y)]
     else:
         _detail_label.text = "Выберите точку на карте или в списке справа"
+    if not _travel_status.is_empty():
+        _detail_label.text += "  •  " + _travel_status
+    if _route_button != null and _travel_button != null:
+        var has_selected := not _selected_poi.is_empty()
+        var is_route := has_selected and _route_active and String(_route_poi.get("id", "")) == String(_selected_poi.get("id", ""))
+        _route_button.disabled = not has_selected
+        _route_button.text = "УБРАТЬ МАРШРУТ" if is_route else "МАРШРУТ"
+        var cost := _travel_cost_for_selected()
+        _travel_button.disabled = not has_selected
+        _travel_button.text = "ПЕРЕЙТИ • БЕСПЛАТНО" if cost == 0 else "ПЕРЕЙТИ • CR %d" % cost
 
 
 func _refresh_map() -> void:
@@ -687,41 +863,68 @@ func _refresh_map() -> void:
     _refresh_labels()
 
 
-func _position_label(label: Label, can_show: bool) -> void:
+func _try_position_label(label: Label, can_show: bool, accepted: Array) -> void:
     if label == null or _canvas == null:
         return
     var point := _world_to_map(float(label.get_meta("world_x", 0.0)), float(label.get_meta("world_z", 0.0)))
     var expanded := Rect2(Vector2(-260.0, -80.0), _canvas.size + Vector2(520.0, 160.0))
-    label.visible = can_show and expanded.has_point(point)
-    if not label.visible:
+    if not can_show or not expanded.has_point(point):
+        label.visible = false
         return
+    if label.size.x < 2.0 or label.size.y < 2.0:
+        label.reset_size()
     var offset: Vector2 = label.get_meta("offset", Vector2.ZERO)
     var target := point + offset
     if bool(label.get_meta("centre_label", false)):
         target -= label.size * 0.5
+    target.x = clampf(target.x, 4.0, maxf(_canvas.size.x - label.size.x - 4.0, 4.0))
+    target.y = clampf(target.y, 4.0, maxf(_canvas.size.y - label.size.y - 4.0, 4.0))
+    var rect := Rect2(target, label.size)
+    for accepted_variant in accepted:
+        var accepted_rect: Rect2 = accepted_variant
+        if rect.intersects(accepted_rect.grow(4.0)):
+            label.visible = false
+            return
     label.position = target
+    label.visible = true
+    accepted.append(rect)
 
 
 func _refresh_labels() -> void:
     if _canvas == null:
         return
+    var accepted: Array = []
     var selected_id := String(_selected_poi.get("id", ""))
+    var route_id := String(_route_poi.get("id", "")) if _route_active else ""
+    var show_districts := _zoom_factor < 1.55
+    # Reserve space for the inspected/routed POI first: its label
+    # must never be the one sacrificed to a district or road name.
+    for label_variant in _poi_labels:
+        var priority_label := label_variant as Label
+        var priority_id := String(priority_label.get_meta("poi_id", ""))
+        if priority_id == selected_id or priority_id == route_id:
+            _try_position_label(priority_label, true, accepted)
     for label_variant in _district_labels:
-        _position_label(label_variant as Label, true)
+        _try_position_label(label_variant as Label, show_districts, accepted)
     for label_variant in _poi_labels:
         var label := label_variant as Label
-        var show := int(label.get_meta("priority", 3)) <= 1 or _zoom_factor >= 1.45 or String(label.get_meta("poi_id", "")) == selected_id
-        _position_label(label, show)
+        var poi_id := String(label.get_meta("poi_id", ""))
+        if poi_id == selected_id or poi_id == route_id:
+            continue
+        var priority := int(label.get_meta("priority", 3))
+        var passes_filter := _active_filter == "all" or String(label.get_meta("filter", "landmarks")) == _active_filter
+        var zoom_show := (priority <= 1 and _zoom_factor >= 1.55) or (priority == 2 and _zoom_factor >= 2.20) or (priority >= 3 and _zoom_factor >= 3.0)
+        _try_position_label(label, passes_filter and zoom_show, accepted)
     for label_variant in _road_labels:
         var label := label_variant as Label
-        var show := int(label.get_meta("priority", 2)) <= 1 or _zoom_factor >= 1.25
-        _position_label(label, show)
+        var priority := int(label.get_meta("priority", 2))
+        var show := (priority <= 1 and _zoom_factor >= 1.20) or (priority >= 2 and _zoom_factor >= 1.75)
+        _try_position_label(label, show, accepted)
     if _scale_label != null:
         var scale_length := 100.0 * _pixels_per_meter()
         _scale_label.position = Vector2(18.0 + scale_length * 0.5 - 20.0, _canvas.size.y - 42.0)
         _scale_label.size = Vector2(48.0, 18.0)
         _scale_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
 
 func _draw_world_rect(min_x: float, max_x: float, min_z: float, max_z: float, color: Color) -> void:
     var top_left := _world_to_map(min_x, max_z)
@@ -757,6 +960,10 @@ func _category_color(category: String) -> Color:
             return Color(1.0, 0.38, 0.52, 1.0)
         "Старт":
             return Color(0.15, 0.92, 1.0, 1.0)
+        "Гонка":
+            return Color(1.0, 0.20, 0.12, 1.0)
+        "Дом":
+            return Color(0.55, 0.92, 1.0, 1.0)
         "Пляж":
             return Color(1.0, 0.86, 0.34, 1.0)
         _:
@@ -778,16 +985,6 @@ func _draw_map() -> void:
     _draw_zone("palmIsland", Color(0.20, 0.50, 0.28, 0.48))
     _draw_zone("sailIsland", Color(0.20, 0.50, 0.28, 0.48))
     _draw_zone("rtPlaza", Color(0.68, 0.68, 0.62, 0.36))
-
-    for district_variant in _data.get("districts", []):
-        var district: Dictionary = district_variant
-        var centre := _world_to_map(float(district.get("x", 0.0)), float(district.get("z", 0.0)))
-        var radius := float(district.get("radiusM", 200.0)) * _pixels_per_meter()
-        var color: Color = DISTRICT_COLORS.get(String(district.get("id", "")), Color(1.0, 1.0, 1.0, 0.08))
-        _canvas.draw_circle(centre, radius, color)
-        var border := color
-        border.a = 0.42
-        _canvas.draw_arc(centre, radius, 0.0, TAU, 96, border, 1.2, true)
 
     var bounds := _bounds()
     var grid_color := Color(1.0, 1.0, 1.0, 0.055)
@@ -848,22 +1045,32 @@ func _draw_map() -> void:
         player_point = _world_to_map(_vehicle.global_position.x, _vehicle.global_position.z)
         has_player = true
 
-    if has_player and not _selected_poi.is_empty():
-        var target_point := _world_to_map(float(_selected_poi.get("x", 0.0)), float(_selected_poi.get("z", 0.0)))
-        var total := player_point.distance_to(target_point)
-        var direction := (target_point - player_point).normalized() if total > 0.01 else Vector2.ZERO
-        var travelled := 0.0
-        while travelled < total:
-            var segment_end := minf(travelled + 9.0, total)
-            _canvas.draw_line(player_point + direction * travelled, player_point + direction * segment_end, Color(1.0, 0.66, 0.10, 0.82), 2.2, true)
-            travelled += 17.0
+    if has_player and _route_active and not _route_poi.is_empty():
+        if _route_points.size() >= 2:
+            var route_map_points := PackedVector2Array()
+            for route_point in _route_points:
+                route_map_points.append(_world_to_map(route_point.x, route_point.y))
+            _canvas.draw_polyline(route_map_points, Color(1.0, 0.52, 0.05, 0.34), 7.0, true)
+            _canvas.draw_polyline(route_map_points, Color(1.0, 0.62, 0.08, 0.96), 3.0, true)
+        else:
+            var target_point := _world_to_map(float(_route_poi.get("x", 0.0)), float(_route_poi.get("z", 0.0)))
+            var total := player_point.distance_to(target_point)
+            var direction := (target_point - player_point).normalized() if total > 0.01 else Vector2.ZERO
+            var travelled := 0.0
+            while travelled < total:
+                var segment_end := minf(travelled + 9.0, total)
+                _canvas.draw_line(player_point + direction * travelled, player_point + direction * segment_end, Color(1.0, 0.66, 0.10, 0.82), 2.2, true)
+                travelled += 17.0
 
     for poi in _pois:
         var poi_dict: Dictionary = poi
+        var poi_id := String(poi_dict.get("id", ""))
+        if not _poi_passes_filter(poi_dict) and poi_id != selected_id and not (_route_active and poi_id == String(_route_poi.get("id", ""))):
+            continue
         var point := _world_to_map(float(poi_dict.get("x", 0.0)), float(poi_dict.get("z", 0.0)))
         if not Rect2(Vector2(-30.0, -30.0), _canvas.size + Vector2(60.0, 60.0)).has_point(point):
             continue
-        var selected := String(poi_dict.get("id", "")) == selected_id
+        var selected := poi_id == selected_id
         var color := _category_color(String(poi_dict.get("category", "")))
         if selected:
             _canvas.draw_arc(point, 15.0, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.95), 2.2, true)
@@ -934,6 +1141,8 @@ func _select_poi_at(local_position: Vector2) -> void:
     var best_distance := 30.0
     for poi in _pois:
         var poi_dict: Dictionary = poi
+        if not _poi_passes_filter(poi_dict):
+            continue
         var point := _world_to_map(float(poi_dict.get("x", 0.0)), float(poi_dict.get("z", 0.0)))
         var distance := local_position.distance_to(point)
         if distance < best_distance:
