@@ -1160,9 +1160,16 @@ func _reset_vehicle_to_road() -> void:
 func _process(delta: float) -> void:
 	_update_adaptive_render_quality(delta)
 	if _world != null and _camera != null and _vehicle != null and not _garage_active:
-		# 0.2.30 directional streaming: full detail in the view
-		# direction, retired render/physics load behind the camera.
-		_world.update_streaming(_camera.global_position, -_camera.global_transform.basis.z, _vehicle.global_position, _vehicle.linear_velocity, delta)
+		# 0.2.30 directional streaming retired load behind the
+		# camera; 0.2.37 also retires whole chunks outside the side
+		# of the real horizontal view cone (with a wide margin), so
+		# pass the live half-FOV derived from the current vertical
+		# FOV and viewport aspect.  Everything inside the view keeps
+		# full detail.
+		var viewport_size := _camera.get_viewport().get_visible_rect().size
+		var aspect := viewport_size.x / maxf(viewport_size.y, 1.0)
+		var horizontal_half_fov := atan(tan(deg_to_rad(_camera.fov * 0.5)) * maxf(aspect, 0.1))
+		_world.update_streaming(_camera.global_position, -_camera.global_transform.basis.z, _vehicle.global_position, _vehicle.linear_velocity, delta, horizontal_half_fov)
 	if _in_menu:
 		if _camera != null and not _camera.is_current():
 			_camera.make_current()
@@ -1412,6 +1419,12 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.30 directional streaming pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("road_infrastructure_repair_0236", false)) or not bool(enhancement_stats.get("real_junction_arms_0236", false)) or not bool(enhancement_stats.get("traffic_signals_on_real_arms_0236", false)) or not bool(enhancement_stats.get("continuous_arterial_curbs_0236", false)) or not bool(enhancement_stats.get("rounded_curb_edge_alignment_0236", false)) or not bool(enhancement_stats.get("bike_lane_junction_breaks_0236", false)) or not bool(enhancement_stats.get("bus_shelter_footprints_clear_0236", false)) or not bool(enhancement_stats.get("roadside_footprints_clear_0236", false)) or int(enhancement_stats.get("rejected_fake_junction_pads_0236", 0)) < 1 or int(enhancement_stats.get("real_crosswalk_groups_0236", 0)) < 50 or int(enhancement_stats.get("rejected_fake_crosswalks_0236", 0)) < 10 or int(enhancement_stats.get("rejected_fake_signal_approaches_0236", 0)) < 10 or int(enhancement_stats.get("road_junction_subsegments_0236", 0)) < 100 or int(enhancement_stats.get("rejected_road_palms_0236", 0)) < 1:
 		failures.append("0.2.36 real-arm road infrastructure/footprint repair pass is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("view_sector_streaming_0237", false)) or int(enhancement_stats.get("flat_shadow_casters_disabled_0237", 0)) < 500 or not bool(enhancement_stats.get("sail_island_expanded_0237", false)) or not bool(enhancement_stats.get("sail_island_loop_0237", false)) or not bool(enhancement_stats.get("sail_island_resort_0237", false)) or not bool(enhancement_stats.get("sail_island_infill_excluded_0237", false)) or float(enhancement_stats.get("sail_island_land_area_m2_0237", 0.0)) < 30000.0 or int(enhancement_stats.get("sail_resort_villas_0237", 0)) < 4 or int(enhancement_stats.get("sail_resort_pools_0237", 0)) < 3 or int(enhancement_stats.get("sail_island_palms_0237", 0)) < 12 or int(enhancement_stats.get("sail_island_promenade_segments_0237", 0)) < 48 or int(enhancement_stats.get("sail_island_lamps_0237", 0)) < 8 or not bool(enhancement_stats.get("canonical_building_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_buildings_relocated_0237", 0)) < 3 or float(enhancement_stats.get("canonical_building_min_clearance_0237", 0.0)) < 1.6 or not bool(enhancement_stats.get("canonical_pool_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_pools_relocated_0237", 0)) < 1 or float(enhancement_stats.get("canonical_pool_min_clearance_0237", 0.0)) < 1.2 or not bool(enhancement_stats.get("bridge_roadside_props_removed_0237", false)) or int(enhancement_stats.get("readable_road_signs_0237", 0)) < 20 or not bool(enhancement_stats.get("road_wear_scale_0237", false)):
+		failures.append("0.2.37 view-sector streaming / flat-shadow diet / Sail Island resort / canonical footprint repair pass is incomplete: %s" % str(enhancement_stats))
+	var sail_loop_surface := _world.get_surface_at(Vector3(1188.0, 3.0, 34.0))
+	var sail_lawn_surface := _world.get_surface_at(Vector3(1185.0, 3.0, 8.0))
+	if String(sail_loop_surface.get("kind", "")) != "asphalt" or String(sail_lawn_surface.get("kind", "")) != "grass":
+		failures.append("0.2.37 Sail Island loop/lawn surfaces are not drivable/landscaped as designed: loop=%s lawn=%s" % [str(sail_loop_surface), str(sail_lawn_surface)])
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
 	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
@@ -1558,7 +1571,7 @@ func _run_smoke_checks() -> void:
 	var safe_bottom := viewport_size.y * 0.96 + 1.0
 	var hud_rects_safe := minimap_rect.position.x >= safe_left and minimap_rect.position.y >= safe_top and gauge_rect.end.x <= safe_right and gauge_rect.position.y >= safe_top and gas_rect.end.x <= safe_right and gas_rect.end.y <= safe_bottom
 	var hud_rects_visible := _rect_is_on_screen(minimap_rect, viewport_size) and _rect_is_on_screen(gauge_rect, viewport_size) and _rect_is_on_screen(gas_rect, viewport_size) and _rect_is_on_screen(brake_rect, viewport_size) and _rect_is_on_screen(nitro_rect, viewport_size) and _rect_is_on_screen(drift_rect, viewport_size) and _rect_is_on_screen(ignition_rect, viewport_size)
-	if not bool(hud_state.get("hud_0233", false)) or not bool(hud_state.get("safe_area_3pct_4pct", false)) or not hud_rects_safe or not hud_rects_visible or not bool(minimap_state.get("circular_heading_up_0233", false)) or int(minimap_state.get("roads", 0)) < 35 or int(minimap_state.get("parks", 0)) < 3 or int(minimap_state.get("pois", 0)) < 20 or not bool(minimap_state.get("has_destination", false)) or not bool(gauge_state.get("circular_gauge_0233", false)) or String(gauge_state.get("speed_text", "")) != "0" or not bool(gas_pedal_state.get("analog_pedal_0233", false)) or not bool(brake_pedal_state.get("analog_pedal_0233", false)) or gas_rect.size.y < viewport_size.y * 0.28 or brake_rect.size.y < viewport_size.y * 0.28 or absf(gas_rect.position.x - brake_rect.end.x - 8.0) > 1.5 or not bool(nitro_button_state.get("round_action_0233", false)) or not bool(drift_button_state.get("round_action_0233", false)) or nitro_rect.position.x - drift_rect.end.x < 15.0 or bool(hud_state.get("performance_visible", true)) != bool(hud_state.get("developer_mode", false)):
+	if not bool(hud_state.get("hud_0233", false)) or not bool(hud_state.get("safe_area_3pct_4pct", false)) or not hud_rects_safe or not hud_rects_visible or not bool(minimap_state.get("circular_heading_up_0233", false)) or not bool(minimap_state.get("static_map_cache_0237", false)) or not bool(minimap_state.get("static_cache_created", false)) or int(minimap_state.get("roads", 0)) < 35 or int(minimap_state.get("parks", 0)) < 3 or int(minimap_state.get("pois", 0)) < 20 or not bool(minimap_state.get("has_destination", false)) or not bool(gauge_state.get("circular_gauge_0233", false)) or String(gauge_state.get("speed_text", "")) != "0" or not bool(gas_pedal_state.get("analog_pedal_0233", false)) or not bool(brake_pedal_state.get("analog_pedal_0233", false)) or gas_rect.size.y < viewport_size.y * 0.28 or brake_rect.size.y < viewport_size.y * 0.28 or absf(gas_rect.position.x - brake_rect.end.x - 8.0) > 1.5 or not bool(nitro_button_state.get("round_action_0233", false)) or not bool(drift_button_state.get("round_action_0233", false)) or nitro_rect.position.x - drift_rect.end.x < 15.0 or bool(hud_state.get("performance_visible", true)) != bool(hud_state.get("developer_mode", false)):
 		failures.append("0.2.34 safe-area circular HUD / analog pedals / road route pass is incomplete: hud=%s minimap=%s gauge=%s" % [str(hud_state), str(minimap_state), str(gauge_state)])
 	if not bool(hud_state.get("hud_0235", false)) or not bool(ignition_button_state.get("ignition_button_0235", false)) or not bool(hud_state.get("ignition_under_minimap", false)) or not bool(hud_state.get("ignition_same_size_as_drift", false)) or ignition_rect.size.x < 56.0 or ignition_rect.size.y < 56.0:
 		failures.append("0.2.35 ignition button under the minimap / handbrake-size pass is incomplete: hud=%s ignition=%s drift_rect=%s" % [str(hud_state), str(ignition_button_state), str(drift_rect)])
@@ -1717,6 +1730,15 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "18_west_t_junction", "time": "day", "vehicle": "hide",
 			"camera": Vector3(525.0, 16.0, -335.0), "target": Vector3(560.0, 1.0, -300.0),
+		},
+		{
+			"name": "19_sail_island_resort", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1015.0, 42.0, 205.0), "target": Vector3(1185.0, 24.0, 80.0),
+		},
+		{
+			"name": "20_sail_island_arrival", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1105.0, 0.0, 80.0),
+			"camera": Vector3(1086.0, 4.2, 104.0), "target": Vector3(1182.0, 30.0, 80.0),
 		},
 		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
 		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},

@@ -65,8 +65,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=39'), 'Native 0.2.36 must bump Android versionCode to 39');
-assert(preset.includes('version/name="0.2.36-native-alpha"'), 'Native version name must be 0.2.36-native-alpha');
+assert(preset.includes('version/code=40'), 'Native 0.2.37 must bump Android versionCode to 40');
+assert(preset.includes('version/name="0.2.37-native-alpha"'), 'Native version name must be 0.2.37-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -203,6 +203,15 @@ for (const marker of ['road_infrastructure_repair_0236', '_junction_arm_mask', '
   assert(combinedRuntime.includes(marker), `Native 0.2.36 road-infrastructure marker is missing: ${marker}`);
 }
 assert(!worldScript.includes('{"x": 914.0, "z": -300.0') && !worldScript.includes('{"x": 914.0, "z": -110.0') && !worldScript.includes('{"x": 914.0, "z": 70.0'), 'Native 0.2.36 must not restore the Corniche bus shelters centred on cross streets/crosswalks');
+// 0.2.37 performance without touching shaders or the car model:
+// whole MultiMesh chunks outside the side of the horizontal view cone
+// retire with a wide margin, flat kerb/slab/deck layers leave the
+// shadow pass, and the minimap renders its static road network once.
+// The same pass expands Sail Island into a landscaped resort with a
+// loop road and audits every canonical building's true footprint.
+for (const marker of ['view_sector_streaming_0237', 'STREAM_SECTOR_HIDE_MARGIN_RAD', 'horizontal_half_fov', '_is_flat_shadow_free_multimesh_0237', 'flat_shadow_casters_disabled_0237', 'static_map_cache_0237', '_draw_cached_world', '_draw_static_cache', 'UPDATE_ONCE', '_expand_sail_island_0237', 'rt-sail-loop', 'sail_island_land_area_m2_0237', '_build_sail_island_resort_0237', 'sail_island_promenade_segments_0237', 'sail_island_infill_excluded_0237', '_sanitize_canonical_buildings_0237', '_sanitize_canonical_pools_0237', '_rect_road_clearance_0237', 'canonical_building_min_clearance_0237', 'canonical_pools_relocated_0237', 'bridge_roadside_props_removed_0237', 'readable_road_signs_0237', 'CityRoadSignBacks0237', 'road_wear_scale_0237', '19_sail_island_resort', '20_sail_island_arrival']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.37 performance/Sail Island marker is missing: ${marker}`);
+}
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых авто без 3D-моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
