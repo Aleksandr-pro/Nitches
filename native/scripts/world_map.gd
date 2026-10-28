@@ -553,7 +553,7 @@ func _build_pois() -> void:
     var home_targets := [Vector2(710.0, -344.0), Vector2(662.0, 306.0), Vector2(1348.0, -352.0)]
     var home_names := ["Дом у музея", "Дом в Южном районе вилл", "Дом на Острове-Пальме"]
     for home_index in home_targets.size():
-        var target := home_targets[home_index]
+        var target: Vector2 = home_targets[home_index]
         var best: Dictionary = {}
         var best_distance := 40.0
         for building_variant in _data.get("buildings", []):
