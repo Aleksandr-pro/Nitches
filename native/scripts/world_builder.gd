@@ -22,6 +22,10 @@ const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
 const STREAM_CELL_M := 64.0
+# 0.2.44: foliage density queries (atmosphere shafts, rustle audio)
+# run against a build-time spatial grid instead of scanning every
+# vegetation point on each sample.
+const FOLIAGE_GRID_CELL_M := 55.0
 const COLLIDER_ACTIVE_RADIUS_M := 150.0
 const COLLIDER_RELEASE_RADIUS_M := 175.0
 const STREAM_HIDE_BEHIND_M := 85.0
@@ -169,6 +173,13 @@ var _reflection_probes: Array[ReflectionProbe] = []
 var _skyline_root: Node3D
 var _skyline_materials: Array[ShaderMaterial] = []
 var _foliage_points: Array[Vector3] = []
+var _foliage_grid: Dictionary = {}
+# 0.2.44 graphics-quality: every MultiMesh chunk that received a
+# visibility range registers its base begin/end here so the user
+# quality preset can rescale detail distances at runtime.
+var _quality_ranged_instances: Array[Dictionary] = []
+var _quality_detail_scale := 1.0
+var _skyline_scale := 1.0
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
@@ -256,6 +267,9 @@ func build_world() -> Dictionary:
 		collider_total += (_collider_cells[cell_variant] as Array).size()
 	_enhancement_stats["streaming_colliders_total"] = collider_total
 	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	# All vegetation points exist by now; bucket them once so density
+	# queries stay O(local) on phones (0.2.44).
+	_build_foliage_grid()
 	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
 	is_built = true
 	return get_stats()
@@ -278,15 +292,93 @@ func get_enhancement_stats() -> Dictionary:
 	return _enhancement_stats.duplicate(true)
 
 
+func _foliage_grid_cell(world_position: Vector3) -> Vector2i:
+	return Vector2i(
+		floori((world_position.x - WORLD_AABB.position.x) / FOLIAGE_GRID_CELL_M),
+		floori((world_position.z - WORLD_AABB.position.z) / FOLIAGE_GRID_CELL_M)
+	)
+
+
+## 0.2.44: bucket every foliage point into a 55 m spatial grid once,
+## at world build.  Density samples then only distance-check the
+## points inside the cells overlapped by the query circle instead of
+## the whole vegetation list (atmosphere shafts sample at ~3.6 Hz and
+## the rustle-audio gate samples too, including on phones).
+func _build_foliage_grid() -> void:
+	_foliage_grid.clear()
+	for foliage_position in _foliage_points:
+		var cell := _foliage_grid_cell(foliage_position)
+		if not _foliage_grid.has(cell):
+			_foliage_grid[cell] = []
+		(_foliage_grid[cell] as Array).append(foliage_position)
+	_enhancement_stats["foliage_spatial_grid_0244"] = true
+	_enhancement_stats["foliage_grid_cells"] = _foliage_grid.size()
+	_enhancement_stats["foliage_points_total"] = _foliage_points.size()
+	_enhancement_stats["foliage_grid_cell_m"] = FOLIAGE_GRID_CELL_M
+
+
 func get_foliage_density_at(world_position: Vector3, radius_m: float = 110.0) -> float:
 	var radius_squared := radius_m * radius_m
 	var nearby := 0
-	for foliage_position in _foliage_points:
-		var dx := foliage_position.x - world_position.x
-		var dz := foliage_position.z - world_position.z
-		if dx * dx + dz * dz <= radius_squared:
-			nearby += 1
+	if _foliage_grid.is_empty():
+		# Only reachable before build_world finishes; keep the exact
+		# legacy result as a defensive fallback.
+		for foliage_position in _foliage_points:
+			var dx := foliage_position.x - world_position.x
+			var dz := foliage_position.z - world_position.z
+			if dx * dx + dz * dz <= radius_squared:
+				nearby += 1
+		return clampf(float(nearby) / 9.0, 0.0, 1.0)
+	var min_cell := _foliage_grid_cell(world_position - Vector3(radius_m, 0.0, radius_m))
+	var max_cell := _foliage_grid_cell(world_position + Vector3(radius_m, 0.0, radius_m))
+	for cell_x in range(min_cell.x, max_cell.x + 1):
+		for cell_y in range(min_cell.y, max_cell.y + 1):
+			var bucket: Array = _foliage_grid.get(Vector2i(cell_x, cell_y), [])
+			for foliage_variant in bucket:
+				var foliage_position := foliage_variant as Vector3
+				var dx := foliage_position.x - world_position.x
+				var dz := foliage_position.z - world_position.z
+				if dx * dx + dz * dz <= radius_squared:
+					nearby += 1
 	return clampf(float(nearby) / 9.0, 0.0, 1.0)
+
+
+## 0.2.44 user graphics quality: rescale every registered detail
+## range (foliage HLODs, far proxies) around its shipped base value.
+## Begin and end scale together so detailed/proxy handoffs stay in
+## sync; instances without a range are untouched.
+func set_quality_detail_scale(scale: float) -> void:
+	_quality_detail_scale = clampf(scale, 0.3, 3.0)
+	for entry in _quality_ranged_instances:
+		var instance := entry.get("node") as GeometryInstance3D
+		if instance == null or not is_instance_valid(instance):
+			continue
+		var base_begin := float(entry.get("begin", 0.0))
+		var base_end := float(entry.get("end", 0.0))
+		if base_begin > 0.0:
+			instance.visibility_range_begin = base_begin * _quality_detail_scale
+		if base_end > 0.0:
+			instance.visibility_range_end = base_end * _quality_detail_scale
+	_enhancement_stats["quality_detail_scale_0244"] = _quality_detail_scale
+	_enhancement_stats["quality_ranged_instances"] = _quality_ranged_instances.size()
+
+
+func set_quality_shadow_distance(distance_m: float) -> void:
+	var clamped := clampf(distance_m, 60.0, 400.0)
+	if _sun != null:
+		_sun.directional_shadow_max_distance = clamped
+	_enhancement_stats["shadow_max_distance"] = clamped
+	_enhancement_stats["quality_shadow_distance_0244"] = clamped
+
+
+## Uniformly scaling the skyline root keeps the rings' angular size
+## identical while letting the camera far plane (and its depth
+## precision budget) shrink on the performance preset.
+func set_skyline_scale(scale: float) -> void:
+	_skyline_scale = clampf(scale, 0.4, 1.5)
+	if _skyline_root != null:
+		_skyline_root.scale = Vector3.ONE * _skyline_scale
+	_enhancement_stats["skyline_scale_0244"] = _skyline_scale
 
 
 func set_skyline_origin(world_position: Vector3) -> void:
@@ -5217,6 +5309,13 @@ func _add_multimesh(
 			# Dithered self-fades soften HLOD handoffs instead of hard pops.
 			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			instance.lod_bias = 0.45
+			# 0.2.44: register the shipped base range so the user's
+			# graphics preset can rescale detail distances live.
+			_quality_ranged_instances.append({
+				"node": instance,
+				"begin": maxf(visual_begin, 0.0),
+				"end": maxf(visual_end, 0.0),
+			})
 		else:
 			# Skyline geometry keeps generated/imported mesh LODs, but
 			# switches to them earlier than the desktop bias.

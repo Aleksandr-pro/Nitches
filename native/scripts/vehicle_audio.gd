@@ -90,6 +90,8 @@ const CLUNK_STREAM: AudioStream = preload("res://assets/audio/vehicle_foley/shif
 const IMPACT_SOFT_STREAM: AudioStream = preload("res://assets/audio/vehicle_foley/impact_soft.wav")
 const IMPACT_MED_STREAM: AudioStream = preload("res://assets/audio/vehicle_foley/impact_med.wav")
 const IMPACT_HARD_STREAM: AudioStream = preload("res://assets/audio/vehicle_foley/impact_hard.wav")
+# 0.2.44: park foliage-rustle ambience (foley bed, foliage-gated).
+const RUSTLE_STREAM: AudioStream = preload("res://assets/audio/vehicle_foley/foliage_rustle.wav")
 const POP_COUNT := 10
 const CAMERA_CHASE := 0
 const CAMERA_HOOD := 1
@@ -138,6 +140,10 @@ var _event_player: AudioStreamPlayer
 var _tire_player: AudioStreamPlayer
 var _road_players: Array[AudioStreamPlayer] = []
 var _wind_player: AudioStreamPlayer
+var _rustle_player: AudioStreamPlayer
+var _rustle_smooth := 0.0
+var _rustle_time := 0.0
+var _foliage_density_heard := 0.0
 var _whine_player: AudioStreamPlayer
 var _scrape_player: AudioStreamPlayer
 var _clunk_player: AudioStreamPlayer
@@ -339,6 +345,7 @@ func _ready() -> void:
 	_prepare_loop(_idle_stream)
 	_prepare_loop(TIRE_STREAM)
 	_prepare_loop(WIND_STREAM)
+	_prepare_loop(RUSTLE_STREAM)
 	_prepare_loop(WHINE_STREAM)
 	_prepare_loop(SCRAPE_STREAM)
 	_road_streams = {
@@ -361,6 +368,7 @@ func _ready() -> void:
 		_make_player("RoadBedB", ROAD_ASPHALT_STREAM, _road_bus_name),
 	]
 	_wind_player = _make_player("WindBed", WIND_STREAM, _road_bus_name)
+	_rustle_player = _make_player("FoliageRustle", RUSTLE_STREAM, _road_bus_name)
 	_whine_player = _make_player("GearWhine", WHINE_STREAM, _road_bus_name)
 	_scrape_player = _make_player("WallScrape", SCRAPE_STREAM, _events_bus_name)
 	_clunk_player = _make_player("ShiftClunk", CLUNK_STREAM, _events_bus_name)
@@ -466,7 +474,7 @@ func _all_players() -> Array[AudioStreamPlayer]:
 	for player in [
 		_idle_player, _on_low_player, _on_high_player, _off_low_player,
 		_off_high_player, _event_player, _tire_player, _wind_player,
-		_whine_player, _scrape_player, _clunk_player, _impact_player,
+		_rustle_player, _whine_player, _scrape_player, _clunk_player, _impact_player,
 		_thump_player,
 	]:
 		if player != null:
@@ -644,6 +652,8 @@ func update_audio(delta: float, s: Dictionary) -> void:
 	var grounded := bool(s.get("grounded", false))
 	_camera_mode = clampi(int(s.get("camera_mode", CAMERA_CHASE)), CAMERA_CHASE, CAMERA_TOP)
 	var scrape_input := clampf(float(s.get("scrape", 0.0)), 0.0, 1.0)
+	var foliage_density := clampf(float(s.get("foliage_density", 0.0)), 0.0, 1.0)
+	_foliage_density_heard = foliage_density
 
 	# Listener (camera) mix, smoothed so a camera cut is not a sonic cut.
 	var listener_targets := [0.0, 1.0, 0.0, 0.0, 0.0]
@@ -780,6 +790,28 @@ func update_audio(delta: float, s: Dictionary) -> void:
 		_set_gain(_scrape_player, 0.0)
 		if _scrape_player.playing:
 			_scrape_player.stop()
+
+	# --- Foliage rustle (0.2.44) -----------------------------------------------
+	# Barely-audible park ambience.  It breathes with slow synthetic
+	# gusts, follows the measured foliage density around the car and
+	# ducks away at speed where wind/road beds take over.  It runs in
+	# the always-on region above the engine early-out, so a parked car
+	# in a palm park still hears the crowns move.
+	_rustle_time += safe_delta
+	var rustle_gust := 0.62 + 0.23 * sin(_rustle_time * 0.53) + 0.15 * sin(_rustle_time * 1.31 + 1.7)
+	var rustle_speed_mask := 1.0 - 0.78 * smoothstep(10.0, 28.0, abs_speed)
+	var rustle_target := pow(foliage_density, 1.25) * rustle_gust * rustle_speed_mask
+	_rustle_smooth = lerpf(_rustle_smooth, rustle_target, 1.0 - exp(-1.6 * safe_delta))
+	if _rustle_player != null:
+		if _rustle_smooth > 0.004:
+			if not _rustle_player.playing:
+				_rustle_player.play()
+			_rustle_player.pitch_scale = 0.94 + 0.06 * sin(_rustle_time * 0.21)
+			_set_gain(_rustle_player, _rustle_smooth * db_to_linear(-15.0 + _listener_wind_db * 0.4))
+		else:
+			_set_gain(_rustle_player, 0.0)
+			if _rustle_player.playing:
+				_rustle_player.stop()
 
 	# --- Exhaust crackle -------------------------------------------------------
 	_prev_sound_rpm = _sound_rpm
@@ -927,6 +959,9 @@ func get_smoke_state() -> Dictionary:
 		"pops_fired": _pops_fired,
 		"crackle_amount": _crackle_amount,
 		"foley_ready": _foley_ready(),
+		"foliage_rustle_ready_0244": _rustle_player != null and RUSTLE_STREAM != null,
+		"foliage_density_heard": _foliage_density_heard,
+		"rustle_level": _rustle_smooth,
 		"engine_lowpass_ready": _engine_lowpass != null,
 		"tire_panner_ready": _tire_panner != null,
 		"engine_lp_hz": _engine_lp_hz,

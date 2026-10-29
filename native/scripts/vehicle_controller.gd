@@ -121,6 +121,9 @@ var _audio_prev_axle_disp: Array[float] = [0.0, 0.0]
 var _audio_axle_disp_ready := false
 var _audio_thump_cooldowns: Array[float] = [0.0, 0.0]
 var _scrape_level := 0.0
+# 0.2.44 foliage-rustle ambience gate (throttled grid sample).
+var _audio_foliage_density := 0.0
+var _audio_foliage_timer := 0.0
 var _nitro := 0.72
 var _forward_speed := 0.0
 var _lateral_speed := 0.0
@@ -1432,6 +1435,13 @@ func _update_engine_state(delta: float) -> void:
 func _update_vehicle_audio(delta: float) -> void:
 	if _vehicle_audio == null or _audio_suspended:
 		return
+	# 0.2.44: throttle-sample the foliage density around the car for
+	# the rustle ambience gate (spatial-grid query, ~3 Hz is plenty).
+	_audio_foliage_timer -= delta
+	if _audio_foliage_timer <= 0.0:
+		_audio_foliage_timer = 0.35
+		if _world != null:
+			_audio_foliage_density = _world.get_foliage_density_at(global_position, 80.0)
 	var tire_level := 0.0
 	if grounded_wheel_count >= 2:
 		var speed_factor := smoothstep(4.5, 12.0, absf(_forward_speed))
@@ -1468,6 +1478,7 @@ func _update_vehicle_audio(delta: float) -> void:
 		"grounded": grounded_wheel_count >= 2,
 		"camera_mode": _audio_camera_mode,
 		"scrape": _scrape_level,
+		"foliage_density": _audio_foliage_density,
 	})
 
 

@@ -111,6 +111,7 @@ const foleyAudioNames = [
   'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
   'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
   'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+  'foliage_rustle.wav',
 ];
 const foleyAudioCopies = foleyAudioNames.map((name) => [
   `src/assets/audio/vehicle_foley/${name}`,
