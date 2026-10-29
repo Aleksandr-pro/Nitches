@@ -108,6 +108,18 @@ var _contact_shadow_material: StandardMaterial3D
 var _soft_disc_texture: Texture2D
 var _vehicle_audio: NativeVehicleAudio
 var _audio_suspended := false
+# 0.2.42 audio-impact sensing: previous-tick velocity for delta-V
+# crash detection, airborne timer for landings, per-axle suspension
+# compression tracking for kerb thumps, and a wall-scrape estimate.
+var _audio_camera_mode := 0
+var _audio_prev_velocity := Vector3.ZERO
+var _audio_air_time := 0.0
+var _audio_impact_cooldown := 0.0
+var _audio_teleport_guard := 0.0
+var _audio_prev_axle_disp: Array[float] = [0.0, 0.0]
+var _audio_axle_disp_ready := false
+var _audio_thump_cooldowns: Array[float] = [0.0, 0.0]
+var _scrape_level := 0.0
 var _nitro := 0.72
 var _forward_speed := 0.0
 var _lateral_speed := 0.0
@@ -332,6 +344,14 @@ func _reset_dynamic_state() -> void:
 	_wheelspin_excess_speed = 0.0
 	_rear_slip_ratio = 0.0
 	_brake_light_active = false
+	_audio_prev_velocity = Vector3.ZERO
+	_audio_air_time = 0.0
+	_audio_impact_cooldown = 0.0
+	_audio_teleport_guard = 0.35
+	_audio_prev_axle_disp = [0.0, 0.0]
+	_audio_axle_disp_ready = false
+	_audio_thump_cooldowns = [0.0, 0.0]
+	_scrape_level = 0.0
 	_set_engine_state(ENGINE_OFF)
 
 
@@ -1279,7 +1299,7 @@ func stop_engine(play_sound: bool = true) -> void:
 	_set_engine_state(ENGINE_STOPPING)
 	if _vehicle_audio != null:
 		if play_sound:
-			_vehicle_audio.play_stop()
+			_vehicle_audio.play_stop(clampf(_engine_rpm / maxf(_redline_rpm, 1.0), 0.0, 1.0))
 		else:
 			_vehicle_audio.cancel_event()
 			_vehicle_audio.stop_engine_loops()
@@ -1297,6 +1317,12 @@ func set_audio_suspended(suspended: bool) -> void:
 	_audio_suspended = suspended
 	if _vehicle_audio != null:
 		_vehicle_audio.set_suspended(suspended)
+
+
+## Main pushes the active camera (0 chase / 1 hood / 2 top) so the
+## audio mixer can move the listener with the player's ears.
+func set_audio_camera_mode(mode: int) -> void:
+	_audio_camera_mode = clampi(mode, 0, 2)
 
 
 func get_engine_load() -> float:
@@ -1380,8 +1406,93 @@ func _update_vehicle_audio(delta: float) -> void:
 			tire_level = maxf(tire_level, 0.62 * speed_factor)
 		if absf(_rear_slip_ratio) > 0.18 and absf(throttle_input) > 0.05:
 			tire_level = maxf(tire_level, clampf((absf(_rear_slip_ratio) - 0.18) / 0.55, 0.0, 1.0))
+	# Rubber only sings on hard surfaces; grass/sand scrub silently
+	# and feed the road bed instead.
+	var squeal_surface_factor := 1.0
+	match _surface_kind:
+		"sidewalk", "concrete", "plaza":
+			squeal_surface_factor = 0.85
+		"rock":
+			squeal_surface_factor = 0.5
+		"grass", "sand", "water":
+			squeal_surface_factor = 0.0
+	tire_level *= squeal_surface_factor
 	var tire_pitch := 0.72 + clampf(absf(_forward_speed) / 42.0, 0.0, 1.0) * 0.38 + clampf(absf(_rear_slip_ratio), 0.0, 1.0) * 0.12
-	_vehicle_audio.update_audio(delta, _engine_state, _engine_rpm, get_engine_load(), boost_active, tire_level, tire_pitch)
+	_vehicle_audio.update_audio(delta, {
+		"engine_state": _engine_state,
+		"engine_rpm": _engine_rpm,
+		"engine_load": get_engine_load(),
+		"boost": boost_active,
+		"speed_ms": _forward_speed,
+		"gear_index": _current_gear,
+		"reverse": _reverse_engaged,
+		"tire_squeal": tire_level,
+		"tire_pitch": tire_pitch,
+		"drift_pan": clampf(_lateral_speed / 13.0, -1.0, 1.0),
+		"surface_kind": _surface_kind,
+		"grounded": grounded_wheel_count >= 2,
+		"camera_mode": _audio_camera_mode,
+		"scrape": _scrape_level,
+	})
+
+
+## 0.2.42: convert physics events the ears should hear — delta-V
+## impacts, landings, kerb/suspension thumps and wall scrapes — into
+## one-shot/level calls on the audio node.  Runs after the tyre pass
+## so grounded count and suspension displacements are current.
+func _update_audio_impacts(delta: float) -> void:
+	_audio_impact_cooldown = maxf(_audio_impact_cooldown - delta, 0.0)
+	_audio_teleport_guard = maxf(_audio_teleport_guard - delta, 0.0)
+	for axle in 2:
+		_audio_thump_cooldowns[axle] = maxf(_audio_thump_cooldowns[axle] - delta, 0.0)
+	var velocity_now := linear_velocity
+	if _vehicle_audio != null and not _audio_suspended and _audio_teleport_guard <= 0.0 and delta > 0.0:
+		# Crash: the body lost (or gained) speed in a single tick far
+		# faster than engine/brakes/drag can explain.
+		var delta_v := (velocity_now - _audio_prev_velocity).length()
+		if delta_v > 1.15 and _audio_impact_cooldown <= 0.0 and velocity_now.length() + delta_v > 2.0:
+			var impact_strength := clampf((delta_v - 1.15) / 5.5, 0.0, 1.0)
+			if impact_strength > 0.03:
+				_vehicle_audio.play_impact(impact_strength)
+				_audio_impact_cooldown = 0.13
+		# Landing after real airtime.
+		if grounded_wheel_count == 0:
+			_audio_air_time += delta
+		else:
+			if _audio_air_time > 0.22 and _audio_prev_velocity.y < -2.5:
+				_vehicle_audio.play_thump(clampf(absf(_audio_prev_velocity.y) / 9.0, 0.15, 1.0))
+				if _audio_prev_velocity.y < -6.5:
+					_vehicle_audio.play_impact(0.3)
+			_audio_air_time = 0.0
+		# Kerb strikes and harsh compressions, per axle.
+		var axle_disp: Array[float] = [0.0, 0.0]
+		var axle_count: Array[int] = [0, 0]
+		for wheel in _wheels:
+			var axle := clampi(int(wheel.get("axle", 0)), 0, 1)
+			axle_disp[axle] += float(wheel.get("displacement", 0.0))
+			axle_count[axle] += 1
+		for axle in 2:
+			if axle_count[axle] > 0:
+				axle_disp[axle] /= float(axle_count[axle])
+		if _audio_axle_disp_ready and absf(_forward_speed) > 2.5:
+			for axle in 2:
+				var compression_velocity := (axle_disp[axle] - _audio_prev_axle_disp[axle]) / delta
+				if compression_velocity > 1.25 and _audio_thump_cooldowns[axle] <= 0.0:
+					_vehicle_audio.play_thump(clampf((compression_velocity - 1.25) / 2.4, 0.0, 0.85))
+					_audio_thump_cooldowns[axle] = 0.09
+		_audio_prev_axle_disp = axle_disp
+		_audio_axle_disp_ready = true
+		# Grinding along a wall: persistent body contact at speed.
+		var scrape_target := 0.0
+		if grounded_wheel_count > 0 and absf(_forward_speed) > 2.5 and get_colliding_bodies().size() > 0:
+			scrape_target = clampf((absf(_forward_speed) - 2.5) / 13.0, 0.0, 1.0) * 0.85
+		var scrape_rate := 3.5 if scrape_target > _scrape_level else 5.0
+		_scrape_level = move_toward(_scrape_level, scrape_target, scrape_rate * delta)
+	else:
+		_scrape_level = move_toward(_scrape_level, 0.0, 5.0 * delta)
+		if grounded_wheel_count > 0:
+			_audio_air_time = 0.0
+	_audio_prev_velocity = velocity_now
 
 
 func set_touch_input(action_name: String, pressed: bool) -> void:
@@ -1547,6 +1658,7 @@ func _physics_process(delta: float) -> void:
 	_brake_light_active = handbrake_active or (throttle_input < -0.03 and _forward_speed > 0.45)
 	_update_drivetrain(delta)
 	_apply_suspension_and_tyres(delta)
+	_update_audio_impacts(delta)
 	_apply_aerodynamics()
 	_update_flip_recovery(delta)
 	_update_safe_transform(delta)
@@ -1634,12 +1746,15 @@ func _update_drivetrain(delta: float) -> void:
 		_rear_slip_ratio = _wheelspin_excess_speed / maxf(absf(_forward_speed), 4.0)
 		return
 
+	var was_reverse_engaged := _reverse_engaged
 	if throttle_input > 0.03:
 		_reverse_engaged = false
 	elif throttle_input < -0.03 and _forward_speed <= 0.45:
 		_reverse_engaged = true
 	elif _forward_speed > 0.6:
 		_reverse_engaged = false
+	if _reverse_engaged and not was_reverse_engaged and _vehicle_audio != null and not _audio_suspended:
+		_vehicle_audio.play_shift(false, 0.35)
 
 	_gear_shift_timer = maxf(_gear_shift_timer - delta, 0.0)
 	var ratio := _reverse_ratio if _reverse_engaged else _gear_ratios[_current_gear]
@@ -1669,6 +1784,8 @@ func _update_drivetrain(delta: float) -> void:
 			_engine_rpm = clampf(maxf(_coupled_rpm, _idle_rpm), _idle_rpm, _redline_rpm)
 			_gear_shift_timer = 0.24
 			_gear_shift_duration = 0.24
+			if _vehicle_audio != null and not _audio_suspended:
+				_vehicle_audio.play_shift(false, clampf(absf(throttle_input), 0.2, 1.0))
 		elif _desired_automatic_gear < _current_gear and absf(_forward_speed) > 3.0:
 			_current_gear -= 1
 			ratio = _gear_ratios[_current_gear]
@@ -1676,6 +1793,8 @@ func _update_drivetrain(delta: float) -> void:
 			_engine_rpm = clampf(maxf(_coupled_rpm, _idle_rpm), _idle_rpm, _redline_rpm)
 			_gear_shift_timer = 0.17
 			_gear_shift_duration = 0.17
+			if _vehicle_audio != null and not _audio_suspended:
+				_vehicle_audio.play_shift(true, clampf(absf(throttle_input), 0.25, 1.0))
 
 	var throttle_magnitude := 0.0
 	if _reverse_engaged:
@@ -2127,6 +2246,8 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
+	_audio_prev_velocity = Vector3.ZERO
+	_audio_teleport_guard = 0.35
 	_current_gear = 0
 	if _engine_state == ENGINE_RUNNING:
 		_engine_rpm = _idle_rpm

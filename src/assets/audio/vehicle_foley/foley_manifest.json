@@ -1,0 +1,91 @@
+{
+  "foley_0242": true,
+  "format": "WAV 32000 Hz 16-bit (wind stereo, rest mono)",
+  "note": "Engine and tyre-squeal voices are field recordings in the per-car banks; this folder is supplemental foley only.",
+  "files": [
+    {
+      "file": "wind_loop.wav",
+      "seconds": 6.0,
+      "sample_rate": 32000,
+      "channels": 2,
+      "method": "Synthesized stereo 1/f noise, FFT-shaped (inherently seamless), baked gust LFO. Foley layer only."
+    },
+    {
+      "file": "road_asphalt.wav",
+      "seconds": 4.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized FFT-shaped noise road bed (seamless). Foley layer only; tyre squeal itself stays the CC BY recording."
+    },
+    {
+      "file": "road_sidewalk.wav",
+      "seconds": 4.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized FFT-shaped noise road bed (seamless). Foley layer only; tyre squeal itself stays the CC BY recording."
+    },
+    {
+      "file": "road_grass.wav",
+      "seconds": 4.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized FFT-shaped noise road bed (seamless). Foley layer only; tyre squeal itself stays the CC BY recording."
+    },
+    {
+      "file": "road_sand.wav",
+      "seconds": 4.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized FFT-shaped noise road bed (seamless). Foley layer only; tyre squeal itself stays the CC BY recording."
+    },
+    {
+      "file": "whine_loop.wav",
+      "seconds": 2.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized harmonic gear-mesh loop at 82 Hz, pitched by output-shaft speed at runtime, mixed ~26 dB under the recorded engine. Foley layer only."
+    },
+    {
+      "file": "impact_soft.wav",
+      "seconds": 0.2,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized body-knock (pitch-dropping sine + filtered noise burst). Foley layer only."
+    },
+    {
+      "file": "impact_med.wav",
+      "seconds": 0.26,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized body-knock (pitch-dropping sine + filtered noise burst). Foley layer only."
+    },
+    {
+      "file": "impact_hard.wav",
+      "seconds": 0.34,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized body-knock (pitch-dropping sine + filtered noise burst). Foley layer only."
+    },
+    {
+      "file": "suspension_thump.wav",
+      "seconds": 0.2,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized low suspension thump. Foley layer only."
+    },
+    {
+      "file": "scrape_loop.wav",
+      "seconds": 3.0,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Synthesized metallic scrape bed (seamless). Foley layer only."
+    },
+    {
+      "file": "shift_clunk.wav",
+      "seconds": 0.11,
+      "sample_rate": 32000,
+      "channels": 1,
+      "method": "Extracted from the recorded Mustang starter engagement (lmbubec, Freesound 119449, CC0), low-passed and enveloped; per-car character via runtime pitch/gain."
+    }
+  ]
+}

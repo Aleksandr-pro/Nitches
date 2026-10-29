@@ -74,8 +74,8 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=44'), 'Native 0.2.41 must bump Android versionCode to 44');
-assert(preset.includes('version/name="0.2.41-native-alpha"'), 'Native version name must be 0.2.41-native-alpha');
+assert(preset.includes('version/code=45'), 'Native 0.2.42 must bump Android versionCode to 45');
+assert(preset.includes('version/name="0.2.42-native-alpha"'), 'Native version name must be 0.2.42-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -275,6 +275,15 @@ for (const marker of ['automatic_shift_0241', '_desired_automatic_gear_for_speed
 assert(carCatalogScript.includes('"paint_roughness": 0.075') && carCatalogScript.includes('"paint_roughness": 0.065') && carCatalogScript.includes('"paint_flake_strength": 0.16') && carCatalogScript.includes('"paint_flake_strength": 0.12'), 'Native 0.2.41 must give the silver R8 and black 560 SEL smooth, fine-flake glossy factory finishes');
 assert(vehicleScript.includes('lower_name == "blackgloss"') && vehicleScript.includes('lower_name == "glasswindow"') && !vehicleScript.includes('lower_name.contains("glass") or lower_name.contains("window")'), 'Native 0.2.41 must handle BlackGloss and GlassWindow as exact distinct exterior semantics');
 assert(mainScript.includes('0.2.41 coupled-RPM automatic shifts') && mainScript.includes('get_automatic_gear_for_speed(speed_kmh / 3.6, 0)') && mainScript.includes('for probe_id in NativeCarCatalog.car_ids()'), 'Native 0.2.41 smoke must exercise the real automatic-gear helper for every catalogue car');
+// 0.2.42 recorded-audio realism pass: dense PSOLA anchor ladders,
+// log-domain crossfades, dynamic engine lowpass, exhaust crackle,
+// shift clunks/downshift blips, wind/road/whine/scrape foley,
+// delta-V impacts and a camera-aware listener — while engine and
+// tyre voices remain real recordings (no synthesized engine tone).
+for (const marker of ['audio_realism_0242', 'AudioEffectLowPassFilter', 'AudioEffectStereoEnhance', 'AudioEffectPanner', 'AudioEffectCompressor', 'play_shift', 'play_impact', 'play_thump', '_update_audio_impacts', 'set_audio_camera_mode', '_crackle_energy', 'VehicleAudio0235Engine', 'VehicleAudio0235Tires', 'VehicleAudio0235Road', 'VehicleAudio0235Events', 'exhaust', 'pop_%02d.wav', 'vehicle_foley', 'wind_loop.wav', 'whine_loop.wav']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.42 audio-realism marker is missing: ${marker}`);
+}
+assert(audioCredits.includes('TD-PSOLA') && audioCredits.includes('0.2.42'), 'Native 0.2.42 audio credits must document the recorded-texture PSOLA anchors and foley honestly');
 assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых машин без моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
 assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
 assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
@@ -649,7 +658,7 @@ for (const cottageTextureStem of ['cottage_basalt', 'cottage_limestone_blocks', 
   }
 }
 
-const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400];
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400, 5000, 5600];
 const shelbyAudioFiles = [
   ...shelbyAudioRpms.flatMap((rpm) => [
     `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
@@ -660,22 +669,24 @@ const shelbyAudioFiles = [
   'mustang_stop.wav',
   'tire_squeal_loop.wav',
 ];
-assert(shelbyAudioFiles.length === 36, 'Native 0.2.35 must ship 32 GT500 loops plus idle/start/stop/tyre recordings');
+assert(shelbyAudioFiles.length === 40, 'Native 0.2.42 must ship 36 GT500 loops (incl. PSOLA 5000/5600) plus idle/start/stop/tyre recordings');
 for (const name of shelbyAudioFiles) {
   const source = `src/assets/audio/shelby/${name}`;
   const info = await stat(source);
   const bytes = await readFile(source);
-  assert(info.size > 40_000, `${source} is unexpectedly small`);
+  const minimumSize = /_(5000|5600)\.wav$/.test(name) ? 15_000 : 40_000;
+  assert(info.size > minimumSize, `${source} is unexpectedly small`);
   assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
   assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit for the mobile audio bank`);
 }
 const shelbyManifest = JSON.parse(await readFile('src/assets/audio/shelby/bank_manifest.json', 'utf8'));
-assert(shelbyManifest.sample_rate === 32000 && shelbyManifest.channels === 1 && shelbyManifest.engine_loops.length === 32, 'Native 0.2.35 Shelby bank manifest must describe all 32 mono engine loops');
+assert(shelbyManifest.sample_rate === 32000 && shelbyManifest.channels === 1 && shelbyManifest.engine_loops.length === 36, 'Native 0.2.42 Shelby bank manifest must describe all 36 mono engine loops');
+assert(shelbyManifest.engine_loops.filter((loop) => loop.derivation).length === 4, 'Shelby 5000/5600 PSOLA derivatives must stay honestly documented in the manifest');
 
 const suppliedCarAudioBanks = {
-  audi_r8: [1231, 1602, 3735],
-  camaro_ss: [635, 1444, 2265, 3747, 6478],
-  mercedes_560_sel: [805, 999, 1444, 2265, 3747, 4342],
+  audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
+  camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
 };
 const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([bank, rpms]) => [
   ...rpms.flatMap((rpm) => [
@@ -686,7 +697,7 @@ const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([ba
   `${bank}/engine_start.wav`,
   `${bank}/engine_stop.wav`,
 ]);
-assert(suppliedCarAudioFiles.length === 37, 'Native 0.2.40 must ship 28 supplied-car loops plus idle/start/stop for all three banks');
+assert(suppliedCarAudioFiles.length === 51, 'Native 0.2.42 must ship 42 supplied-car loops plus idle/start/stop for all three banks');
 for (const [bank, rpms] of Object.entries(suppliedCarAudioBanks)) {
   const manifest = JSON.parse(await readFile(`src/assets/audio/${bank}/bank_manifest.json`, 'utf8'));
   assert(manifest.bank === bank && manifest.format === 'mono WAV 32000 Hz 16-bit' && manifest.anchors.length === rpms.length, `${bank} audio manifest does not describe its complete mono bank`);
@@ -699,6 +710,36 @@ for (const name of suppliedCarAudioFiles) {
   assert(info.size > 15_000, `${source} is unexpectedly small`);
   assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
   assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit`);
+}
+
+// 0.2.42: every bank also ships ten exhaust-pop one-shots sliced
+// from its own recorded loops, plus a small secondary foley set
+// (wind/road/impact/whine/scrape) layered under the recorded
+// engine and tyre voices.
+const popBanks = ['shelby', 'audi_r8', 'camaro_ss', 'mercedes_560_sel'];
+for (const bank of popBanks) {
+  for (let i = 1; i <= 10; i += 1) {
+    const source = `src/assets/audio/${bank}/pop_${String(i).padStart(2, '0')}.wav`;
+    const info = await stat(source);
+    const bytes = await readFile(source);
+    assert(info.size > 2_500, `${source} is unexpectedly small`);
+    assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+    assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit`);
+  }
+}
+const foleyAudioFiles = [
+  'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
+  'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
+  'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+];
+for (const name of foleyAudioFiles) {
+  const source = `src/assets/audio/vehicle_foley/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  assert(info.size > 4_000, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  const expectedChannels = name === 'wind_loop.wav' ? 2 : 1;
+  assert(bytes.readUInt16LE(22) === expectedChannels && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay 32 kHz/16-bit (${expectedChannels}ch)`);
 }
 
 const steeringWheelBytes = await readFile('src/assets/ui/steering_wheel_common.png');

@@ -132,18 +132,71 @@ sample-accurate captures of those exact production engines.
 
 ## Runtime layout
 
-- Shelby: sixteen RPM points, 900–4400 rpm, above which the climb to
-  its 6400 rpm redline is compressed rather than pitch-stretched by
-  an unnatural amount.
-- Audi R8: 1231, 1602, and 3735 rpm anchors; 900 rpm idle and an
-  8500 rpm sound redline.
-- Camaro SS: 635, 1444, 2265, 3747, and 6478 rpm anchors; 750 rpm
-  idle and a 6500 rpm sound redline.
-- Mercedes 560 SEL: 805, 999, 1444, 2265, 3747, and 4342 rpm anchors;
-  700 rpm idle, a 6000 rpm sound redline, and a quieter master offset.
+- Shelby: eighteen RPM points, 900–5600 rpm, above which the climb
+  to its 6400 rpm redline is compressed rather than pitch-stretched
+  by an unnatural amount (see the 0.2.42 section below).
+- Audi R8: 1231, 1602, 2400, 3735, 5200, and 6800 rpm anchors;
+  900 rpm idle and an 8500 rpm sound redline.
+- Camaro SS: 635, 1050, 1444, 2265, 2900, 3747, 5000, and 6478 rpm
+  anchors; 750 rpm idle and a 6500 rpm sound redline.
+- Mercedes 560 SEL: 805, 999, 1444, 2265, 2900, 3747, and 5000 rpm
+  anchors; 700 rpm idle, a 6000 rpm sound redline, and a quieter
+  master offset.
 - `NativeVehicleAudio.configure_for_car()` selects the bank before
   the node enters the tree. Four continuous players crossfade two
   neighbouring RPM points in both throttle layers; a fifth carries
   idle, a sixth starter/shutdown one-shots, and a seventh controlled
   tyre slip.
 - All vehicle layers share a dedicated bus with a limiter.
+
+## 0.2.42 realism pass — recorded-texture PSOLA anchors and foley
+
+Sparse anchor ladders forced large runtime pitch stretches (the V10
+jumped 1602→3735 rpm at up to ×2.13). 0.2.42 densifies every bank
+without inventing a synthetic voice: the missing anchors are
+pulse-synchronous **TD-PSOLA** derivatives of the same CC0/CC BY-SA
+recordings — individual firing pulses from the real loops are
+re-timed, so the grain, formants and exhaust texture stay recorded
+while the firing rate (perceived pitch) becomes exact. Each derived
+anchor is documented in its `bank_manifest.json` with the parent
+recording, ratio and method; harmonic-comb verification values are
+kept as reference notes. Anchor RPM of real loops was verified by
+spectral comb analysis against the firing harmonics (all shipped
+anchors measured within 1.3% of their labels).
+
+- Shelby GT500: 900–4400 rpm recorded points plus 5000/5600 rpm
+  TD-PSOLA derivatives of the recorded 4400 rpm loops; the climb to
+  the 6400 rpm redline is compressed to the 5600 rpm anchor at ×0.80
+  so runtime pitch never exceeds ×1.30.
+- Audi R8 V10: 1231/1602/3735 rpm recorded anchors plus 2400 (from
+  3735), 5200 and 6800 rpm (from 3735) TD-PSOLA derivatives.
+- Camaro SS: 635/1444/2265/3747/6478 rpm recorded anchors plus 1050
+  (from the 635 Caprice loop), 2900 and 5000 rpm (from the recorded
+  Lexus IS F loop, CC BY-SA 4.0) TD-PSOLA derivatives.
+- Mercedes 560 SEL: 805/999/1444/2265/3747 rpm recorded anchors plus
+  2900/5000 rpm TD-PSOLA derivatives. The earlier 4342 rpm anchor
+  (Ferrari V12 recording, CC BY 3.0) was removed: a V12 voice inside
+  a luxury V8 was worse than a densified V8 ladder.
+- Idle voicing now comes from idle-character recordings rather than
+  the mid-rev loops that previously doubled as "idle": Corvette V8
+  637184 (Camaro), Chevrolet Caprice 391671 (Mercedes), BMW M6 V10
+  478597 (Audi), each looped at whole crank cycles.
+- Every bank ships ten exhaust-pop one-shots (`pop_01..10.wav`)
+  sliced from transient peaks of its own recorded loops; the runtime
+  schedules them on trailing throttle with per-car intensity (R8
+  crackles hard, the 560 SEL barely burbles).
+- `vehicle_foley/` is secondary by design and deliberately small:
+  wind, four road-surface beds, scrape and thump are filtered-noise
+  and low-frequency renders; `shift_clunk.wav` is a transient cut
+  from the recorded Corvette starter clip (637184); the three impact
+  layers are noise burst + low thump renders used only for delta-V
+  crashes; `whine_loop.wav` is a discrete-mesh render played at very
+  low level for reverse/first gear. The engine voice, exhaust pops
+  and tyre squeal remain the real recordings credited above; no
+  synthesized engine tone is used anywhere in the runtime.
+- Runtime mixing: log-domain (geometric pitch + equal-power)
+  crossfades, per-anchor loudness compensation measured from the
+  files, a dynamic 18 dB/oct engine lowpass following RPM/load/
+  camera, living-idle RPM wander, limiter gate at 19 Hz firing rate,
+  downshift throttle-blip sampling, wind ∝ speed², surface-aware
+  road beds, and a listener mix per camera (chase/hood/top).

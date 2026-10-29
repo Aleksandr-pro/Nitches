@@ -321,6 +321,58 @@
       "source_freesound_id": "205511",
       "source_time_s": 12.04,
       "source_rpm": 3727.0
+    },
+    {
+      "file": "gt500_on_5000.wav",
+      "layer": "on",
+      "rpm": 5000,
+      "cycles": 28,
+      "samples": 21511,
+      "measured_rpm": 5001.0,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0,
+      "derived_from": "gt500_on_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_on_4400.wav loop, ratio 1.136, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 5001, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_on_5600.wav",
+      "layer": "on",
+      "rpm": 5600,
+      "cycles": 28,
+      "samples": 19206,
+      "measured_rpm": 5598.0,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0,
+      "derived_from": "gt500_on_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_on_4400.wav loop, ratio 1.273, pulse rate scaled to 5600 rpm by construction (comb spectral estimate 5598, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_off_5000.wav",
+      "layer": "off",
+      "rpm": 5000,
+      "cycles": 28,
+      "samples": 21511,
+      "measured_rpm": 4380.0,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0,
+      "derived_from": "gt500_off_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_off_4400.wav loop, ratio 1.136, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 4380, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_off_5600.wav",
+      "layer": "off",
+      "rpm": 5600,
+      "cycles": 28,
+      "samples": 19206,
+      "measured_rpm": 4905.0,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0,
+      "derived_from": "gt500_off_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_off_4400.wav loop, ratio 1.273, pulse rate scaled to 5600 rpm by construction (comb spectral estimate 4905, biased toward the parent envelope PSOLA preserves); no synthesized tone."
     }
   ],
   "idle": {
@@ -349,5 +401,71 @@
     "file": "tire_squeal_loop.wav",
     "source_freesound_id": "71739",
     "edit": "downsampled to 32 kHz and circular-crossfaded"
+  },
+  "audio_0242": true,
+  "pops": {
+    "files": [
+      {
+        "file": "pop_01.wav",
+        "seconds": 0.09722,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_02.wav",
+        "seconds": 0.07762,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_03.wav",
+        "seconds": 0.05506,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_04.wav",
+        "seconds": 0.08678,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_05.wav",
+        "seconds": 0.05663,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_06.wav",
+        "seconds": 0.06588,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_07.wav",
+        "seconds": 0.06234,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_08.wav",
+        "seconds": 0.09584,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_09.wav",
+        "seconds": 0.06928,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_10.wav",
+        "seconds": 0.10894,
+        "sample_rate": 32000,
+        "channels": 1
+      }
+    ],
+    "derivation": "Single exhaust pulses cut from the recorded GT500 4400 rpm loops, enveloped and resequenced stochastically at runtime for overrun crackle."
   }
 }

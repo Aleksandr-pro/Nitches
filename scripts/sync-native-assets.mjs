@@ -63,7 +63,12 @@ const uiCopies = [
 // 0.2.35 recorded Shelby/Mustang bank.  The phase-aligned GT500 loops
 // are staged in both load layers; the long Mustang idle, starter,
 // shutdown and tyre recordings complete the vehicle-audio set.
-const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400];
+// 0.2.42: 5000/5600 anchors are pulse-synchronous TD-PSOLA
+// derivatives of the recorded 4400 loops (recorded texture, gap
+// synthesis documented in the bank manifest), and every bank gained
+// ten exhaust-pop one-shots cut from the same source loops.
+const popNames = Array.from({ length: 10 }, (_, i) => `pop_${String(i + 1).padStart(2, '0')}.wav`);
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400, 5000, 5600];
 const shelbyAudioNames = [
   ...shelbyAudioRpms.flatMap((rpm) => [
     `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
@@ -73,14 +78,16 @@ const shelbyAudioNames = [
   'mustang_start.wav',
   'mustang_stop.wav',
   'tire_squeal_loop.wav',
+  ...popNames,
 ];
-// 0.2.40 recorded banks for the three supplied cars.  The generator
-// writes phase-trimmed on/off-throttle loops plus idle/start/stop for
-// each bank; NativeVehicleAudio selects one bank per catalogue car.
+// 0.2.40 recorded banks for the three supplied cars (0.2.42 densified
+// with recorded-texture PSOLA anchors + pops).  The generator writes
+// phase-trimmed on/off-throttle loops plus idle/start/stop for each
+// bank; NativeVehicleAudio selects one bank per catalogue car.
 const recordedCarAudioBanks = {
-  audi_r8: [1231, 1602, 3735],
-  camaro_ss: [635, 1444, 2265, 3747, 6478],
-  mercedes_560_sel: [805, 999, 1444, 2265, 3747, 4342],
+  audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
+  camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
 };
 const recordedCarAudioCopies = Object.entries(recordedCarAudioBanks).flatMap(([bank, rpms]) => {
   const names = [
@@ -91,18 +98,31 @@ const recordedCarAudioCopies = Object.entries(recordedCarAudioBanks).flatMap(([b
     'engine_idle.wav',
     'engine_start.wav',
     'engine_stop.wav',
+    ...popNames,
   ];
   return names.map((name) => [
     `src/assets/audio/${bank}/${name}`,
     `audio/${bank}/${name}`,
   ]);
 });
+// 0.2.42 secondary foley: wind/road/impact layers under the recorded
+// engine and tyre voices (documented in docs/AUDIO_CREDITS.md).
+const foleyAudioNames = [
+  'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
+  'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
+  'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+];
+const foleyAudioCopies = foleyAudioNames.map((name) => [
+  `src/assets/audio/vehicle_foley/${name}`,
+  `audio/vehicle_foley/${name}`,
+]);
 const audioCopies = [
   ...shelbyAudioNames.map((name) => [
     `src/assets/audio/shelby/${name}`,
     `audio/shelby/${name}`,
   ]),
   ...recordedCarAudioCopies,
+  ...foleyAudioCopies,
 ];
 
 const textureNames = [
