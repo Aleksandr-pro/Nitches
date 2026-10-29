@@ -16,6 +16,7 @@ const CurtainWallGlassShader: Shader = preload("res://shaders/curtain_wall_glass
 const CurtainWallFacadeShader: Shader = preload("res://shaders/curtain_wall_facade.gdshader")
 const ConcreteSurfaceShader: Shader = preload("res://shaders/concrete_surface.gdshader")
 const PremiumStonePavingShader: Shader = preload("res://shaders/premium_stone_paving.gdshader")
+const HorizonSkylineShader: Shader = preload("res://shaders/horizon_skyline.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -62,6 +63,8 @@ var _pending_batched_models: Dictionary = {}
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
+var _skyline_root: Node3D
+var _skyline_materials: Array[ShaderMaterial] = []
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
@@ -95,6 +98,7 @@ func build_world() -> Dictionary:
 		_create_collision_root()
 		_build_environment()
 		_build_emergency_spawn_pad()
+		_build_skyline_backdrop()
 		set_time_of_day("day")
 		is_built = true
 		return {"error": build_error}
@@ -118,6 +122,7 @@ func build_world() -> Dictionary:
 	_flush_batched_models()
 	_build_reflection_probes()
 	_build_world_bounds()
+	_build_skyline_backdrop()
 	set_time_of_day("day")
 	is_built = true
 	return get_stats()
@@ -490,8 +495,89 @@ func _apply_sky_mode(mode: String) -> void:
 		_sky.sky_material = _procedural_sky_material
 
 
+func _make_skyline_ring_mesh(radius: float, height: float, segments: int = 112) -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for segment in segments:
+		var u0 := float(segment) / float(segments)
+		var u1 := float(segment + 1) / float(segments)
+		var a0 := TAU * u0
+		var a1 := TAU * u1
+		var p0 := Vector3(sin(a0) * radius, -4.0, cos(a0) * radius)
+		var p1 := Vector3(sin(a1) * radius, -4.0, cos(a1) * radius)
+		var p2 := Vector3(sin(a1) * radius, height, cos(a1) * radius)
+		var p3 := Vector3(sin(a0) * radius, height, cos(a0) * radius)
+		var vertices: Array[Vector3] = [p0, p1, p2, p0, p2, p3]
+		var uvs: Array[Vector2] = [
+			Vector2(u0, 0.0), Vector2(u1, 0.0), Vector2(u1, 1.0),
+			Vector2(u0, 0.0), Vector2(u1, 1.0), Vector2(u0, 1.0),
+		]
+		for vertex_index in vertices.size():
+			tool.set_uv(uvs[vertex_index])
+			tool.add_vertex(vertices[vertex_index])
+	return tool.commit()
+
+
+func _build_skyline_backdrop() -> void:
+	if _skyline_root != null:
+		return
+	_skyline_root = Node3D.new()
+	_skyline_root.name = "HorizonSkyline"
+	add_child(_skyline_root)
+	var layers: Array[Dictionary] = [
+		{"radius": 1640.0, "height": 205.0, "seed": 1.7, "density": 126.0, "opacity": 0.68, "color": Color(0.20, 0.29, 0.38, 1.0)},
+		{"radius": 1870.0, "height": 325.0, "seed": 8.3, "density": 176.0, "opacity": 0.46, "color": Color(0.46, 0.57, 0.69, 1.0)},
+	]
+	for index in layers.size():
+		var layer: Dictionary = layers[index]
+		var material := ShaderMaterial.new()
+		material.shader = HorizonSkylineShader
+		material.set_shader_parameter("skyline_tint", layer.get("color", Color.WHITE))
+		material.set_shader_parameter("layer_opacity", float(layer.get("opacity", 0.5)))
+		material.set_shader_parameter("layer_seed", float(layer.get("seed", 1.0)))
+		material.set_shader_parameter("skyline_density", float(layer.get("density", 144.0)))
+		material.set_shader_parameter("night_factor", 0.0)
+		var skyline := MeshInstance3D.new()
+		skyline.name = "SkylineLayer%d" % (index + 1)
+		skyline.mesh = _make_skyline_ring_mesh(float(layer.get("radius", 1600.0)), float(layer.get("height", 200.0)))
+		skyline.material_override = material
+		skyline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		skyline.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		skyline.custom_aabb = AABB(Vector3(-1900.0, -5.0, -1900.0), Vector3(3800.0, 340.0, 3800.0))
+		_skyline_root.add_child(skyline)
+		_skyline_materials.append(material)
+	_enhancement_stats["skyline_layers"] = _skyline_materials.size()
+	_enhancement_stats["skyline_follows_vehicle"] = true
+	_enhancement_stats["skyline_procedural_windows"] = true
+	set_skyline_origin(spawn_transform.origin)
+
+
+func set_skyline_origin(world_position: Vector3) -> void:
+	if _skyline_root == null:
+		return
+	_skyline_root.global_position = Vector3(world_position.x, 0.0, world_position.z)
+
+
+func _set_skyline_time(mode: String) -> void:
+	var near_color := Color(0.20, 0.29, 0.38, 1.0)
+	var far_color := Color(0.46, 0.57, 0.69, 1.0)
+	var night_factor := 0.0
+	if mode == "sunset":
+		near_color = Color(0.34, 0.22, 0.25, 1.0)
+		far_color = Color(0.62, 0.38, 0.34, 1.0)
+	elif mode == "night":
+		near_color = Color(0.035, 0.065, 0.12, 1.0)
+		far_color = Color(0.055, 0.09, 0.17, 1.0)
+		night_factor = 1.0
+	for index in _skyline_materials.size():
+		var tint := near_color if index == 0 else far_color
+		_skyline_materials[index].set_shader_parameter("skyline_tint", tint)
+		_skyline_materials[index].set_shader_parameter("night_factor", night_factor)
+
+
 func set_time_of_day(mode: String) -> void:
 	time_of_day = mode
+	_set_skyline_time(mode)
 	if _sun == null or _environment == null or _sky == null:
 		return
 	_apply_sky_mode(mode)

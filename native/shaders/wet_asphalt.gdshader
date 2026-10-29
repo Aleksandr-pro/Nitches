@@ -25,8 +25,8 @@ uniform float tex_scale : hint_range(0.01, 2.0) = 0.115;
 uniform float wetness : hint_range(0.0, 1.0) = 0.12;
 uniform float puddle_amount : hint_range(0.0, 1.0) = 0.22;
 uniform float dry_roughness : hint_range(0.0, 1.0) = 0.94;
-uniform float wet_roughness : hint_range(0.0, 1.0) = 0.48;
-uniform float puddle_roughness : hint_range(0.0, 1.0) = 0.16;
+uniform float wet_roughness : hint_range(0.0, 1.0) = 0.36;
+uniform float puddle_roughness : hint_range(0.0, 1.0) = 0.12;
 uniform float bump_strength : hint_range(0.0, 2.0) = 0.62;
 
 varying vec3 world_pos;
@@ -150,6 +150,7 @@ void fragment() {
 
 	float wear_luma = 0.065;
 	float crack = 0.0;
+	vec3 road_normal = vec3(0.0, 0.0, 1.0);
 	if (use_textures) {
 		vec2 coords = p * tex_scale;
 		vec2 rotated = mat2(vec2(0.9239, 0.3827), vec2(-0.3827, 0.9239)) * p;
@@ -181,7 +182,7 @@ void fragment() {
 		// Godot expects NORMAL_MAP in texture RGB form. Feeding it the
 		// already-unpacked -1..1 vector caused overly hard, incorrectly
 		// centred relief in the copied Drive shader.
-		NORMAL_MAP = combined_normal * 0.5 + 0.5;
+		road_normal = combined_normal;
 		NORMAL_MAP_DEPTH = bump_strength * (1.0 - puddle * 0.9);
 	} else {
 		ALBEDO = asphalt_color.rgb * grain;
@@ -194,9 +195,23 @@ void fragment() {
 			(height_c - height_y) * 2.0,
 			1.0
 		));
-		NORMAL_MAP = fallback_normal * 0.5 + 0.5;
+		road_normal = fallback_normal;
 		NORMAL_MAP_DEPTH = bump_strength * (1.0 - puddle * 0.9);
 	}
+
+	// Tiny animated rain rings and crossing ripples only disturb wet patches;
+	// the dry road keeps its stable photographic micro-normal. ReflectionProbe
+	// and the roughness split provide the broad highlight while this perturbation
+	// catches the moving light without an expensive planar-reflection pass.
+	float ripple_weight = puddle * clamp(wetness * 1.7, 0.0, 1.0);
+	float ripple_a = sin(p.x * 2.6 + p.y * 0.7 + TIME * 3.2);
+	float ripple_b = sin(p.y * 2.2 - p.x * 0.55 - TIME * 2.65);
+	float ripple_c = sin(length(fract(p * 0.34) - vec2(0.5)) * 46.0 - TIME * 4.2);
+	vec3 animated_normal = normalize(vec3(
+		road_normal.xy + vec2(ripple_a + ripple_c, ripple_b - ripple_c) * 0.065 * ripple_weight,
+		max(road_normal.z, 0.35)
+	));
+	NORMAL_MAP = animated_normal * 0.5 + 0.5;
 
 	// Road-aligned ageing sits above both texture octaves, so it remains
 	// coherent when the same world-space grain crosses an intersection.

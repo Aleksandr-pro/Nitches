@@ -57,10 +57,12 @@ var _paint_materials: Dictionary = {}
 var _headlight_materials: Array[StandardMaterial3D] = []
 var _tail_light_materials: Array[StandardMaterial3D] = []
 var _smoke_emitters: Array[GPUParticles3D] = []
+var _spark_emitters: Array[GPUParticles3D] = []
 var _nitro_emitters: Array[GPUParticles3D] = []
 var _contact_shadow_material: StandardMaterial3D
 var _soft_disc_texture: Texture2D
 var _engine_player: AudioStreamPlayer
+var _wind_player: AudioStreamPlayer
 var _nitro := 0.72
 var _forward_speed := 0.0
 var _lateral_speed := 0.0
@@ -514,9 +516,9 @@ func _make_particle_emitter(
 	process.emission_sphere_radius = 0.20
 	var gradient := Gradient.new()
 	gradient.set_color(0, Color(1.0, 1.0, 1.0, 0.0))
+	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
 	gradient.add_point(0.16, Color(1.0, 1.0, 1.0, 0.82))
 	gradient.add_point(0.72, Color(1.0, 1.0, 1.0, 0.42))
-	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
 	var gradient_texture := GradientTexture1D.new()
 	gradient_texture.gradient = gradient
 	gradient_texture.width = 64
@@ -576,6 +578,22 @@ func _create_vehicle_effects() -> void:
 			_particle_material(Color(0.72, 0.72, 0.74, 0.34)),
 			Vector3(0.0, 0.45, 0.0)
 		))
+	for x in [-0.82, 0.82]:
+		_spark_emitters.append(_make_particle_emitter(
+			"HandbrakeTireSparks",
+			Vector3(x, 0.12, 1.43),
+			22,
+			0.40,
+			Vector3(0.0, -0.24, 1.0),
+			62.0,
+			2.8,
+			8.5,
+			0.12,
+			0.38,
+			0.055,
+			_particle_material(Color(1.0, 0.48, 0.12, 0.92), true),
+			Vector3(0.0, -8.8, 0.0)
+		))
 	for x in [-0.56, 0.56]:
 		_nitro_emitters.append(_make_particle_emitter(
 			"NitroFlame",
@@ -616,6 +634,33 @@ func _create_engine_audio() -> void:
 	_engine_player.pitch_scale = 0.72
 	add_child(_engine_player)
 	_engine_player.play()
+	_create_wind_audio()
+
+
+func _create_wind_audio() -> void:
+	var sample_rate := 22050
+	var samples := PackedByteArray()
+	samples.resize(sample_rate)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 90210
+	var filtered_noise := 0.0
+	for i in sample_rate:
+		filtered_noise = lerpf(filtered_noise, rng.randf_range(-1.0, 1.0), 0.045)
+		samples[i] = int(clampf(128.0 + filtered_noise * 118.0, 4.0, 251.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_8_BITS
+	stream.mix_rate = sample_rate
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = sample_rate
+	stream.data = samples
+	_wind_player = AudioStreamPlayer.new()
+	_wind_player.name = "SpeedWindAudio"
+	_wind_player.stream = stream
+	_wind_player.volume_db = -48.0
+	_wind_player.pitch_scale = 0.78
+	add_child(_wind_player)
+	_wind_player.play()
 
 
 func set_touch_input(action_name: String, pressed: bool) -> void:
@@ -1092,6 +1137,12 @@ func _process(delta: float) -> void:
 		var process := emitter.process_material as ParticleProcessMaterial
 		if process != null:
 			process.color = smoke_color
+	var spark_intensity := 0.0
+	if grounded_wheel_count >= 2 and handbrake_active and absf(_forward_speed) > 12.0 and absf(_rear_slip_ratio) > 0.36:
+		spark_intensity = clampf((absf(_rear_slip_ratio) - 0.30) / 0.58, 0.0, 1.0)
+	for emitter in _spark_emitters:
+		emitter.emitting = spark_intensity > 0.02
+		emitter.amount_ratio = spark_intensity
 	for emitter in _nitro_emitters:
 		emitter.emitting = boost_active
 		emitter.amount_ratio = 1.0 if boost_active else 0.0
@@ -1104,6 +1155,10 @@ func _process(delta: float) -> void:
 		var rpm := get_rpm_ratio()
 		_engine_player.pitch_scale = 0.68 + rpm * 1.65
 		_engine_player.volume_db = -25.0 + absf(throttle_input) * 7.0 + (4.0 if boost_active else 0.0)
+	if _wind_player != null:
+		var wind_ratio := clampf((absf(_forward_speed) - 7.0) / 52.0, 0.0, 1.0)
+		_wind_player.volume_db = lerpf(-48.0, -23.0, wind_ratio)
+		_wind_player.pitch_scale = 0.78 + wind_ratio * 0.72
 
 
 func reset_to_transform(target: Transform3D) -> void:
@@ -1228,6 +1283,16 @@ func get_gear_label() -> String:
 
 func get_rpm_ratio() -> float:
 	return clampf((_engine_rpm - ENGINE_IDLE_RPM) / maxf(ENGINE_REDLINE_RPM - ENGINE_IDLE_RPM, 1.0), 0.08, 1.0)
+
+
+func get_effect_state() -> Dictionary:
+	return {
+		"tire_smoke_emitters": _smoke_emitters.size(),
+		"tire_spark_emitters": _spark_emitters.size(),
+		"nitro_emitters": _nitro_emitters.size(),
+		"engine_audio": _engine_player != null and _engine_player.playing,
+		"speed_wind_audio": _wind_player != null and _wind_player.playing,
+	}
 
 
 func get_smoothing_state() -> Dictionary:

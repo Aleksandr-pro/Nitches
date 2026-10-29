@@ -8,6 +8,7 @@ extends Node3D
 const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
+const AtmosphereFxScript := preload("res://scripts/atmosphere_fx.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -20,6 +21,7 @@ var _vehicle: NativeVehicle
 var _hud: NativeHud
 var _camera: Camera3D
 var _speed_post: NativeSpeedPost
+var _atmosphere_fx: NativeAtmosphereFX
 var _camera_mode := CAMERA_CHASE
 var _snap_camera := true
 var _time_index := 0
@@ -66,6 +68,9 @@ func _ready() -> void:
 	print("[native] Traffic removed: player vehicle only")
 
 	_create_camera()
+	_atmosphere_fx = AtmosphereFxScript.new() as NativeAtmosphereFX
+	_atmosphere_fx.configure(_vehicle, _camera)
+	add_child(_atmosphere_fx)
 	_hud = HudScript.new() as NativeHud
 	add_child(_hud)
 	_hud.bind(_world, _vehicle)
@@ -158,9 +163,9 @@ func _create_camera() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "GameCamera"
 	_camera.near = 0.12
-	# RichTown's playable diagonal is about 1.4 km; 1.5 km still covers
-	# corner-to-corner views while tightening depth precision and culling.
-	_camera.far = 1500.0
+	# Real RichTown geometry stays range-limited by HLOD. The extra far-plane
+	# budget is reserved for the two unshaded, camera-following skyline rings.
+	_camera.far = 2100.0
 	_camera.fov = 58.0
 	add_child(_camera)
 	_camera.make_current()
@@ -196,6 +201,8 @@ func _apply_time_mode() -> void:
 		return
 	var mode := TIME_MODES[_time_index]
 	_world.set_time_of_day(mode)
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_time_mode(mode)
 	if _vehicle != null:
 		_vehicle.set_headlights_enabled(mode != "day")
 
@@ -217,6 +224,8 @@ func _process(delta: float) -> void:
 	if _camera != null and not _camera.is_current():
 		_camera.make_current()
 	_update_camera(delta, _snap_camera)
+	if _world != null and _vehicle != null:
+		_world.set_skyline_origin(_vehicle.global_position)
 	_snap_camera = false
 	if _smoke_mode and not _smoke_completed:
 		_smoke_frames += 1
@@ -381,6 +390,11 @@ func _run_smoke_checks() -> void:
 		failures.append("landmark stats are incomplete")
 
 	var enhancement_stats := _world.get_enhancement_stats()
+	if int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)):
+		failures.append("two-layer distant skyline is incomplete: %s" % str(enhancement_stats))
+	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
+	if not bool(atmosphere_state.get("ready", false)) or not bool(atmosphere_state.get("light_shafts", false)) or int(atmosphere_state.get("leaves", 0)) < 16 or int(atmosphere_state.get("petals", 0)) < 8:
+		failures.append("near-car atmosphere particle/light-shaft pass is incomplete: %s" % str(atmosphere_state))
 	if int(enhancement_stats.get("reflection_probes", 0)) < 6 or not bool(enhancement_stats.get("reflection_probe_box_projection", false)) or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) < 0.5 or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) > 0.75:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:
@@ -429,6 +443,9 @@ func _run_smoke_checks() -> void:
 	var speed_post_state := _speed_post.get_smoke_state()
 	if not bool(speed_post_state.get("ready", false)) or not bool(speed_post_state.get("cinematic_grade", false)) or not bool(speed_post_state.get("always_on_vignette", false)) or not bool(speed_post_state.get("film_grain", false)):
 		failures.append("SpeedPost cinematic grade/vignette/grain is incomplete: %s" % str(speed_post_state))
+	var vehicle_effect_state := _vehicle.get_effect_state()
+	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or int(vehicle_effect_state.get("tire_spark_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)) or not bool(vehicle_effect_state.get("speed_wind_audio", false)):
+		failures.append("vehicle tire smoke/sparks or engine/wind audio is incomplete: %s" % str(vehicle_effect_state))
 	var drive_base_state := _vehicle.get_drive_base_state()
 	if not bool(drive_base_state.get("car_paint_shader", false)) or not bool(drive_base_state.get("paint_reflections_ready", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
 		failures.append("ArcadeCar reflective paint Drive base is not active: %s" % str(drive_base_state))

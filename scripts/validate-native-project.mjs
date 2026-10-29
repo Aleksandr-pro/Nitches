@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, atmosphereFxScript, arcadeCarScript, carPaintShader, speedPostShader, lightShaftShader, horizonSkylineShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -24,9 +24,12 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/hud.gd'),
   readText('scripts/dynamic_world.gd'),
   readText('scripts/speed_post.gd'),
+  readText('scripts/atmosphere_fx.gd'),
   readText('scripts/arcade_car.gd'),
   readText('shaders/car_paint.gdshader'),
   readText('shaders/speed_post.gdshader'),
+  readText('shaders/light_shafts.gdshader'),
+  readText('shaders/horizon_skyline.gdshader'),
   readText('shaders/wet_asphalt.gdshader'),
   readText('shaders/foliage_wind.gdshader'),
   readText('shaders/curtain_wall_glass.gdshader'),
@@ -54,7 +57,7 @@ for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
+const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${atmosphereFxScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${lightShaftShader}\n${horizonSkylineShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
@@ -81,7 +84,7 @@ for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def 
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist']) {
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeAtmosphereFX', 'class_name NativeArcadeCarAssist']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -93,6 +96,17 @@ for (const marker of [
   '_ackermann_angle',
   'GEAR_RATIOS',
   'GPUParticles3D',
+  'DriftingLeaves',
+  'GoldenPetals',
+  'RoadWakeDust',
+  'HandbrakeTireSparks',
+  'SpeedWindAudio',
+  'light_shafts.gdshader',
+  'shaft_intensity',
+  'HorizonSkyline',
+  'skyline_density',
+  'skyline_follows_vehicle',
+  'get_effect_state',
   'get_visual_aabb_size',
   'PhysicalSkyMaterial',
   'GOLDEN_HOUR',
@@ -110,6 +124,8 @@ for (const marker of [
   'always_on_vignette',
   'film_grain',
   'WetAsphaltShader',
+  'ripple_weight',
+  'ReflectionProbe.UPDATE_ONCE',
   'WaterSurfaceShader',
   'water_surface.gdshader',
   'get_water_visual_state',
