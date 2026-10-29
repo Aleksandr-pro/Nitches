@@ -45,7 +45,7 @@ jobs:
   screenshots:
     name: Render in-game screenshots (software Vulkan)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - name: Checkout (LFS runtime model is pulled explicitly)
         uses: actions/checkout@v4
@@ -123,7 +123,7 @@ jobs:
           echo "Using lavapipe ICD: $ICD"
           export VK_ICD_FILENAMES="$ICD"
           export LIBGL_ALWAYS_SOFTWARE=1
-          timeout 1800 xvfb-run -a -s "-screen 0 960x540x24 +render" \
+          timeout 2400 xvfb-run -a -s "-screen 0 960x540x24 +render" \
             stdbuf -oL -eL "$GODOT_BIN" --path "$PROJECT_PATH" \
             --resolution 960x540 \
             --rendering-driver vulkan \
@@ -148,7 +148,7 @@ jobs:
           ICD="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
           export VK_ICD_FILENAMES="$ICD"
           export LIBGL_ALWAYS_SOFTWARE=1
-          timeout 1800 xvfb-run -a -s "-screen 0 960x540x24 +render" \
+          timeout 2400 xvfb-run -a -s "-screen 0 960x540x24 +render" \
             stdbuf -oL -eL "$GODOT_BIN" --path "$PROJECT_PATH" \
             --resolution 960x540 \
             --rendering-driver vulkan \
