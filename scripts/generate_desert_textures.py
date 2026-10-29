@@ -239,16 +239,18 @@ def rock_red(rng):
     fine = fractal(rng, beta=2.7, fmax=340)
     grain = fractal(rng, beta=3.3, fmax=500)
     warp = fractal(rng, beta=2.0, fmax=20)
-    band = 0.5 + 0.5 * np.sin(math.tau * (yy / S * 13.0 + warp * 2.2))
-    t = clip01(band * 0.38 + base * 0.62)
+    # 0.2.53: fewer, weaker strata.  The old 13-cycle sine read as
+    # polished wood grain once stretched over the cliff faces.
+    band = 0.5 + 0.5 * np.sin(math.tau * (yy / S * 7.0 + warp * 1.15))
+    t = clip01(band * 0.22 + base * 0.78)
     steps = np.floor(t * 7.0) / 7.0
-    t2 = clip01(t * 0.55 + steps * 0.45)
+    t2 = clip01(t * 0.68 + steps * 0.32)
     albedo = mix((0.43, 0.25, 0.17), (0.65, 0.39, 0.26), t2)
     albedo = mix(albedo, (0.76, 0.54, 0.39), smoothstep(0.74, 0.96, t2) * 0.55)
     albedo = mix(albedo, (0.46, 0.37, 0.31), smoothstep(0.58, 0.88, mid) * 0.30)
     fn = fractal(rng, beta=2.1, fmax=120)
     frac = smoothstep(0.014, 0.0, np.abs(fn - 0.5))
-    albedo = mix(albedo, (0.28, 0.18, 0.13), frac * 0.55)
+    albedo = mix(albedo, (0.28, 0.18, 0.13), frac * 0.68)
     col_noise = normalize(np.asarray(Image.fromarray(
         (rng.random((24, S)) * 255).astype(np.uint8)).resize((S, S), Image.BICUBIC), dtype=np.float64) / 255.0)
     albedo = albedo * (0.82 + fine[..., None] * 0.20 + grain[..., None] * 0.14 + col_noise[..., None] * 0.05)
@@ -268,13 +270,14 @@ def cactus_skin(rng):
     height = prof ** 0.8 * 0.85
     fine = fractal(rng, beta=2.8, fmax=300)
     height += fine * 0.10
-    albedo = mix((0.13, 0.29, 0.12), (0.27, 0.49, 0.22), prof)
+    # Dusty blue-green saguaro skin, not saturated plastic green.
+    albedo = mix((0.10, 0.22, 0.10), (0.19, 0.36, 0.17), prof)
     rib_gain = rng.uniform(0.90, 1.08, size=ribs + 1)
     rib_gain[ribs] = rib_gain[0]
     rib_id = np.clip((uw * ribs).astype(np.int32), 0, ribs)
     albedo = albedo * rib_gain[rib_id][..., None]
     bleach = fractal(rng, beta=2.2, fmax=20)
-    albedo = mix(albedo, (0.42, 0.52, 0.26), smoothstep(0.60, 0.90, bleach) * 0.22)
+    albedo = mix(albedo, (0.34, 0.42, 0.24), smoothstep(0.60, 0.90, bleach) * 0.16)
     albedo = albedo * (0.93 + fine[..., None] * 0.12)
     alb_img = Image.fromarray((clip01(albedo) * 255).astype(np.uint8))
     bump = Image.new("L", (S, S), 0)

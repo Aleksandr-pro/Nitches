@@ -317,7 +317,7 @@ func _build_ui() -> void:
     _reverse_label.text = "R"
     _reverse_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _reverse_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _style_label(_reverse_label, 52, Color(1.0, 0.18, 0.10, 0.98))
+    _style_label(_reverse_label, 34, Color(1.0, 0.18, 0.10, 0.98))
     _reverse_label.visible = false
     _root.add_child(_reverse_label)
 
@@ -409,7 +409,9 @@ func _layout_hud() -> void:
     var drift_rect := Rect2(Vector2(nitro_rect.position.x - 16.0 - drift_d, nitro_rect.position.y + (nitro_d - drift_d) * 0.55), Vector2(drift_d, drift_d))
     _place(_drift_button, drift_rect)
 
-    _place(_reverse_label, Rect2(Vector2(vw * 0.5 - 42.0, vh * 0.68), Vector2(84.0, 72.0)))
+    # 0.2.53: compact top-centre chip; the old 84x72 flashing R sat
+    # directly on top of the car in chase view and read as a plate bug.
+    _place(_reverse_label, Rect2(Vector2(vw * 0.5 - 28.0, vh * 0.15), Vector2(56.0, 48.0)))
     _place(_performance_label, Rect2(Vector2(vw * 0.34, margin_y), Vector2(vw * 0.32, 76.0)))
 
 
@@ -458,7 +460,7 @@ func _process(delta: float) -> void:
             _district_label.visible = _district_notice_time > 0.0
             _district_label.modulate.a = clampf(_district_notice_time / 0.45, 0.0, 1.0) if _district_notice_time < 0.45 else 1.0
     if _reverse_label != null and _reverse_label.visible:
-        _reverse_label.modulate.a = 1.0 if int(Time.get_ticks_msec() / 260) % 2 == 0 else 0.20
+        _reverse_label.modulate.a = 1.0 if int(Time.get_ticks_msec() / 260) % 2 == 0 else 0.35
 
     _fast_timer += delta
     _slow_timer += delta

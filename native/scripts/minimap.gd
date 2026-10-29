@@ -9,12 +9,13 @@ extends Control
 
 const VIEW_RADIUS_M := 260.0
 ## 0.2.37: the road/park network never changes while driving, so it is
-## rendered once into a 1024 px north-up cache.  The per-frame draw
+## rendered once into a 2048 px north-up cache (0.2.53: 1024 px
+## over the 4 km desert made carriageways nearly invisible).  The per-frame draw
 ## then submits one textured quad under the existing circular mask
 ## plus the dynamic route/markers, instead of re-tessellating more
 ## than a thousand road samples into antialiased CanvasItem lines at
 ## 30 Hz.  The old vector path remains as the first-frame fallback.
-const STATIC_CACHE_SIZE := 1024
+const STATIC_CACHE_SIZE := 2048
 
 var _roads: Array = []
 var _parks: Array = []
@@ -111,7 +112,10 @@ func _build_static_cache() -> void:
     viewport.name = "StaticMinimapCache0237"
     viewport.size = Vector2i(STATIC_CACHE_SIZE, STATIC_CACHE_SIZE)
     viewport.transparent_bg = true
-    viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+    # 0.2.53: UPDATE_ONCE could bake the cache before the canvas
+    # control had ever drawn (empty roads on the desert minimap).
+    # Render continuously for the first frames, then freeze.
+    viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
     viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 
     var cache_control := NativeMinimap.new()
@@ -125,10 +129,12 @@ func _build_static_cache() -> void:
     cache_control.size = Vector2(float(STATIC_CACHE_SIZE), float(STATIC_CACHE_SIZE))
     add_child(viewport)
     _static_cache_viewport = viewport
+    cache_control.queue_redraw()
     _mark_static_cache_ready_later(viewport)
 
 
 func _mark_static_cache_ready_later(viewport: SubViewport) -> void:
+    await RenderingServer.frame_post_draw
     await RenderingServer.frame_post_draw
     await RenderingServer.frame_post_draw
     if not is_instance_valid(viewport) or viewport != _static_cache_viewport:
@@ -136,6 +142,7 @@ func _mark_static_cache_ready_later(viewport: SubViewport) -> void:
     _static_cache_texture = viewport.get_texture()
     _static_cache_ready = _static_cache_texture != null
     if _static_cache_ready:
+        viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
         queue_redraw()
 
 
@@ -187,6 +194,8 @@ func get_smoke_state() -> Dictionary:
         "route_points": _route_points.size(),
         "road_route_0234": true,
         "static_map_cache_0237": true,
+        "minimap_contrast_0253": true,
+        "static_cache_always_until_ready_0253": true,
         "static_cache_created": _static_cache_viewport != null,
         "static_cache_ready": _static_cache_ready,
         "static_cache_size": STATIC_CACHE_SIZE,
@@ -290,9 +299,10 @@ func _draw_static_cache() -> void:
         if points.size() < 2:
             continue
         var width_world := float(road_data.get("widthM", road_data.get("width", 16.0)))
-        var road_width := clampf(width_world * pixels_per_meter, 2.0, 26.0)
-        draw_polyline(points, Color(0.48, 0.56, 0.66, 0.92), road_width, true)
-        draw_polyline(points, Color(0.90, 0.94, 1.0, 0.24), 1.2, true)
+        var road_width := clampf(width_world * pixels_per_meter, 3.2, 26.0)
+        draw_polyline(points, Color(0.02, 0.03, 0.05, 0.85), road_width + 2.4, true)
+        draw_polyline(points, Color(0.62, 0.70, 0.80, 0.96), road_width, true)
+        draw_polyline(points, Color(0.95, 0.97, 1.0, 0.30), 1.2, true)
 
 
 func _draw_cached_world() -> bool:
@@ -338,8 +348,9 @@ func _draw_vector_world() -> void:
                     continue
                 var a2 := _world_to_map(from)
                 var b2 := _world_to_map(to)
-                _draw_clipped_line(a2, b2, Color(0.48, 0.56, 0.66, 0.92), road_width)
-                _draw_clipped_line(a2, b2, Color(0.90, 0.94, 1.0, 0.24), 1.0)
+                _draw_clipped_line(a2, b2, Color(0.02, 0.03, 0.05, 0.85), road_width + 2.0)
+                _draw_clipped_line(a2, b2, Color(0.62, 0.70, 0.80, 0.96), road_width)
+                _draw_clipped_line(a2, b2, Color(0.95, 0.97, 1.0, 0.30), 1.0)
             continue
         var from: Vector2 = road_data.get("from", Vector2.ZERO)
         var to: Vector2 = road_data.get("to", Vector2.ZERO)
@@ -347,8 +358,9 @@ func _draw_vector_world() -> void:
             continue
         var a := _world_to_map(from)
         var b := _world_to_map(to)
-        _draw_clipped_line(a, b, Color(0.48, 0.56, 0.66, 0.92), road_width)
-        _draw_clipped_line(a, b, Color(0.90, 0.94, 1.0, 0.24), 1.0)
+        _draw_clipped_line(a, b, Color(0.02, 0.03, 0.05, 0.85), road_width + 2.0)
+        _draw_clipped_line(a, b, Color(0.62, 0.70, 0.80, 0.96), road_width)
+        _draw_clipped_line(a, b, Color(0.95, 0.97, 1.0, 0.30), 1.0)
 
 
 
@@ -365,7 +377,7 @@ func _draw() -> void:
 
     # The parent applies a circular shader mask; drawing the base as
     # a full disc also keeps the control correct without material.
-    draw_circle(centre, radius, Color(0.004, 0.012, 0.030, 0.50))
+    draw_circle(centre, radius, Color(0.010, 0.015, 0.030, 0.66))
     draw_arc(centre, radius * 0.72, 0.0, TAU, 72, Color(0.62, 0.74, 0.86, 0.10), 1.0, true)
     draw_arc(centre, radius * 0.42, 0.0, TAU, 56, Color(0.62, 0.74, 0.86, 0.08), 1.0, true)
 

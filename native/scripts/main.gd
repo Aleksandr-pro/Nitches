@@ -2503,6 +2503,25 @@ func _run_desert_smoke_checks(failures: Array[String]) -> void:
 		failures.append("desert 0.2.50 cactus/rock detail is incomplete: %s" % str(es))
 	if int(es.get("desert_fences_0251", 0)) < 85:
 		failures.append("desert 0.2.51 fences are incomplete: %s" % str(es))
+	if not bool(es.get("desert_screenshot_audit_0253", false)) or not bool(es.get("desert_rock_triplanar_0253", false)) or not bool(es.get("desert_race_rings_subtle_0253", false)) or not bool(es.get("desert_lake_calm_0253", false)) or not es.has("desert_pipe_road_gaps_0253"):
+		failures.append("desert 0.2.53 screenshot-audit repair is incomplete: %s" % str(es))
+	var dz_smoke: Dictionary = world_data.get("desert", {})
+	var lake_smoke: Dictionary = dz_smoke.get("lake", {})
+	var lake_y_smoke := float(lake_smoke.get("y", 26.2))
+	var oasis_deck_ok := false
+	for road_variant2 in world_data.get("roads", []):
+		var road2: Dictionary = road_variant2
+		if String(road2.get("id", "")) != "dz-oasis_road":
+			continue
+		var min_deck_y := 1e9
+		for sample_variant2 in road2.get("samples", []):
+			var sample2: Array = sample_variant2
+			var d_lake := Vector2(float(sample2[0]) - float(lake_smoke.get("x", 3350.0)), float(sample2[2]) - float(lake_smoke.get("z", 3500.0))).length()
+			if d_lake < 95.0:
+				min_deck_y = minf(min_deck_y, float(sample2[1]))
+		oasis_deck_ok = min_deck_y > lake_y_smoke + 0.1
+	if not oasis_deck_ok:
+		failures.append("oasis road deck is not above lake level (0.2.53)")
 	var salt_point := Vector3(2000.0, _world.height_at(2000.0, 1900.0) + 0.5, 1900.0)
 	var salt_surface := _world.get_surface_at(salt_point)
 	if String(salt_surface.get("kind", "")) != "salt":

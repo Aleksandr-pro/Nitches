@@ -96,10 +96,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.52-native-alpha"'), 'Native project version metadata must match 0.2.52-native-alpha');
-assert(preset.includes('version/code=55'), 'Native 0.2.52 must bump Android versionCode to 55');
-assert(preset.includes('version/name="0.2.52-native-alpha"'), 'Native version name must be 0.2.52-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.52-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.53-native-alpha"'), 'Native project version metadata must match 0.2.53-native-alpha');
+assert(preset.includes('version/code=56'), 'Native 0.2.53 must bump Android versionCode to 56');
+assert(preset.includes('version/name="0.2.53-native-alpha"'), 'Native version name must be 0.2.53-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.53-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -158,7 +158,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.52"') && preset.includes('application/product_version="0.2.52"'), 'Desktop Windows version metadata must match native 0.2.52');
+assert(preset.includes('application/file_version="0.2.53"') && preset.includes('application/product_version="0.2.53"'), 'Desktop Windows version metadata must match native 0.2.53');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -982,11 +982,61 @@ for (const g of desertData.desert.guardrails) {
 assert(worstRail >= 0.5, `Desert guardrail sits on a road (edge clearance ${worstRail})`);
 const desertScatterTotal = Object.values(desertData.desert.scatter).reduce((sum, items) => sum + items.length, 0);
 assert(desertScatterTotal >= 37000, 'Desert scatter is below the authored budget');
+// 0.2.53 screenshot audit: scatter used centreline-distance raster
+// thresholds below road half-widths, so rocks/shrubs/cacti legally
+// spawned on carriageways.  Grid-accelerated exact check: no scatter
+// centre may remain on a carriageway.
+const segGrid0253 = new Map();
+const SEG_CELL_0253 = 100;
+roadSegs.forEach((seg, idx) => {
+  const [[ax, az], [bx, bz], hw] = seg;
+  const pad = hw + 40;
+  const x0 = Math.floor((Math.min(ax, bx) - pad) / SEG_CELL_0253);
+  const x1 = Math.floor((Math.max(ax, bx) + pad) / SEG_CELL_0253);
+  const z0 = Math.floor((Math.min(az, bz) - pad) / SEG_CELL_0253);
+  const z1 = Math.floor((Math.max(az, bz) + pad) / SEG_CELL_0253);
+  for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    const key = `${cx},${cz}`;
+    if (!segGrid0253.has(key)) segGrid0253.set(key, []);
+    segGrid0253.get(key).push(idx);
+  }
+});
+function fastEdgeClearance0253(px, pz) {
+  const key = `${Math.floor(px / SEG_CELL_0253)},${Math.floor(pz / SEG_CELL_0253)}`;
+  const cand = segGrid0253.get(key) ?? [];
+  let best = Infinity;
+  for (const idx of cand) {
+    const [[ax, az], [bx, bz], hw] = roadSegs[idx];
+    const abx = bx - ax, abz = bz - az;
+    const l2 = Math.max(abx * abx + abz * abz, 1e-9);
+    let t = ((px - ax) * abx + (pz - az) * abz) / l2;
+    t = Math.min(1, Math.max(0, t));
+    best = Math.min(best, Math.hypot(px - (ax + abx * t), pz - (az + abz * t)) - hw);
+  }
+  return best;
+}
+let scatterOnRoad0253 = 0;
+for (const items of Object.values(desertData.desert.scatter)) {
+  for (const it of items) if (fastEdgeClearance0253(it[0], it[1]) < 0) scatterOnRoad0253 += 1;
+}
+assert(scatterOnRoad0253 === 0, `Desert scatter instances on carriageways after the 0.2.53 audit: ${scatterOnRoad0253}`);
+const lake0253 = desertData.desert.lake;
+const oasisRoad0253 = desertData.roads.find((r) => r.id === 'dz-oasis_road');
+assert(oasisRoad0253, 'Desert oasis road is missing');
+const oasisNearLake0253 = oasisRoad0253.samples.filter((sm) => Math.hypot(sm[0] - lake0253.x, sm[2] - lake0253.z) < 95);
+assert(oasisNearLake0253.length >= 8 && Math.min(...oasisNearLake0253.map((sm) => sm[1])) > lake0253.y + 0.1, 'Oasis road deck must stay above lake level across the bridge span (0.2.53)');
+const wreckCluster0253 = desertData.desert.structures.filter((st) => st.kind === 'car_wreck' && Math.abs(st.z - 2050) < 0.11 && st.x > 1000 && st.x < 1350).length;
+assert(wreckCluster0253 <= 2, `Town Main car-wreck sampler cluster regressed (0.2.53): ${wreckCluster0253}`);
 assert(desertData.desert.game.fastTravel.length === 8 && desertData.desert.game.photoSpots.length === 10, 'Desert game markers are incomplete');
 assert(desertData.spawn.x > 0 && desertData.spawn.x < 4000 && desertData.spawn.z > 0 && desertData.spawn.z < 4000, 'Desert spawn must be inside the basin');
 for (const marker of ['DESERT_DATA_PATH', '_build_desert_world', 'desert_world_0247', '_build_desert_scatter', '_dz_animate', '_add_pitched_box_collider', 'desert_road_deck_colliders', 'desert_smooth_roads_0249', 'desert_detail_0250', '_dz_saguaro_mesh', 'dz_cactus_skin.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel_roughness.jpg', 'desert_fences_0251']) {
   assert(worldScript.includes(marker), `0.2.47 desert builder marker is missing: ${marker}`);
 }
+for (const marker of ['desert_screenshot_audit_0253', 'desert_rock_triplanar_0253', 'desert_scatter_road_audit_0253', 'desert_oasis_deck_0253', 'desert_pipe_road_gaps_0253', 'desert_race_rings_subtle_0253', 'desert_lake_calm_0253', 'dz_wreck_blue', 'minimap_contrast_0253', 'static_cache_always_until_ready_0253', 'route_beacon_subtle_0253']) {
+  assert(combinedRuntime.includes(marker), `0.2.53 screenshot-audit marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('SubViewport.UPDATE_ALWAYS') && minimapScript.includes('SubViewport.UPDATE_DISABLED'), '0.2.53 minimap static cache must render continuously until ready, then freeze');
+assert(hudScript.includes('vh * 0.15') && hudScript.includes('Vector2(56.0, 48.0)'), '0.2.53 reverse indicator must stay a compact top-centre chip off the car');
 for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders', 'desert_scatter_variants', 'desert_fences_0251']) {
   assert(mainScript.includes(marker), `0.2.47 world-switch marker is missing: ${marker}`);
 }
