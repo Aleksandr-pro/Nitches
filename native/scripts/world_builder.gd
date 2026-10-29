@@ -10875,7 +10875,7 @@ func _build_desert_roads() -> void:
 			if surf == "asphalt":
 				# Edge lines (continuous) + one centre dash per segment.
 				for side in [-1.0, 1.0]:
-					var eo := side * (half_w - 0.55)
+					var eo: float = side * (half_w - 0.55)
 					var e0 := Vector3(pts[i].x + perps[i].x * (eo - 0.09), pts[i].y + y_off + 0.02, pts[i].z + perps[i].y * (eo - 0.09))
 					var e1 := Vector3(pts[i].x + perps[i].x * (eo + 0.09), pts[i].y + y_off + 0.02, pts[i].z + perps[i].y * (eo + 0.09))
 					var e2 := Vector3(pts[j].x + perps[j].x * (eo + 0.09), pts[j].y + y_off + 0.02, pts[j].z + perps[j].y * (eo + 0.09))
@@ -11496,7 +11496,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 					var topc: Vector3 = o + basis * Vector3(sx * w * 0.26, h - 4.6, sz * d * 0.26)
 					_dz_beam("dz_metal_dark", foot, topc, 0.22, 0.22)
 			for lv in [0.35, 0.7]:
-				var y := (h - 4.6) * lv
+				var y: float = (h - 4.6) * lv
 				var spread := lerpf(w * 0.42, w * 0.26, lv)
 				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, -spread), Vector3(spread * 2.0, 0.14, 0.14))
 				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, spread), Vector3(spread * 2.0, 0.14, 0.14))
@@ -11592,7 +11592,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.9, -5.1), Vector3(3.2, 1.3, 1.2), 0.0, 0.45, 0.0)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, -0.5), Vector3(3.0, 2.6, 8.0))
 		"container":
-			var cm := ["dz_rust_light", "dz_sign_blue", "dz_metal"][hash_pick]
+			var cm: String = ["dz_rust_light", "dz_sign_blue", "dz_metal"][hash_pick]
 			_dz_lbox(cm, o, basis, Vector3(0.0, 1.3, 0.0), Vector3(w, 2.6, d))
 			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 2.68, 0.0), Vector3(w + 0.1, 0.14, d + 0.1))
 			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, 0.0), Vector3(w, 2.6, d))
@@ -11692,7 +11692,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 				for sz in [-1.0, 1.0]:
 					_dz_beam("dz_metal_dark", o + basis * Vector3(sx * w * 0.5, 0.0, sz * d * 0.5), o + basis * Vector3(sx * 0.5, th * 0.82, sz * 0.5), 0.18, 0.18)
 			for lv in [0.22, 0.45, 0.68]:
-				var y := th * 0.82 * lv
+				var y: float = th * 0.82 * lv
 				var spread := lerpf(w * 0.5, 0.5, lv)
 				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, -spread), Vector3(spread * 2.0, 0.12, 0.12))
 				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, spread), Vector3(spread * 2.0, 0.12, 0.12))
@@ -11743,7 +11743,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 				_dz_lcyl("dz_wood", o, basis, Vector3(sx, h * 0.42, 0.0), 0.09, h * 0.85)
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h * 0.88, 0.0), Vector3(4.4, 0.95, 0.12))
 		"car_wreck":
-			var wm := ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
+			var wm: String = ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
 			var roll := 0.10 if hash_pick == 1 else 0.0
 			_dz_lbox(wm, o, basis, Vector3(0.0, 0.62, 0.0), Vector3(1.85, 0.62, 4.5), 0.0, 0.0, roll)
 			_dz_lbox(wm, o, basis, Vector3(0.0, 1.22, 0.25), Vector3(1.65, 0.6, 2.2), 0.0, 0.0, roll)
