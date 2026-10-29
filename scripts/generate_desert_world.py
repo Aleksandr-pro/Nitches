@@ -622,6 +622,117 @@ def road_dist_at(x, z):
     return bilinear(road_dist, x, z)
 
 
+def segment_points(x, z, yaw, length, step=1.0):
+    """Sample points along a fence segment (builder basis: local +X)."""
+    dx, dz = math.cos(yaw), -math.sin(yaw)
+    n = max(2, int(length / step) + 1)
+    return [(x + dx * (-length * 0.5 + length * i / n),
+             z + dz * (-length * 0.5 + length * i / n)) for i in range(n + 1)]
+
+
+def segment_clear_of_roads(x, z, yaw, length, clearance):
+    """True when EVERY point of the segment stays at least
+    `clearance` metres from any road centreline.  The old town
+    fences only tested the segment centre with 5 m, so 14 m long
+    fences ended with their ends on the carriageway (0.2.51)."""
+    return all(road_dist_at(px, pz) >= clearance
+               for (px, pz) in segment_points(x, z, yaw, length))
+
+# Exact polyline clearance: the raster above is 8 m bilinear and
+# can be a couple of metres off next to diagonal roads.  Segments
+# are built lazily from roads_out on first use.
+_EXACT_CACHE = {}
+
+
+def _exact_segments():
+    if "A" not in _EXACT_CACHE:
+        A, B, HW = [], [], []
+        for r in roads_out:
+            pts = [(float(smp[0]), float(smp[2])) for smp in r["samples"]]
+            if r.get("closed") and pts:
+                pts = pts + [pts[0]]
+            hw = float(r["widthM"]) * 0.5
+            for a, b in zip(pts[:-1], pts[1:]):
+                A.append(a)
+                B.append(b)
+                HW.append(hw)
+        _EXACT_CACHE["A"] = np.array(A)
+        _EXACT_CACHE["B"] = np.array(B)
+        _EXACT_CACHE["HW"] = np.array(HW)
+    return _EXACT_CACHE["A"], _EXACT_CACHE["B"], _EXACT_CACHE["HW"]
+
+
+def exact_edge_clearances(points):
+    """Per-point distance to nearest road EDGE (negative = on it)."""
+    A, B, HW = _exact_segments()
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-9)
+    P = np.array(points, dtype=np.float64)
+    best = np.full(len(P), 1e9)
+    for j in range(0, len(A), 1500):
+        a = A[j:j + 1500]
+        ab = AB[j:j + 1500]
+        l2 = L2[j:j + 1500]
+        hw = HW[j:j + 1500]
+        t = np.clip(((P[:, None, :] - a[None, :, :]) * ab[None, :, :]).sum(-1) / l2[None, :], 0, 1)
+        proj = a[None, :, :] + t[:, :, None] * ab[None, :, :]
+        d = np.linalg.norm(P[:, None, :] - proj, axis=-1) - hw[None, :]
+        best = np.minimum(best, d.min(axis=1))
+    return best
+
+
+def exact_edge_clearance(points):
+    """(min clearance to any road EDGE, nearest road point)."""
+    A, B, HW = _exact_segments()
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-9)
+    P = np.array(points, dtype=np.float64)
+    best = np.full(len(P), 1e9)
+    best_pt = np.zeros((len(P), 2))
+    for j in range(0, len(A), 1500):
+        a = A[j:j + 1500]
+        ab = AB[j:j + 1500]
+        l2 = L2[j:j + 1500]
+        hw = HW[j:j + 1500]
+        t = np.clip(((P[:, None, :] - a[None, :, :]) * ab[None, :, :]).sum(-1) / l2[None, :], 0, 1)
+        proj = a[None, :, :] + t[:, :, None] * ab[None, :, :]
+        d = np.linalg.norm(P[:, None, :] - proj, axis=-1) - hw[None, :]
+        k = np.argmin(d, axis=1)
+        dk = d[np.arange(len(P)), k]
+        upd = dk < best
+        if upd.any():
+            best[upd] = dk[upd]
+            best_pt[upd] = proj[np.arange(len(P))[upd], k[upd]]
+    i = int(np.argmin(best))
+    return float(best[i]), best_pt[i]
+
+
+def segment_edge_clear(x, z, yaw, length, min_edge):
+    return float(exact_edge_clearances(
+        segment_points(x, z, yaw, length, step=0.5)).min()) >= min_edge
+
+
+def clear_runs(x, z, yaw, length, min_edge, min_run=7.0):
+    """Sub-segments of a fence side keeping `min_edge` from roads."""
+    pts = segment_points(x, z, yaw, length, step=1.0)
+    cls = exact_edge_clearances(pts)
+    dx, dz = math.cos(yaw), -math.sin(yaw)
+    runs = []
+    start = None
+    for i in range(len(pts) + 1):
+        ok = i < len(pts) and cls[i] >= min_edge
+        if ok and start is None:
+            start = i
+        elif not ok and start is not None:
+            t0 = -length * 0.5 + length * start / (len(pts) - 1)
+            t1 = -length * 0.5 + length * (i - 1) / (len(pts) - 1)
+            if t1 - t0 >= min_run:
+                tc = (t0 + t1) / 2.0
+                runs.append((x + dx * tc, z + dz * tc, t1 - t0))
+            start = None
+    return runs
+
+
 def zone_of(x, z):
     if in_rect(x, z, TOWN_RECT):
         return "town"
@@ -873,6 +984,24 @@ house_spots = [
 for (hx, hz, hyaw) in house_spots:
     add_structure("house", hx, hz, hyaw, float(rng.uniform(9, 12)), float(rng.uniform(8, 10)),
                   float(rng.uniform(3.6, 6.2)))
+# Front-yard fences on the street side of most houses, so the town
+# reads as fenced plots instead of houses dropped on open dirt.
+# Dedicated RNG: the main stream below must not shift.
+frng = np.random.default_rng(SEED + 251)
+for (hx, hz, hyaw) in house_spots:
+    if frng.random() < 0.22:
+        continue
+    cands = []
+    for (ox, oz, fyaw) in [(0.0, 9.5, 0.0), (0.0, -9.5, 0.0),
+                           (9.5, 0.0, math.pi / 2), (-9.5, 0.0, math.pi / 2)]:
+        cands.append((road_dist_at(hx + ox, hz + oz), ox, oz, fyaw))
+    cands.sort(key=lambda c: c[0])
+    flen = float(frng.uniform(11.0, 16.0))
+    for (_d, ox, oz, fyaw) in cands:
+        if segment_clear_of_roads(hx + ox, hz + oz, fyaw, flen, 7.5):
+            add_structure("fence", float(hx + ox), float(hz + oz), fyaw,
+                          flen, 0.3, 1.1, building=False)
+            break
 # fairground stalls on the plaza (x 700..880, z 2100..2210)
 for i in range(12):
     add_structure("stall", 712 + (i % 6) * 30, 2122 + (i // 6) * 46,
@@ -882,10 +1011,15 @@ add_structure("stage", 790, 2196, math.pi, 16, 8, 5, building=False)
 for i in range(70):
     fx = float(rng.uniform(470, 1150))
     fz = float(rng.choice([rng.uniform(1920, 1995), rng.uniform(2115, 2225)]))
-    if road_dist_at(fx, fz) < 5.0:
+    fyaw = float(rng.choice([0.0, math.pi / 2]))
+    flen = float(rng.uniform(6, 14))
+    pts = segment_points(fx, fz, fyaw, flen)
+    if any(road_dist_at(px, pz) < 8.0 for (px, pz) in pts):
         continue
-    add_structure("fence", fx, fz, float(rng.choice([0.0, math.pi / 2])),
-                  float(rng.uniform(6, 14)), 0.3, 1.1, building=False)
+    if any(abs(px - hx) < 8.5 and abs(pz - hz) < 7.5
+           for (px, pz) in pts for (hx, hz, _hy) in house_spots):
+        continue
+    add_structure("fence", fx, fz, fyaw, flen, 0.3, 1.1, building=False)
 for i in range(80):
     fx = float(rng.uniform(480, 1140))
     fz = float(rng.choice([rng.uniform(1990, 2035), rng.uniform(2070, 2115),
@@ -1000,8 +1134,70 @@ for i, (rx, rz) in enumerate(RANCHES):
     add_structure("barn", rx + 16, rz + 7, float(rng.random() * math.pi), 13, 8, 5.5)
     add_structure("windmill", rx - 13, rz + 10, 0.0, 3, 3, 11, building=False)
     add_structure("ranch_tank", rx + 6, rz - 12, 0.0, 4, 4, 4.5, building=False)
-    add_structure("fence", rx, rz - 18, 0.0, 44, 0.3, 1.1, building=False)
-    add_structure("fence", rx, rz + 18, 0.0, 44, 0.3, 1.1, building=False)
+    # Corral: a full 48x36 m enclosure with a 7 m gate gap on the
+    # road side.  Every side is segment-checked against the roads;
+    # the corral first shifts away from a colliding side, and a
+    # side that still collides stays open (driveway).  A fence must
+    # never cross the carriageway: the old two blind 44 m lines cut
+    # straight through roads at three of the six ranches (0.2.51).
+    # Corrals shrink (48x36 -> 40x30 -> 32x24) before giving up,
+    # so a ranch squeezed between two roads still gets a yard.
+    # Sides are checked against the exact road polylines (2 m
+    # from the road edge); crossed sides keep their clear runs.
+    ccx0, ccz0 = float(rx), float(rz)
+    def corral_sides(cx, cz, hx, hz):
+        return [(cx, cz - hz, 0.0, hx * 2.0), (cx, cz + hz, 0.0, hx * 2.0),
+                (cx - hx, cz, math.pi / 2, hz * 2.0), (cx + hx, cz, math.pi / 2, hz * 2.0)]
+    chosen = None
+    for (chx, chz) in [(24.0, 18.0), (20.0, 15.0), (16.0, 12.0)]:
+        ccx, ccz = ccx0, ccz0
+        for _try in range(6):
+            sides = corral_sides(ccx, ccz, chx, chz)
+            bad = [si for si, sd in enumerate(sides)
+                   if not segment_edge_clear(sd[0], sd[1], sd[2], sd[3], 2.0)]
+            if not bad:
+                break
+            si = bad[0]
+            if si == 0:
+                ccz += 3.0
+            elif si == 1:
+                ccz -= 3.0
+            elif si == 2:
+                ccx += 3.0
+            else:
+                ccx -= 3.0
+        sides = corral_sides(ccx, ccz, chx, chz)
+        ok = [segment_edge_clear(sd[0], sd[1], sd[2], sd[3], 2.0) for sd in sides]
+        if sum(ok) >= 2:
+            chosen = (ccx, ccz, chx, chz)
+            break
+    if chosen is not None:
+        ccx, ccz, chx, chz = chosen
+        # Keep the ranch house comfortably inside its own corral:
+        # escaping a road must not shove a fence line through the
+        # house.  Sides are re-checked below, so clamping is safe.
+        ccx = min(max(ccx, ccx0 - (chx - 9.0)), ccx0 + (chx - 9.0))
+        ccz = min(max(ccz, ccz0 - (chz - 8.0)), ccz0 + (chz - 8.0))
+        out_pts = [(ccx, ccz - chz - 24.0), (ccx, ccz + chz + 24.0),
+                   (ccx - chx - 24.0, ccz), (ccx + chx + 24.0, ccz)]
+        gate_side = min(range(4), key=lambda si: road_dist_at(*out_pts[si]))
+        for si, (sx, sz, syaw, slen) in enumerate(corral_sides(ccx, ccz, chx, chz)):
+            if not segment_edge_clear(sx, sz, syaw, slen, 2.0):
+                # Side crossed by a road: keep the clear runs so
+                # the fence stops at the roadside instead of the
+                # whole corral being dropped.
+                for (cx2, cz2, clen) in clear_runs(sx, sz, syaw, slen, 2.0):
+                    add_structure("fence", cx2, cz2, syaw, clen, 0.3, 1.1, building=False)
+                continue
+            if si == gate_side:
+                gap = 7.0
+                seg_len = (slen - gap) / 2.0
+                off = gap / 2.0 + seg_len / 2.0
+                dx, dz = math.cos(syaw), -math.sin(syaw)
+                add_structure("fence", sx - dx * off, sz - dz * off, syaw, seg_len, 0.3, 1.1, building=False)
+                add_structure("fence", sx + dx * off, sz + dz * off, syaw, seg_len, 0.3, 1.1, building=False)
+            else:
+                add_structure("fence", sx, sz, syaw, slen, 0.3, 1.1, building=False)
 
 # Salt-flat furniture (Bonneville vibe): drag markers + crossing poles
 for (mx, mz) in [(1500, 2268), (1500, 2292), (2300, 2268), (2300, 2292),
@@ -1186,6 +1382,57 @@ add_drop_guardrails()
 
 print(f"[desert] structures: {len(structures)} (poles {len(pole_points)}, "
       f"guardrail sections {len(guardrails)}, pipe segments {len(pipes)})")
+
+# --- exact road-clearance safety net (0.2.51) -----------------------
+# The road-distance raster is 8 m bilinear and offset rails on
+# switchbacks can land on the neighbouring leg, so placement checks
+# alone cannot promise "no fence/rail on the carriageway".  Verify
+# every fence and guardrail against the exact road polylines here:
+# fences within 1.2 m of a road edge are dropped; guardrails are
+# nudged away from the nearest road point first and dropped only
+# when there is no room (tight switchback legs).  Baseline before
+# this filter: 12/72 fences and 21/209 guardrails on the roadway.
+_kept = []
+_dropped_fences = 0
+for _s in structures:
+    if _s["kind"] == "fence":
+        _c, _near = exact_edge_clearance(
+            segment_points(_s["x"], _s["z"], _s["yaw"], float(_s["w"]), step=0.5))
+        if _c < 1.2:
+            _dropped_fences += 1
+            continue
+    _kept.append(_s)
+structures = _kept
+
+_fixed_rails = []
+_shifted_rails = 0
+for (_x1, _z1, _x2, _z2) in guardrails:
+    _seg = [(float(_x1), float(_z1)), (float(_x2), float(_z2))]
+    _c = -1.0
+    for _attempt in range(7):
+        _n = max(2, int(math.hypot(_seg[1][0] - _seg[0][0], _seg[1][1] - _seg[0][1])) + 1)
+        _pts = [(_seg[0][0] + (_seg[1][0] - _seg[0][0]) * i / _n,
+                 _seg[0][1] + (_seg[1][1] - _seg[0][1]) * i / _n) for i in range(_n + 1)]
+        _c, _near = exact_edge_clearance(_pts)
+        if _c >= 0.55:
+            break
+        _mid = np.array([(_seg[0][0] + _seg[1][0]) / 2.0, (_seg[0][1] + _seg[1][1]) / 2.0])
+        _away = _mid - _near
+        _ln = float(np.linalg.norm(_away))
+        if _ln < 1e-6:
+            break
+        _away = _away / _ln * 0.5
+        _seg = [(_seg[0][0] + float(_away[0]), _seg[0][1] + float(_away[1])),
+                (_seg[1][0] + float(_away[0]), _seg[1][1] + float(_away[1]))]
+        if _attempt == 0:
+            _shifted_rails += 1
+    if _c >= 0.55:
+        _fixed_rails.append([round(_seg[0][0], 1), round(_seg[0][1], 1),
+                              round(_seg[1][0], 1), round(_seg[1][1], 1)])
+guardrails = _fixed_rails
+print(f"[desert] fence/rail clearance filter: dropped fences {_dropped_fences}, "
+      f"guardrails kept {len(guardrails)} (nudged {_shifted_rails})")
+
 
 # ---------------------------------------------------------------- game content
 print("[desert] game content ...")

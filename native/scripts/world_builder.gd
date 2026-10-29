@@ -11623,12 +11623,40 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, h + 1.2, 0.0), Vector3(w + 1.0, 0.14, d + 1.2), 0.0, 0.1, 0.0)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 0.7, 0.0), Vector3(w, 1.4, d))
 		"fence":
-			var posts := maxi(2, int(w / 3.0))
-			for pi in range(posts + 1):
-				_dz_lbox("dz_wood_dark", o, basis, Vector3(-w * 0.5 + w * float(pi) / float(posts), 0.55, 0.0), Vector3(0.13, 1.1, 0.13))
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.95, 0.0), Vector3(w, 0.09, 0.07))
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.5, 0.0), Vector3(w, 0.09, 0.07))
+			# 0.2.51: terrain-following wooden fence.  Every post is
+			# planted on its own ground height with a little weathered
+			# height/tilt jitter, and the rails are individual planks
+			# sloped span-by-span between the posts, so a long fence
+			# hugs a hillside instead of floating as one rigid slab.
+			# Short town/yard fences get three solid planks; long
+			# ranch runs get two planks, a top wire strand and
+			# diagonal end braces.
+			var is_ranch := w >= 18.0
+			var spans := maxi(1, int(round(w / 2.4)))
+			var side_off: Vector3 = basis * Vector3(0.0, 0.0, 0.105)
+			var post_bases: Array = []
+			for pi in range(spans + 1):
+				var lx := -w * 0.5 + w * float(pi) / float(spans)
+				var wp: Vector3 = o + basis * Vector3(lx, 0.0, 0.0)
+				var gy := height_at(wp.x, wp.z)
+				var jitter := _hash01(int(round(wp.x * 7.0)), int(round(wp.z * 7.0)))
+				var post_h := 1.08 + (jitter - 0.5) * 0.10
+				var tilt := (jitter - 0.5) * 0.07
+				_dz_box("dz_wood_dark", Vector3(wp.x, gy + post_h * 0.5 - 0.07, wp.z), Vector3(0.16, post_h, 0.16), yaw, tilt, tilt * 0.6)
+				post_bases.append(Vector3(wp.x, gy, wp.z))
+			var rail_levels: Array = [0.55, 0.92] if is_ranch else [0.32, 0.64, 0.96]
+			for si in range(spans):
+				var ba: Vector3 = post_bases[si]
+				var bb: Vector3 = post_bases[si + 1]
+				for lvl_variant in rail_levels:
+					var lvl := float(lvl_variant)
+					_dz_beam("dz_wood", ba + side_off + Vector3(0.0, lvl, 0.0), bb + side_off + Vector3(0.0, lvl, 0.0), 0.05, 0.15)
+				if is_ranch:
+					_dz_beam("dz_metal_dark", ba + Vector3(0.0, 1.10, 0.0), bb + Vector3(0.0, 1.10, 0.0), 0.025, 0.025)
+					if si == 0 or si == spans - 1:
+						_dz_beam("dz_wood_dark", ba + Vector3(0.0, 0.06, 0.0), bb + Vector3(0.0, 0.95, 0.0), 0.07, 0.07)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 0.5, 0.0), Vector3(w, 1.0, 0.3))
+			_enhancement_stats["desert_fences_0251"] = int(_enhancement_stats.get("desert_fences_0251", 0)) + 1
 		"crate":
 			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.6, 0.0), Vector3(1.2, 1.2, 1.2))
 			if hash_pick != 0:
