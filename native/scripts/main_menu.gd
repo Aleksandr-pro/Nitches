@@ -53,6 +53,9 @@ const MIN_TOUCH_HEIGHT := 48.0
 const MIN_FONT_SIZE := 14
 const WORLD_MOUNTAINS_REQUIRED_LEVEL := 5
 const WORLD_CANYON_REQUIRED_CREDITS := 50000
+# Temporary owner request (0.2.48): every finished world is free for
+# all players. Flip this one flag to restore the credit/level gates.
+const WORLDS_FREE_FOR_ALL := true
 const TUNING_COSTS: Array[int] = [0, 5000, 12000]
 const TUNING_MULTIPLIERS: Array[float] = [1.0, 1.08, 1.16]
 const TUNING_NAMES: Array[String] = ["СТОК", "SPORT", "TRACK"]
@@ -309,6 +312,7 @@ func get_smoke_state() -> Dictionary:
         "desert_world_0247": _desert_card != null,
         "current_world_id": _current_world_id,
         "desert_unlocked_0247": _desert_unlocked(),
+        "worlds_free_for_all_0248": WORLDS_FREE_FOR_ALL,
         "hover_sound_0236": _hover_player != null,
         "panel_transition_018_0236": is_equal_approx(PANEL_TRANSITION_SECONDS, 0.18),
         "gameplay_card_textures_0236": MENU_PLAY_TEXTURE != null and MENU_SHELBY_TEXTURE != null and MENU_RICHTOWN_TEXTURE != null and MENU_WORLD_TEXTURE != null,
@@ -1859,22 +1863,29 @@ func _build_worlds_panel(parent: Node) -> Control:
     locked_column.add_theme_constant_override("separation", 12)
     locked_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     row.add_child(locked_column)
+    var mountains_subtitle := "открывается на уровне %d • мир в разработке" % WORLD_MOUNTAINS_REQUIRED_LEVEL
+    if WORLDS_FREE_FOR_ALL:
+        mountains_subtitle = "бесплатно • мир в разработке"
     var locked_specs := [
-        ["СЕВЕРНЫЕ ГОРЫ", "открывается на уровне %d • мир в разработке" % WORLD_MOUNTAINS_REQUIRED_LEVEL],
+        ["СЕВЕРНЫЕ ГОРЫ", mountains_subtitle],
     ]
     for spec in locked_specs:
         var locked := _tile(String(spec[0]), String(spec[1]), COL_LOCKED, Vector2(0.0, 106.0), 21)
-        locked.disabled = true
+        locked.disabled = true # This world is not built yet; free mode removes only its level gate.
         locked.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var lock_icon := LockIconScript.new() as NativeLockIcon
-        lock_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-        lock_icon.offset_left = -46.0
-        lock_icon.offset_top = 12.0
-        lock_icon.offset_right = -12.0
-        lock_icon.offset_bottom = 46.0
-        locked.add_child(lock_icon)
+        if not WORLDS_FREE_FOR_ALL:
+            var lock_icon := LockIconScript.new() as NativeLockIcon
+            lock_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+            lock_icon.offset_left = -46.0
+            lock_icon.offset_top = 12.0
+            lock_icon.offset_right = -12.0
+            lock_icon.offset_bottom = 46.0
+            locked.add_child(lock_icon)
         locked_column.add_child(locked)
-    _desert_card = _tile("ПУСТЫННЫЙ КАНЬОН", "нужно накопить CR %s" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS), Color(0.78, 0.50, 0.24), Vector2(0.0, 106.0), 21)
+    var desert_card_subtitle_text := "нужно накопить CR %s" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS)
+    if WORLDS_FREE_FOR_ALL:
+        desert_card_subtitle_text = "бесплатно • открыт для всех игроков"
+    _desert_card = _tile("ПУСТЫННЫЙ КАНЬОН", desert_card_subtitle_text, Color(0.78, 0.50, 0.24), Vector2(0.0, 106.0), 21)
     _desert_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     for child in _desert_card.get_children():
         if child is Label:
@@ -2033,7 +2044,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.47-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.48-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2221,6 +2232,10 @@ func _refresh_history(items: Array) -> void:
 func _update_world_progress() -> void:
     if _world_progress_label == null:
         return
+    if WORLDS_FREE_FOR_ALL:
+        _world_progress_label.text = "ВСЕ ГОТОВЫЕ КАРТЫ БЕСПЛАТНЫ: RichTown и Пустынный каньон открыты сразу. Северные горы тоже будут бесплатны, но этот мир ещё в разработке."
+        _refresh_world_cards()
+        return
     var level := int(_profile_view.get("level", 1))
     var credits := int(_profile_view.get("credits", 35000))
     var mountains_left := maxi(WORLD_MOUNTAINS_REQUIRED_LEVEL - level, 0)
@@ -2237,15 +2252,18 @@ func _update_world_progress() -> void:
     _refresh_world_cards()
 
 
-## 0.2.47 world selection: RichTown is always available, the desert
-## canyon unlocks at WORLD_CANYON_REQUIRED_CREDITS.  Selecting a card
-## asks main to rebuild the world and then starts driving there.
+## World selection: RichTown is always available.  While
+## WORLDS_FREE_FOR_ALL is on (0.2.48), the desert canyon is free too;
+## otherwise it unlocks at WORLD_CANYON_REQUIRED_CREDITS.  Selecting a
+## card asks main to rebuild the world and then starts driving there.
 func _world_display_name(world_id: String = "") -> String:
     var id := world_id if not world_id.is_empty() else _current_world_id
     return "ПУСТЫННЫЙ КАНЬОН" if id == "desert" else "RICHTOWN"
 
 
 func _desert_unlocked() -> bool:
+    if WORLDS_FREE_FOR_ALL:
+        return true
     return int(_profile_view.get("credits", 35000)) >= WORLD_CANYON_REQUIRED_CREDITS
 
 
@@ -2290,7 +2308,7 @@ func _refresh_world_cards() -> void:
             elif desert:
                 _desert_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • каньоны • солончак • оазис"
             else:
-                _desert_card_subtitle.text = "открыт • 4×4 км • каньоны • солончак • оазис"
+                _desert_card_subtitle.text = "бесплатно • открыт • 4×4 км • каньоны • солончак • оазис" if WORLDS_FREE_FOR_ALL else "открыт • 4×4 км • каньоны • солончак • оазис"
     if _world_title_label != null:
         _world_title_label.text = "%s — ТЕКУЩИЙ МИР" % _world_display_name()
     if _world_detail_label != null:
