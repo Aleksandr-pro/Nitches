@@ -1571,6 +1571,8 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic node must be completely removed in 0.2.5")
 	if _camera == null:
 		failures.append("camera node is missing")
+	elif _camera.far < 2099.0:
+		failures.append("camera far plane no longer reaches the 2.1 km skyline: %.1f m" % _camera.far)
 	if _speed_post == null:
 		failures.append("speed post node is missing")
 	if _atmosphere_fx == null:

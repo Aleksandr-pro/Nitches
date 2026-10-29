@@ -94,7 +94,7 @@ const atmosphereFxScript = await readText('scripts/atmosphere_fx.gd');
 for (const marker of ['get_foliage_density_at', 'get_headlight_world_positions', 'leaves', 'petals', 'light_shafts', 'headlight_bokeh']) {
   assert(atmosphereFxScript.includes(marker), `0.2.43 near-car atmosphere effect marker is missing: ${marker}`);
 }
-for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate']) {
+for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate', 'camera far plane no longer reaches the 2.1 km skyline']) {
   assert(mainScript.includes(marker), `Native smoke test is missing acceptance check: ${marker}`);
 }
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
