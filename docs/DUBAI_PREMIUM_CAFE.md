@@ -14,13 +14,19 @@ The model uses named material groups (`CafeTravertine`, `CafeLimestone`, `CafeBr
 
 ## Current RichTown placement
 
-`NativeWorldBuilder._build_premium_boulevard_details()` instances the asset five times at approximately:
+`NativeWorldBuilder._build_premium_boulevard_details()` instances the asset nine times at approximately:
 
 - `(718, terrain height, -67)` — west side, yaw `0`
 - `(718, terrain height, -20)` — west side, yaw `0`
 - `(718, terrain height, 27)` — west side, yaw `0`
 - `(782, terrain height, -58)` — east side, yaw `PI`
 - `(782, terrain height, 18)` — east side, yaw `PI`
+- `(718, terrain height, 330)` — west spawn frontage, yaw `0`
+- `(782, terrain height, 330)` — east spawn frontage, yaw `PI`
+- `(718, terrain height, -132)` — west side, yaw `0`
+- `(782, terrain height, 150)` — east side, yaw `PI`
+
+Native 0.2.19 intentionally requires this detailed PR #61 version: the validator rejects a source GLB below 2.5 MB, and the runtime smoke requires at least 12 model parts and 10,000 triangles. At least one accepted instance must be at the `Z=330` spawn frontage so the model is visible immediately, not only near the central focus block.
 
 The model is offset upward by 5.5 cm to sit just above the promenade paving. At yaw `0`, its terrace points toward RichTown Boulevard at `X=760`; the east-side copies use yaw `PI` so their terraces face the same carriageway. The full 11.6 × 9.2 m placement rectangle is checked against exported and generated buildings before an instance is accepted. Each interior shell gets a static collision box; terrace seating stays decorative.
 

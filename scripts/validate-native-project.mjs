@@ -13,7 +13,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, dynamicWorldScript, speedPostScript, atmosphereFxScript, arcadeCarScript, carPaintShader, speedPostShader, lightShaftShader, horizonSkylineShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript] = await Promise.all([
+function parseGlbJson(bytes) {
+  assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', 'GLB header is missing');
+  const jsonLength = bytes.readUInt32LE(12);
+  const jsonType = bytes.readUInt32LE(16);
+  assert(jsonType === 0x4e4f534a, 'First GLB chunk is not JSON');
+  return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
+}
+
+const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -22,14 +30,12 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
   readText('scripts/hud.gd'),
+  readText('scripts/minimap.gd'),
   readText('scripts/dynamic_world.gd'),
   readText('scripts/speed_post.gd'),
-  readText('scripts/atmosphere_fx.gd'),
   readText('scripts/arcade_car.gd'),
   readText('shaders/car_paint.gdshader'),
   readText('shaders/speed_post.gdshader'),
-  readText('shaders/light_shafts.gdshader'),
-  readText('shaders/horizon_skyline.gdshader'),
   readText('shaders/wet_asphalt.gdshader'),
   readText('shaders/foliage_wind.gdshader'),
   readText('shaders/curtain_wall_glass.gdshader'),
@@ -38,6 +44,24 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('shaders/premium_stone_paving.gdshader'),
   readFile('scripts/sync-native-assets.mjs', 'utf8'),
   readFile('blender/build_props.py', 'utf8'),
+  readFile('.github/workflows/native-godot-desktop.yml', 'utf8'),
+  readText('scripts/main_menu.gd'),
+  readText('scripts/steering_wheel.gd'),
+  readText('scripts/world_map.gd'),
+  readText('scripts/dashboard_gauge.gd'),
+  readText('scripts/touch_pedal.gd'),
+  readText('scripts/round_action_button.gd'),
+  readText('shaders/circular_mask.gdshader'),
+  readText('scripts/route_guide.gd'),
+  readText('scripts/car_silhouette_icon.gd'),
+  readText('shaders/backdrop_blur.gdshader'),
+  readText('scripts/vehicle_audio.gd'),
+  readText('scripts/ignition_button.gd'),
+  readFile('docs/AUDIO_CREDITS.md', 'utf8'),
+  readText('scripts/avatar_icon.gd'),
+  readText('scripts/wheel_preview.gd'),
+  readText('scripts/lock_icon.gd'),
+  readText('scripts/car_catalog.gd'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -50,22 +74,73 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=22'), 'Native 0.2.19 must bump Android versionCode to 22');
-assert(preset.includes('version/name="0.2.19-native-alpha"'), 'Native version name must be 0.2.19-native-alpha');
+assert(project.includes('config/version="0.2.43-native-alpha"'), 'Native project version metadata must match 0.2.43-native-alpha');
+assert(preset.includes('version/code=46'), 'Native 0.2.43 must bump Android versionCode to 46');
+assert(preset.includes('version/name="0.2.43-native-alpha"'), 'Native version name must be 0.2.43-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.43-native-alpha'), 'Main menu version label must match the native export version');
+for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
+  assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
+  const png = await readFile(path.join('src/assets/textures/realworld', name));
+  assert(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${name} is not a valid PNG`);
+  assert(png.readUInt32BE(16) === 4096 && png.readUInt32BE(20) === 512, `${name} must be a 4096x512 skyline panorama`);
+}
+for (const marker of ['skyline_panorama_textures_0243', 'near_field_lod_0243', 'range_fade_mode', 'tree_detail_end_m', 'palm_detail_end_m', 'shrub_detail_end_m']) {
+  assert(worldScript.includes(marker), `0.2.43 near-field/skyline validation marker is missing: ${marker}`);
+}
+for (const marker of ['wet_streak', 'wet_roughness', 'puddle_roughness']) {
+  assert(wetAsphaltShader.includes(marker), `0.2.43 low-cost wet-road shading marker is missing: ${marker}`);
+}
+const atmosphereFxScript = await readText('scripts/atmosphere_fx.gd');
+for (const marker of ['get_foliage_density_at', 'get_headlight_world_positions', 'leaves', 'petals', 'light_shafts', 'headlight_bokeh']) {
+  assert(atmosphereFxScript.includes(marker), `0.2.43 near-car atmosphere effect marker is missing: ${marker}`);
+}
+for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate']) {
+  assert(mainScript.includes(marker), `Native smoke test is missing acceptance check: ${marker}`);
+}
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
-const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${atmosphereFxScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${lightShaftShader}\n${horizonSkylineShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
-const skylineSourceFiles = [
-  'src/assets/textures/realworld/skyline_rich_town_near.png',
-  'src/assets/textures/realworld/skyline_rich_town_far.png',
-];
-for (const file of skylineSourceFiles) {
-  const bytes = await readFile(file);
-  assert(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${file} is not a PNG`);
-  assert(bytes.readUInt32BE(16) === 4096 && bytes.readUInt32BE(20) === 512, `${file} must be a 4096x512 skyline panorama`);
+// 0.2.21 desktop parity: Windows/Linux export the identical native game.
+assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="Windows"'), 'Windows desktop export preset is missing');
+assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
+assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
+assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
+assert(preset.includes('application/file_version="0.2.43"') && preset.includes('application/product_version="0.2.43"'), 'Desktop Windows version metadata must match native 0.2.43');
+assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
+for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
+  assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
+}
+for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_screenshot', '[native-screenshots] DONE']) {
+  assert(mainScript.includes(marker), `Visual-audit screenshot tour marker is missing: ${marker}`);
+}
+assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
+assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
+
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
+for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
+}
+// 0.2.22 RichTown parks: Central Park, Museum Garden, Corniche Palmetum.
+for (const marker of ['PARK_SPECS', '_build_parks', 'parks_0222', 'RichTown Central Park', 'Museum Garden', 'Corniche Palmetum', 'central_park_fountain_garden', 'museum_garden_pergola', 'beach_palmetum_rondel', '_is_in_park', 'get_park_rects', '_park_plant_oak_grove', '_park_plant_palm_grove', '_park_plant_parterre']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.22 parks marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('_draw_rotated_rect') && minimapScript.includes('get_park_map_entries'), 'Minimap must draw the 0.2.22 RichTown parks from the HUD world-data binding');
+// 0.2.23 photoreal model detail pass: denser palms/ground cover and
+// fully modelled street/park furniture with per-model triangle stats.
+for (const marker of ['photoreal_models_0223', 'photoreal_park_furniture_0223', 'street_lamp_triangles', 'bus_shelter_triangles', 'park_bench_triangles', 'park_pergola_triangles', 'park_bench_models', 'BlenderParkBenches', 'BlenderParkPergola', 'res://assets/props/park_bench.glb', 'res://assets/props/park_pergola.glb']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.23 photoreal-model marker is missing: ${marker}`);
+}
+for (const marker of ['def build_park_bench():', 'def build_park_pergola():', '(build_park_bench, "park_bench.glb")', '(build_park_pergola, "park_pergola.glb")']) {
+  assert(blenderScript.includes(marker), `Blender 0.2.23 park-model marker is missing: ${marker}`);
+}
+assert(syncScript.includes('park_bench.glb') && syncScript.includes('park_pergola.glb'), 'Native asset sync is missing the 0.2.23 park bench/pergola GLBs');
+// 0.2.24 districts/roads: synthetic local streets in the exported data,
+// rounded kerb returns, cross-road kerb/paint openings and guardrails
+// trimmed clear of the Corniche junctions.
+for (const marker of ['district_infrastructure_0224', '_build_district_infrastructure', '_build_rounded_intersection_returns', '_clearance_to_other_roads', 'rounded_intersection_returns', 'rounded_corner_curbs', 'junction_edge_openings_0224', 'junction_paint_breaks_0224', 'guardrail_trim_start_m', 'guardrail_terminals', 'guardrail_min_alignment']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.24 district/road marker is missing: ${marker}`);
 }
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
@@ -79,24 +154,185 @@ assert(!worldScript.includes('_get_palm_crown_mesh') && !worldScript.includes('_
 for (const marker of ['paver_id', 'gum_spots', 'macro_stain', 'world_position', 'pattern_scale']) {
   assert(concreteSurfaceShader.includes(marker), `Native 0.2.17 concrete shader marker is missing: ${marker}`);
 }
-for (const marker of ['stone_texture', 'fine_normal_texture', 'dominant_plane', 'district_variation', 'polished_wear', 'PremiumStone']) {
-  assert(premiumStonePavingShader.includes(marker) || worldScript.includes(marker), `Native 0.2.18 premium stone paving marker is missing: ${marker}`);
+for (const marker of ['stone_texture', 'fine_normal_texture', 'dominant_plane', 'district_variation', 'polished_wear', 'PremiumStone', 'formal_slab_joint', 'formal_slab_id', 'slab_joint']) {
+  assert(premiumStonePavingShader.includes(marker) || worldScript.includes(marker), `Native 0.2.19 premium stone paving marker is missing: ${marker}`);
 }
+assert(wetAsphaltShader.includes('boulevard_mask') && worldScript.includes('boulevard_dark_asphalt_0219'), 'Native 0.2.19 must keep the dark resurfaced RichTown Boulevard asphalt mask');
 for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.glb', 'flower_clump.glb', 'ornamental_shrub.glb']) {
   assert(syncScript.includes(vegetationModel), `Native asset sync is missing ${vegetationModel}`);
   assert(worldScript.includes(`res://assets/vegetation/${vegetationModel}`), `Native world does not load ${vegetationModel}`);
 }
 assert(syncScript.includes('user_sand_beach_white.jpg'), 'Native asset sync is missing the 0.2.18 white-pebble texture');
-for (const skylineTexture of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
-  assert(syncScript.includes(skylineTexture), `Native asset sync is missing ${skylineTexture}`);
-}
 for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def build_grass_tuft():', 'def build_flower_clump():', 'def build_ornamental_shrub():']) {
   assert(blenderScript.includes(marker), `Blender vegetation builder is missing: ${marker}`);
 }
+assert(blenderScript.includes('def build_opera():') && blenderScript.includes('(build_opera, "opera_house.glb")'), 'Blender Building Model No.6 opera builder/export is missing');
+assert(syncScript.includes('opera_house.glb') && worldScript.includes('res://assets/buildings/opera_house.glb'), 'Native 0.2.20 must stage and load the RichTown Opera GLB');
+for (const marker of ['premium_opera_built', 'premium_opera_fixed_scale', 'premium_opera_detail_pass', 'premium_opera_material_pass', 'premium_opera_site_pass', 'premium_opera_fronts_boulevard', 'RichTownOpera', 'opera_glass_physical', 'opera_shell_ceramic']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.20 opera marker is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_mosque():') && blenderScript.includes('(build_mosque, "mosque.glb")'), 'Blender Building Model No.7 mosque builder/export is missing');
+assert(syncScript.includes('mosque.glb') && worldScript.includes('res://assets/buildings/mosque.glb'), 'Native 0.2.25 must stage and load the RichTown Mosque GLB');
+for (const marker of ['premium_mosque_built', 'premium_mosque_fixed_scale', 'premium_mosque_detail_pass', 'premium_mosque_material_pass', 'premium_mosque_site_pass', 'premium_mosque_fronts_east', 'RichTownMosque', 'mosque_glass_physical', 'mosque_dome_copper', 'mosque_glazed_tile']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.25 mosque marker is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_hotel():') && blenderScript.includes('(build_hotel, \"grand_hotel.glb\")'), 'Blender Building Model No.8 grand hotel builder/export is missing');
+assert(syncScript.includes('grand_hotel.glb') && worldScript.includes('res://assets/buildings/grand_hotel.glb'), 'Native 0.2.26 must stage and load the Grand Hotel GLB');
+for (const marker of ['premium_hotel_models', 'premium_hotel_fixed_scale', 'premium_hotel_detail_pass', 'premium_hotel_material_pass', 'premium_hotel_site_pass', 'premium_hotel_fronts_corniche', 'BlenderGrandHotels', 'hotel_glass_physical', 'hotel_travertine', 'hotel_pool_water']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.26 grand hotel marker is missing: ${marker}`);
+}
+assert(blenderScript.includes('def build_museum():') && blenderScript.includes('(build_museum, "museum.glb")'), 'Blender Building Model No.9 museum builder/export is missing');
+assert(syncScript.includes('museum.glb') && worldScript.includes('res://assets/buildings/museum.glb'), 'Native 0.2.29 must stage and load the Museum GLB');
+for (const marker of ['premium_museum_built', 'premium_museum_fixed_scale', 'premium_museum_detail_pass', 'premium_museum_material_pass', 'premium_museum_site_pass', 'premium_museum_fronts_fountain', 'RichTownMuseum', 'museum_glass_physical', 'museum_limestone', 'museum_pool_water']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.29 museum marker is missing: ${marker}`);
+}
+// 0.2.39 Building Models No.10-12: three distinct fixed-scale Dubai
+// cottage estates on Sail Island with authored PBR roughness maps,
+// retaining podiums, multi-box colliders and an open SW lookout.
+for (const marker of ['def build_cottage_dune():', 'def build_cottage_courtyard():', 'def build_cottage_palm():', '(build_cottage_dune, "cottage_dune.glb")', '(build_cottage_courtyard, "cottage_courtyard.glb")', '(build_cottage_palm, "cottage_palm.glb")']) {
+  assert(blenderScript.includes(marker), `Blender cottage-estate builder/export is missing: ${marker}`);
+}
+for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottage_palm.glb']) {
+  assert(syncScript.includes(cottageModel), `Native asset sync is missing ${cottageModel}`);
+  assert(worldScript.includes(`res://assets/buildings/${cottageModel}`), `Native world does not load ${cottageModel}`);
+}
+for (const roughnessMap of ['cottage_basalt_roughness.jpg', 'cottage_limestone_blocks_roughness.jpg', 'cottage_paving_roughness.jpg', 'cottage_rammed_sand_roughness.jpg', 'cottage_roof_metal_roughness.jpg', 'cottage_teak_weathered_roughness.jpg', 'cottage_travertine_coarse_roughness.jpg']) {
+  assert(syncScript.includes(roughnessMap), `Native asset sync is missing the PBR roughness map ${roughnessMap}`);
+  assert(worldScript.includes(roughnessMap), `Native world does not use the PBR roughness map ${roughnessMap}`);
+}
+for (const marker of ['sail_cottage_estates_0239', 'sail_cottage_models_0239', 'sail_cottage_fixed_scale_0239', 'sail_cottage_exterior_only_0239', 'sail_cottage_pbr_roughness_0239', 'sail_cottage_material_pass_0239', 'sail_cottage_multi_box_colliders_0239', 'sail_cottage_podiums_0239', 'sail_cottage_dune_triangles_0239', 'sail_cottage_courtyard_triangles_0239', 'sail_cottage_palm_triangles_0239', 'sail_cottage_garden_palms_0239', 'sail_open_lookout_0239', 'sail_cottage_resort_fit_0239', 'SailCottageDune', 'SailCottageCourtyard', 'SailCottagePalm', 'SailCottagePodiums', 'cottage_rammed_sand', 'cottage_travertine_coarse', 'cottage_glass_physical', '_cottage_estate_ground_y_0239', '_add_cottage_estate_colliders_0239', 'roughness_texture_channel', '23_sail_cottage_dune', '24_sail_cottage_courtyard', '25_sail_cottage_palm', '26_sail_cottages_aerial']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.39 cottage-estate marker is missing: ${marker}`);
+}
+for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.32 steering-wheel/world-map marker is missing: ${marker}`);
+}
+assert(hudScript.includes('_control_type == "arrows"') && hudScript.includes('_wheel.visible = _control_type != "arrows"'), 'Native 0.2.33 HUD must default to the steering wheel and expose arrows only as a settings alternative');
+for (const marker of ['get_global_transform_interpolated', 'PHYSICS_INTERPOLATION_MODE_OFF', 'reset_physics_interpolation', 'responsive_steering', 'ramp_digital_steering', 'shape_steering_input', 'CONTACT_PATCH_SAMPLES', 'TYRE_RELAXATION_LENGTH_M', 'free_orbit_0231', 'InputEventScreenDrag', 'InputEventMouseMotion', 'JOY_AXIS_RIGHT_X']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.31 anti-jitter/steering/free-camera marker is missing: ${marker}`);
+}
+assert(project.includes('common/physics_interpolation=true'), 'Native 0.2.31 requires project physics interpolation');
+for (const marker of ['directional_streaming_0230', 'update_streaming', '_streaming_tick', '_register_collider', 'streaming_colliders_total', 'STREAM_HIDE_BEHIND_M']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.30 directional-streaming marker is missing: ${marker}`);
+}
+for (const marker of ['class_name NativeMainMenu', 'play_requested', 'nitches_profile.cfg', 'get_spec_sheet', 'SPEC_TORQUE_NM', 'menu_requested', '_update_menu_camera']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.29 main-menu/spec marker is missing: ${marker}`);
+}
+for (const marker of ['paving_variety_0228', 'paving_running_bond_0228', 'bond_cell', 'joint_grime', 'batch_drift']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.28 paving-variety marker is missing: ${marker}`);
+}
+for (const marker of ['scaled_local(scale_value)', 'curtain_wall_reflective_glass_0227', 'glass_smoke_luminance_min_0227', 'guardrail_local_axis_0227']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.27 reflective-glass/local-axis marker is missing: ${marker}`);
+}
+assert(!worldScript.includes('Basis(Vector3.UP, yaw).scaled('), 'Native 0.2.27 make_transform must not use global-space Basis.scaled()');
 for (const forbidden of ['WebView', 'Capacitor', 'JavaScriptBridge', 'http://localhost', 'https://localhost']) {
   assert(!combinedRuntime.includes(forbidden), `Native runtime must not contain ${forbidden}`);
 }
-for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeAtmosphereFX', 'class_name NativeArcadeCarAssist']) {
+for (const marker of ['class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'NativeDashboardGauge', 'hud_0233', 'safe_area_3pct_4pct', 'circular_heading_up_0233', 'circular_gauge_0233', 'analog_pedal_0233', 'round_action_0233', 'set_control_preferences', 'set_touch_pedal', 'shape_steering_input_with_preferences', '_update_tilt_steering', 'nitches_settings.cfg', 'settings_panel_0233', 'bind_settings', 'show_settings', 'destination_changed', 'get_minimap_points', 'district_notice_seconds']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.33 HUD/settings marker is missing: ${marker}`);
+}
+assert(!hudScript.includes('NITCHES HORIZON • NATIVE') && !hudScript.includes('"CAM"') && !hudScript.includes('"TIME"') && !hudScript.includes('"RESET"') && !hudScript.includes('"MENU"'), 'Native 0.2.33 HUD must not restore the removed text panel/buttons');
+assert(hudScript.includes('_performance_label.visible = false') && hudScript.includes('set_developer_mode'), 'Native 0.2.33 performance text must stay hidden until developer mode');
+// 0.2.34 clean front end: one accent, icon tabs instead of duplicated
+// home shortcuts, picture-led PLAY/world cards, a hidden unfinished
+// store, frosted translucent panels, click/press feedback, a real
+// 3D garage studio and persisted Shelby paint/wheels/tuning/plate.
+for (const marker of ['clean_menu_0234', 'store_panel_0236', 'labeled_tabs_0236', 'backdrop_blur_0234', 'hint_screen_texture', 'textureLod(screen_texture', 'FontVariation', 'variation_embolden', 'variation_transform', 'MENU_PLAY_TEXTURE', 'MENU_SHELBY_TEXTURE', 'MENU_RICHTOWN_TEXTURE', 'MENU_WORLD_TEXTURE', 'menu_play_gameplay.jpg', 'menu_shelby_gameplay.jpg', 'menu_richtown_gameplay.jpg', 'menu_world_gameplay.jpg', 'UI_CLICK_STREAM', 'class_name NativeCarSilhouetteIcon', 'car_silhouette_icon_0234', 'panel_changed', 'garage_dragged', 'garage_zoomed', 'customization_changed', 'tuning_purchase_requested', 'profile_changed', 'GarageStudio0234', '_create_garage_studio', '_set_garage_active', 'StudioTurntable', 'set_paint_color', 'set_wheel_finish', 'set_tuning_level', 'get_tuning_preview', 'set_license_plate', 'customization_0234', 'TUNING_TORQUE_MULTIPLIERS', 'xp_progress', 'drift_record_deg', 'achievements', 'car_stats', '_claim_achievement_rewards', '_credit_distance_bank_m']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.34 menu/garage/profile marker is missing: ${marker}`);
+}
+for (const marker of ['_build_store_panel', 'PANEL_STORE', '_store_items', '_cycle_store_sort', '_on_store_action_pressed', 'StoreDragSurface0236', 'top_xp_bar_0236', 'clickable_home_cards_0236', 'home_goal_0236', 'wheel_previews_0236', 'profile_single_scroll_0236', 'achievement_cards_0236', 'locked_world_conditions_0236', 'hover_sound_0236', 'gameplay_card_textures_0236', 'PANEL_TRANSITION_SECONDS := 0.18', 'MIN_FONT_SIZE := 14', 'MIN_TOUCH_HEIGHT := 48.0', 'StudioReflectionProbe0236', '"current": distance_km', '"unit": "км"', '"progress": clampf', 'NativeMainMenu.PANEL_STORE', '11_menu_store']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.36 readable-menu/store marker is missing: ${marker}`);
+}
+// 0.2.36 road-infrastructure repair: junction pads, zebras, stop
+// lines, tactile paving and signal heads are generated only for road
+// arms that really exist; shelters/planters/bins/signs are checked by
+// footprint, and curb/paint geometry is subdivided only near real
+// junction mouths so openings no longer stop at source-sample bounds.
+for (const marker of ['road_infrastructure_repair_0236', '_junction_arm_mask', '_junction_has_both_axes', '_is_footprint_clear_of_roads', '_is_pole_clear_of_road', '_subdivide_road_points_for_junctions', 'rejected_fake_junction_pads_0236', 'real_crosswalk_groups_0236', 'rejected_fake_crosswalks_0236', 'rejected_offroad_crosswalk_stripes_0236', 'traffic_signals_on_real_arms_0236', 'rejected_fake_signal_approaches_0236', 'continuous_arterial_curbs_0236', 'rounded_curb_edge_alignment_0236', 'road_junction_subsegments_0236', 'bike_lane_junction_breaks_0236', 'bus_shelter_footprints_clear_0236', 'roadside_footprints_clear_0236', 'rejected_road_palms_0236', 'rejected_road_trees_0236', 'rejected_road_bushes_0236', 'rejected_road_lamps_0236', '15_corniche_t_junction', '16_corniche_l_corner', '17_boulevard_full_junction', '18_west_t_junction']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.36 road-infrastructure marker is missing: ${marker}`);
+}
+assert(!worldScript.includes('{"x": 914.0, "z": -300.0') && !worldScript.includes('{"x": 914.0, "z": -110.0') && !worldScript.includes('{"x": 914.0, "z": 70.0'), 'Native 0.2.36 must not restore the Corniche bus shelters centred on cross streets/crosswalks');
+// 0.2.37 performance without touching shaders or the car model:
+// whole MultiMesh chunks outside the side of the horizontal view cone
+// retire with a wide margin, flat kerb/slab/deck layers leave the
+// shadow pass, and the minimap renders its static road network once.
+// The same pass expands Sail Island into a landscaped resort with a
+// loop road and audits every canonical building's true footprint.
+for (const marker of ['view_sector_streaming_0237', 'STREAM_SECTOR_HIDE_MARGIN_RAD', 'horizontal_half_fov', '_is_flat_shadow_free_multimesh_0237', 'flat_shadow_casters_disabled_0237', 'static_map_cache_0237', '_draw_cached_world', '_draw_static_cache', 'UPDATE_ONCE', '_expand_sail_island_0237', 'rt-sail-loop', 'sail_island_land_area_m2_0237', '_build_sail_island_resort_0237', 'sail_island_promenade_segments_0237', 'sail_island_infill_excluded_0237', '_sanitize_canonical_buildings_0237', '_sanitize_canonical_pools_0237', '_rect_road_clearance_0237', 'canonical_building_min_clearance_0237', 'canonical_pools_relocated_0237', 'bridge_roadside_props_removed_0237', 'readable_road_signs_0237', 'CityRoadSignBacks0237', 'road_wear_scale_0237', '19_sail_island_resort', '20_sail_island_arrival']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.37 performance/Sail Island marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('func _draw_vector_world() -> void:\n    var radius := _clip_radius()'), 'Native 0.2.37 minimap vector fallback must declare its clip radius locally, not borrow _draw() scope');
+// 0.2.38 Sail Island loop road repair from the phone screenshots:
+// the closed oval gets a seam tangent + entry pad, single broken
+// centreline, no closed-chain arrows and no random wear/props;
+// resort paving/hedges/pools are fitted and re-audited against the
+// carriageway, and the pool audit counts the concrete rim without
+// letting a pool reject its own relocation candidate.
+for (const marker of ['closedLoop0238', 'resortRoad0238', 'sail_loop_closed_0238', 'sail_loop_entry_pad_0238', 'sail_loop_center_dashes_0238', 'sail_loop_clean_markings_0238', 'sail_loop_pristine_asphalt_0238', 'sail_resort_min_road_clearance_0238', 'sail_resort_rejected_road_overlaps_0238', 'sail_island_hedges_0238', 'sail_pools_final_0238', 'sail_pool_min_road_clearance_0238', 'sail_loop_road_repair_0238', 'canonical_pool_rim_clearance_0238', 'canonical_pool_self_excluded_0238', 'excluded_pool_index', 'sail_loop_generic_props_removed_0238', 'sail_loop_segments_without_props_0238', '21_sail_loop_entry', '22_sail_loop_east']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.38 Sail loop road-repair marker is missing: ${marker}`);
+}
+assert(worldScript.includes('{"x": 1216.0, "z": 80.0, "w": 16.0, "d": 26.0}') && worldScript.includes('{"x": 1149.8, "z": 80.0, "w": 4.4, "d": 18.0'), 'Native 0.2.38 must keep the east Sail pool and arrival apron inside the loop with road clearance');
+assert(!worldScript.includes('{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0') && !worldScript.includes('{"x": 1220.0, "z": 61.0, "w": 20.0') && !worldScript.includes('{"x": 1220.0, "z": 99.0, "w": 20.0'), 'Native 0.2.38 must not restore the Sail paving/hedge bars that crossed the loop carriageway');
+// 0.2.40 four-car catalogue: one parameterised RigidBody, owner-supplied
+// Audi/Camaro/Mercedes GLBs, separate recorded banks, a photographic
+// replaceable HUD wheel, per-car customization/stats and a compulsory
+// in-game screenshot for every car.
+for (const marker of ['class_name NativeCarCatalog', 'get_menu_cars', 'car_count', 'get_cars', 'car_selection_requested', 'bind_car_catalog', 'multi_car_0240', 'configure_car', 'switch_car', 'car_changed', 'configure_for_car', 'multi_car_audio_0240', 'photo_steering_wheel_0240', 'replaceable_per_car_0240', 'set_wheel_texture_path', 'set_steering_wheel_texture_path', '08a_car_audi_r8', '08b_car_camaro_ss', '08c_car_mercedes_560_sel', '08d_car_shelby_gt500', 'audi_r8_v10_plus', 'chevrolet_camaro_ss', 'mercedes_560_sel', '_car_customizations', '_car_stats', 'selected_car_id', '_load_car_model', '_license_plate_font_size']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.40 multi-car marker is missing: ${marker}`);
+}
+for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207], ['audi_r8_v10_plus', 610, 560, 330], ['chevrolet_camaro_ss', 455, 617, 290], ['mercedes_560_sel', 300, 455, 250]]) {
+  assert(carCatalogScript.includes(`"id": "${carId}"`), `Native catalogue is missing ${carId}`);
+  assert(carCatalogScript.includes(`"power_hp": ${power}`) && carCatalogScript.includes(`"torque_nm": ${torque}`) && carCatalogScript.includes(`"top_speed_kmh": ${topSpeed}`), `Native catalogue spec sheet drifted for ${carId}`);
+}
+assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
+assert(mainScript.includes('"car_id": "audi_r8_v10_plus"') && mainScript.includes('"car_id": "chevrolet_camaro_ss"') && mainScript.includes('"car_id": "mercedes_560_sel"') && mainScript.includes('catalog_by_id.get("mercedes_560_sel"') && !mainScript.includes('"car_id": "mercedes_benz_560_sel"') && !mainScript.includes('catalog_by_id.get("mercedes_benz_560_sel"') && mainMenuScript.includes('"mercedes_560_sel":\n            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"'), 'Native screenshot/menu code must use the exact catalogue car IDs, distinct from GLB filenames');
+assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0') && mainMenuScript.includes('Altair78 (CC BY-SA 4.0)') && mainMenuScript.includes('docs/AUDIO_CREDITS.md'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
+// 0.2.41 supplied-car hotfix: the automatic gearbox must use road-speed
+// coupled RPM (the 560 SEL first gear ends at 64.7 km/h and must not trap
+// the car at 67-68), and the silver/black finishes need per-car glossy
+// paint plus exact semantic handling so BlackGloss is not rebuilt as
+// glass merely because its lowercase name contains "glass".
+for (const marker of ['automatic_shift_0241', '_desired_automatic_gear_for_speed', 'get_automatic_gear_for_speed', '_coupled_rpm_for_gear', 'shift_speeds_kmh', 'paint_finish_0241', 'paint_metallic', 'paint_clearcoat_roughness', 'paint_flake_tint_amount', '_textured_material_override', 'paint_shader_surfaces', 'blackgloss']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.41 drivetrain/paint marker is missing: ${marker}`);
+}
+assert(carCatalogScript.includes('"paint_roughness": 0.075') && carCatalogScript.includes('"paint_roughness": 0.065') && carCatalogScript.includes('"paint_flake_strength": 0.16') && carCatalogScript.includes('"paint_flake_strength": 0.12'), 'Native 0.2.41 must give the silver R8 and black 560 SEL smooth, fine-flake glossy factory finishes');
+assert(vehicleScript.includes('lower_name == "blackgloss"') && vehicleScript.includes('lower_name == "glasswindow"') && !vehicleScript.includes('lower_name.contains("glass") or lower_name.contains("window")'), 'Native 0.2.41 must handle BlackGloss and GlassWindow as exact distinct exterior semantics');
+assert(mainScript.includes('0.2.41 coupled-RPM automatic shifts') && mainScript.includes('get_automatic_gear_for_speed(speed_kmh / 3.6, 0)') && mainScript.includes('for probe_id in NativeCarCatalog.car_ids()'), 'Native 0.2.41 smoke must exercise the real automatic-gear helper for every catalogue car');
+// 0.2.42 recorded-audio realism pass: dense PSOLA anchor ladders,
+// log-domain crossfades, dynamic engine lowpass, exhaust crackle,
+// shift clunks/downshift blips, wind/road/whine/scrape foley,
+// delta-V impacts and a camera-aware listener — while engine and
+// tyre voices remain real recordings (no synthesized engine tone).
+for (const marker of ['audio_realism_0242', 'AudioEffectLowPassFilter', 'AudioEffectStereoEnhance', 'AudioEffectPanner', 'AudioEffectCompressor', 'play_shift', 'play_impact', 'play_thump', '_update_audio_impacts', 'set_audio_camera_mode', '_crackle_energy', 'VehicleAudio0235Engine', 'VehicleAudio0235Tires', 'VehicleAudio0235Road', 'VehicleAudio0235Events', 'exhaust', 'pop_%02d.wav', 'vehicle_foley', 'wind_loop.wav', 'whine_loop.wav']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.42 audio-realism marker is missing: ${marker}`);
+}
+assert(audioCredits.includes('TD-PSOLA') && audioCredits.includes('0.2.42'), 'Native 0.2.42 audio credits must document the recorded-texture PSOLA anchors and foley honestly');
+assert(mainMenuScript.includes('МАГАЗИН') && mainMenuScript.includes('Фейковых машин без моделей здесь нет'), 'Native 0.2.36 store must be present and explicitly limited to real in-game content');
+assert(!mainMenuScript.includes('menu_shelby.jpg') && !mainMenuScript.includes('menu_richtown.jpg') && !mainMenuScript.includes('menu_garage.jpg'), 'Native 0.2.36 must not restore the retired photoreal menu renders');
+assert(avatarIconScript.includes('class_name NativeAvatarIcon') && wheelPreviewScript.includes('class_name NativeWheelPreview') && lockIconScript.includes('class_name NativeLockIcon'), 'Native 0.2.36 avatar/wheel/lock vector controls are missing');
+assert(!mainMenuScript.includes('COL_TEAL') && !mainMenuScript.includes('COL_MAGENTA') && !mainMenuScript.includes('COL_YELLOW'), 'Native 0.2.34 menu must not return to the rejected multi-neon palette');
+// 0.2.34 map/navigation: labels are selected by zoom tier and then
+// deconflicted by rectangle priority, debug district circles are
+// gone, and an explicit route is solved on the road graph for the
+// fullscreen map, minimap and an orange 3D road ribbon.
+for (const marker of ['world_map_0234', 'zoom_label_tiers_0234', '_try_position_label', 'district_circles_removed', 'fast_travel_requested', 'minimap_points_changed', '_set_filter', 'set_first_open_hint', 'map_hint_seen', 'class_name NativeRouteGuide', 'route_guide_0234', 'AStar2D', 'get_id_path', 'RouteRibbon', 'RouteDestinationBeacon', 'road_route_0234', 'set_route_path', '_on_fast_travel_requested', 'find_nearest_road_transform']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.34 map/route marker is missing: ${marker}`);
+}
+assert(!worldMapScript.includes('_canvas.draw_circle(centre, radius, color)'), 'Native 0.2.34 world map must not draw the removed debug district circles');
+assert(syncScript.includes('menu_play_gameplay.jpg') && syncScript.includes('menu_shelby_gameplay.jpg') && syncScript.includes('menu_audi_r8_gameplay.jpg') && syncScript.includes('menu_camaro_ss_gameplay.jpg') && syncScript.includes('menu_mercedes_560_sel_gameplay.jpg') && syncScript.includes('menu_richtown_gameplay.jpg') && syncScript.includes('menu_world_gameplay.jpg') && syncScript.includes('ui_click.wav') && !syncScript.includes("menu_garage.jpg"), 'Native asset sync must stage real-gameplay menu screenshots for every car and the click sound, not retired photoreal renders');
+// 0.2.35 ignition + recorded Shelby audio: the car spawns off, a
+// handbrake-sized power button sits under the minimap, F/Enter also
+// toggles the engine, and the old synthesized 55 Hz loop is gone.
+// The continuous voice is a 16-point recorded GT500 bank in on/off
+// throttle layers, with recorded Mustang idle/start/stop and tyre
+// squeal on a dedicated limited bus.
+for (const marker of ['class_name NativeVehicleAudio', 'class_name NativeIgnitionButton', 'recorded_audio_0235', 'recorded_gt500_bank', 'gt500_on_0900.wav', 'gt500_on_4400.wav', 'gt500_off_0900.wav', 'gt500_off_4400.wav', 'mustang_idle.wav', 'mustang_start.wav', 'mustang_stop.wav', 'tire_squeal_loop.wav', 'AudioEffectLimiter', 'VehicleAudio0235', 'ENGINE_CRANKING', 'ENGINE_STOPPING', 'toggle_engine', 'start_engine', 'stop_engine', '_ensure_action(&"ignition_toggle"', 'set_audio_suspended', 'ignition_0235', 'hud_0235', 'ignition_button_0235', 'ignition_under_minimap', 'ignition_same_size_as_drift']) {
+  assert(combinedRuntime.includes(marker), `Native 0.2.35 ignition/recorded-audio marker is missing: ${marker}`);
+}
+assert(!vehicleScript.includes('_engine_player') && !vehicleScript.includes('AudioStreamWAV.new()') && !vehicleScript.includes('sin(phase) * 0.42'), 'Native 0.2.35 must not restore the synthesized procedural engine loop');
+assert(syncScript.includes('shelbyAudioRpms') && syncScript.includes('shelbyAudioNames') && syncScript.includes('assertRealWav'), 'Native asset sync must stage and header-check the complete 0.2.35 Shelby WAV bank');
+assert(audioCredits.includes('VacekH') && audioCredits.includes('205510') && audioCredits.includes('lmbubec') && audioCredits.includes('119449') && audioCredits.includes('Tom Haigh') && audioCredits.includes('CC BY 3.0') && audioCredits.includes('CC0'), 'Native 0.2.35 audio credits must preserve the CC0 provenance and the required CC BY 3.0 tyre attribution');
+assert(mainMenuScript.includes('Tom Haigh (CC BY 3.0)'), 'Native 0.2.35 settings must carry the in-app CC BY 3.0 tyre-sound attribution');
+for (const expectedClass of ['class_name NativeWorldBuilder', 'class_name NativeVehicle', 'class_name NativeHud', 'class_name NativeDynamicWorld', 'class_name NativeSpeedPost', 'class_name NativeArcadeCarAssist', 'class_name NativeMainMenu', 'class_name NativeSteeringWheel', 'class_name NativeWorldMap', 'class_name NativeMinimap', 'class_name NativeDashboardGauge', 'class_name NativeTouchPedal', 'class_name NativeRoundActionButton', 'class_name NativeRouteGuide', 'class_name NativeCarSilhouetteIcon', 'class_name NativeVehicleAudio', 'class_name NativeIgnitionButton', 'class_name NativeAvatarIcon', 'class_name NativeWheelPreview', 'class_name NativeLockIcon', 'class_name NativeCarCatalog']) {
   assert(combinedRuntime.includes(expectedClass), `Missing ${expectedClass}`);
 }
 for (const marker of [
@@ -108,29 +344,6 @@ for (const marker of [
   '_ackermann_angle',
   'GEAR_RATIOS',
   'GPUParticles3D',
-  'DriftingLeaves',
-  'GoldenPetals',
-  'RoadWakeDust',
-  'HeadlightBokehLayer',
-  'headlight_bokeh',
-  'get_foliage_density_at',
-  'foliage_gate',
-  'skyline_rich_town_near.png',
-  'skyline_rich_town_far.png',
-  'skyline_tex',
-  'VISIBILITY_RANGE_FADE_SELF',
-  'near_field_lod_0219',
-  'rich_town_vertical_slice_0219',
-  'golden_hour',
-  'wet_streak',
-  'HandbrakeTireSparks',
-  'SpeedWindAudio',
-  'light_shafts.gdshader',
-  'shaft_intensity',
-  'HorizonSkyline',
-  'skyline_density',
-  'skyline_follows_vehicle',
-  'get_effect_state',
   'get_visual_aabb_size',
   'PhysicalSkyMaterial',
   'GOLDEN_HOUR',
@@ -148,8 +361,6 @@ for (const marker of [
   'always_on_vignette',
   'film_grain',
   'WetAsphaltShader',
-  'ripple_weight',
-  'ReflectionProbe.UPDATE_ONCE',
   'WaterSurfaceShader',
   'water_surface.gdshader',
   'get_water_visual_state',
@@ -301,10 +512,6 @@ for (const marker of [
   'TowerMetal',
   '_glass_model_fit',
   'main_tower.glb',
-  '_coordinates_label',
-  '_update_coordinates_label',
-  'coordinates_text',
-  'coordinates_rect',
   'VillaPlaster',
   'VillaStone',
   'VillaLimestone',
@@ -348,8 +555,11 @@ for (const marker of [
   'CafeBronze',
   'DubaiPremiumCafes',
   'dubai_premium_cafe_model',
+  'dubai_premium_cafe_triangles',
+  'dubai_premium_cafe_pbr_0219',
   'premium_boulevard_paving',
   'boulevard_cafes',
+  'boulevard_spawn_cafes',
   'boulevard_palm_planters',
   'boulevard_lawn_islands',
   'WashingtoniaWhiteGravelBeds',
@@ -361,17 +571,31 @@ for (const marker of [
   'premium_stone_paving.gdshader',
   'premium_stone_paving_shader_0218',
   'boulevard_rebuild_0218',
+  'boulevard_reference_0219',
+  'boulevard_dark_asphalt_0219',
   'boulevard_granite_curbs',
   'boulevard_premium_sidewalk_slabs',
   'boulevard_fresh_markings',
+  'boulevard_yellow_edge_lines',
+  'BoulevardYellowEdgeLines',
   'boulevard_arcades',
   'boulevard_cafe_tables',
   'boulevard_cafe_umbrellas',
   'boulevard_drip_emitters',
-  'boulevard_royal_palms',
-  'boulevard_extra_royal_palms',
+  'boulevard_date_palms',
+  'boulevard_extra_date_palms',
   'boulevard_lawn_area_m2',
   'boulevard_topiary',
+  'boulevard_continuous_hedges',
+  'boulevard_modern_lamps',
+  'BoulevardStreetLampPoles',
+  'boulevard_stone_benches',
+  'BoulevardStoneBenches',
+  'boulevard_pool_decks',
+  'BoulevardPoolDecks',
+  'boulevard_marina_deck_segments',
+  'BoulevardMarinaPromenadeDeck',
+  'boulevard_frontage_infill',
   'boulevard_ground_cover',
   'PremiumPromenade_ScreenshotAxis',
   'BoulevardGraniteCurbs',
@@ -387,7 +611,16 @@ for (const marker of [
   '_camera_follow_yaw',
   '_render_quality_vote_count',
 ]) {
-  assert(combinedRuntime.includes(marker), `Native 0.2.18 marker is missing: ${marker}`);
+  assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
+}
+
+for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+  const info = await stat(relative);
+  assert(info.size > minimumSize, `Native 0.2.36 canonical UI asset is unexpectedly small: ${relative}`);
+  if (relative.endsWith('.jpg')) {
+    const bytes = await readFile(relative);
+    assert(bytes[0] === 0xff && bytes[1] === 0xd8 && (bytes.includes(Buffer.from([0xff, 0xc0])) || bytes.includes(Buffer.from([0xff, 0xc2]))), `${relative} is not a JPEG gameplay screenshot`);
+  }
 }
 
 const data = JSON.parse(dataText);
@@ -395,7 +628,10 @@ assert(data.schemaVersion === 1, 'Unexpected native world schema');
 assert(data.units === 'metres', 'Native world must use real metres');
 assert(data.terrain.heights.length === data.terrain.cols * data.terrain.rows, 'Terrain height count mismatch');
 assert(data.bounds.minX === 520 && data.bounds.maxX === 1500, 'RichTown X bounds changed unexpectedly');
-assert(data.roads.length >= 35, 'Too few RichTown road edges exported');
+assert(data.roads.length >= 50, 'Too few RichTown road edges exported');
+assert(data.roads.filter((r) => r.id.startsWith('rt-villa-')).length === 6, 'Native 0.2.24 must export 6 South Villa District streets');
+assert(data.roads.filter((r) => r.id.startsWith('rt-palm-local-')).length === 3, 'Native 0.2.24 must export 3 Palm Island local streets');
+assert(data.districts.some((d) => d.id === 'south-villa-district'), 'Native 0.2.24 South Villa District metadata is missing');
 assert(data.buildings.length >= 45, 'Too few RichTown buildings exported');
 assert(data.buildings.filter((b) => b.model === 'villa').length === 14, 'Expected 14 Blender villas');
 assert(data.buildings.filter((b) => b.model === 'glass_tower').length === 8, 'Expected 8 Blender glass towers');
@@ -403,16 +639,180 @@ assert(data.landmarks.length === 15, 'Expected all 15 RichTown landmarks');
 assert(data.palms.length === 112, 'Expected 112 RichTown palms');
 assert(data.spawn.x === 760 && data.spawn.z === 330, 'Unexpected native spawn point');
 
+const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
+assert(detailedCafeInfo.size > 2_500_000, 'Native 0.2.19 must use the detailed 2.86 MB PR #61 Dubai Premium Cafe, not the earlier lightweight GLB');
+const operaInfo = await stat('src/assets/models/props/opera_house.glb');
+assert(operaInfo.size > 250_000, 'Native 0.2.20 RichTown Opera GLB is unexpectedly small');
+const operaBytes = await readFile('src/assets/models/props/opera_house.glb');
+assert(operaBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Opera source is an LFS pointer or corrupt GLB');
+const operaLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-opera');
+assert(operaLandmark && operaLandmark.x === 820 && operaLandmark.z === 25 && operaLandmark.h === 22, 'RichTown Opera landmark must stay at X820 Z25 with the authored 22 m height');
+const mosqueInfo = await stat('src/assets/models/props/mosque.glb');
+assert(mosqueInfo.size > 1_000_000, 'Native 0.2.25 RichTown Mosque GLB is unexpectedly small');
+const mosqueBytes = await readFile('src/assets/models/props/mosque.glb');
+assert(mosqueBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Mosque source is an LFS pointer or corrupt GLB');
+const mosqueLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-mosque');
+assert(mosqueLandmark && mosqueLandmark.x === 620 && mosqueLandmark.z === 335 && mosqueLandmark.h === 30, 'RichTown Mosque landmark must stay at X620 Z335 with the authored 30 m height');
+const hotelInfo = await stat('src/assets/models/props/grand_hotel.glb');
+assert(hotelInfo.size > 1_000_000, 'Native 0.2.26 Grand Hotel GLB is unexpectedly small');
+const hotelBytes = await readFile('src/assets/models/props/grand_hotel.glb');
+assert(hotelBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Grand Hotel source is an LFS pointer or corrupt GLB');
+const grandHotelParcels = data.buildings.filter((b) => b.kind === 'rt-hotel' && b.h > 38 && b.w >= 33 && b.w <= 36 && b.d >= 25 && b.d <= 28);
+assert(grandHotelParcels.length === 3 && grandHotelParcels.every((b) => b.x === 892), 'Building Model No.8 must land on exactly the three tall 34x26 Corniche parcels at X892');
+const museumInfo = await stat('src/assets/models/props/museum.glb');
+assert(museumInfo.size > 1_000_000, 'Native 0.2.29 Museum GLB is unexpectedly small');
+const museumBytes = await readFile('src/assets/models/props/museum.glb');
+assert(museumBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Museum source is an LFS pointer or corrupt GLB');
+const museumLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-museum');
+assert(museumLandmark && museumLandmark.x === 665 && museumLandmark.z === -340, 'RichTown Museum landmark must stay at X665 Z-340');
+for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottage_palm.glb']) {
+  const cottageSource = `src/assets/models/props/${cottageModel}`;
+  const cottageInfo = await stat(cottageSource);
+  const cottageBytes = await readFile(cottageSource);
+  assert(cottageInfo.size > 1_000_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
+  assert(cottageBytes.subarray(0, 4).toString('utf8') === 'glTF', `${cottageModel} source is an LFS pointer or corrupt GLB`);
+}
+for (const cottageTextureStem of ['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse']) {
+  for (const cottageTextureSuffix of ['', '_normal', '_roughness']) {
+    const cottageTexture = `src/assets/textures/realworld/${cottageTextureStem}${cottageTextureSuffix}.jpg`;
+    const cottageTextureInfo = await stat(cottageTexture);
+    assert(cottageTextureInfo.size > 10_000, `${cottageTexture} is unexpectedly small`);
+  }
+}
+
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400, 5000, 5600];
+const shelbyAudioFiles = [
+  ...shelbyAudioRpms.flatMap((rpm) => [
+    `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
+    `gt500_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  'mustang_idle.wav',
+  'mustang_start.wav',
+  'mustang_stop.wav',
+  'tire_squeal_loop.wav',
+];
+assert(shelbyAudioFiles.length === 40, 'Native 0.2.42 must ship 36 GT500 loops (incl. PSOLA 5000/5600) plus idle/start/stop/tyre recordings');
+for (const name of shelbyAudioFiles) {
+  const source = `src/assets/audio/shelby/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  const minimumSize = /_(5000|5600)\.wav$/.test(name) ? 15_000 : 40_000;
+  assert(info.size > minimumSize, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit for the mobile audio bank`);
+}
+const shelbyManifest = JSON.parse(await readFile('src/assets/audio/shelby/bank_manifest.json', 'utf8'));
+assert(shelbyManifest.sample_rate === 32000 && shelbyManifest.channels === 1 && shelbyManifest.engine_loops.length === 36, 'Native 0.2.42 Shelby bank manifest must describe all 36 mono engine loops');
+assert(shelbyManifest.engine_loops.filter((loop) => loop.derivation).length === 4, 'Shelby 5000/5600 PSOLA derivatives must stay honestly documented in the manifest');
+
+const suppliedCarAudioBanks = {
+  audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
+  camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
+};
+const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([bank, rpms]) => [
+  ...rpms.flatMap((rpm) => [
+    `${bank}/engine_on_${String(rpm).padStart(4, '0')}.wav`,
+    `${bank}/engine_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  `${bank}/engine_idle.wav`,
+  `${bank}/engine_start.wav`,
+  `${bank}/engine_stop.wav`,
+]);
+assert(suppliedCarAudioFiles.length === 51, 'Native 0.2.42 must ship 42 supplied-car loops plus idle/start/stop for all three banks');
+for (const [bank, rpms] of Object.entries(suppliedCarAudioBanks)) {
+  const manifest = JSON.parse(await readFile(`src/assets/audio/${bank}/bank_manifest.json`, 'utf8'));
+  assert(manifest.bank === bank && manifest.format === 'mono WAV 32000 Hz 16-bit' && manifest.anchors.length === rpms.length, `${bank} audio manifest does not describe its complete mono bank`);
+  assert(manifest.anchors.every((anchor, index) => anchor.rpm === rpms[index] && anchor.on.sample_rate === 32000 && anchor.off.sample_rate === 32000 && anchor.on.channels === 1 && anchor.off.channels === 1 && anchor.source_recording && anchor.author && anchor.license && anchor.url), `${bank} audio manifest is missing per-anchor provenance`);
+}
+for (const name of suppliedCarAudioFiles) {
+  const source = `src/assets/audio/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  assert(info.size > 15_000, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit`);
+}
+
+// 0.2.42: every bank also ships ten exhaust-pop one-shots sliced
+// from its own recorded loops, plus a small secondary foley set
+// (wind/road/impact/whine/scrape) layered under the recorded
+// engine and tyre voices.
+const popBanks = ['shelby', 'audi_r8', 'camaro_ss', 'mercedes_560_sel'];
+for (const bank of popBanks) {
+  for (let i = 1; i <= 10; i += 1) {
+    const source = `src/assets/audio/${bank}/pop_${String(i).padStart(2, '0')}.wav`;
+    const info = await stat(source);
+    const bytes = await readFile(source);
+    assert(info.size > 2_500, `${source} is unexpectedly small`);
+    assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+    assert(bytes.readUInt16LE(22) === 1 && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay mono 32 kHz/16-bit`);
+  }
+}
+const foleyAudioFiles = [
+  'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
+  'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
+  'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+];
+for (const name of foleyAudioFiles) {
+  const source = `src/assets/audio/vehicle_foley/${name}`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  assert(info.size > 4_000, `${source} is unexpectedly small`);
+  assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
+  const expectedChannels = name === 'wind_loop.wav' ? 2 : 1;
+  assert(bytes.readUInt16LE(22) === expectedChannels && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay 32 kHz/16-bit (${expectedChannels}ch)`);
+}
+
+const steeringWheelBytes = await readFile('src/assets/ui/steering_wheel_common.png');
+assert(steeringWheelBytes.length > 500_000 && steeringWheelBytes.readUInt32BE(16) === 1024 && steeringWheelBytes.readUInt32BE(20) === 1024 && steeringWheelBytes[25] === 6, 'Native 0.2.40 photographic steering wheel must be a 1024x1024 RGBA PNG');
+assert([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => steeringWheelBytes[index] === value), 'Native steering-wheel PNG signature is invalid');
+
+const suppliedCars = [
+  { stem: 'audi_r8_v10_plus', minimumBytes: 5_000_000, size: [1.966872, 1.200647, 4.426], materials: ['Paint', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireRubber'] },
+  { stem: 'chevrolet_camaro_ss', minimumBytes: 3_500_000, size: [2.037753, 1.346721, 4.790135], materials: ['Paint', 'GlassWindow', 'LiveryTexture', 'TireRimTexture'] },
+  { stem: 'mercedes_benz_560_sel', minimumBytes: 5_000_000, size: [1.955433, 1.559742, 5.16], materials: ['Paint', 'PaintSecondary', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireTreadTexture'] },
+];
+for (const car of suppliedCars) {
+  const source = `src/assets/models/cars/${car.stem}.glb`;
+  const info = await stat(source);
+  const bytes = await readFile(source);
+  const gltf = parseGlbJson(bytes);
+  const report = JSON.parse(await readFile(`src/assets/models/cars/${car.stem}_report.json`, 'utf8'));
+  const nodeNames = new Set((gltf.nodes ?? []).map((node) => node.name));
+  const materialNames = new Set((gltf.materials ?? []).map((material) => material.name));
+  assert(info.size > car.minimumBytes && report.outputBytes === info.size, `${source} byte size does not match its conversion report`);
+  assert(report.boundsGltfSizeXYZ.every((value, index) => Math.abs(value - car.size[index]) < 0.02), `${source} real-scale bounds drifted`);
+  for (const nodeName of ['Body', 'Wheel_FL', 'Wheel_FR', 'Wheel_RL', 'Wheel_RR', 'Wheel_FL_Spin', 'Wheel_FR_Spin', 'Wheel_RL_Spin', 'Wheel_RR_Spin']) {
+    assert(nodeNames.has(nodeName), `${source} is missing runtime node ${nodeName}`);
+  }
+  for (const materialName of car.materials) {
+    assert(materialNames.has(materialName), `${source} is missing semantic material ${materialName}`);
+  }
+}
+
 if (requireAssets) {
   const required = [
     'assets/vehicles/mustang.glb',
+    'assets/vehicles/audi_r8_v10_plus.glb',
+    'assets/vehicles/chevrolet_camaro_ss.glb',
+    'assets/vehicles/mercedes_benz_560_sel.glb',
     'assets/buildings/villa.glb',
     'assets/buildings/glass_tower.glb',
     'assets/buildings/main_tower.glb',
     'assets/buildings/hero_building.glb',
     'assets/buildings/townhouse.glb',
+    'assets/buildings/opera_house.glb',
+    'assets/buildings/mosque.glb',
+    'assets/buildings/grand_hotel.glb',
+    'assets/buildings/museum.glb',
+    'assets/buildings/cottage_dune.glb',
+    'assets/buildings/cottage_courtyard.glb',
+    'assets/buildings/cottage_palm.glb',
     'assets/props/street_lamp.glb',
     'assets/props/bus_shelter.glb',
+    'assets/props/park_bench.glb',
+    'assets/props/park_pergola.glb',
     'assets/props/traffic_signal_short.glb',
     'assets/props/traffic_signal_long.glb',
     'assets/props/dubai_premium_cafe.glb',
@@ -443,8 +843,18 @@ if (requireAssets) {
     'assets/textures/user_sky_night.jpg',
     'assets/textures/cafe_linen.jpg',
     'assets/textures/cafe_linen_normal.png',
-    'assets/textures/skyline_rich_town_near.png',
-    'assets/textures/skyline_rich_town_far.png',
+    ...['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse'].flatMap((stem) => ['', '_normal', '_roughness'].map((suffix) => `assets/textures/${stem}${suffix}.jpg`)),
+    'assets/ui/menu_play_gameplay.jpg',
+    'assets/ui/menu_shelby_gameplay.jpg',
+    'assets/ui/menu_audi_r8_gameplay.jpg',
+    'assets/ui/menu_camaro_ss_gameplay.jpg',
+    'assets/ui/menu_mercedes_560_sel_gameplay.jpg',
+    'assets/ui/menu_richtown_gameplay.jpg',
+    'assets/ui/menu_world_gameplay.jpg',
+    'assets/ui/steering_wheel_common.png',
+    'assets/audio/ui_click.wav',
+    ...shelbyAudioFiles.map((name) => `assets/audio/shelby/${name}`),
+    ...suppliedCarAudioFiles.map((name) => `assets/audio/${name}`),
   ];
   for (const relative of required) {
     const file = path.join(root, relative);
@@ -454,10 +864,9 @@ if (requireAssets) {
       const bytes = await readFile(file);
       assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', `${file} is an LFS pointer or corrupt GLB`);
     }
-    if (file.includes('skyline_rich_town_')) {
+    if (file.endsWith('.wav')) {
       const bytes = await readFile(file);
-      assert(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${file} is not a PNG`);
-      assert(bytes.readUInt32BE(16) === 4096 && bytes.readUInt32BE(20) === 512, `${file} must be a 4096x512 skyline panorama`);
+      assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${file} is not a real WAV`);
     }
   }
 }

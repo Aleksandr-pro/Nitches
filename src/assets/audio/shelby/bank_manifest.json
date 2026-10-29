@@ -1,0 +1,471 @@
+{
+  "sample_rate": 32000,
+  "channels": 1,
+  "engine_loops": [
+    {
+      "file": "gt500_on_0900.wav",
+      "layer": "on",
+      "rpm": 900,
+      "cycles": 6,
+      "samples": 25602,
+      "source_freesound_id": "205511",
+      "source_time_s": 0.92,
+      "source_rpm": 901.0
+    },
+    {
+      "file": "gt500_on_1100.wav",
+      "layer": "on",
+      "rpm": 1100,
+      "cycles": 7,
+      "samples": 24437,
+      "source_freesound_id": "205511",
+      "source_time_s": 1.68,
+      "source_rpm": 1068.0
+    },
+    {
+      "file": "gt500_on_1300.wav",
+      "layer": "on",
+      "rpm": 1300,
+      "cycles": 8,
+      "samples": 23632,
+      "source_freesound_id": "205511",
+      "source_time_s": 1.94,
+      "source_rpm": 1363.0
+    },
+    {
+      "file": "gt500_on_1500.wav",
+      "layer": "on",
+      "rpm": 1500,
+      "cycles": 9,
+      "samples": 23040,
+      "source_freesound_id": "205511",
+      "source_time_s": 2.36,
+      "source_rpm": 1498.0
+    },
+    {
+      "file": "gt500_on_1700.wav",
+      "layer": "on",
+      "rpm": 1700,
+      "cycles": 11,
+      "samples": 24849,
+      "source_freesound_id": "205511",
+      "source_time_s": 2.7,
+      "source_rpm": 1674.0
+    },
+    {
+      "file": "gt500_on_1900.wav",
+      "layer": "on",
+      "rpm": 1900,
+      "cycles": 12,
+      "samples": 24252,
+      "source_freesound_id": "205501",
+      "source_time_s": 9.58,
+      "source_rpm": 1904.0
+    },
+    {
+      "file": "gt500_on_2100.wav",
+      "layer": "on",
+      "rpm": 2100,
+      "cycles": 13,
+      "samples": 23777,
+      "source_freesound_id": "205501",
+      "source_time_s": 9.68,
+      "source_rpm": 1979.0
+    },
+    {
+      "file": "gt500_on_2350.wav",
+      "layer": "on",
+      "rpm": 2350,
+      "cycles": 15,
+      "samples": 24510,
+      "source_freesound_id": "205511",
+      "source_time_s": 7.56,
+      "source_rpm": 2350.0
+    },
+    {
+      "file": "gt500_on_2600.wav",
+      "layer": "on",
+      "rpm": 2600,
+      "cycles": 16,
+      "samples": 23632,
+      "source_freesound_id": "205511",
+      "source_time_s": 14.9,
+      "source_rpm": 2600.0
+    },
+    {
+      "file": "gt500_on_2850.wav",
+      "layer": "on",
+      "rpm": 2850,
+      "cycles": 18,
+      "samples": 24246,
+      "source_freesound_id": "205511",
+      "source_time_s": 8.94,
+      "source_rpm": 2849.0
+    },
+    {
+      "file": "gt500_on_3100.wav",
+      "layer": "on",
+      "rpm": 3100,
+      "cycles": 19,
+      "samples": 23541,
+      "source_freesound_id": "205511",
+      "source_time_s": 4.76,
+      "source_rpm": 3099.0
+    },
+    {
+      "file": "gt500_on_3350.wav",
+      "layer": "on",
+      "rpm": 3350,
+      "cycles": 21,
+      "samples": 24066,
+      "source_freesound_id": "205511",
+      "source_time_s": 21.1,
+      "source_rpm": 3349.0
+    },
+    {
+      "file": "gt500_on_3600.wav",
+      "layer": "on",
+      "rpm": 3600,
+      "cycles": 22,
+      "samples": 23474,
+      "source_freesound_id": "205511",
+      "source_time_s": 11.44,
+      "source_rpm": 3602.0
+    },
+    {
+      "file": "gt500_on_3850.wav",
+      "layer": "on",
+      "rpm": 3850,
+      "cycles": 24,
+      "samples": 23928,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.04,
+      "source_rpm": 3844.0
+    },
+    {
+      "file": "gt500_on_4100.wav",
+      "layer": "on",
+      "rpm": 4100,
+      "cycles": 26,
+      "samples": 24362,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0
+    },
+    {
+      "file": "gt500_on_4400.wav",
+      "layer": "on",
+      "rpm": 4400,
+      "cycles": 28,
+      "samples": 24444,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0
+    },
+    {
+      "file": "gt500_off_0900.wav",
+      "layer": "off",
+      "rpm": 900,
+      "cycles": 6,
+      "samples": 25602,
+      "source_freesound_id": "205511",
+      "source_time_s": 0.92,
+      "source_rpm": 901.0
+    },
+    {
+      "file": "gt500_off_1100.wav",
+      "layer": "off",
+      "rpm": 1100,
+      "cycles": 7,
+      "samples": 24437,
+      "source_freesound_id": "205511",
+      "source_time_s": 1.68,
+      "source_rpm": 1068.0
+    },
+    {
+      "file": "gt500_off_1300.wav",
+      "layer": "off",
+      "rpm": 1300,
+      "cycles": 8,
+      "samples": 23632,
+      "source_freesound_id": "205511",
+      "source_time_s": 1.94,
+      "source_rpm": 1363.0
+    },
+    {
+      "file": "gt500_off_1500.wav",
+      "layer": "off",
+      "rpm": 1500,
+      "cycles": 9,
+      "samples": 23040,
+      "source_freesound_id": "205511",
+      "source_time_s": 2.36,
+      "source_rpm": 1498.0
+    },
+    {
+      "file": "gt500_off_1700.wav",
+      "layer": "off",
+      "rpm": 1700,
+      "cycles": 11,
+      "samples": 24849,
+      "source_freesound_id": "205511",
+      "source_time_s": 2.7,
+      "source_rpm": 1674.0
+    },
+    {
+      "file": "gt500_off_1900.wav",
+      "layer": "off",
+      "rpm": 1900,
+      "cycles": 12,
+      "samples": 24252,
+      "source_freesound_id": "205501",
+      "source_time_s": 9.56,
+      "source_rpm": 1917.0
+    },
+    {
+      "file": "gt500_off_2100.wav",
+      "layer": "off",
+      "rpm": 2100,
+      "cycles": 13,
+      "samples": 23777,
+      "source_freesound_id": "205511",
+      "source_time_s": 34.48,
+      "source_rpm": 1999.0
+    },
+    {
+      "file": "gt500_off_2350.wav",
+      "layer": "off",
+      "rpm": 2350,
+      "cycles": 15,
+      "samples": 24510,
+      "source_freesound_id": "205511",
+      "source_time_s": 6.94,
+      "source_rpm": 2350.0
+    },
+    {
+      "file": "gt500_off_2600.wav",
+      "layer": "off",
+      "rpm": 2600,
+      "cycles": 16,
+      "samples": 23632,
+      "source_freesound_id": "205511",
+      "source_time_s": 6.64,
+      "source_rpm": 2600.0
+    },
+    {
+      "file": "gt500_off_2850.wav",
+      "layer": "off",
+      "rpm": 2850,
+      "cycles": 18,
+      "samples": 24246,
+      "source_freesound_id": "205511",
+      "source_time_s": 23.36,
+      "source_rpm": 2851.0
+    },
+    {
+      "file": "gt500_off_3100.wav",
+      "layer": "off",
+      "rpm": 3100,
+      "cycles": 19,
+      "samples": 23541,
+      "source_freesound_id": "205511",
+      "source_time_s": 23.0,
+      "source_rpm": 3100.0
+    },
+    {
+      "file": "gt500_off_3350.wav",
+      "layer": "off",
+      "rpm": 3350,
+      "cycles": 21,
+      "samples": 24066,
+      "source_freesound_id": "205511",
+      "source_time_s": 22.62,
+      "source_rpm": 3352.0
+    },
+    {
+      "file": "gt500_off_3600.wav",
+      "layer": "off",
+      "rpm": 3600,
+      "cycles": 22,
+      "samples": 23474,
+      "source_freesound_id": "205511",
+      "source_time_s": 5.66,
+      "source_rpm": 3596.0
+    },
+    {
+      "file": "gt500_off_3850.wav",
+      "layer": "off",
+      "rpm": 3850,
+      "cycles": 24,
+      "samples": 23928,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0
+    },
+    {
+      "file": "gt500_off_4100.wav",
+      "layer": "off",
+      "rpm": 4100,
+      "cycles": 26,
+      "samples": 24362,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0
+    },
+    {
+      "file": "gt500_off_4400.wav",
+      "layer": "off",
+      "rpm": 4400,
+      "cycles": 28,
+      "samples": 24444,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0
+    },
+    {
+      "file": "gt500_on_5000.wav",
+      "layer": "on",
+      "rpm": 5000,
+      "cycles": 28,
+      "samples": 21511,
+      "measured_rpm": 5001.0,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0,
+      "derived_from": "gt500_on_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_on_4400.wav loop, ratio 1.136, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 5001, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_on_5600.wav",
+      "layer": "on",
+      "rpm": 5600,
+      "cycles": 28,
+      "samples": 19206,
+      "measured_rpm": 5598.0,
+      "source_freesound_id": "205508",
+      "source_time_s": 6.34,
+      "source_rpm": 4074.0,
+      "derived_from": "gt500_on_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_on_4400.wav loop, ratio 1.273, pulse rate scaled to 5600 rpm by construction (comb spectral estimate 5598, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_off_5000.wav",
+      "layer": "off",
+      "rpm": 5000,
+      "cycles": 28,
+      "samples": 21511,
+      "measured_rpm": 4380.0,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0,
+      "derived_from": "gt500_off_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_off_4400.wav loop, ratio 1.136, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 4380, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "file": "gt500_off_5600.wav",
+      "layer": "off",
+      "rpm": 5600,
+      "cycles": 28,
+      "samples": 19206,
+      "measured_rpm": 4905.0,
+      "source_freesound_id": "205511",
+      "source_time_s": 12.04,
+      "source_rpm": 3727.0,
+      "derived_from": "gt500_off_4400.wav",
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) pitch-shift of the recorded gt500_off_4400.wav loop, ratio 1.273, pulse rate scaled to 5600 rpm by construction (comb spectral estimate 4905, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    }
+  ],
+  "idle": {
+    "file": "mustang_idle.wav",
+    "source_freesound_id": "119449",
+    "recorded_rpm": 705
+  },
+  "start": {
+    "file": "mustang_start.wav",
+    "source_freesound_id": "119449",
+    "source_window_s": [
+      0.1,
+      1.12
+    ],
+    "edit": "recorded crank repeated twice before the recorded catch"
+  },
+  "stop": {
+    "file": "mustang_stop.wav",
+    "source_freesound_id": "119449",
+    "source_window_s": [
+      17.42,
+      18.78
+    ]
+  },
+  "tire_squeal": {
+    "file": "tire_squeal_loop.wav",
+    "source_freesound_id": "71739",
+    "edit": "downsampled to 32 kHz and circular-crossfaded"
+  },
+  "audio_0242": true,
+  "pops": {
+    "files": [
+      {
+        "file": "pop_01.wav",
+        "seconds": 0.09722,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_02.wav",
+        "seconds": 0.07762,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_03.wav",
+        "seconds": 0.05506,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_04.wav",
+        "seconds": 0.08678,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_05.wav",
+        "seconds": 0.05663,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_06.wav",
+        "seconds": 0.06588,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_07.wav",
+        "seconds": 0.06234,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_08.wav",
+        "seconds": 0.09584,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_09.wav",
+        "seconds": 0.06928,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_10.wav",
+        "seconds": 0.10894,
+        "sample_rate": 32000,
+        "channels": 1
+      }
+    ],
+    "derivation": "Single exhaust pulses cut from the recorded GT500 4400 rpm loops, enveloped and resequenced stochastically at runtime for overrun crackle."
+  }
+}

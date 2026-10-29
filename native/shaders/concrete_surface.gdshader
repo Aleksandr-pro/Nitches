@@ -1,6 +1,9 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 
+// Native 0.2.28: variety pass (replaced/aged pavers, delivery-batch
+// hue drift, per-segment mortar colour, chipped joint edges, joint
+// grime) on top of the 0.2.17 stochastic concrete below.
 // Native 0.2.17 stochastic concrete.  The old StandardMaterial repeated
 // one 6 m slab photograph in world triplanar space, so the same joints
 // and stains visibly tiled across whole districts.  This shader keeps
@@ -46,7 +49,8 @@ vec3 sample_concrete_albedo(vec2 plane) {
 	float blend = smoothstep(0.30, 0.70, value_noise(plane * 0.073 + 13.7));
 	vec3 colour = mix(a, b, blend * 0.62);
 	float fine = texture(fine_texture, plane * 0.63).r;
-	colour *= 0.82 + 0.30 * fine;
+	float fine_rot = texture(fine_texture, vec2(plane.y, -plane.x) * 1.71 + 0.43).r;
+	colour *= (0.76 + 0.42 * fine) * (0.90 + 0.20 * fine_rot);
 	return colour;
 }
 
@@ -83,16 +87,29 @@ void fragment() {
 	float edge_x = min(local_x, 1.0 - local_x) * segment_length;
 	float edge_y = min(local_y, 1.0 - local_y) * row_height;
 	float edge_distance = min(edge_x, edge_y);
-	float aa = max(max(fwidth(plane.x), fwidth(plane.y)), 0.004);
-	float joint = (1.0 - smoothstep(0.012, 0.046 + aa * 1.45, edge_distance)) * joint_strength;
-	float bevel = smoothstep(0.035, 0.078, edge_distance) * (1.0 - smoothstep(0.078, 0.175, edge_distance));
-
 	vec2 paver_id = vec2(segment_id * 1.73 + row_id * 0.31, row_id * 2.19 - segment_id * 0.17);
 	float paver_hash = hash12(paver_id);
 	float paver_warmth = hash12(paver_id + 19.7);
+	// 0.2.28 variety pass: chipped/worn joint edges and a per-paver
+	// joint width, so no two joints read as the same stamped line.
+	float chip = value_noise(plane * 9.0 + 3.7);
+	float edge_chipped = edge_distance + (chip - 0.5) * 0.016;
+	float joint_half = 0.012 + 0.020 * hash12(paver_id + 7.3);
+	float aa = max(max(fwidth(plane.x), fwidth(plane.y)), 0.004);
+	float joint = (1.0 - smoothstep(joint_half, joint_half + 0.034 + aa * 1.45, edge_chipped)) * joint_strength;
+	float bevel = smoothstep(0.035, 0.078, edge_distance) * (1.0 - smoothstep(0.078, 0.175, edge_distance));
+
 	vec3 base = use_textures ? sample_concrete_albedo(plane) : vec3(0.52);
-	vec3 colour = base * tint.rgb * (0.84 + 0.30 * paver_hash);
+	vec3 colour = base * tint.rgb * (0.78 + 0.44 * paver_hash);
 	colour *= mix(vec3(0.96, 0.99, 1.04), vec3(1.05, 1.00, 0.93), paver_warmth);
+	// Occasional replaced (newer, cooler) and aged (darker) pavers.
+	float replaced = step(0.935, hash12(paver_id + 31.1));
+	float aged = step(hash12(paver_id + 47.9), 0.045);
+	colour *= 1.0 + replaced * 0.16 - aged * 0.20;
+	colour = mix(colour, colour * vec3(0.94, 0.97, 1.05), replaced * 0.7);
+	// Slow warm<->cool drift between stone deliveries (~60 m wavelength).
+	float batch_drift = value_noise(plane * 0.016 + 8.4);
+	colour *= mix(vec3(0.93, 0.97, 1.07), vec3(1.08, 1.00, 0.90), batch_drift);
 
 	float macro_stain = value_noise(plane * 0.043 + 4.9);
 	float district_stain = value_noise(plane * 0.161 + 9.2);
@@ -101,8 +118,13 @@ void fragment() {
 	colour *= 1.0 - tyre_and_foot_wear * 0.10;
 	float gum_spots = smoothstep(0.968, 0.996, value_noise(plane * 7.3 + 41.0));
 	colour *= 1.0 - gum_spots * 0.18;
+	// Grime collects unevenly along joints.
+	float joint_grime = (1.0 - smoothstep(0.0, 0.09, edge_distance)) * (0.35 + 0.65 * district_stain);
+	colour *= 1.0 - joint_grime * 0.10;
 
-	colour = mix(colour, vec3(0.125, 0.120, 0.112), joint * 0.80);
+	// Mortar varies per segment: mostly dark, sometimes sand-filled.
+	vec3 joint_colour = mix(vec3(0.10, 0.095, 0.09), vec3(0.42, 0.38, 0.31), step(0.78, hash12(vec2(row_id * 3.7, segment_id * 1.3))));
+	colour = mix(colour, joint_colour, joint * 0.80);
 	colour *= 1.0 + bevel * 0.035;
 
 	ALBEDO = colour;
@@ -110,7 +132,7 @@ void fragment() {
 		NORMAL_MAP = sample_concrete_normal(plane);
 		NORMAL_MAP_DEPTH = normal_strength;
 	}
-	ROUGHNESS = clamp(base_roughness + (paver_hash - 0.5) * 0.055 + joint * 0.025 - tyre_and_foot_wear * 0.035, 0.58, 1.0);
+	ROUGHNESS = clamp(base_roughness + (paver_hash - 0.5) * 0.13 + joint * 0.025 - tyre_and_foot_wear * 0.035 - replaced * 0.08 + aged * 0.05, 0.58, 1.0);
 	METALLIC = 0.0;
 	SPECULAR = 0.28;
 	AO = 1.0 - joint * 0.24;

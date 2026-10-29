@@ -25,8 +25,8 @@ uniform float tex_scale : hint_range(0.01, 2.0) = 0.115;
 uniform float wetness : hint_range(0.0, 1.0) = 0.12;
 uniform float puddle_amount : hint_range(0.0, 1.0) = 0.22;
 uniform float dry_roughness : hint_range(0.0, 1.0) = 0.94;
-uniform float wet_roughness : hint_range(0.0, 1.0) = 0.36;
-uniform float puddle_roughness : hint_range(0.0, 1.0) = 0.12;
+uniform float wet_roughness : hint_range(0.0, 1.0) = 0.48;
+uniform float puddle_roughness : hint_range(0.0, 1.0) = 0.16;
 uniform float bump_strength : hint_range(0.0, 2.0) = 0.62;
 
 varying vec3 world_pos;
@@ -86,8 +86,8 @@ void fragment() {
 		1.0
 	);
 	float grain = mix(0.86, 1.14, vnoise(p * 4.2));
-	// Narrow, road-aligned wet streaks make the sunset/headlamp specular
-	// response directional without a screen-space or planar reflection pass.
+	// Narrow road-aligned wet streaks modulate the PBR highlight instead
+	// of rendering a costly screen-space or planar reflection.
 	float streak_noise = fbm2(vec2(road_s * 0.10 + TIME * 0.018, lateral * 5.2));
 	float wet_streak = smoothstep(0.57, 0.79, streak_noise)
 		* (1.0 - smoothstep(0.88, 1.0, abs_lateral))
@@ -157,7 +157,6 @@ void fragment() {
 
 	float wear_luma = 0.065;
 	float crack = 0.0;
-	vec3 road_normal = vec3(0.0, 0.0, 1.0);
 	if (use_textures) {
 		vec2 coords = p * tex_scale;
 		vec2 rotated = mat2(vec2(0.9239, 0.3827), vec2(-0.3827, 0.9239)) * p;
@@ -189,7 +188,7 @@ void fragment() {
 		// Godot expects NORMAL_MAP in texture RGB form. Feeding it the
 		// already-unpacked -1..1 vector caused overly hard, incorrectly
 		// centred relief in the copied Drive shader.
-		road_normal = combined_normal;
+		NORMAL_MAP = combined_normal * 0.5 + 0.5;
 		NORMAL_MAP_DEPTH = bump_strength * (1.0 - puddle * 0.9);
 	} else {
 		ALBEDO = asphalt_color.rgb * grain;
@@ -202,23 +201,9 @@ void fragment() {
 			(height_c - height_y) * 2.0,
 			1.0
 		));
-		road_normal = fallback_normal;
+		NORMAL_MAP = fallback_normal * 0.5 + 0.5;
 		NORMAL_MAP_DEPTH = bump_strength * (1.0 - puddle * 0.9);
 	}
-
-	// Tiny animated rain rings and crossing ripples only disturb wet patches;
-	// the dry road keeps its stable photographic micro-normal. ReflectionProbe
-	// and the roughness split provide the broad highlight while this perturbation
-	// catches the moving light without an expensive planar-reflection pass.
-	float ripple_weight = puddle * clamp(wetness * 1.7, 0.0, 1.0);
-	float ripple_a = sin(p.x * 2.6 + p.y * 0.7 + TIME * 3.2);
-	float ripple_b = sin(p.y * 2.2 - p.x * 0.55 - TIME * 2.65);
-	float ripple_c = sin(length(fract(p * 0.34) - vec2(0.5)) * 46.0 - TIME * 4.2);
-	vec3 animated_normal = normalize(vec3(
-		road_normal.xy + vec2(ripple_a + ripple_c, ripple_b - ripple_c) * 0.065 * ripple_weight,
-		max(road_normal.z, 0.35)
-	));
-	NORMAL_MAP = animated_normal * 0.5 + 0.5;
 
 	// Road-aligned ageing sits above both texture octaves, so it remains
 	// coherent when the same world-space grain crosses an intersection.
@@ -236,17 +221,28 @@ void fragment() {
 	// Влажный асфальт темнеет; лужи не должны становиться светлее дороги.
 	ALBEDO *= mix(1.0, 0.72, damp);
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.58, 0.62, 0.68), puddle);
-	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.86, 0.90, 0.96), wet_streak * 0.18);
+
+	// 0.2.19 reference corridor: RichTown Boulevard itself is a freshly
+	// resurfaced charcoal carriageway, while side streets retain the
+	// older grey aggregate.  The world-space mask is confined to the
+	// exported X=760, Z=-430..430 avenue and its intersection pads.
+	float boulevard_mask = (1.0 - smoothstep(11.2, 13.2, abs(world_pos.x - 760.0)))
+		* smoothstep(-438.0, -428.0, world_pos.z)
+		* (1.0 - smoothstep(428.0, 438.0, world_pos.z));
+	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.43, 0.45, 0.49), boulevard_mask * 0.86);
+	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.86, 0.90, 0.96), wet_streak * 0.16);
 
 	float surface_roughness = dry_roughness;
 	surface_roughness += (wear_luma - 0.065) * 0.65;
 	surface_roughness -= wheel_track * 0.10 + oil * 0.18;
 	surface_roughness += crack * 0.045 + joint * 0.05 + repair_patch * 0.015;
-	surface_roughness = clamp(surface_roughness - wet_streak * 0.12, 0.56, 0.985);
+	surface_roughness = clamp(surface_roughness, 0.70, 0.985);
+	surface_roughness = mix(surface_roughness, 0.82, boulevard_mask * 0.72);
 
 	ROUGHNESS = mix(surface_roughness, wet_roughness, damp);
 	ROUGHNESS = mix(ROUGHNESS, puddle_roughness, puddle);
+	ROUGHNESS = mix(ROUGHNESS, max(wet_roughness - 0.08, 0.36), wet_streak * 0.24);
 	METALLIC = 0.0;
-	SPECULAR = clamp(mix(0.30, 0.56, max(damp, puddle)) + wet_streak * 0.10, 0.0, 0.74);
+	SPECULAR = clamp(mix(0.30, 0.56, max(damp, puddle)) + wet_streak * 0.08, 0.0, 1.0);
 	AO = clamp(1.0 - crack * 0.18 - joint * 0.12 - tar_border * 0.15, 0.62, 1.0);
 }

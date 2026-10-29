@@ -73,3 +73,7 @@ src/assets/models/oak-tree.fbx -filter -diff -merge -text
 # Obj.obj by the obj-inbox CI (small decimated GLB, built for src/assets).
 src/assets/models/plants.glb -filter -diff -merge -text
 src/assets/models/props/*.glb -filter -diff -merge -text
+# The three 0.2.40 supplied cars are optimized 3.9-5.9 MB game GLBs and,
+# like the prop pack, ship as plain Git files so every native CI checkout
+# has the real bytes without depending on the Mustang's manual LFS fetch.
+src/assets/models/cars/*.glb -filter -diff -merge -text

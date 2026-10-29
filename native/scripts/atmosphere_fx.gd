@@ -19,6 +19,7 @@ var _bokeh_layer: CanvasLayer
 var _bokeh_texture: ImageTexture
 var _bokeh_items: Array[Dictionary] = []
 var _mode := "day"
+var _active := false
 var _headlights_enabled := false
 var _foliage_density := 0.0
 var _foliage_update_timer := 0.0
@@ -192,11 +193,29 @@ func set_time_mode(mode: String) -> void:
 		var intensity := 0.72 if mode == "day" else (0.42 if mode == "sunset" else 0.0)
 		var tint := Color(1.0, 0.84, 0.62) if mode == "day" else Color(1.0, 0.56, 0.32)
 		_shaft_material.set_shader_parameter("shaft_tint", Vector3(tint.r, tint.g, tint.b))
-		_shaft_material.set_shader_parameter("shaft_intensity", intensity * smoothstep(0.04, 0.52, _foliage_density))
+		var foliage_gate := smoothstep(0.04, 0.52, _foliage_density)
+		_shaft_material.set_shader_parameter("shaft_intensity", intensity * foliage_gate if _active else 0.0)
 
 
 func set_headlights_enabled(enabled: bool) -> void:
 	_headlights_enabled = enabled
+
+
+func set_active(active: bool) -> void:
+	_active = active
+	if not active:
+		if _leaf_particles != null:
+			_leaf_particles.emitting = false
+		if _petal_particles != null:
+			_petal_particles.emitting = false
+		if _dust_particles != null:
+			_dust_particles.emitting = false
+		if _shaft_material != null:
+			_shaft_material.set_shader_parameter("shaft_intensity", 0.0)
+		for item in _bokeh_items:
+			var rect := item.get("rect") as TextureRect
+			if rect != null:
+				rect.modulate.a = 0.0
 
 
 func _update_foliage_shafts(delta: float) -> void:
@@ -220,11 +239,9 @@ func _update_headlight_bokeh() -> void:
 	var viewport_size := viewport.get_visible_rect().size
 	var screen_centre := viewport_size * 0.5
 	var flare_mode := _mode != "day" and _headlights_enabled
-	var vehicle_transform := _vehicle.global_transform
-	var lens_positions: Array[Vector3] = [
-		vehicle_transform * Vector3(-0.62, 0.74, -2.22),
-		vehicle_transform * Vector3(0.62, 0.74, -2.22),
-	]
+	var lens_positions := _vehicle.get_headlight_world_positions()
+	if lens_positions.size() < 2:
+		return
 	for item in _bokeh_items:
 		var rect := item.get("rect") as TextureRect
 		if rect == null:
@@ -248,6 +265,8 @@ func _update_headlight_bokeh() -> void:
 
 func _process(delta: float) -> void:
 	if _vehicle == null:
+		return
+	if not _active:
 		return
 	var car_position := _vehicle.global_position
 	global_position = car_position
@@ -288,6 +307,7 @@ func get_state() -> Dictionary:
 		"petals": _petal_particles.amount if _petal_particles != null else 0,
 		"dust": _dust_particles.amount if _dust_particles != null else 0,
 		"light_shafts": _shaft_material != null,
+		"active": _active,
 		"shaft_intensity": float(_shaft_material.get_shader_parameter("shaft_intensity")) if _shaft_material != null else 0.0,
 		"foliage_density": _foliage_density,
 		"headlight_bokeh": _bokeh_texture != null,

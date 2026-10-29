@@ -46,9 +46,24 @@ jobs:
 
       - name: Build prop GLBs
         run: |
+          set -o pipefail
           mkdir -p props_out
-          blender -b -noaudio --python blender/build_props.py -- "$PWD/props_out"
+          blender -b -noaudio --python blender/build_props.py -- "$PWD/props_out" 2>&1 | tee blender-props.log
           ls -la props_out
+          # Blender can return exit code 0 after a Python exception.  A
+          # missing completion marker or GLB must fail here instead of
+          # committing a partial props/report from the earlier models.
+          if grep -Eq 'Traceback \(most recent call last\)|Error: Python:' blender-props.log; then
+            echo "::error::Blender Python failed; refusing a partial GLB set"
+            exit 1
+          fi
+          grep -q '\[props\] done ->' blender-props.log
+          for file in bus_shelter.glb street_lamp.glb park_bench.glb park_pergola.glb traffic_signal_short.glb traffic_signal_long.glb hero_building.glb townhouse.glb villa.glb glass_tower.glb main_tower.glb opera_house.glb mosque.glb grand_hotel.glb museum.glb cottage_dune.glb cottage_courtyard.glb cottage_palm.glb palm_date.glb palm_royal.glb grass_tuft.glb flower_clump.glb ornamental_shrub.glb; do
+            if [ ! -s "props_out/$file" ]; then
+              echo "::error::Missing expected Blender output: $file"
+              exit 1
+            fi
+          done
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

@@ -1,0 +1,147 @@
+{
+  "car": "mercedes",
+  "input": "Mercedes Benz 560 SEL.blend",
+  "output": "mercedes_560_sel.glb",
+  "outputBytes": 5623016,
+  "inputTriangles": 85499,
+  "finalTriangles": 85499,
+  "finalMeshObjects": [
+    "Body",
+    "Wheel_FL_Spin",
+    "Wheel_RL_Spin",
+    "Wheel_RR_Spin",
+    "Wheel_FR_Spin"
+  ],
+  "materials": [
+    "BlackTrim",
+    "ChassisTexture",
+    "Chrome",
+    "CoverTexture",
+    "Dots Stroke",
+    "EngineTextureA",
+    "EngineTextureB",
+    "GlassWindow",
+    "GreyTrim",
+    "Headlight",
+    "InteriorTextureA",
+    "InteriorTextureB",
+    "LeatherTextureA",
+    "LeatherTextureB",
+    "LightTexture",
+    "Paint",
+    "PaintSecondary",
+    "PlasticTexture",
+    "RimMetal",
+    "TailLight",
+    "TireSidewallTexture",
+    "TireTreadTexture",
+    "VelvetTextureA",
+    "VelvetTextureB",
+    "WhiteTrim"
+  ],
+  "boundsBlender": {
+    "min": [
+      -0.97683,
+      -2.436642,
+      0.0
+    ],
+    "max": [
+      0.978603,
+      2.723357,
+      1.559742
+    ],
+    "sizeXYZ": [
+      1.955433,
+      5.16,
+      1.559742
+    ]
+  },
+  "boundsGltfSizeXYZ": [
+    1.955433,
+    1.559742,
+    5.16
+  ],
+  "wheelbaseM": 3.006082,
+  "frontTrackM": 1.514051,
+  "rearTrackM": 1.530632,
+  "wheels": {
+    "FL": {
+      "blenderHub": [
+        0.757025,
+        -1.502497,
+        0.326075
+      ],
+      "gltfHub": [
+        0.757025,
+        0.326075,
+        1.502497
+      ],
+      "tireSizeBlender": [
+        0.210981,
+        0.651382,
+        0.651147
+      ],
+      "radiusM": 0.325691,
+      "spinTriangles": 4343
+    },
+    "FR": {
+      "blenderHub": [
+        -0.757026,
+        -1.503585,
+        0.326075
+      ],
+      "gltfHub": [
+        -0.757026,
+        0.326075,
+        1.503585
+      ],
+      "tireSizeBlender": [
+        0.210981,
+        0.651382,
+        0.651147
+      ],
+      "radiusM": 0.325691,
+      "spinTriangles": 4343
+    },
+    "RL": {
+      "blenderHub": [
+        0.765316,
+        1.50401,
+        0.325574
+      ],
+      "gltfHub": [
+        0.765316,
+        0.325574,
+        -1.50401
+      ],
+      "tireSizeBlender": [
+        0.210981,
+        0.651382,
+        0.651147
+      ],
+      "radiusM": 0.325691,
+      "spinTriangles": 4343
+    },
+    "RR": {
+      "blenderHub": [
+        -0.765316,
+        1.502071,
+        0.325574
+      ],
+      "gltfHub": [
+        -0.765316,
+        0.325574,
+        -1.502071
+      ],
+      "tireSizeBlender": [
+        0.210981,
+        0.651382,
+        0.651147
+      ],
+      "radiusM": 0.325691,
+      "spinTriangles": 4343
+    }
+  },
+  "bodyTriangles": 68127,
+  "root": "MercedesBenz560SEL"
+}

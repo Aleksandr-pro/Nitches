@@ -1,6 +1,11 @@
 shader_type spatial;
 render_mode cull_back;
 
+// Native 0.2.27 recalibration: the 0.2.17 F0 tints multiplied
+// sky/probe radiance by only ~0.05-0.16, so daytime towers rendered
+// nearly black (user screenshots 27.10).  Reflective low-e glazing
+// reflects ~25-45%; deep/smoke defaults are raised into that range
+// while metallic stays ~0.92 (no diffuse wash, no white blow-out).
 // Native 0.2.17 environment-reflective opaque curtain-wall facade.
 // This is the transparent environment-reflective algorithm without an ALPHA output.  The
 // 0.2.16 phone result swung too far the other way: a 0.62 metallic
@@ -12,11 +17,11 @@ render_mode cull_back;
 // while blinds/interiors remain much less metallic.  A small RADIANCE
 // tint keyed to the reflected ray keeps upward reflections sky-blue
 // and downward reflections grounded without replacing the real probes.
-uniform vec4 deep_glass_color : source_color = vec4(0.018, 0.052, 0.082, 1.0);
-uniform vec4 smoke_glass_color : source_color = vec4(0.052, 0.112, 0.158, 1.0);
+uniform vec4 deep_glass_color : source_color = vec4(0.105, 0.185, 0.275, 1.0);
+uniform vec4 smoke_glass_color : source_color = vec4(0.215, 0.345, 0.490, 1.0);
 uniform vec4 blind_color : source_color = vec4(0.235, 0.225, 0.200, 1.0);
-uniform vec4 cool_interior_color : source_color = vec4(0.034, 0.068, 0.092, 1.0);
-uniform vec4 warm_interior_color : source_color = vec4(0.088, 0.061, 0.038, 1.0);
+uniform vec4 cool_interior_color : source_color = vec4(0.075, 0.130, 0.175, 1.0);
+uniform vec4 warm_interior_color : source_color = vec4(0.150, 0.104, 0.065, 1.0);
 uniform vec4 sky_reflection_color : source_color = vec4(0.30, 0.53, 0.86, 1.0);
 uniform vec4 ground_reflection_color : source_color = vec4(0.16, 0.155, 0.135, 1.0);
 uniform float environment_tint_strength : hint_range(0.0, 0.45) = 0.19;

@@ -14,13 +14,25 @@ const destinationRoot = 'native/assets';
 
 const modelCopies = [
   ['public/assets/models/cars/mustang/mustang.glb', 'vehicles/mustang.glb', 'mustang'],
+  ['src/assets/models/cars/audi_r8_v10_plus.glb', 'vehicles/audi_r8_v10_plus.glb'],
+  ['src/assets/models/cars/chevrolet_camaro_ss.glb', 'vehicles/chevrolet_camaro_ss.glb'],
+  ['src/assets/models/cars/mercedes_benz_560_sel.glb', 'vehicles/mercedes_benz_560_sel.glb'],
   ['src/assets/models/props/villa.glb', 'buildings/villa.glb'],
   ['src/assets/models/props/glass_tower.glb', 'buildings/glass_tower.glb'],
   ['src/assets/models/props/main_tower.glb', 'buildings/main_tower.glb'],
   ['src/assets/models/props/hero_building.glb', 'buildings/hero_building.glb'],
   ['src/assets/models/props/townhouse.glb', 'buildings/townhouse.glb'],
+  ['src/assets/models/props/opera_house.glb', 'buildings/opera_house.glb'],
+  ['src/assets/models/props/mosque.glb', 'buildings/mosque.glb'],
+  ['src/assets/models/props/grand_hotel.glb', 'buildings/grand_hotel.glb'],
+  ['src/assets/models/props/museum.glb', 'buildings/museum.glb'],
+  ['src/assets/models/props/cottage_dune.glb', 'buildings/cottage_dune.glb'],
+  ['src/assets/models/props/cottage_courtyard.glb', 'buildings/cottage_courtyard.glb'],
+  ['src/assets/models/props/cottage_palm.glb', 'buildings/cottage_palm.glb'],
   ['src/assets/models/props/street_lamp.glb', 'props/street_lamp.glb'],
   ['src/assets/models/props/bus_shelter.glb', 'props/bus_shelter.glb'],
+  ['src/assets/models/props/park_bench.glb', 'props/park_bench.glb'],
+  ['src/assets/models/props/park_pergola.glb', 'props/park_pergola.glb'],
   ['src/assets/models/props/traffic_signal_short.glb', 'props/traffic_signal_short.glb'],
   ['src/assets/models/props/traffic_signal_long.glb', 'props/traffic_signal_long.glb'],
   ['src/assets/models/props/dubai_premium_cafe.glb', 'props/dubai_premium_cafe.glb'],
@@ -30,6 +42,87 @@ const modelCopies = [
   ['src/assets/models/props/grass_tuft.glb', 'vegetation/grass_tuft.glb'],
   ['src/assets/models/props/flower_clump.glb', 'vegetation/flower_clump.glb'],
   ['src/assets/models/props/ornamental_shrub.glb', 'vegetation/ornamental_shrub.glb'],
+];
+
+// Menu cards are cropped from real in-game CI frames (0.2.36 cards
+// from 0.2.35; the three 0.2.40 supplied-car cards are made by
+// scripts/make_car_menu_cards.py from shots 08a-08c).  The retired
+// photoreal menu renders are deliberately no longer staged.
+const uiCopies = [
+  ['src/assets/ui/menu_play_gameplay.jpg', 'ui/menu_play_gameplay.jpg'],
+  ['src/assets/ui/menu_shelby_gameplay.jpg', 'ui/menu_shelby_gameplay.jpg'],
+  ['src/assets/ui/menu_audi_r8_gameplay.jpg', 'ui/menu_audi_r8_gameplay.jpg'],
+  ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 'ui/menu_camaro_ss_gameplay.jpg'],
+  ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 'ui/menu_mercedes_560_sel_gameplay.jpg'],
+  ['src/assets/ui/menu_richtown_gameplay.jpg', 'ui/menu_richtown_gameplay.jpg'],
+  ['src/assets/ui/menu_world_gameplay.jpg', 'ui/menu_world_gameplay.jpg'],
+  ['src/assets/ui/steering_wheel_common.png', 'ui/steering_wheel_common.png'],
+  ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
+];
+
+// 0.2.35 recorded Shelby/Mustang bank.  The phase-aligned GT500 loops
+// are staged in both load layers; the long Mustang idle, starter,
+// shutdown and tyre recordings complete the vehicle-audio set.
+// 0.2.42: 5000/5600 anchors are pulse-synchronous TD-PSOLA
+// derivatives of the recorded 4400 loops (recorded texture, gap
+// synthesis documented in the bank manifest), and every bank gained
+// ten exhaust-pop one-shots cut from the same source loops.
+const popNames = Array.from({ length: 10 }, (_, i) => `pop_${String(i + 1).padStart(2, '0')}.wav`);
+const shelbyAudioRpms = [900, 1100, 1300, 1500, 1700, 1900, 2100, 2350, 2600, 2850, 3100, 3350, 3600, 3850, 4100, 4400, 5000, 5600];
+const shelbyAudioNames = [
+  ...shelbyAudioRpms.flatMap((rpm) => [
+    `gt500_on_${String(rpm).padStart(4, '0')}.wav`,
+    `gt500_off_${String(rpm).padStart(4, '0')}.wav`,
+  ]),
+  'mustang_idle.wav',
+  'mustang_start.wav',
+  'mustang_stop.wav',
+  'tire_squeal_loop.wav',
+  ...popNames,
+];
+// 0.2.40 recorded banks for the three supplied cars (0.2.42 densified
+// with recorded-texture PSOLA anchors + pops).  The generator writes
+// phase-trimmed on/off-throttle loops plus idle/start/stop for each
+// bank; NativeVehicleAudio selects one bank per catalogue car.
+const recordedCarAudioBanks = {
+  audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
+  camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
+  mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
+};
+const recordedCarAudioCopies = Object.entries(recordedCarAudioBanks).flatMap(([bank, rpms]) => {
+  const names = [
+    ...rpms.flatMap((rpm) => [
+      `engine_on_${String(rpm).padStart(4, '0')}.wav`,
+      `engine_off_${String(rpm).padStart(4, '0')}.wav`,
+    ]),
+    'engine_idle.wav',
+    'engine_start.wav',
+    'engine_stop.wav',
+    ...popNames,
+  ];
+  return names.map((name) => [
+    `src/assets/audio/${bank}/${name}`,
+    `audio/${bank}/${name}`,
+  ]);
+});
+// 0.2.42 secondary foley: wind/road/impact layers under the recorded
+// engine and tyre voices (documented in docs/AUDIO_CREDITS.md).
+const foleyAudioNames = [
+  'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
+  'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
+  'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+];
+const foleyAudioCopies = foleyAudioNames.map((name) => [
+  `src/assets/audio/vehicle_foley/${name}`,
+  `audio/vehicle_foley/${name}`,
+]);
+const audioCopies = [
+  ...shelbyAudioNames.map((name) => [
+    `src/assets/audio/shelby/${name}`,
+    `audio/shelby/${name}`,
+  ]),
+  ...recordedCarAudioCopies,
+  ...foleyAudioCopies,
 ];
 
 const textureNames = [
@@ -66,8 +159,17 @@ const textureNames = [
   'foliage.jpg', 'foliage_normal.jpg',
   'user_palm_leaf.png',
   'user_sky_day.jpg', 'user_sky_sunset.jpg', 'user_sky_night.jpg',
-  'cafe_linen.jpg', 'cafe_linen_normal.png',
   'skyline_rich_town_near.png', 'skyline_rich_town_far.png',
+  'cafe_linen.jpg', 'cafe_linen_normal.png',
+  // 0.2.39 Sail cottage estates: seven authored PBR sets, each with a
+  // real roughness map instead of one scalar for every surface.
+  'cottage_basalt.jpg', 'cottage_basalt_normal.jpg', 'cottage_basalt_roughness.jpg',
+  'cottage_limestone_blocks.jpg', 'cottage_limestone_blocks_normal.jpg', 'cottage_limestone_blocks_roughness.jpg',
+  'cottage_paving.jpg', 'cottage_paving_normal.jpg', 'cottage_paving_roughness.jpg',
+  'cottage_rammed_sand.jpg', 'cottage_rammed_sand_normal.jpg', 'cottage_rammed_sand_roughness.jpg',
+  'cottage_roof_metal.jpg', 'cottage_roof_metal_normal.jpg', 'cottage_roof_metal_roughness.jpg',
+  'cottage_teak_weathered.jpg', 'cottage_teak_weathered_normal.jpg', 'cottage_teak_weathered_roughness.jpg',
+  'cottage_travertine_coarse.jpg', 'cottage_travertine_coarse_normal.jpg', 'cottage_travertine_coarse_roughness.jpg',
 ];
 
 async function readHeader(file, length = 64) {
@@ -95,9 +197,22 @@ async function assertRealGlb(file, optionalRole = '') {
   return true;
 }
 
+async function assertRealWav(file) {
+  const info = await stat(file);
+  const header = await readHeader(file, 44);
+  const riff = header.subarray(0, 4).toString('utf8');
+  const wave = header.subarray(8, 12).toString('utf8');
+  if (info.size <= 44 || riff !== 'RIFF' || wave !== 'WAVE') {
+    throw new Error(`${file} is not a real WAV (riff: ${JSON.stringify(riff)}, wave: ${JSON.stringify(wave)}, size: ${info.size}).`);
+  }
+}
+
 async function copyOne(source, relativeDestination, role = '') {
   if (source.endsWith('.glb') && !(await assertRealGlb(source, role))) {
     return 0;
+  }
+  if (source.endsWith('.wav')) {
+    await assertRealWav(source);
   }
   const destination = path.join(destinationRoot, relativeDestination);
   await mkdir(path.dirname(destination), { recursive: true });
@@ -113,6 +228,12 @@ await mkdir(destinationRoot, { recursive: true });
 let totalBytes = 0;
 for (const [source, destination, role] of modelCopies) {
   totalBytes += await copyOne(source, destination, role ?? '');
+}
+for (const [source, destination] of uiCopies) {
+  totalBytes += await copyOne(source, destination);
+}
+for (const [source, destination] of audioCopies) {
+  totalBytes += await copyOne(source, destination);
 }
 for (const name of textureNames) {
   totalBytes += await copyOne(
