@@ -19,6 +19,13 @@ const PremiumStonePavingShader: Shader = preload("res://shaders/premium_stone_pa
 const HorizonSkylineShader: Shader = preload("res://shaders/horizon_skyline.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
+## 0.2.47 second world: ``world_id`` selects the data file and build
+## path ("richtown" default, "desert"); ``_active_aabb`` is the world
+## bounds every generic system (road/foliage grids, streaming cells,
+## terrain culling) must use instead of the RichTown constant.
+var world_id := "richtown"
+var _is_desert := false
+var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
 const STREAM_CELL_M := 64.0
@@ -160,6 +167,7 @@ var _road_segment_starts: Array[Vector3] = []
 var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
 var _road_segment_ids: Array[String] = []
+var _road_segment_surfaces: Array[String] = []
 var _road_segment_grid: Dictionary = {}
 var _road_junction_subsegments_0236 := 0
 var _multimesh_chunk_count := 0
@@ -204,12 +212,16 @@ func _process(delta: float) -> void:
 			fmod(_elapsed * speed * 0.63, 1.0),
 			0.0
 		)
+	if _is_desert:
+		_dz_animate(delta)
 
 
 func build_world() -> Dictionary:
 	if is_built:
 		return get_stats() if build_error.is_empty() else {"error": build_error}
 
+	_is_desert = world_id == "desert"
+	_active_aabb = DESERT_AABB if _is_desert else WORLD_AABB
 	_load_data()
 	if data.is_empty():
 		if build_error.is_empty():
@@ -224,6 +236,8 @@ func build_world() -> Dictionary:
 		return {"error": build_error}
 
 	_terrain = data.get("terrain", {})
+	if _is_desert:
+		return _build_desert_world()
 	_expand_sail_island_0237()
 	_compute_spawn_transform()
 	_build_road_surface_index()
@@ -256,8 +270,8 @@ func build_world() -> Dictionary:
 	_enhancement_stats["range_fade_mode"] = "dithered_self"
 	_enhancement_stats["wet_asphalt_streaks_0243"] = true
 	_enhancement_stats["rich_town_vertical_slice_0243"] = true
-	_enhancement_stats["vertical_slice_width_m"] = WORLD_AABB.size.x
-	_enhancement_stats["vertical_slice_depth_m"] = WORLD_AABB.size.z
+	_enhancement_stats["vertical_slice_width_m"] = _active_aabb.size.x
+	_enhancement_stats["vertical_slice_depth_m"] = _active_aabb.size.z
 	set_time_of_day("day")
 	# 0.2.30: register streaming totals and sectorise colliders
 	# around the spawn point before the first frame; chunk hiding
@@ -294,8 +308,8 @@ func get_enhancement_stats() -> Dictionary:
 
 func _foliage_grid_cell(world_position: Vector3) -> Vector2i:
 	return Vector2i(
-		floori((world_position.x - WORLD_AABB.position.x) / FOLIAGE_GRID_CELL_M),
-		floori((world_position.z - WORLD_AABB.position.z) / FOLIAGE_GRID_CELL_M)
+		floori((world_position.x - _active_aabb.position.x) / FOLIAGE_GRID_CELL_M),
+		floori((world_position.z - _active_aabb.position.z) / FOLIAGE_GRID_CELL_M)
 	)
 
 
@@ -471,6 +485,8 @@ func _set_skyline_time(mode: String) -> void:
 
 
 func get_park_rects() -> Array:
+	if _is_desert:
+		return [Rect2(3030.0, 3180.0, 640.0, 640.0)]
 	var rects: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -481,6 +497,8 @@ func get_park_rects() -> Array:
 ## Named park entries for the 0.2.32 full-screen world map.  The
 ## minimap only needs rectangles; the big map also shows names.
 func get_park_map_entries() -> Array:
+	if _is_desert:
+		return [{"id": "oasis", "label": "Оазис", "rect": Rect2(3030.0, 3180.0, 640.0, 640.0)}]
 	var entries: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -493,6 +511,8 @@ func get_park_map_entries() -> Array:
 
 
 func _is_in_park(x: float, z: float, pad: float = 0.0) -> bool:
+	if _is_desert:
+		return false
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
 		var rect: Rect2 = spec.get("rect", Rect2())
@@ -586,12 +606,13 @@ func get_road_visual_state() -> Dictionary:
 
 func _road_grid_cell(x: float, z: float) -> Vector2i:
 	return Vector2i(
-		floori((x - WORLD_AABB.position.x) / ROAD_GRID_CELL_M),
-		floori((z - WORLD_AABB.position.z) / ROAD_GRID_CELL_M)
+		floori((x - _active_aabb.position.x) / ROAD_GRID_CELL_M),
+		floori((z - _active_aabb.position.z) / ROAD_GRID_CELL_M)
 	)
 
 
 func _build_road_surface_index() -> void:
+	_road_segment_surfaces.clear()
 	_road_segment_starts.clear()
 	_road_segment_ends.clear()
 	_road_segment_half_widths.clear()
@@ -612,6 +633,7 @@ func _build_road_surface_index() -> void:
 			_road_segment_ends.append(b)
 			_road_segment_half_widths.append(half_width)
 			_road_segment_ids.append(String(road.get("id", "")))
+			_road_segment_surfaces.append(String(road.get("surface", "asphalt")))
 
 			# The old lookup scanned all 1085 road segments for every tyre,
 			# every physics tick. This uniform grid contains every segment
@@ -892,12 +914,21 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 func get_surface_at(world_position: Vector3) -> Dictionary:
 	var clearance := _road_clearance_xz(world_position)
 	if clearance <= 0.0:
+		if _is_desert and _road_surface_kind_at(world_position) == "gravel":
+			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
 		return {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 	if clearance <= 2.05:
+		if _is_desert:
+			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		return {"kind": "sidewalk", "label": "БЕТОН", "mu": 0.93, "rolling_resistance": 0.021}
 
 	var h := height_at(world_position.x, world_position.z)
-	if ((_in_zone(world_position.x, world_position.z, "sea") or _in_zone(world_position.x, world_position.z, "marina")) and h < 0.45) or world_position.y < 0.18:
+	var is_water := false
+	if _is_desert:
+		is_water = _in_zone(world_position.x, world_position.z, "oasisLake") and world_position.y < 27.4
+	else:
+		is_water = ((_in_zone(world_position.x, world_position.z, "sea") or _in_zone(world_position.x, world_position.z, "marina")) and h < 0.45) or world_position.y < 0.18
+	if is_water:
 		return {"kind": "water", "label": "ВОДА", "mu": 0.27, "rolling_resistance": 0.19}
 
 	var sample_step := 5.0
@@ -911,8 +942,14 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 	var ix := clampi(int(floor((world_position.x - min_x) / step)), 0, int(_terrain.get("cols", 2)) - 1)
 	var iz := clampi(int(floor((world_position.z - min_z) / step)), 0, int(_terrain.get("rows", 2)) - 1)
 	match _terrain_class(world_position.x, world_position.z, h, slope, ix, iz):
-		"sand":
+		"sand", "dune":
 			return {"kind": "sand", "label": "ПЕСОК", "mu": 0.57, "rolling_resistance": 0.115}
+		"salt":
+			return {"kind": "salt", "label": "СОЛЬ", "mu": 0.60, "rolling_resistance": 0.010}
+		"packed":
+			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
+		"gravel":
+			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
 		"rock":
 			return {"kind": "rock", "label": "КАМЕНЬ", "mu": 0.74, "rolling_resistance": 0.052}
 		"concrete":
@@ -1155,13 +1192,14 @@ func set_time_of_day(mode: String) -> void:
 
 func _load_data() -> void:
 	build_error = ""
-	if not FileAccess.file_exists(WORLD_DATA_PATH):
-		build_error = "Native world data is missing from the exported game: %s" % WORLD_DATA_PATH
+	var data_path := DESERT_DATA_PATH if world_id == "desert" else WORLD_DATA_PATH
+	if not FileAccess.file_exists(data_path):
+		build_error = "Native world data is missing from the exported game: %s" % data_path
 		push_error(build_error)
 		return
-	var file := FileAccess.open(WORLD_DATA_PATH, FileAccess.READ)
+	var file := FileAccess.open(data_path, FileAccess.READ)
 	if file == null:
-		build_error = "Native world data could not be opened: %s" % WORLD_DATA_PATH
+		build_error = "Native world data could not be opened: %s" % data_path
 		push_error(build_error)
 		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
@@ -1318,8 +1356,8 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 	for cell_variant in _collider_cells.keys():
 		var cell := cell_variant as Vector2i
 		var cell_centre := Vector2(
-			WORLD_AABB.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
-			WORLD_AABB.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
+			_active_aabb.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
+			_active_aabb.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
 		)
 		var cell_dist := cell_centre.distance_to(focus_2d)
 		var was_active := bool(_active_collider_cells.get(cell, true))
@@ -1349,8 +1387,8 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 
 func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 	var cell := Vector2i(
-		floori((centre.x - WORLD_AABB.position.x) / STREAM_CELL_M),
-		floori((centre.z - WORLD_AABB.position.z) / STREAM_CELL_M)
+		floori((centre.x - _active_aabb.position.x) / STREAM_CELL_M),
+		floori((centre.z - _active_aabb.position.z) / STREAM_CELL_M)
 	)
 	if not _collider_cells.has(cell):
 		_collider_cells[cell] = []
@@ -1704,8 +1742,19 @@ func _terrain_material(kind: String) -> Material:
 	match kind:
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
+		"dune":
+			material = _material("terrain_dune_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.95, 0.81, 0.57), 0.98)
+		"salt":
+			material = _material("terrain_salt", "user_sand_beach_white.jpg", "", Color(0.96, 0.95, 0.91), 0.52)
+		"packed":
+			material = _material("terrain_packed_dirt", "user_dirt_cracked.jpg", "", Color(0.82, 0.67, 0.48), 1.0)
+		"gravel":
+			material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
 		"rock":
-			material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
+			if _is_desert:
+				material = _material("terrain_red_rock", "rock.jpg", "rock_normal.jpg", Color(0.70, 0.45, 0.34), 1.0)
+			else:
+				material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
 			material = _material("terrain_grass", "user_grass.jpg", "user_grass_normal.jpg", Color(0.54, 0.63, 0.38), 0.98)
 	# Земля строится процедурно. Правильный winding — основное исправление
@@ -3231,6 +3280,30 @@ func _hash01(ix: int, iz: int) -> float:
 
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
+	if _is_desert:
+		# Desert splat (spec: asphalt/gravel handled by roads, the other
+		# four layers live here): salt pan, red rock, soft dune sand and
+		# packed cracked dirt.  The oasis bowl stays packed dirt so the
+		# green scatter reads against earth, not loose dune sand.
+		if _in_zone(x, z, "salt") and h < 35.4:
+			return "salt"
+		if Vector2(x - 3350.0, z - 3500.0).length() < 430.0:
+			# The oasis bowl overlaps the dune zone rectangle; keep its
+			# packed-earth shore so the green scatter reads against soil.
+			return "packed"
+		if _in_zone(x, z, "dunes"):
+			# Dune slip faces are intentionally steep (sampled slopes can
+			# exceed 1.0 on the 8 m grid).  They are still sand, not rock:
+			# classifying them by the generic slope gate produced a hard
+			# black/orange checkerboard across every ridge in the sunset
+			# screenshot audit.  Rocky outcrops in the dune sea come from
+			# scatter boulders, not from the terrain splat.
+			return "dune"
+		if slope > 0.30 or h > 108.0:
+			return "rock"
+		if _in_zone(x, z, "quarry") and slope < 0.22:
+			return "gravel"
+		return "packed"
 	if _is_in_park(x, z):
 		return "grass"
 	var in_focus_promenade := z >= -100.0 and z <= 52.0 and ((x >= 682.0 and x <= 744.0) or (x >= 776.0 and x <= 790.0))
@@ -3315,7 +3388,7 @@ func _build_terrain() -> void:
 		if mesh != null:
 			_terrain_meshes[String(kind)] = mesh
 			var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s" % String(kind), false)
-			instance.custom_aabb = WORLD_AABB
+			instance.custom_aabb = _active_aabb
 	_enhancement_stats["terrain_meshes"] = _terrain_meshes.size()
 	_enhancement_stats["premium_boulevard_paving"] = _terrain_meshes.has("plaza")
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false)) if _road_mesh != null else false
@@ -3580,7 +3653,7 @@ func _build_roads() -> void:
 	_sidewalk_mesh = _build_road_mesh(1.9, 0.050, 7.0)
 	if _sidewalk_mesh != null:
 		var sidewalks := _mesh_instance(roads_root, _sidewalk_mesh, sidewalk_material, Transform3D.IDENTITY, "Sidewalks", false)
-		sidewalks.custom_aabb = WORLD_AABB
+		sidewalks.custom_aabb = _active_aabb
 
 	# Plain (not dashed) user asphalt feeds the adapted Drive wet_asphalt
 	# shader. Lane paint is real geometry below, so it no longer depends on
@@ -3589,7 +3662,7 @@ func _build_roads() -> void:
 	_road_mesh = _build_road_mesh(0.0, ROAD_SURFACE_OFFSET_M, 18.0, ROAD_CROWN_M)
 	if _road_mesh != null:
 		var roads := _mesh_instance(roads_root, _road_mesh, asphalt_material, Transform3D.IDENTITY, "Asphalt", false)
-		roads.custom_aabb = WORLD_AABB
+		roads.custom_aabb = _active_aabb
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false))
 
 	_build_intersection_pads(roads_root, asphalt_material)
@@ -3792,7 +3865,7 @@ func _build_rounded_intersection_returns(parent: Node, asphalt_material: ShaderM
 	var mesh := tool.commit()
 	if mesh != null:
 		var instance := _mesh_instance(parent, mesh, asphalt_material, Transform3D.IDENTITY, "RoundedIntersectionReturns", false)
-		instance.custom_aabb = WORLD_AABB
+		instance.custom_aabb = _active_aabb
 	var curb_mesh := BoxMesh.new()
 	curb_mesh.size = Vector3.ONE
 	var curb_material := _create_concrete_material(
@@ -5264,8 +5337,8 @@ func _add_multimesh(
 	for transform_variant in transforms:
 		var transform_value := transform_variant as Transform3D
 		var cell := Vector2i(
-			floori((transform_value.origin.x - WORLD_AABB.position.x) / effective_chunk_size_m),
-			floori((transform_value.origin.z - WORLD_AABB.position.z) / effective_chunk_size_m)
+			floori((transform_value.origin.x - _active_aabb.position.x) / effective_chunk_size_m),
+			floori((transform_value.origin.z - _active_aabb.position.z) / effective_chunk_size_m)
 		)
 		if not grouped.has(cell):
 			grouped[cell] = []
@@ -5298,7 +5371,7 @@ func _add_multimesh(
 			instance.material_override = material
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if effective_cast_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else WORLD_AABB
+		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else _active_aabb
 		var visual_begin := visibility_begin_m
 		var visual_end := visibility_end_m if visibility_end_m >= 0.0 else _multimesh_visual_range(node_name)
 		if visual_begin > 0.0:
@@ -10506,3 +10579,1742 @@ func _build_world_bounds() -> void:
 	_add_box_collider(Vector3(center_x, 24.0, min_z - 3.0), Vector3(max_x - min_x + 12.0, 60.0, 6.0))
 	_add_box_collider(Vector3(center_x, 24.0, max_z + 3.0), Vector3(max_x - min_x + 12.0, 60.0, 6.0))
 	_add_box_collider(Vector3(center_x, -6.5, center_z), Vector3(max_x - min_x + 80.0, 2.0, max_z - min_z + 80.0))
+
+
+# --------------------------------------------------------------------------- #
+# 0.2.47 Desert ("Пустынный каньон") — second world.  Data comes from
+# native/data/desert_native.json, generated offline by
+# scripts/generate_desert_world.py from the owner's spec in
+# docs/DESERT_MAP.md (4x4 km basin, mesas/canyons north, quarry NE, oil
+# field east, salt flat centre, town "Дюны" west, wind farm SW, dune
+# sea south, oasis SE).  Everything below only runs when
+# world_id == "desert"; the RichTown path above is untouched.  Static
+# dressing is merged per 256 m chunk per material, scatter is chunked
+# MultiMesh, and the generic systems (road surface index, collider
+# streaming, foliage grid, sky/time, probes) are reused as-is.
+# --------------------------------------------------------------------------- #
+
+const DESERT_DATA_PATH := "res://data/desert_native.json"
+const DESERT_AABB := AABB(Vector3(0.0, -20.0, 0.0), Vector3(4000.0, 500.0, 4000.0))
+const DZ_CHUNK_M := 256.0
+
+var _dz_merge: Dictionary = {}
+var _dz_prim_cache: Dictionary = {}
+var _dz_pumpjack_pivots: Array[Dictionary] = []
+var _dz_rotors: Array[Dictionary] = []
+var _dz_beacon_material: StandardMaterial3D
+var _dz_flare_material: StandardMaterial3D
+var _dz_scatter_material: StandardMaterial3D
+
+
+func _road_surface_kind_at(point: Vector3) -> String:
+	if _road_segment_grid.is_empty():
+		return "asphalt"
+	var candidates: Array = _road_segment_grid.get(_road_grid_cell(point.x, point.z), [])
+	var best_clearance := ROAD_GRID_QUERY_CLEARANCE_M
+	var best_kind := "asphalt"
+	for index_variant in candidates:
+		var i := int(index_variant)
+		var clearance := _distance_to_segment_xz(point, _road_segment_starts[i], _road_segment_ends[i]) - _road_segment_half_widths[i]
+		if clearance < best_clearance:
+			best_clearance = clearance
+			if i < _road_segment_surfaces.size():
+				best_kind = _road_segment_surfaces[i]
+	return best_kind
+
+
+func _build_desert_world() -> Dictionary:
+	_compute_spawn_transform()
+	_build_road_surface_index()
+	_create_collision_root()
+	_build_environment()
+	_build_desert_terrain()
+	_build_desert_water()
+	_build_desert_roads()
+	_build_desert_structures()
+	_build_desert_scatter()
+	_build_desert_game_markers()
+	_flush_batched_models()
+	_build_desert_reflection_probes()
+	_build_desert_bounds()
+	_build_desert_skyline()
+	_enhancement_stats["desert_world_0247"] = true
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	set_time_of_day("day")
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_build_foliage_grid()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
+	is_built = true
+	return get_stats()
+
+
+func _dz_data() -> Dictionary:
+	return data.get("desert", {})
+
+
+func _dz_ground_y(x: float, z: float, sink: float = 0.05) -> float:
+	return height_at(x, z) - sink
+
+
+func _dz_footprint_y(cx: float, cz: float, w: float, d: float, yaw: float) -> float:
+	var basis := Basis(Vector3.UP, yaw)
+	var gy := height_at(cx, cz)
+	for fx in [-0.5, 0.5]:
+		for fz in [-0.5, 0.5]:
+			var p: Vector3 = Vector3(cx, 0.0, cz) + basis * Vector3(fx * w, 0.0, fz * d)
+			gy = maxf(gy, height_at(p.x, p.z))
+	return gy - 0.12
+
+
+# --- terrain ----------------------------------------------------------------
+
+func _build_desert_terrain() -> void:
+	var cols := int(_terrain.get("cols", 0))
+	var rows := int(_terrain.get("rows", 0))
+	if cols < 2 or rows < 2:
+		return
+	var min_x := _f(_terrain, "minX", 0.0)
+	var min_z := _f(_terrain, "minZ", 0.0)
+	var step := _f(_terrain, "stepM", 8.0)
+	var terrain_root := Node3D.new()
+	terrain_root.name = "Terrain"
+	add_child(terrain_root)
+	_terrain_meshes.clear()
+	var chunk_cells := maxi(int(DZ_CHUNK_M / step), 1)
+	var chunk_count := 0
+	for cz0 in range(0, rows - 1, chunk_cells):
+		for cx0 in range(0, cols - 1, chunk_cells):
+			var tools: Dictionary = {}
+			var min_y := INF
+			var max_y := -INF
+			var iz_end := mini(cz0 + chunk_cells, rows - 1)
+			var ix_end := mini(cx0 + chunk_cells, cols - 1)
+			for iz in range(cz0, iz_end):
+				for ix in range(cx0, ix_end):
+					var x0 := min_x + float(ix) * step
+					var z0 := min_z + float(iz) * step
+					var x1 := x0 + step
+					var z1 := z0 + step
+					var p00 := Vector3(x0, _grid_height(ix, iz), z0)
+					var p10 := Vector3(x1, _grid_height(ix + 1, iz), z0)
+					var p11 := Vector3(x1, _grid_height(ix + 1, iz + 1), z1)
+					var p01 := Vector3(x0, _grid_height(ix, iz + 1), z1)
+					min_y = minf(min_y, minf(p00.y, p11.y))
+					max_y = maxf(max_y, maxf(p10.y, p01.y))
+					var center := (p00 + p11) * 0.5
+					var slope := maxf(absf(p10.y - p00.y), absf(p01.y - p00.y)) / step
+					var kind := _terrain_class(center.x, center.z, center.y, slope, ix, iz)
+					if not tools.has(kind):
+						var new_tool := SurfaceTool.new()
+						new_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+						tools[kind] = new_tool
+					var tool := tools[kind] as SurfaceTool
+					for vertex in [p00, p10, p11, p00, p11, p01]:
+						_terrain_vertex(tool, vertex)
+			for kind in tools.keys():
+				var tool := tools[kind] as SurfaceTool
+				tool.index()
+				tool.generate_normals()
+				tool.generate_tangents()
+				var mesh := tool.commit()
+				if mesh == null:
+					continue
+				if not _terrain_meshes.has(String(kind)):
+					_terrain_meshes[String(kind)] = mesh
+				var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s_%d_%d" % [String(kind), cx0, cz0], false)
+				instance.custom_aabb = AABB(
+					Vector3(min_x + float(cx0) * step, min_y - 2.0, min_z + float(cz0) * step),
+					Vector3(float(chunk_cells) * step, (max_y - min_y) + 4.0, float(chunk_cells) * step))
+				chunk_count += 1
+	_enhancement_stats["desert_terrain_chunks"] = chunk_count
+	_enhancement_stats["terrain_meshes"] = _terrain_meshes.size()
+
+	var heights: Array = _terrain.get("heights", [])
+	var map_data := PackedFloat32Array()
+	map_data.resize(heights.size())
+	for i in heights.size():
+		map_data[i] = float(heights[i])
+	var height_shape := HeightMapShape3D.new()
+	height_shape.map_width = cols
+	height_shape.map_depth = rows
+	height_shape.map_data = map_data
+	var collision := CollisionShape3D.new()
+	collision.name = "TerrainHeightMap"
+	collision.shape = height_shape
+	var center := Vector3(min_x + float(cols - 1) * step * 0.5, 0.0, min_z + float(rows - 1) * step * 0.5)
+	collision.transform = make_transform(center, 0.0, Vector3(step, 1.0, step))
+	_collision_root.add_child(collision)
+
+
+func _build_desert_water() -> void:
+	var root := Node3D.new()
+	root.name = "Water"
+	add_child(root)
+	var lake: Dictionary = _dz_data().get("lake", {})
+	var lake_x := _f(lake, "x", 3350.0)
+	var lake_z := _f(lake, "z", 3500.0)
+	var lake_y := _f(lake, "y", 26.2)
+	var lake_r := _f(lake, "radius", 78.0)
+	var lake_mesh := CylinderMesh.new()
+	lake_mesh.top_radius = lake_r + 12.0
+	lake_mesh.bottom_radius = lake_r + 12.0
+	lake_mesh.height = 0.24
+	lake_mesh.radial_segments = 40
+	_mesh_instance(root, lake_mesh, _water_material(), make_transform(Vector3(lake_x, lake_y - 0.12, lake_z)), "OasisLake", false)
+	# Stream ribbon flowing into the lake from the west.
+	var stream: Array = _dz_data().get("stream", [])
+	if stream.size() >= 2:
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var pts: Array[Vector3] = []
+		for p_variant in stream:
+			var p: Array = p_variant
+			pts.append(Vector3(float(p[0]), 0.0, float(p[1])))
+		for i in range(pts.size() - 1):
+			var a := pts[i]
+			var b := pts[i + 1]
+			var dir := Vector2(b.x - a.x, b.z - a.z).normalized()
+			var perp := Vector2(-dir.y, dir.x) * 3.6
+			var ya := minf(height_at(a.x, a.z) + 0.32, lake_y + 0.4)
+			var yb := minf(height_at(b.x, b.z) + 0.32, lake_y + 0.4)
+			var v0 := Vector3(a.x - perp.x, ya, a.z - perp.y)
+			var v1 := Vector3(a.x + perp.x, ya, a.z + perp.y)
+			var v2 := Vector3(b.x + perp.x, yb, b.z + perp.y)
+			var v3 := Vector3(b.x - perp.x, yb, b.z - perp.y)
+			for vertex in [v0, v1, v2, v0, v2, v3]:
+				tool.set_uv(Vector2(vertex.x / 9.0, vertex.z / 9.0))
+				tool.add_vertex(vertex)
+		tool.generate_normals()
+		var stream_mesh := tool.commit()
+		if stream_mesh != null:
+			_mesh_instance(root, stream_mesh, _water_material(), Transform3D.IDENTITY, "OasisStream", false)
+	_enhancement_stats["desert_lake"] = true
+
+
+# --- roads ------------------------------------------------------------------
+
+func _dz_road_points(road: Dictionary) -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for s_variant in road.get("samples", []):
+		pts.append(_sample_point(s_variant))
+	return pts
+
+
+func _dz_point_perps(pts: Array[Vector3], closed: bool) -> Array[Vector2]:
+	var perps: Array[Vector2] = []
+	var n := pts.size()
+	for i in range(n):
+		var prev_i := i - 1
+		var next_i := i + 1
+		if closed:
+			prev_i = (i - 1 + n) % n
+			next_i = (i + 1) % n
+		else:
+			prev_i = maxi(i - 1, 0)
+			next_i = mini(i + 1, n - 1)
+		var d := Vector2(pts[next_i].x - pts[prev_i].x, pts[next_i].z - pts[prev_i].z)
+		if d.length_squared() < 0.0001:
+			d = Vector2(1.0, 0.0)
+		d = d.normalized()
+		perps.append(Vector2(-d.y, d.x))
+	return perps
+
+
+func _build_desert_roads() -> void:
+	var root := Node3D.new()
+	root.name = "DesertRoads"
+	add_child(root)
+	var asphalt_tool := SurfaceTool.new()
+	asphalt_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var gravel_tool := SurfaceTool.new()
+	gravel_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var marking_tool := SurfaceTool.new()
+	marking_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var marking_count := 0
+	var crown_offsets: Array = [-1.0, -0.42, 0.42, 1.0]
+	var crown_heights: Array = [0.0, 0.045, 0.045, 0.0]
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var pts := _dz_road_points(road)
+		if pts.size() < 2:
+			continue
+		var width := _f(road, "widthM", 8.0)
+		var half_w := width * 0.5
+		var surf := String(road.get("surface", "asphalt"))
+		var closed := bool(road.get("closed", false))
+		var tool := asphalt_tool if surf == "asphalt" else gravel_tool
+		var y_off := 0.10 if surf == "asphalt" else 0.07
+		var perps := _dz_point_perps(pts, closed)
+		var cumlen: Array[float] = [0.0]
+		for i in range(1, pts.size()):
+			cumlen.append(cumlen[i - 1] + Vector2(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z).length())
+		var seg_count := pts.size() if closed else pts.size() - 1
+		for i in range(seg_count):
+			var j := (i + 1) % pts.size()
+			# Closed loops wrap to sample 0: keep the travelled-metre
+			# UV continuous across the seam instead of snapping to 0.
+			var len_j := cumlen[j] if j > i else cumlen[pts.size() - 1] + Vector2(pts[0].x - pts[i].x, pts[0].z - pts[i].z).length()
+			for k in range(3):
+				var oa := float(crown_offsets[k])
+				var ob := float(crown_offsets[k + 1])
+				var ha := float(crown_heights[k])
+				var hb := float(crown_heights[k + 1])
+				var a0 := Vector3(pts[i].x + perps[i].x * oa * half_w, pts[i].y + y_off + ha, pts[i].z + perps[i].y * oa * half_w)
+				var a1 := Vector3(pts[i].x + perps[i].x * ob * half_w, pts[i].y + y_off + hb, pts[i].z + perps[i].y * ob * half_w)
+				var b1 := Vector3(pts[j].x + perps[j].x * ob * half_w, pts[j].y + y_off + hb, pts[j].z + perps[j].y * ob * half_w)
+				var b0 := Vector3(pts[j].x + perps[j].x * oa * half_w, pts[j].y + y_off + ha, pts[j].z + perps[j].y * oa * half_w)
+				# Asphalt shader contract: UV.x lateral 0..1, UV.y metres/18.
+				# Gravel (StandardMaterial) gets world-scale UVs instead.
+				var uva := Vector2((oa + 1.0) * 0.5, cumlen[i] / 18.0) if surf == "asphalt" else Vector2(a0.x / 8.0, a0.z / 8.0)
+				var uvb := Vector2((ob + 1.0) * 0.5, cumlen[i] / 18.0) if surf == "asphalt" else Vector2(a1.x / 8.0, a1.z / 8.0)
+				var uvc := Vector2((ob + 1.0) * 0.5, len_j / 18.0) if surf == "asphalt" else Vector2(b1.x / 8.0, b1.z / 8.0)
+				var uvd := Vector2((oa + 1.0) * 0.5, len_j / 18.0) if surf == "asphalt" else Vector2(b0.x / 8.0, b0.z / 8.0)
+				for pair in [[a0, uva], [a1, uvb], [b1, uvc], [a0, uva], [b1, uvc], [b0, uvd]]:
+					tool.set_uv(pair[1])
+					tool.add_vertex(pair[0])
+			if surf == "asphalt":
+				# Edge lines (continuous) + one centre dash per segment.
+				for side in [-1.0, 1.0]:
+					var eo: float = side * (half_w - 0.55)
+					var e0 := Vector3(pts[i].x + perps[i].x * (eo - 0.09), pts[i].y + y_off + 0.02, pts[i].z + perps[i].y * (eo - 0.09))
+					var e1 := Vector3(pts[i].x + perps[i].x * (eo + 0.09), pts[i].y + y_off + 0.02, pts[i].z + perps[i].y * (eo + 0.09))
+					var e2 := Vector3(pts[j].x + perps[j].x * (eo + 0.09), pts[j].y + y_off + 0.02, pts[j].z + perps[j].y * (eo + 0.09))
+					var e3 := Vector3(pts[j].x + perps[j].x * (eo - 0.09), pts[j].y + y_off + 0.02, pts[j].z + perps[j].y * (eo - 0.09))
+					for vertex in [e0, e1, e2, e0, e2, e3]:
+						marking_tool.set_uv(Vector2(vertex.x / 4.0, vertex.z / 4.0))
+						marking_tool.add_vertex(vertex)
+					marking_count += 1
+				var dash_end := pts[i].lerp(pts[j], 0.24)
+				var d0 := Vector3(pts[i].x - perps[i].x * 0.10, pts[i].y + y_off + 0.055, pts[i].z - perps[i].y * 0.10)
+				var d1 := Vector3(pts[i].x + perps[i].x * 0.10, pts[i].y + y_off + 0.055, pts[i].z + perps[i].y * 0.10)
+				var d2 := Vector3(dash_end.x + perps[j].x * 0.10, dash_end.y + y_off + 0.055, dash_end.z + perps[j].y * 0.10)
+				var d3 := Vector3(dash_end.x - perps[j].x * 0.10, dash_end.y + y_off + 0.055, dash_end.z - perps[j].y * 0.10)
+				for vertex in [d0, d1, d2, d0, d2, d3]:
+					marking_tool.set_uv(Vector2(vertex.x / 4.0, vertex.z / 4.0))
+					marking_tool.add_vertex(vertex)
+				marking_count += 1
+		if not closed:
+			# Junction / trailhead discs so ribbons meet cleanly.
+			for end_i in [0, pts.size() - 1]:
+				var c := pts[end_i]
+				var r := width * 0.62
+				var cy := c.y + y_off - 0.005
+				for k in range(12):
+					var a0 := TAU * float(k) / 12.0
+					var a1 := TAU * float(k + 1) / 12.0
+					var center_v := Vector3(c.x, cy, c.z)
+					var va := Vector3(c.x + cos(a0) * r, cy, c.z + sin(a0) * r)
+					var vb := Vector3(c.x + cos(a1) * r, cy, c.z + sin(a1) * r)
+					for vertex in [center_v, va, vb]:
+						if surf == "asphalt":
+							tool.set_uv(Vector2(clampf((vertex.x - c.x) / maxf(r, 0.01) * 0.5 + 0.5, 0.0, 1.0), (cumlen[end_i] if end_i < cumlen.size() else 0.0) / 18.0))
+						else:
+							tool.set_uv(Vector2(vertex.x / 8.0, vertex.z / 8.0))
+						tool.add_vertex(vertex)
+	asphalt_tool.index()
+	asphalt_tool.generate_normals()
+	asphalt_tool.generate_tangents()
+	var asphalt_mesh := asphalt_tool.commit()
+	if asphalt_mesh != null:
+		_road_mesh = asphalt_mesh
+		var inst := _mesh_instance(root, asphalt_mesh, _create_asphalt_material(), Transform3D.IDENTITY, "DesertAsphalt", false)
+		inst.custom_aabb = _active_aabb
+	gravel_tool.index()
+	gravel_tool.generate_normals()
+	gravel_tool.generate_tangents()
+	var gravel_mesh := gravel_tool.commit()
+	if gravel_mesh != null:
+		var gravel_mat := _material("dz_gravel_road", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.76, 0.67, 0.54), 1.0)
+		gravel_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var inst := _mesh_instance(root, gravel_mesh, gravel_mat, Transform3D.IDENTITY, "DesertGravel", false)
+		inst.custom_aabb = _active_aabb
+	marking_tool.index()
+	marking_tool.generate_normals()
+	var marking_mesh := marking_tool.commit()
+	if marking_mesh != null:
+		var marking_mat := _material("dz_road_marking", "", "", Color(0.92, 0.91, 0.86), 0.6)
+		marking_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var inst := _mesh_instance(root, marking_mesh, marking_mat, Transform3D.IDENTITY, "DesertMarkings", false)
+		inst.custom_aabb = _active_aabb
+	_enhancement_stats["road_markings"] = marking_count
+	_dz_build_bridges(root)
+	_dz_build_tunnel(root)
+
+
+func _dz_find_road(road_id: String) -> Dictionary:
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		if String(road.get("id", "")) == road_id:
+			return road
+	return {}
+
+
+func _dz_span_indices(pts: Array[Vector3], centre: Vector2, half_length: float) -> Vector2i:
+	var best_i := 0
+	var best_d := INF
+	var cumlen: Array[float] = [0.0]
+	for i in range(pts.size()):
+		if i > 0:
+			cumlen.append(cumlen[i - 1] + Vector2(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z).length())
+		var d := Vector2(pts[i].x - centre.x, pts[i].z - centre.y).length()
+		if d < best_d:
+			best_d = d
+			best_i = i
+	var s0 := cumlen[best_i] - half_length
+	var s1 := cumlen[best_i] + half_length
+	var i0 := best_i
+	var i1 := best_i
+	while i0 > 0 and cumlen[i0] > s0:
+		i0 -= 1
+	while i1 < pts.size() - 1 and cumlen[i1] < s1:
+		i1 += 1
+	return Vector2i(i0, i1)
+
+
+func _dz_build_bridges(root: Node) -> void:
+	for bridge_variant in _dz_data().get("bridges", []):
+		var bridge: Dictionary = bridge_variant
+		var road := _dz_find_road(String(bridge.get("road", "")))
+		if road.is_empty():
+			continue
+		var pts := _dz_road_points(road)
+		var width := _f(road, "widthM", 10.0)
+		var half_w := width * 0.5
+		var centre := Vector2(_f(bridge, "x"), _f(bridge, "z"))
+		var span := _dz_span_indices(pts, centre, _f(bridge, "halfLength", 40.0))
+		var perps := _dz_point_perps(pts, bool(road.get("closed", false)))
+		# Deck colliders: the heightmap keeps the wadi dip, so the car
+		# physically rides these boxes while the ribbon floats above.
+		for i in range(span.x, span.y):
+			var a := pts[i]
+			var b := pts[i + 1]
+			var mid := (a + b) * 0.5
+			var seg_len := Vector2(b.x - a.x, b.z - a.z).length()
+			var yaw := atan2(-(b.x - a.x), -(b.z - a.z))
+			_add_box_collider(Vector3(mid.x, mid.y - 0.16, mid.z), Vector3(width + 0.5, 0.55, seg_len + 0.6), yaw)
+			for side in [-1.0, 1.0]:
+				var ea := Vector3(a.x + perps[i].x * side * (half_w + 0.18), a.y - 0.28, a.z + perps[i].y * side * (half_w + 0.18))
+				var eb := Vector3(b.x + perps[i + 1].x * side * (half_w + 0.18), b.y - 0.28, b.z + perps[i + 1].y * side * (half_w + 0.18))
+				_dz_beam("dz_concrete", ea, eb, 0.38, 0.85)
+		# Piers at thirds + abutments at both ends.
+		var pier_indices: Array = [span.x, int(lerpf(float(span.x), float(span.y), 0.36)), int(lerpf(float(span.x), float(span.y), 0.66)), span.y]
+		for pi_variant in pier_indices:
+			var pi := int(pi_variant)
+			var p := pts[pi]
+			var bed_y := height_at(p.x, p.z)
+			var top_y := p.y - 0.42
+			var h := maxf(top_y - bed_y + 1.2, 1.5)
+			_dz_box("dz_concrete", Vector3(p.x, top_y - h * 0.5, p.z), Vector3(width * 0.72, h, 1.6), atan2(-perps[pi].x, -perps[pi].y) + PI * 0.5)
+	_enhancement_stats["desert_bridges"] = (_dz_data().get("bridges", []) as Array).size()
+
+
+func _dz_build_tunnel(root: Node) -> void:
+	var tunnel: Dictionary = _dz_data().get("tunnel", {})
+	if tunnel.is_empty():
+		return
+	var road := _dz_find_road(String(tunnel.get("road", "")))
+	if road.is_empty():
+		return
+	var pts := _dz_road_points(road)
+	var width := _f(road, "widthM", 15.0)
+	var half_w := width * 0.5
+	var centre := Vector2(_f(tunnel, "x"), _f(tunnel, "z"))
+	var span := _dz_span_indices(pts, centre, _f(tunnel, "halfLength", 55.0))
+	var perps := _dz_point_perps(pts, bool(road.get("closed", false)))
+	var opening_h := 6.4
+	for i in range(span.x, span.y):
+		var a := pts[i]
+		var b := pts[i + 1]
+		var mid := (a + b) * 0.5
+		var seg_len := Vector2(b.x - a.x, b.z - a.z).length()
+		var yaw := atan2(-(b.x - a.x), -(b.z - a.z))
+		var roof_y := mid.y + opening_h + 0.5
+		_dz_box("dz_tunnel_roof", Vector3(mid.x, roof_y, mid.z), Vector3(width + 3.4, 0.8, seg_len + 0.75), yaw)
+		for side in [-1.0, 1.0]:
+			var wall_pos := Vector3(mid.x + perps[i].x * side * (half_w + 0.75), mid.y + opening_h * 0.5, mid.z + perps[i].y * side * (half_w + 0.75))
+			_dz_box("dz_tunnel_wall", wall_pos, Vector3(0.7, opening_h + 0.6, seg_len + 0.75), yaw)
+			_add_box_collider(Vector3(wall_pos.x, mid.y + 2.2, wall_pos.z), Vector3(0.9, 5.0, seg_len + 0.75), yaw)
+		if i % 2 == 0:
+			_dz_box("dz_lamp", Vector3(mid.x, roof_y - 0.55, mid.z), Vector3(1.4, 0.18, 0.5), yaw)
+	# Rock portals: three boxes framing the opening at both ends.
+	for end_i in [span.x, span.y]:
+		var p := pts[end_i]
+		var yaw := atan2(-perps[end_i].x, -perps[end_i].y)
+		var basis := Basis(Vector3.UP, yaw)
+		for side in [-1.0, 1.0]:
+			var leg: Vector3 = p + basis * Vector3(side * (half_w + 2.6), 0.0, 0.0)
+			_dz_box("dz_rock", Vector3(leg.x, p.y + 4.6, leg.z), Vector3(5.4, 10.5, 2.6), yaw)
+		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 2.1, p.z), Vector3(width + 10.4, 3.6, 2.6), yaw)
+		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 5.0, p.z), Vector3(width + 5.0, 2.6, 2.2), yaw + 0.04)
+	_enhancement_stats["desert_tunnel"] = true
+
+
+# --- merged static geometry ---------------------------------------------------
+
+func _dz_material(key: String) -> Material:
+	match key:
+		"dz_adobe":
+			return _material("dz_adobe", "cottage_rammed_sand.jpg", "cottage_rammed_sand_normal.jpg", Color(0.88, 0.74, 0.56), 0.95)
+		"dz_adobe_dark":
+			return _material("dz_adobe_dark", "cottage_rammed_sand.jpg", "cottage_rammed_sand_normal.jpg", Color(0.72, 0.57, 0.42), 0.95)
+		"dz_plaster":
+			return _material("dz_plaster", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.93, 0.89, 0.80), 0.92)
+		"dz_brick":
+			return _material("dz_brick", "facade_brick.jpg", "facade_brick_normal.jpg", Color(0.82, 0.66, 0.55), 0.95)
+		"dz_sandstone":
+			return _material("dz_sandstone", "facade_sandstone.jpg", "facade_sandstone_normal.jpg", Color(0.88, 0.76, 0.58), 0.94)
+		"dz_roof_red":
+			return _material("dz_roof_red", "user_roof_terracotta.jpg", "user_roof_terracotta_normal.jpg", Color(0.72, 0.42, 0.30), 0.92)
+		"dz_roof_dark":
+			return _material("dz_roof_dark", "roof_slate.jpg", "roof_slate_normal.jpg", Color(0.42, 0.40, 0.40), 0.9)
+		"dz_roof_metal":
+			return _material("dz_roof_metal", "cottage_roof_metal.jpg", "cottage_roof_metal_normal.jpg", Color(0.62, 0.50, 0.42), 0.75, 0.35)
+		"dz_wood":
+			return _material("dz_wood", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.48, 0.33), 0.95)
+		"dz_wood_dark":
+			return _material("dz_wood_dark", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.45, 0.34, 0.24), 0.95)
+		"dz_metal":
+			return _material("dz_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.66, 0.68, 0.71), 0.45, 0.7)
+		"dz_metal_dark":
+			return _material("dz_metal_dark", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.34, 0.35, 0.38), 0.6, 0.55)
+		"dz_pole":
+			return _material("dz_pole", "metal_pole.jpg", "metal_pole_normal.jpg", Color(0.45, 0.40, 0.34), 0.8, 0.3)
+		"dz_yellow":
+			return _material("dz_yellow", "user_brushed_metal.jpg", "", Color(0.88, 0.64, 0.16), 0.55, 0.25)
+		"dz_rust":
+			return _material("dz_rust", "rock.jpg", "", Color(0.50, 0.30, 0.20), 0.95)
+		"dz_rust_light":
+			return _material("dz_rust_light", "rock.jpg", "", Color(0.66, 0.47, 0.33), 0.95)
+		"dz_concrete":
+			return _material("dz_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.70, 0.69, 0.66), 0.95)
+		"dz_tunnel_wall":
+			return _material("dz_tunnel_wall", "user_concrete_slabs.jpg", "", Color(0.38, 0.37, 0.36), 0.95)
+		"dz_tunnel_roof":
+			return _material("dz_tunnel_roof", "rock.jpg", "rock_normal.jpg", Color(0.55, 0.40, 0.32), 1.0)
+		"dz_rock":
+			return _material("dz_rock", "rock.jpg", "rock_normal.jpg", Color(0.68, 0.45, 0.34), 1.0)
+		"dz_glass":
+			var glass := _material("dz_glass", "", "", Color(0.10, 0.15, 0.19), 0.12, 0.9)
+			return glass
+		"dz_white":
+			return _material("dz_white", "user_plaster_white.jpg", "", Color(0.94, 0.93, 0.90), 0.6, 0.1)
+		"dz_sign_blue":
+			return _material("dz_sign_blue", "", "", Color(0.16, 0.34, 0.62), 0.5, 0.15)
+		"dz_sign_red":
+			return _material("dz_sign_red", "", "", Color(0.66, 0.20, 0.16), 0.5, 0.15)
+		"dz_sign_cream":
+			return _material("dz_sign_cream", "", "", Color(0.88, 0.80, 0.62), 0.55, 0.1)
+		"dz_canvas":
+			return _material("dz_canvas", "cafe_linen.jpg", "", Color(0.78, 0.66, 0.48), 0.95)
+		"dz_dirt":
+			return _material("dz_dirt", "user_dirt_cracked.jpg", "", Color(0.76, 0.62, 0.45), 1.0)
+		"dz_lamp":
+			var lamp := _material("dz_lamp", "", "", Color(1.0, 0.85, 0.60), 0.4)
+			if not lamp.emission_enabled:
+				lamp.emission_enabled = true
+				lamp.emission = Color(1.0, 0.78, 0.48)
+				_register_night_material(lamp, 0.0, 0.9, 2.0)
+			return lamp
+	return _material("dz_fallback", "user_dirt_cracked.jpg", "", Color(0.7, 0.6, 0.5), 0.95)
+
+
+func _dz_unit_box() -> Mesh:
+	if not _dz_prim_cache.has("box"):
+		var m := BoxMesh.new()
+		m.size = Vector3.ONE
+		_dz_prim_cache["box"] = m
+	return _dz_prim_cache["box"]
+
+
+func _dz_unit_cyl(segs: int, top_ratio: float) -> Mesh:
+	var key := "cyl_%d_%.2f" % [segs, top_ratio]
+	if not _dz_prim_cache.has(key):
+		var m := CylinderMesh.new()
+		m.top_radius = 0.5 * top_ratio
+		m.bottom_radius = 0.5
+		m.height = 1.0
+		m.radial_segments = segs
+		_dz_prim_cache[key] = m
+	return _dz_prim_cache[key]
+
+
+func _dz_unit_sphere(segs: int, rings: int) -> Mesh:
+	var key := "sph_%d_%d" % [segs, rings]
+	if not _dz_prim_cache.has(key):
+		var m := SphereMesh.new()
+		m.radius = 0.5
+		m.height = 1.0
+		m.radial_segments = segs
+		m.rings = rings
+		_dz_prim_cache[key] = m
+	return _dz_prim_cache[key]
+
+
+func _dz_chunk_key(pos: Vector3, mat_key: String) -> String:
+	return "%d,%d,%s" % [int(floor(pos.x / DZ_CHUNK_M)), int(floor(pos.z / DZ_CHUNK_M)), mat_key]
+
+
+func _dz_prim(mat_key: String, prim: Mesh, xform: Transform3D, uv_scale: float = 0.25) -> void:
+	var key := _dz_chunk_key(xform.origin, mat_key)
+	if not _dz_merge.has(key):
+		_dz_merge[key] = {
+			"verts": PackedVector3Array(),
+			"normals": PackedVector3Array(),
+			"uvs": PackedVector2Array(),
+			"min": Vector3(INF, INF, INF),
+			"max": Vector3(-INF, -INF, -INF),
+		}
+	var entry: Dictionary = _dz_merge[key]
+	var arrays: Array = prim.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var ev: PackedVector3Array = entry["verts"]
+	var en: PackedVector3Array = entry["normals"]
+	var euv: PackedVector2Array = entry["uvs"]
+	var mn: Vector3 = entry["min"]
+	var mx: Vector3 = entry["max"]
+	var order: Array = []
+	if index.is_empty():
+		for i in range(verts.size()):
+			order.append(i)
+	else:
+		for i in range(index.size()):
+			order.append(int(index[i]))
+	for vi_variant in order:
+		var vi := int(vi_variant)
+		var wp: Vector3 = xform.basis * verts[vi] + xform.origin
+		ev.append(wp)
+		en.append((xform.basis * normals[vi]).normalized())
+		if vi < uvs.size():
+			euv.append(uvs[vi] * uv_scale)
+		else:
+			euv.append(Vector2.ZERO)
+		mn = mn.min(wp)
+		mx = mx.max(wp)
+	entry["verts"] = ev
+	entry["normals"] = en
+	entry["uvs"] = euv
+	entry["min"] = mn
+	entry["max"] = mx
+	_dz_merge[key] = entry
+
+
+func _dz_box(mat_key: String, center: Vector3, size: Vector3, yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0) -> void:
+	var basis := Basis.from_euler(Vector3(pitch, yaw, roll)) * Basis.IDENTITY.scaled(size)
+	_dz_prim(mat_key, _dz_unit_box(), Transform3D(basis, center), maxf(size.x, maxf(size.y, size.z)) * 0.25)
+
+
+func _dz_lbox(mat_key: String, origin: Vector3, basis: Basis, local_center: Vector3, size: Vector3, local_yaw: float = 0.0, local_pitch: float = 0.0, local_roll: float = 0.0) -> void:
+	var world_basis := basis * Basis.from_euler(Vector3(local_pitch, local_yaw, local_roll)) * Basis.IDENTITY.scaled(size)
+	_dz_prim(mat_key, _dz_unit_box(), Transform3D(world_basis, origin + basis * local_center), maxf(size.x, maxf(size.y, size.z)) * 0.25)
+
+
+func _dz_lcyl(mat_key: String, origin: Vector3, basis: Basis, local_center: Vector3, radius: float, height: float, local_yaw: float = 0.0, local_pitch: float = 0.0, local_roll: float = 0.0, top_ratio: float = 1.0, segs: int = 12) -> void:
+	var world_basis := basis * Basis.from_euler(Vector3(local_pitch, local_yaw, local_roll)) * Basis.IDENTITY.scaled(Vector3(radius * 2.0, height, radius * 2.0))
+	_dz_prim(mat_key, _dz_unit_cyl(segs, top_ratio), Transform3D(world_basis, origin + basis * local_center), maxf(radius * 2.0, height) * 0.25)
+
+
+func _dz_lsphere(mat_key: String, origin: Vector3, basis: Basis, local_center: Vector3, radii: Vector3, local_yaw: float = 0.0) -> void:
+	var world_basis := basis * Basis.from_euler(Vector3(0.0, local_yaw, 0.0)) * Basis.IDENTITY.scaled(radii * 2.0)
+	_dz_prim(mat_key, _dz_unit_sphere(12, 8), Transform3D(world_basis, origin + basis * local_center), radii.x * 0.5)
+
+
+func _dz_beam(mat_key: String, a: Vector3, b: Vector3, thick_x: float, thick_y: float) -> void:
+	var dir := b - a
+	var len := dir.length()
+	if len < 0.02:
+		return
+	var up := Vector3.UP
+	if absf(dir.normalized().dot(Vector3.UP)) > 0.97:
+		up = Vector3.RIGHT
+	var basis := Basis.looking_at(dir.normalized(), up) * Basis.IDENTITY.scaled(Vector3(thick_x, thick_y, len))
+	_dz_prim(mat_key, _dz_unit_box(), Transform3D(basis, (a + b) * 0.5), len * 0.2)
+
+
+func _dz_flush_merge(root: Node) -> int:
+	var count := 0
+	for key_variant in _dz_merge.keys():
+		var key := String(key_variant)
+		var entry: Dictionary = _dz_merge[key]
+		var verts: PackedVector3Array = entry["verts"]
+		if verts.is_empty():
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = entry["normals"]
+		arrays[Mesh.ARRAY_TEX_UV] = entry["uvs"]
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var mat_key := key.rsplit(",", true, 1)[1]
+		var instance := _mesh_instance(root, mesh, _dz_material(mat_key), Transform3D.IDENTITY, "DzMerged_" + mat_key, true)
+		var mn: Vector3 = entry["min"]
+		var mx: Vector3 = entry["max"]
+		var aabb := AABB(mn, mx - mn)
+		instance.custom_aabb = aabb
+		_stream_chunks.append({
+			"node": instance,
+			"centre": aabb.get_center(),
+			"radius": aabb.size.length() * 0.5,
+			"hidden": false,
+			"sector_hidden_0237": false,
+		})
+		count += 1
+	_dz_merge.clear()
+	return count
+
+
+func _dz_pipe_beam(mat_key: String, a: Vector3, b: Vector3, radius: float) -> void:
+	var dir := b - a
+	var len := dir.length()
+	if len < 0.02:
+		return
+	var up := Vector3.UP
+	if absf(dir.normalized().dot(Vector3.UP)) > 0.95:
+		up = Vector3.RIGHT
+	var basis := Basis.looking_at(dir.normalized(), up) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0)) * Basis.IDENTITY.scaled(Vector3(radius * 2.0, len, radius * 2.0))
+	_dz_prim(mat_key, _dz_unit_cyl(10, 1.0), Transform3D(basis, (a + b) * 0.5), len * 0.2)
+
+
+func _dz_collider(origin: Vector3, basis: Basis, yaw: float, local_center: Vector3, size: Vector3) -> void:
+	_add_box_collider(origin + basis * local_center, size, yaw)
+
+
+func _dz_gable_roof(mat_key: String, origin: Vector3, basis: Basis, y: float, w: float, d: float, rise: float, overhang: float = 0.5) -> void:
+	var half_d := d * 0.5 + overhang
+	var slope_len := sqrt(half_d * half_d + rise * rise) + 0.15
+	var ang := atan2(rise, half_d)
+	for side in [-1.0, 1.0]:
+		_dz_lbox(mat_key, origin, basis, Vector3(0.0, y + rise * 0.5, side * half_d * 0.5), Vector3(w + overhang * 2.0, 0.16, slope_len), 0.0, side * ang, 0.0)
+	_dz_lbox(mat_key, origin, basis, Vector3(0.0, y + rise + 0.02, 0.0), Vector3(w + overhang * 2.0, 0.14, 0.5))
+
+
+func _dz_flat_roof(mat_key: String, origin: Vector3, basis: Basis, y: float, w: float, d: float, parapet: float = 0.45) -> void:
+	_dz_lbox(mat_key, origin, basis, Vector3(0.0, y + 0.10, 0.0), Vector3(w + 0.5, 0.22, d + 0.5))
+	if parapet > 0.01:
+		_dz_lbox(mat_key, origin, basis, Vector3(0.0, y + 0.22 + parapet * 0.5, -d * 0.5 - 0.13), Vector3(w + 0.5, parapet, 0.24))
+		_dz_lbox(mat_key, origin, basis, Vector3(0.0, y + 0.22 + parapet * 0.5, d * 0.5 + 0.13), Vector3(w + 0.5, parapet, 0.24))
+		_dz_lbox(mat_key, origin, basis, Vector3(-w * 0.5 - 0.13, y + 0.22 + parapet * 0.5, 0.0), Vector3(0.24, parapet, d + 0.5))
+		_dz_lbox(mat_key, origin, basis, Vector3(w * 0.5 + 0.13, y + 0.22 + parapet * 0.5, 0.0), Vector3(0.24, parapet, d + 0.5))
+
+
+func _dz_building(origin: Vector3, basis: Basis, yaw: float, w: float, d: float, h: float, wall: String, roof: String, gable: bool, windows: bool = true) -> void:
+	_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.22, 0.0), Vector3(w + 0.5, 0.45, d + 0.5))
+	_dz_lbox(wall, origin, basis, Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d))
+	if gable:
+		_dz_gable_roof(roof, origin, basis, h, w, d, maxf(1.1, d * 0.24))
+	else:
+		_dz_flat_roof(roof, origin, basis, h, w, d)
+	if windows:
+		var win_y := clampf(h * 0.55, 1.4, 3.2)
+		var n := maxi(2, int(w / 3.4))
+		for i in range(n):
+			var fx := -w * 0.5 + w * float(i + 1) / float(n + 1)
+			_dz_lbox("dz_glass", origin, basis, Vector3(fx, win_y, -d * 0.5 - 0.03), Vector3(1.15, 1.05, 0.08))
+			_dz_lbox("dz_glass", origin, basis, Vector3(fx, win_y, d * 0.5 + 0.03), Vector3(1.15, 1.05, 0.08))
+		_dz_lbox("dz_wood_dark", origin, basis, Vector3(0.0, 1.05, -d * 0.5 - 0.03), Vector3(1.05, 2.1, 0.08))
+	_dz_collider(origin, basis, yaw, Vector3(0.0, 1.3, 0.0), Vector3(w, 2.6, d))
+
+
+func _dz_setup_dynamic_materials() -> void:
+	_dz_beacon_material = StandardMaterial3D.new()
+	_dz_beacon_material.albedo_color = Color(0.9, 0.16, 0.12)
+	_dz_beacon_material.emission_enabled = true
+	_dz_beacon_material.emission = Color(1.0, 0.18, 0.12)
+	_dz_beacon_material.emission_energy_multiplier = 2.4
+	_dz_flare_material = StandardMaterial3D.new()
+	_dz_flare_material.albedo_color = Color(1.0, 0.55, 0.2)
+	_dz_flare_material.emission_enabled = true
+	_dz_flare_material.emission = Color(1.0, 0.5, 0.16)
+	_dz_flare_material.emission_energy_multiplier = 3.2
+
+
+func _build_desert_structures() -> void:
+	var root := Node3D.new()
+	root.name = "DesertStructures"
+	add_child(root)
+	var anim_root := Node3D.new()
+	anim_root.name = "DesertAnimated"
+	root.add_child(anim_root)
+	_dz_setup_dynamic_materials()
+	var dz := _dz_data()
+	var structures: Array = dz.get("structures", [])
+	for s_variant in structures:
+		_dz_structure(anim_root, s_variant)
+	for pipe_variant in dz.get("pipes", []):
+		var pipe: Array = pipe_variant
+		if pipe.size() < 4:
+			continue
+		var a := Vector3(float(pipe[0]), 0.0, float(pipe[1]))
+		var b := Vector3(float(pipe[2]), 0.0, float(pipe[3]))
+		var steps := maxi(1, int(Vector2(b.x - a.x, b.z - a.z).length() / 14.0))
+		var prev := Vector3(a.x, height_at(a.x, a.z) + 1.15, a.z)
+		for si in range(1, steps + 1):
+			var t := float(si) / float(steps)
+			var p := a.lerp(b, t)
+			var top := Vector3(p.x, height_at(p.x, p.z) + 1.15, p.z)
+			_dz_pipe_beam("dz_rust_light", prev, top, 0.30)
+			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
+			prev = top
+	for rail_variant in dz.get("guardrails", []):
+		var rail: Array = rail_variant
+		if rail.size() < 4:
+			continue
+		var a := Vector3(float(rail[0]), 0.0, float(rail[1]))
+		var b := Vector3(float(rail[2]), 0.0, float(rail[3]))
+		var ay := height_at(a.x, a.z)
+		var by := height_at(b.x, b.z)
+		_dz_beam("dz_metal", Vector3(a.x, ay + 0.78, a.z), Vector3(b.x, by + 0.78, b.z), 0.07, 0.30)
+		var len2d := Vector2(b.x - a.x, b.z - a.z).length()
+		var posts := maxi(2, int(len2d / 4.5))
+		for pi in range(posts + 1):
+			var p := a.lerp(b, float(pi) / float(posts))
+			var py := height_at(p.x, p.z)
+			_dz_box("dz_metal_dark", Vector3(p.x, py + 0.4, p.z), Vector3(0.14, 0.85, 0.14))
+		var mid := (a + b) * 0.5
+		_add_box_collider(Vector3(mid.x, (ay + by) * 0.5 + 0.5, mid.z), Vector3(0.4, 1.1, len2d), atan2(-(b.x - a.x), -(b.z - a.z)))
+	var line: Array = dz.get("poleLine", [])
+	for li in range(line.size() - 1):
+		var pa: Array = line[li]
+		var pb: Array = line[li + 1]
+		var va := Vector2(float(pa[0]), float(pa[1]))
+		var vb := Vector2(float(pb[0]), float(pb[1]))
+		var dist := (vb - va).length()
+		if dist < 5.0 or dist > 75.0:
+			continue
+		var dir := (vb - va) / dist
+		var perp := Vector2(-dir.y, dir.x)
+		for off in [-1.8, 0.0, 1.8]:
+			var top_off := 11.2 if absf(off) > 0.01 else 11.6
+			var a3 := Vector3(va.x + perp.x * off, height_at(va.x, va.y) + top_off, va.y + perp.y * off)
+			var b3 := Vector3(vb.x + perp.x * off, height_at(vb.x, vb.y) + top_off, vb.y + perp.y * off)
+			var mid3 := (a3 + b3) * 0.5
+			mid3.y -= dist * 0.03 + 0.5
+			_dz_beam("dz_metal_dark", a3, mid3, 0.05, 0.05)
+			_dz_beam("dz_metal_dark", mid3, b3, 0.05, 0.05)
+	var merged := _dz_flush_merge(root)
+	_enhancement_stats["desert_structures"] = structures.size()
+	_enhancement_stats["desert_merged_chunks"] = merged
+	_enhancement_stats["desert_poles"] = line.size()
+
+
+func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
+	var kind := String(s.get("kind", ""))
+	var x := _f(s, "x")
+	var z := _f(s, "z")
+	var yaw := _f(s, "yaw")
+	var w := _f(s, "w", 6.0)
+	var d := _f(s, "d", 6.0)
+	var h := _f(s, "h", 4.0)
+	var basis := Basis(Vector3.UP, yaw)
+	if kind == "conveyor":
+		var x2 := _f(s, "x2", x)
+		var z2 := _f(s, "z2", z)
+		var a := Vector3(x, height_at(x, z) + h, z)
+		var b := Vector3(x2, height_at(x2, z2) + 1.6, z2)
+		_dz_beam("dz_yellow", a, b, 2.0, 0.7)
+		var steps := int(Vector2(x2 - x, z2 - z).length() / 22.0)
+		for ci in range(1, maxi(steps, 1)):
+			var p := a.lerp(b, float(ci) / float(maxi(steps, 1)))
+			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.3, p.z), p + Vector3(0, -0.3, 0), 0.35, 0.35)
+		return
+	var big_kinds := ["gas_station", "garage", "motel", "diner", "warehouse", "church", "house", "ranch_house", "barn", "oasis_house", "office", "shed", "roadstop", "stage", "crusher", "station_ruin"]
+	var gy := _dz_footprint_y(x, z, w, d, yaw) if kind in big_kinds else _dz_ground_y(x, z, 0.04)
+	var o := Vector3(x, gy, z)
+	var hash_pick := int(absf(x) * 3.0 + absf(z) * 7.0) % 3
+	match kind:
+		"gas_station":
+			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_metal", false)
+			for cx in [-0.35, 0.35]:
+				_dz_lcyl("dz_metal", o, basis, Vector3(cx * w, 2.4, -d * 0.5 - 4.6), 0.16, 4.8)
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(cx * w * 0.6, 0.75, -d * 0.5 - 3.2), Vector3(0.7, 1.5, 0.5))
+				_dz_lbox("dz_sign_red", o, basis, Vector3(cx * w * 0.6, 1.65, -d * 0.5 - 3.2), Vector3(0.72, 0.3, 0.52))
+			_dz_lbox("dz_roof_red", o, basis, Vector3(0.0, 4.9, -d * 0.5 - 4.6), Vector3(w * 0.95, 0.25, 7.0))
+			_dz_lcyl("dz_pole", o, basis, Vector3(w * 0.5 + 3.0, 4.0, -d * 0.5 - 6.0), 0.14, 8.0)
+			_dz_lbox("dz_sign_red", o, basis, Vector3(w * 0.5 + 3.0, 8.3, -d * 0.5 - 6.0), Vector3(3.2, 1.1, 0.2))
+		"garage":
+			_dz_building(o, basis, yaw, w, d, h, "dz_sandstone", "dz_roof_metal", false, false)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(-w * 0.2, 1.7, -d * 0.5 - 0.04), Vector3(5.4, 3.4, 0.1))
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(w * 0.25, 1.7, -d * 0.5 - 0.04), Vector3(5.4, 3.4, 0.1))
+			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h + 0.9, -d * 0.5 - 0.2), Vector3(w * 0.6, 1.0, 0.18))
+		"motel":
+			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_red", false, false)
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 3.1, -d * 0.5 - 0.85), Vector3(w, 0.18, 1.7))
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 3.75, -d * 0.5 - 1.65), Vector3(w, 0.5, 0.06))
+			for i in range(6):
+				var fx := -w * 0.5 + w * float(i + 1) / 7.0
+				_dz_lbox("dz_wood_dark", o, basis, Vector3(fx, 1.05, -d * 0.5 - 0.04), Vector3(1.0, 2.1, 0.08))
+				_dz_lbox("dz_wood_dark", o, basis, Vector3(fx, 4.2, -d * 0.5 - 0.04), Vector3(1.0, 2.1, 0.08))
+			_dz_lcyl("dz_pole", o, basis, Vector3(w * 0.5 + 4.0, 4.5, -d * 0.5 - 4.0), 0.15, 9.0)
+			_dz_lbox("dz_sign_blue", o, basis, Vector3(w * 0.5 + 4.0, 9.4, -d * 0.5 - 4.0), Vector3(3.6, 1.3, 0.2))
+		"diner":
+			_dz_building(o, basis, yaw, w, d, h, "dz_metal", "dz_roof_red", false, false)
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 1.9, -d * 0.5 - 0.04), Vector3(w * 0.85, 1.7, 0.08))
+			_dz_lbox("dz_sign_red", o, basis, Vector3(0.0, h + 1.0, -d * 0.5 - 0.2), Vector3(w * 0.5, 1.1, 0.2))
+		"warehouse":
+			_dz_building(o, basis, yaw, w, d, h, "dz_adobe_dark", "dz_roof_metal", true, false)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 2.0, -d * 0.5 - 0.04), Vector3(6.0, 4.0, 0.1))
+		"office", "roadstop":
+			_dz_building(o, basis, yaw, w, d, h, "dz_sandstone", "dz_roof_dark", false)
+			if kind == "roadstop":
+				_dz_lbox("dz_roof_red", o, basis, Vector3(0.0, 3.0, -d * 0.5 - 1.6), Vector3(w * 0.8, 0.15, 3.2))
+				_dz_lcyl("dz_pole", o, basis, Vector3(-w * 0.5 - 2.5, 3.4, -d * 0.5 - 3.0), 0.13, 6.8)
+				_dz_lbox("dz_sign_cream", o, basis, Vector3(-w * 0.5 - 2.5, 7.0, -d * 0.5 - 3.0), Vector3(2.8, 1.0, 0.18))
+		"shed":
+			_dz_building(o, basis, yaw, w, d, h, "dz_wood", "dz_roof_metal", false, false)
+		"church":
+			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_dark", true, false)
+			var tower_top := h + 3.4
+			_dz_lbox("dz_plaster", o, basis, Vector3(w * 0.32, tower_top * 0.5, -d * 0.5 + 1.2), Vector3(3.2, tower_top, 3.2))
+			_dz_lcyl("dz_roof_dark", o, basis, Vector3(w * 0.32, tower_top + 1.3, -d * 0.5 + 1.2), 2.3, 2.6, PI * 0.25, 0.0, 0.0, 0.02, 4)
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(w * 0.32, tower_top + 3.1, -d * 0.5 + 1.2), Vector3(0.16, 1.4, 0.16))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(w * 0.32, tower_top + 3.25, -d * 0.5 + 1.2), Vector3(0.8, 0.16, 0.16))
+			_dz_lbox("dz_glass", o, basis, Vector3(w * 0.32, tower_top - 1.3, -d * 0.5 - 0.44), Vector3(0.9, 1.7, 0.08))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, 1.3, -d * 0.5 - 0.04), Vector3(1.6, 2.6, 0.08))
+		"house":
+			var wall := "dz_adobe" if hash_pick != 0 else "dz_plaster"
+			var roof := "dz_roof_red" if hash_pick != 1 else "dz_roof_dark"
+			_dz_building(o, basis, yaw, w, d, h, wall, roof, true)
+		"ranch_house":
+			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_red", true)
+			for px in [-0.4, 0.0, 0.4]:
+				_dz_lcyl("dz_wood", o, basis, Vector3(px * w, 1.3, -d * 0.5 - 2.0), 0.09, 2.6)
+			_dz_lbox("dz_roof_red", o, basis, Vector3(0.0, 2.75, -d * 0.5 - 1.05), Vector3(w * 0.95, 0.14, 2.3), 0.0, 0.10, 0.0)
+		"barn":
+			_dz_building(o, basis, yaw, w, d, h, "dz_brick", "dz_roof_dark", true, false)
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, 2.0, -d * 0.5 - 0.04), Vector3(4.4, 4.0, 0.1))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, h - 0.9, -d * 0.5 - 0.04), Vector3(1.4, 1.2, 0.08))
+		"oasis_house":
+			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_red", false)
+			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, 2.6, -d * 0.5 - 1.3), Vector3(w * 0.7, 0.1, 2.4), 0.0, 0.12, 0.0)
+		"water_tower":
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					var foot: Vector3 = o + basis * Vector3(sx * w * 0.42, 0.0, sz * d * 0.42)
+					var topc: Vector3 = o + basis * Vector3(sx * w * 0.26, h - 4.6, sz * d * 0.26)
+					_dz_beam("dz_metal_dark", foot, topc, 0.22, 0.22)
+			for lv in [0.35, 0.7]:
+				var y: float = (h - 4.6) * lv
+				var spread := lerpf(w * 0.42, w * 0.26, lv)
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, -spread), Vector3(spread * 2.0, 0.14, 0.14))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, spread), Vector3(spread * 2.0, 0.14, 0.14))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(-spread, y, 0.0), Vector3(0.14, 0.14, spread * 2.0))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(spread, y, 0.0), Vector3(0.14, 0.14, spread * 2.0))
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h - 2.2, 0.0), w * 0.5, 4.6, 0.0, 0.0, 0.0, 1.0, 16)
+			_dz_lcyl("dz_roof_red", o, basis, Vector3(0.0, h + 0.75, 0.0), w * 0.56, 1.5, 0.0, 0.0, 0.0, 0.05, 16)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.2, 0.0), Vector3(w * 0.7, 2.4, d * 0.7))
+		"stall":
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.45, h * 0.45, sz * d * 0.45), 0.07, h * 0.9)
+			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, h, 0.0), Vector3(w + 0.7, 0.1, d + 0.7), 0.0, 0.16, 0.0)
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.55, -d * 0.3), Vector3(w * 0.9, 1.1, d * 0.45))
+		"stage":
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.6, 0.0), Vector3(w, 1.2, d))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, h * 0.55, d * 0.5 - 0.3), Vector3(w, h * 1.1, 0.3))
+			for sx in [-1.0, 1.0]:
+				_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.47, h * 0.6, -d * 0.42), 0.1, h * 1.2)
+			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, h + 1.2, 0.0), Vector3(w + 1.0, 0.14, d + 1.2), 0.0, 0.1, 0.0)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.7, 0.0), Vector3(w, 1.4, d))
+		"fence":
+			var posts := maxi(2, int(w / 3.0))
+			for pi in range(posts + 1):
+				_dz_lbox("dz_wood_dark", o, basis, Vector3(-w * 0.5 + w * float(pi) / float(posts), 0.55, 0.0), Vector3(0.13, 1.1, 0.13))
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.95, 0.0), Vector3(w, 0.09, 0.07))
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.5, 0.0), Vector3(w, 0.09, 0.07))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.5, 0.0), Vector3(w, 1.0, 0.3))
+		"crate":
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.6, 0.0), Vector3(1.2, 1.2, 1.2))
+			if hash_pick != 0:
+				_dz_lbox("dz_wood", o, basis, Vector3(0.75, 0.45, 0.5), Vector3(0.9, 0.9, 0.9), 0.4)
+			if hash_pick == 2:
+				_dz_lbox("dz_wood_dark", o, basis, Vector3(-0.15, 1.55, 0.1), Vector3(0.85, 0.85, 0.85), -0.3)
+		"barrel_group":
+			var spots := [Vector3.ZERO, Vector3(0.65, 0, 0.3), Vector3(0.25, 0, -0.6), Vector3(-0.6, 0, -0.35)]
+			for bi in range(3 + hash_pick):
+				var bp: Vector3 = spots[bi % spots.size()]
+				var bm := "dz_rust" if (bi + hash_pick) % 2 == 0 else "dz_metal_dark"
+				_dz_lcyl(bm, o, basis, Vector3(bp.x, 0.45, bp.z), 0.30, 0.9, 0.0, 0.0, 0.0, 1.0, 10)
+		"tank_small":
+			_dz_lcyl("dz_rust_light", o, basis, Vector3(0.0, 0.85, 0.0), 0.55, 1.9, 0.0, 0.0, PI * 0.5, 1.0, 12)
+			for fx in [-0.6, 0.6]:
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(fx, 0.25, 0.0), Vector3(0.14, 0.5, 0.8))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.8, 0.0), Vector3(1.9, 1.6, 1.1))
+		"town_pole":
+			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.5, 0.0), 0.09, h, 0.0, 0.0, 0.0, 0.7, 8)
+			_dz_lbox("dz_pole", o, basis, Vector3(0.8, h - 0.15, 0.0), Vector3(1.7, 0.09, 0.09))
+			_dz_lbox("dz_lamp", o, basis, Vector3(1.55, h - 0.3, 0.0), Vector3(0.55, 0.14, 0.28))
+			_add_cylinder_collider(Vector3(x, gy + 1.4, z), 0.16, 2.8)
+		"power_pole":
+			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.5, 0.0), 0.19, h, 0.0, 0.0, 0.0, 0.65, 8)
+			_dz_lbox("dz_pole", o, basis, Vector3(0.0, h - 0.7, 0.0), Vector3(4.2, 0.18, 0.18))
+			_dz_lbox("dz_pole", o, basis, Vector3(0.0, h - 1.7, 0.0), Vector3(3.0, 0.15, 0.15))
+			_add_cylinder_collider(Vector3(x, gy + 1.5, z), 0.26, 3.0)
+		"crusher":
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d))
+			_dz_lbox("dz_metal", o, basis, Vector3(0.0, h + 1.5, 0.0), Vector3(w * 0.6, 3.0, d * 0.6))
+			_dz_lcyl("dz_yellow", o, basis, Vector3(0.0, h * 0.72, -d * 0.5 - 1.6), 2.2, 3.0, 0.0, 0.0, 0.0, 0.3, 12)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(w * 0.3, 1.6, -d * 0.5 - 0.05), Vector3(3.4, 3.2, 0.12))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.4, 0.0), Vector3(w, 2.8, d))
+		"silo":
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h * 0.5, 0.0), w * 0.5, h, 0.0, 0.0, 0.0, 1.0, 18)
+			_dz_lsphere("dz_metal", o, basis, Vector3(0.0, h, 0.0), Vector3(w * 0.5, w * 0.26, w * 0.5))
+			_add_cylinder_collider(Vector3(x, gy + 1.5, z), w * 0.52, 3.0)
+		"excavator":
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(sx * 1.15, 0.5, 0.0), Vector3(0.8, 1.0, 5.2))
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.0, 1.85, 0.4), Vector3(3.0, 1.7, 4.6))
+			_dz_lbox("dz_glass", o, basis, Vector3(-0.9, 3.3, -0.6), Vector3(1.3, 1.6, 1.5))
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.55, 4.4, -3.0), Vector3(0.55, 0.7, 6.4), 0.0, 0.72, 0.0)
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.55, 3.9, -6.3), Vector3(0.45, 0.55, 3.6), 0.0, -0.5, 0.0)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.55, 1.0, -7.6), Vector3(1.5, 1.1, 1.1), 0.0, 0.5, 0.0)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.4, -0.6), Vector3(3.2, 2.8, 7.0))
+		"dumptruck":
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.85, 0.0), Vector3(2.5, 0.5, 8.6))
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.0, 2.0, -3.4), Vector3(2.5, 1.9, 1.9))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 2.45, -4.15), Vector3(2.2, 0.9, 0.4))
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.0, 1.55, 1.1), Vector3(2.7, 0.3, 6.2))
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_yellow", o, basis, Vector3(sx * 1.32, 2.2, 1.1), Vector3(0.09, 1.3, 6.2))
+				for wz in [-3.1, 2.2, 3.5]:
+					_dz_lcyl("dz_metal_dark", o, basis, Vector3(sx * 1.25, 0.62, wz), 0.62, 0.45, 0.0, 0.0, PI * 0.5, 1.0, 12)
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.0, 2.2, 4.15), Vector3(2.7, 1.3, 0.09))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, 0.0), Vector3(2.7, 2.6, 8.6))
+		"loader":
+			_dz_lbox("dz_yellow", o, basis, Vector3(0.0, 1.7, 0.8), Vector3(2.7, 1.8, 5.4))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 3.3, 0.6), Vector3(1.9, 1.7, 1.9))
+			for sx in [-1.0, 1.0]:
+				for wz in [-2.0, 2.4]:
+					_dz_lcyl("dz_metal_dark", o, basis, Vector3(sx * 1.35, 0.85, wz), 0.85, 0.6, 0.0, 0.0, PI * 0.5, 1.0, 14)
+				_dz_lbox("dz_yellow", o, basis, Vector3(sx * 1.1, 1.8, -3.3), Vector3(0.4, 0.6, 3.4), 0.0, 0.35, 0.0)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.9, -5.1), Vector3(3.2, 1.3, 1.2), 0.0, 0.45, 0.0)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, -0.5), Vector3(3.0, 2.6, 8.0))
+		"container":
+			var cm: String = ["dz_rust_light", "dz_sign_blue", "dz_metal"][hash_pick]
+			_dz_lbox(cm, o, basis, Vector3(0.0, 1.3, 0.0), Vector3(w, 2.6, d))
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 2.68, 0.0), Vector3(w + 0.1, 0.14, d + 0.1))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, 0.0), Vector3(w, 2.6, d))
+		"oil_tank":
+			var tr := w * 0.5
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h * 0.5, 0.0), tr, h, 0.0, 0.0, 0.0, 1.0, 22)
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.0, h + 0.15, 0.0), tr * 1.01, 0.3, 0.0, 0.0, 0.0, 1.0, 22)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(tr * 0.72, h * 0.5, -tr * 0.72), Vector3(0.5, h, 0.08), -PI * 0.25)
+			_dz_lbox("dz_dirt", o, basis, Vector3(0.0, 0.3, 0.0), Vector3(w * 1.7, 0.6, d * 1.7))
+			_add_cylinder_collider(Vector3(x, gy + 1.5, z), tr + 0.1, 3.0)
+		"ranch_tank":
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h * 0.55, 0.0), w * 0.5, h * 0.8, 0.0, 0.0, 0.0, 1.0, 16)
+			_dz_lcyl("dz_roof_red", o, basis, Vector3(0.0, h, 0.0), w * 0.55, 0.8, 0.0, 0.0, 0.0, 0.1, 16)
+			_add_cylinder_collider(Vector3(x, gy + 1.3, z), w * 0.53, 2.6)
+		"flare":
+			_dz_lcyl("dz_rust", o, basis, Vector3(0.0, h * 0.5, 0.0), 0.42, h, 0.0, 0.0, 0.0, 0.55, 10)
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.0, h + 0.35, 0.0), 0.34, 0.7, 0.0, 0.0, 0.0, 1.25, 10)
+			var flame := SphereMesh.new()
+			flame.radius = 0.85
+			flame.height = 3.4
+			flame.radial_segments = 10
+			flame.rings = 6
+			var flame_inst := _mesh_instance(anim_root, flame, _dz_flare_material, make_transform(Vector3(x, gy + h + 2.0, z)), "FlareFlame", false)
+			flame_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_add_cylinder_collider(Vector3(x, gy + 1.4, z), 0.55, 2.8)
+		"pumpjack":
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.2, 0.0), Vector3(7.5, 0.4, 2.4))
+			for sx in [-1.0, 1.0]:
+				var foot: Vector3 = o + basis * Vector3(0.0, 0.3, sx * 0.95)
+				var apex: Vector3 = o + basis * Vector3(0.0, 4.3, 0.0)
+				_dz_beam("dz_metal_dark", foot + basis * Vector3(-1.5, 0.0, 0.0), apex, 0.2, 0.2)
+				_dz_beam("dz_metal_dark", foot + basis * Vector3(1.5, 0.0, 0.0), apex, 0.2, 0.2)
+			_dz_lbox("dz_rust", o, basis, Vector3(-3.4, 0.75, 0.0), Vector3(1.6, 1.1, 1.1))
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(-2.4, 1.35, 0.0), 0.85, 0.35, 0.0, PI * 0.5, 0.0, 1.0, 14)
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(3.6, 0.9, 0.0), 0.22, 1.8, 0.0, 0.0, 0.0, 1.0, 8)
+			var jack := Node3D.new()
+			jack.name = "Pumpjack"
+			jack.position = o
+			jack.rotation.y = yaw
+			anim_root.add_child(jack)
+			var pivot := Node3D.new()
+			pivot.position = Vector3(0.0, 4.35, 0.0)
+			jack.add_child(pivot)
+			var beam_mat := _dz_material("dz_rust_light")
+			_add_box(pivot, Vector3(8.2, 0.5, 0.34), Vector3(0.2, 0.28, 0.0), beam_mat, 0.0, "Beam")
+			_add_box(pivot, Vector3(0.5, 1.15, 0.3), Vector3(4.15, -0.15, 0.0), beam_mat, 0.0, "HorseHead")
+			_add_box(pivot, Vector3(1.3, 1.05, 0.55), Vector3(-3.4, 0.0, 0.0), _dz_material("dz_metal_dark"), 0.0, "Counterweight")
+			var phase := float(int(absf(x) * 7.0 + absf(z) * 13.0) % 100) / 100.0 * TAU
+			_dz_pumpjack_pivots.append({"node": pivot, "phase": phase, "speed": 0.85 + phase * 0.06})
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.2, 0.0), Vector3(6.6, 2.4, 2.2))
+		"wind_turbine":
+			var tower_h := 34.0
+			_dz_lcyl("dz_white", o, basis, Vector3(0.0, tower_h * 0.5, 0.0), 1.7, tower_h, 0.0, 0.0, 0.0, 0.5, 14)
+			_dz_lbox("dz_white", o, basis, Vector3(0.0, tower_h + 0.6, 1.4), Vector3(2.0, 2.2, 6.4))
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.3, 0.0), Vector3(6.0, 0.6, 6.0))
+			var rotor_root := Node3D.new()
+			rotor_root.name = "TurbineRotor"
+			rotor_root.position = o + basis * Vector3(0.0, tower_h + 0.6, -2.4)
+			rotor_root.rotation.y = yaw
+			anim_root.add_child(rotor_root)
+			var spinner := Node3D.new()
+			rotor_root.add_child(spinner)
+			var white := _dz_material("dz_white")
+			for bi in range(3):
+				var blade_pivot := Node3D.new()
+				blade_pivot.rotation.z = TAU * float(bi) / 3.0
+				spinner.add_child(blade_pivot)
+				_add_box(blade_pivot, Vector3(0.62, 15.6, 0.14), Vector3(0.0, 8.4, 0.0), white, 0.0, "Blade")
+			_add_sphere(spinner, 1.05, 2.1, Vector3.ZERO, white, "Hub")
+			var spin_speed := 0.65 + float(int(absf(x) + absf(z)) % 40) / 100.0
+			_dz_rotors.append({"node": spinner, "speed": spin_speed})
+			_add_cylinder_collider(Vector3(x, gy + 1.6, z), 1.85, 3.2)
+		"windmill":
+			var mh := h
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					_dz_beam("dz_metal_dark", o + basis * Vector3(sx * 1.5, 0.0, sz * 1.5), o + basis * Vector3(sx * 0.35, mh, sz * 0.35), 0.12, 0.12)
+			for bi in range(8):
+				var ang := TAU * float(bi) / 8.0
+				_dz_lbox("dz_metal", o, basis, Vector3(cos(ang) * 1.25, mh + 0.2 + sin(ang) * 1.25, -0.35), Vector3(0.55, 1.7, 0.06), 0.0, 0.0, -ang)
+			_dz_lbox("dz_metal", o, basis, Vector3(-1.5, mh + 0.2, 1.2), Vector3(1.3, 1.0, 0.06), PI * 0.25)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.2, 0.0), Vector3(2.4, 2.4, 2.4))
+		"viewpoint":
+			var deck_y := maxf(h, 3.4)
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.42, deck_y * 0.5, sz * d * 0.42), 0.12, deck_y)
+					_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.42, deck_y + 0.55, sz * d * 0.42), 0.08, 1.1)
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, deck_y, 0.0), Vector3(w, 0.18, d))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, deck_y + 1.05, -d * 0.46), Vector3(w, 0.09, 0.09))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, deck_y + 1.05, d * 0.46), Vector3(w, 0.09, 0.09))
+			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, deck_y + 2.2, 0.0), Vector3(w + 0.8, 0.1, d + 0.8), 0.0, 0.08, 0.0)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.2, 0.0), Vector3(w * 0.85, 2.4, d * 0.85))
+		"radio_tower":
+			var th := h
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					_dz_beam("dz_metal_dark", o + basis * Vector3(sx * w * 0.5, 0.0, sz * d * 0.5), o + basis * Vector3(sx * 0.5, th * 0.82, sz * 0.5), 0.18, 0.18)
+			for lv in [0.22, 0.45, 0.68]:
+				var y: float = th * 0.82 * lv
+				var spread := lerpf(w * 0.5, 0.5, lv)
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, -spread), Vector3(spread * 2.0, 0.12, 0.12))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, y, spread), Vector3(spread * 2.0, 0.12, 0.12))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(-spread, y, 0.0), Vector3(0.12, 0.12, spread * 2.0))
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(spread, y, 0.0), Vector3(0.12, 0.12, spread * 2.0))
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, th * 0.91, 0.0), 0.16, th * 0.2, 0.0, 0.0, 0.0, 0.5, 8)
+			_dz_lsphere("dz_white", o, basis, Vector3(1.6, th * 0.55, 0.0), Vector3(1.3, 1.3, 0.45))
+			var beacon := SphereMesh.new()
+			beacon.radius = 0.42
+			beacon.height = 0.84
+			beacon.radial_segments = 10
+			beacon.rings = 6
+			var beacon_inst := _mesh_instance(anim_root, beacon, _dz_beacon_material, make_transform(Vector3(x, gy + th + 0.4, z)), "TowerBeacon", false)
+			beacon_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.3, 0.0), Vector3(w * 0.8, 2.6, d * 0.8))
+		"stone_arch":
+			_dz_lbox("dz_rock", o, basis, Vector3(-w * 0.38, h * 0.42, 0.0), Vector3(3.4, h * 0.84, 4.2), 0.12, 0.0, 0.05)
+			_dz_lbox("dz_rock", o, basis, Vector3(w * 0.38, h * 0.42, 0.6), Vector3(3.4, h * 0.84, 4.2), -0.08, 0.0, -0.04)
+			_dz_lbox("dz_rock", o, basis, Vector3(0.0, h * 0.92, 0.3), Vector3(w + 2.4, h * 0.2, 4.0), 0.03, 0.0, 0.02)
+			_dz_lsphere("dz_rock", o, basis, Vector3(-w * 0.55, 0.7, 2.6), Vector3(1.5, 0.9, 1.4))
+			_dz_lsphere("dz_rock", o, basis, Vector3(w * 0.5, 0.5, -2.8), Vector3(1.1, 0.7, 1.0))
+			_dz_collider(o, basis, yaw, Vector3(-w * 0.38, 1.4, 0.0), Vector3(3.4, 2.8, 4.2))
+			_dz_collider(o, basis, yaw, Vector3(w * 0.38, 1.4, 0.6), Vector3(3.4, 2.8, 4.2))
+		"plane_wreck":
+			_dz_lcyl("dz_rust_light", o, basis, Vector3(0.0, 2.0, 0.0), 1.9, 15.0, 0.0, PI * 0.5, 0.0, 1.0, 14)
+			_dz_lsphere("dz_rust_light", o, basis, Vector3(0.0, 2.0, -8.2), Vector3(1.9, 1.9, 2.6))
+			_dz_lbox("dz_rust", o, basis, Vector3(0.0, 4.6, 7.2), Vector3(0.28, 3.4, 2.6), 0.0, -0.35, 0.0)
+			_dz_lbox("dz_rust", o, basis, Vector3(-6.4, 2.2, -0.8), Vector3(9.0, 0.22, 2.6), 0.0, 0.0, 0.08)
+			_dz_lbox("dz_rust", o, basis, Vector3(5.2, 0.35, 2.8), Vector3(5.6, 0.2, 2.4), 0.5, 0.0, -0.16)
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 3.15, -6.8), Vector3(2.6, 0.9, 2.2))
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(-4.2, 1.1, -1.2), 0.95, 3.0, 0.0, PI * 0.5, 0.0, 1.0, 12)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.6, 0.0), Vector3(4.0, 3.2, 15.0))
+		"station_ruin":
+			_dz_lbox("dz_adobe_dark", o, basis, Vector3(0.0, h * 0.5, -d * 0.5), Vector3(w, h, 0.4))
+			_dz_lbox("dz_adobe_dark", o, basis, Vector3(-w * 0.5, h * 0.36, 0.0), Vector3(0.4, h * 0.72, d))
+			_dz_lbox("dz_adobe_dark", o, basis, Vector3(w * 0.5, h * 0.22, 0.0), Vector3(0.4, h * 0.44, d))
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(1.0, 0.5, 1.5), Vector3(5.0, 0.3, 0.4), 0.7, 0.0, 0.2)
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.55, -d * 0.5 - 3.2), Vector3(w * 1.15, 1.1, 3.6))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.2, -d * 0.5), Vector3(w, 2.4, 0.6))
+		"rail_stub":
+			for sx in [-0.75, 0.75]:
+				_dz_lbox("dz_metal_dark", o, basis, Vector3(sx, 0.22, 0.0), Vector3(0.14, 0.2, d))
+			var sleepers := int(d / 0.9)
+			for si in range(sleepers):
+				_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, 0.08, -d * 0.5 + 0.5 + float(si) * 0.9), Vector3(2.3, 0.12, 0.5))
+		"station_sign":
+			for sx in [-1.4, 1.4]:
+				_dz_lcyl("dz_wood", o, basis, Vector3(sx, h * 0.42, 0.0), 0.09, h * 0.85)
+			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h * 0.88, 0.0), Vector3(4.4, 0.95, 0.12))
+		"car_wreck":
+			var wm: String = ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
+			var roll := 0.10 if hash_pick == 1 else 0.0
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.62, 0.0), Vector3(1.85, 0.62, 4.5), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 1.22, 0.25), Vector3(1.65, 0.6, 2.2), 0.0, 0.0, roll)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 1.24, 0.25), Vector3(1.7, 0.5, 2.0), 0.0, 0.0, roll)
+			for sx in [-1.0, 1.0]:
+				for wz in [-1.45, 1.45]:
+					if hash_pick == 0 and wz > 0.0 and sx > 0.0:
+						continue
+					_dz_lcyl("dz_metal_dark", o, basis, Vector3(sx * 0.82, 0.34, wz), 0.34, 0.22, 0.0, 0.0, PI * 0.5, 1.0, 10)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.8, 0.0), Vector3(1.9, 1.6, 4.5))
+		"salt_gate":
+			for sx in [-1.0, 1.0]:
+				_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.48, h * 0.5, 0.0), 0.16, h)
+				_add_cylinder_collider(o + basis * Vector3(sx * w * 0.48, 1.4, 0.0), 0.24, 2.8)
+			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, h - 0.25, 0.0), Vector3(w + 0.8, 0.3, 0.3))
+			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 0.95, 0.0), Vector3(minf(w * 0.55, 5.2), 0.9, 0.1))
+		"salt_marker":
+			_dz_lcyl("dz_concrete", o, basis, Vector3(0.0, h * 0.5, 0.0), 0.42, h, PI * 0.25, 0.0, 0.0, 0.55, 4)
+		"salt_pylon":
+			_dz_lcyl("dz_concrete", o, basis, Vector3(0.0, h * 0.5, 0.0), 1.15, h, PI * 0.25, 0.0, 0.0, 0.45, 4)
+			_dz_lsphere("dz_sign_red", o, basis, Vector3(0.0, h + 0.8, 0.0), Vector3(0.8, 0.8, 0.8))
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.4, 0.0), Vector3(4.2, 0.8, 4.2))
+			_add_cylinder_collider(Vector3(x, gy + 1.5, z), 1.25, 3.0)
+		"tent":
+			_dz_lbox("dz_canvas", o, basis, Vector3(-w * 0.24, h * 0.52, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, 0.78)
+			_dz_lbox("dz_canvas", o, basis, Vector3(w * 0.24, h * 0.52, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, -0.78)
+			_dz_lbox("dz_dirt", o, basis, Vector3(0.0, 0.05, 0.0), Vector3(w + 0.6, 0.1, d + 0.6))
+		"pier":
+			var plen := maxf(d, 12.0)
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 1.15, -plen * 0.5), Vector3(2.6, 0.18, plen))
+			var psteps := int(plen / 3.5)
+			for pi in range(psteps + 1):
+				for sx in [-1.1, 1.1]:
+					_dz_lcyl("dz_wood_dark", o, basis, Vector3(sx, 0.2, -1.0 - float(pi) * 3.5), 0.09, 2.0)
+		"billboard":
+			for sx in [-1.0, 1.0]:
+				_dz_lcyl("dz_pole", o, basis, Vector3(sx * w * 0.3, 3.0, 0.35), 0.14, 6.0)
+				_add_cylinder_collider(o + basis * Vector3(sx * w * 0.3, 1.4, 0.35), 0.2, 2.8)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, h - 1.35, 0.12), Vector3(w + 0.25, 2.9, 0.14))
+			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, -0.02), Vector3(w, 2.6, 0.1))
+			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, 0.26), Vector3(w, 2.6, 0.1))
+		"sign", "sign_smash":
+			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.42, 0.0), 0.06, h * 0.85, 0.0, 0.0, 0.0, 1.0, 8)
+			var sm := "dz_sign_red" if kind == "sign_smash" else ("dz_sign_blue" if hash_pick != 1 else "dz_sign_cream")
+			_dz_lbox(sm, o, basis, Vector3(0.0, h * 0.9, 0.0), Vector3(1.15, 0.85, 0.07))
+			_dz_lbox("dz_white", o, basis, Vector3(0.0, h * 0.9, -0.05), Vector3(0.85, 0.24, 0.03))
+		_:
+			_dz_building(o, basis, yaw, w, d, h, "dz_adobe", "dz_roof_metal", false)
+
+
+# --- scatter ------------------------------------------------------------------
+
+func _dz_scatter_part(prim: Mesh, pos: Vector3, scale: Vector3, color: Color, yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0) -> Dictionary:
+	return {"prim": prim, "xform": Transform3D(Basis.from_euler(Vector3(pitch, yaw, roll)) * Basis.IDENTITY.scaled(scale), pos), "color": color}
+
+
+func _dz_scatter_mesh(parts: Array) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for part_variant in parts:
+		var part: Dictionary = part_variant
+		var prim := part["prim"] as Mesh
+		var xform := part["xform"] as Transform3D
+		var color := part["color"] as Color
+		var arrays: Array = prim.surface_get_arrays(0)
+		var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var pn: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var puv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var order: Array = []
+		if idx.is_empty():
+			for i in range(pv.size()):
+				order.append(i)
+		else:
+			for i in range(idx.size()):
+				order.append(int(idx[i]))
+		for vi_variant in order:
+			var vi := int(vi_variant)
+			verts.append(xform.basis * pv[vi] + xform.origin)
+			normals.append((xform.basis * pn[vi]).normalized())
+			colors.append(color)
+			uvs.append(puv[vi] if vi < puv.size() else Vector2.ZERO)
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
+	var prim := _dz_unit_sphere(9, 6)
+	var arrays: Array = prim.surface_get_arrays(0)
+	var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var displaced := PackedVector3Array()
+	displaced.resize(pv.size())
+	for i in range(pv.size()):
+		var p := pv[i]
+		var hsh := _hash01(int(round(p.x * 40.0)) + seed_i * 131, int(round(p.y * 40.0 + p.z * 57.0)) - seed_i * 17)
+		var r := 0.76 + hsh * 0.48
+		displaced[i] = Vector3(p.x * r, p.y * 0.74 * r, p.z * r)
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var tri_count := idx.size() / 3
+	for t in range(tri_count):
+		var a := displaced[int(idx[t * 3])]
+		var b := displaced[int(idx[t * 3 + 1])]
+		var c := displaced[int(idx[t * 3 + 2])]
+		var n := (b - a).cross(c - a)
+		if n.length_squared() < 0.000001:
+			continue
+		n = n.normalized()
+		var shade := 0.72 + clampf(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.38
+		var face_color := Color(color.r * shade, color.g * shade, color.b * shade)
+		for v in [a, b, c]:
+			verts.append(v)
+			normals.append(n)
+			colors.append(face_color)
+			uvs.append(Vector2.ZERO)
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _dz_unit_torus() -> Mesh:
+	if not _dz_prim_cache.has("torus"):
+		var m := TorusMesh.new()
+		m.inner_radius = 0.34
+		m.outer_radius = 0.5
+		m.rings = 12
+		m.ring_segments = 6
+		_dz_prim_cache["torus"] = m
+	return _dz_prim_cache["torus"]
+
+
+func _dz_emit_multimesh(root: Node, mesh: Mesh, material: Material, transforms: Array, node_name: String, range_end: float, shadows: bool) -> void:
+	if transforms.is_empty():
+		return
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	multi.instance_count = transforms.size()
+	var mn := Vector3(INF, INF, INF)
+	var mx := Vector3(-INF, -INF, -INF)
+	for i in range(transforms.size()):
+		var t := transforms[i] as Transform3D
+		multi.set_instance_transform(i, t)
+		mn = mn.min(t.origin)
+		mx = mx.max(t.origin)
+	var inst := MultiMeshInstance3D.new()
+	inst.name = node_name
+	inst.multimesh = multi
+	inst.material_override = material
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	var pad := Vector3(7.0, 9.0, 7.0)
+	var aabb := AABB(mn - pad, (mx - mn) + pad * 2.0)
+	inst.custom_aabb = aabb
+	if range_end > 0.0:
+		inst.visibility_range_begin = 0.0
+		inst.visibility_range_end = range_end
+		inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		inst.lod_bias = 0.45
+		_quality_ranged_instances.append({"node": inst, "begin": 0.0, "end": range_end})
+	root.add_child(inst)
+	_stream_chunks.append({"node": inst, "centre": aabb.get_center(), "radius": aabb.size.length() * 0.5, "hidden": false, "sector_hidden_0237": false})
+	_multimesh_chunk_count += 1
+
+
+func _build_desert_scatter() -> void:
+	var root := Node3D.new()
+	root.name = "DesertScatter"
+	add_child(root)
+	if _dz_scatter_material == null:
+		_dz_scatter_material = StandardMaterial3D.new()
+		_dz_scatter_material.vertex_color_use_as_albedo = true
+		_dz_scatter_material.roughness = 0.95
+		_dz_scatter_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var cyl8 := _dz_unit_cyl(8, 0.85)
+	var cyl7 := _dz_unit_cyl(7, 0.4)
+	var cyl11 := _dz_unit_cyl(11, 0.05)
+	var sph := _dz_unit_sphere(10, 7)
+	var torus := _dz_unit_torus()
+	var cactus_green := Color(0.20, 0.40, 0.19)
+	var saguaro_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl8, Vector3(0, 2.1, 0), Vector3(0.55, 4.2, 0.55), cactus_green),
+		_dz_scatter_part(sph, Vector3(0, 4.25, 0), Vector3(0.52, 0.5, 0.52), cactus_green),
+		_dz_scatter_part(cyl8, Vector3(-0.62, 2.55, 0), Vector3(0.32, 1.05, 0.32), cactus_green, 0.0, 0.0, PI * 0.5),
+		_dz_scatter_part(cyl8, Vector3(-1.05, 3.25, 0), Vector3(0.34, 1.5, 0.34), cactus_green),
+		_dz_scatter_part(cyl8, Vector3(0.55, 1.95, 0), Vector3(0.28, 0.8, 0.28), cactus_green, 0.0, 0.0, -PI * 0.5),
+		_dz_scatter_part(cyl8, Vector3(0.9, 2.5, 0), Vector3(0.3, 1.1, 0.3), cactus_green),
+	])
+	var barrel_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.30, 0.46, 0.22)),
+		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.92, 0.52, 0.16)),
+	])
+	var prickly_parts: Array = []
+	for pi in range(5):
+		var ang := TAU * float(pi) / 5.0
+		prickly_parts.append(_dz_scatter_part(sph, Vector3(cos(ang) * 0.42, 0.34, sin(ang) * 0.42), Vector3(0.55, 0.72, 0.15), Color(0.27, 0.47, 0.23), -ang, 0.0, 0.24))
+	prickly_parts.append(_dz_scatter_part(sph, Vector3(0, 0.3, 0), Vector3(0.5, 0.62, 0.15), Color(0.27, 0.47, 0.23), 0.4))
+	var prickly_mesh := _dz_scatter_mesh(prickly_parts)
+	var shrub_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(1.25, 0.85, 1.25), Color(0.36, 0.40, 0.27)),
+		_dz_scatter_part(sph, Vector3(0.5, 0.62, 0.22), Vector3(0.8, 0.62, 0.8), Color(0.41, 0.44, 0.30)),
+		_dz_scatter_part(sph, Vector3(-0.48, 0.55, -0.3), Vector3(0.7, 0.55, 0.7), Color(0.33, 0.37, 0.25)),
+	])
+	var dead_tree_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.8, 0), Vector3(0.5, 3.6, 0.5), Color(0.45, 0.36, 0.27), 0.0, 0.0, 0.07),
+		_dz_scatter_part(cyl7, Vector3(0.75, 3.2, 0.1), Vector3(0.2, 1.9, 0.2), Color(0.45, 0.36, 0.27), 0.0, 0.0, -0.85),
+		_dz_scatter_part(cyl7, Vector3(-0.65, 2.8, -0.2), Vector3(0.17, 1.6, 0.17), Color(0.48, 0.39, 0.29), 0.0, 0.35, 0.9),
+		_dz_scatter_part(cyl7, Vector3(0.15, 3.9, -0.6), Vector3(0.14, 1.4, 0.14), Color(0.48, 0.39, 0.29), 0.0, 0.8, 0.2),
+	])
+	var bone_color := Color(0.84, 0.79, 0.68)
+	var bones_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0.28, 0), Vector3(0.22, 0.22, 2.2), bone_color),
+		_dz_scatter_part(torus, Vector3(0, 0.32, -0.55), Vector3(1.15, 1.3, 1.15), bone_color, 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(torus, Vector3(0, 0.3, 0.05), Vector3(1.05, 1.2, 1.05), bone_color, 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(torus, Vector3(0, 0.26, 0.6), Vector3(0.9, 1.05, 0.9), bone_color, 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(sph, Vector3(0.35, 0.22, -1.45), Vector3(0.55, 0.45, 0.8), bone_color, 0.4),
+	])
+	var tumble_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.9, 0.9, 0.9), Color(0.60, 0.49, 0.32)),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.85, 0.85, 0.85), Color(0.56, 0.45, 0.30), 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.8, 0.8, 0.8), Color(0.64, 0.53, 0.35), 0.7, PI * 0.25, 0.5),
+	])
+	var reed_parts: Array = []
+	for ri in range(6):
+		var rang := TAU * float(ri) / 6.0
+		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.8, sin(rang) * 0.3), Vector3(0.06, 1.7, 0.06), Color(0.34, 0.50, 0.24), 0.0, cos(rang) * 0.14, sin(rang) * 0.14))
+	var reed_mesh := _dz_scatter_mesh(reed_parts)
+	var pile_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl11, Vector3(0, 1.45, 0), Vector3(6.2, 2.9, 6.2), Color(0.60, 0.53, 0.43)),
+		_dz_scatter_part(cyl11, Vector3(3.4, 0.8, 1.6), Vector3(3.4, 1.6, 3.4), Color(0.56, 0.49, 0.40)),
+	])
+	var rock_small_mesh := _dz_rock_mesh(1, Color(0.58, 0.47, 0.38))
+	var rock_medium_mesh := _dz_rock_mesh(2, Color(0.60, 0.44, 0.34))
+	var rock_large_mesh := _dz_rock_mesh(3, Color(0.62, 0.43, 0.32))
+
+	var cfg := {
+		"cactus_saguaro": {"mesh": saguaro_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
+		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05},
+		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05},
+		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.06, "foliage": true},
+		"rock_small": {"mesh": rock_small_mesh, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
+		"rock_medium": {"mesh": rock_medium_mesh, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"mesh": rock_large_mesh, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.30, "collider_r": 1.35, "collider_h": 2.4},
+		"dead_tree": {"mesh": dead_tree_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
+		"bones": {"mesh": bones_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.04},
+		"tumbleweed": {"mesh": tumble_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.03},
+		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.30},
+		"gravel_pile": {"mesh": pile_mesh, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15},
+	}
+	var scatter: Dictionary = _dz_data().get("scatter", {})
+	var total := 0
+	for kind_variant in cfg.keys():
+		var kind := String(kind_variant)
+		var conf: Dictionary = cfg[kind]
+		var items: Array = scatter.get(kind, [])
+		if items.is_empty():
+			continue
+		var buckets: Dictionary = {}
+		var base := float(conf.get("base", 1.0))
+		var sink := float(conf.get("sink", 0.05))
+		var collider_r := float(conf.get("collider_r", 0.0))
+		var collider_h := float(conf.get("collider_h", 2.0))
+		var is_foliage := bool(conf.get("foliage", false))
+		for item_variant in items:
+			var item: Array = item_variant
+			if item.size() < 4:
+				continue
+			var px := float(item[0])
+			var pz := float(item[1])
+			var sc := float(item[2]) * base
+			var pyaw := float(item[3])
+			var pos := Vector3(px, height_at(px, pz) - sink, pz)
+			var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+			if not buckets.has(key):
+				buckets[key] = []
+			(buckets[key] as Array).append(make_transform(pos, pyaw, Vector3.ONE * sc))
+			total += 1
+			if collider_r > 0.0:
+				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+			if is_foliage:
+				_foliage_points.append(pos)
+		for key_variant in buckets.keys():
+			_dz_emit_multimesh(root, conf["mesh"], _dz_scatter_material, buckets[key_variant], "DzScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+	# Oasis palms reuse the detailed date/royal GLBs (same batching path
+	# as RichTown so LOD/streaming treatment is identical).
+	var palm_items: Array = scatter.get("oasis_palm", [])
+	var date_t: Array = []
+	var royal_t: Array = []
+	for i in range(palm_items.size()):
+		var item: Array = palm_items[i]
+		if item.size() < 4:
+			continue
+		var px := float(item[0])
+		var pz := float(item[1])
+		var pos := Vector3(px, height_at(px, pz) - 0.06, pz)
+		_foliage_points.append(pos)
+		var t := make_transform(pos, float(item[3]), Vector3.ONE * float(item[2]))
+		if i % 5 < 3:
+			date_t.append(t)
+		else:
+			royal_t.append(t)
+		total += 1
+	_add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_t, "DesertOasisPalms")
+	_add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_t, "DesertOasisPalms")
+	_enhancement_stats["desert_scatter"] = total
+	_enhancement_stats["palm_count"] = palm_items.size()
+
+
+# --- game dressing --------------------------------------------------------------
+
+func _dz_banner(root: Node3D, pos: Vector3, yaw: float, mat_key: String) -> void:
+	var basis := Basis(Vector3.UP, yaw)
+	for sx in [-1.0, 1.0]:
+		_dz_lcyl("dz_pole", pos, basis, Vector3(sx * 5.4, 3.1, 0.0), 0.13, 6.2)
+		_add_cylinder_collider(pos + basis * Vector3(sx * 5.4, 1.5, 0.0), 0.2, 3.0)
+	_dz_lbox(mat_key, pos, basis, Vector3(0.0, 6.0, 0.0), Vector3(11.4, 1.15, 0.16))
+	_dz_lbox("dz_white", pos, basis, Vector3(0.0, 6.0, -0.1), Vector3(6.4, 0.5, 0.06))
+
+
+func _build_desert_game_markers() -> void:
+	var root := Node3D.new()
+	root.name = "DesertGameMarkers"
+	add_child(root)
+	var game: Dictionary = _dz_data().get("game", {})
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.albedo_color = Color(1.0, 0.55, 0.12, 0.38)
+	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ring_mat.no_depth_test = false
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 3.3
+	ring_mesh.outer_radius = 3.95
+	ring_mesh.rings = 26
+	ring_mesh.ring_segments = 8
+	var ring_count := 0
+	var banner_count := 0
+	for list_key in ["circuits", "sprints"]:
+		for route_variant in game.get(list_key, []):
+			var route: Dictionary = route_variant
+			var points: Array = route.get("points", [])
+			var acc := 0.0
+			var prev := Vector2.INF
+			for pi in range(points.size()):
+				var p: Array = points[pi]
+				var v := Vector2(float(p[0]), float(p[1]))
+				if prev != Vector2.INF:
+					acc += (v - prev).length()
+				var is_first := pi == 0
+				var is_last := pi == points.size() - 1
+				if is_first or is_last or acc >= 150.0:
+					# TorusMesh lies in the local XZ plane.  Rotate it
+					# upright and yaw it with the route so each marker is
+					# a checkpoint gate across the road, not a flat halo
+					# hovering parallel to the ground (screenshot audit).
+					var route_dir := Vector2.RIGHT
+					if pi + 1 < points.size():
+						var next_point: Array = points[pi + 1]
+						route_dir = Vector2(float(next_point[0]), float(next_point[1])) - v
+					elif prev != Vector2.INF:
+						route_dir = v - prev
+					if route_dir.length_squared() < 0.01:
+						route_dir = Vector2.RIGHT
+					var ring_yaw := atan2(-route_dir.x, -route_dir.y)
+					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 1.15)
+					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 5.6, v.y)), "RaceRing", false)
+					ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					ring_count += 1
+					acc = 0.0
+					if points.size() >= 2 and (is_first or is_last):
+						var other: Array = points[1] if is_first else points[points.size() - 2]
+						var ov := Vector2(float(other[0]), float(other[1]))
+						var dir := (v - ov) if is_last else (ov - v)
+						var yaw := atan2(-dir.x, -dir.y)
+						_dz_banner(root, Vector3(v.x, height_at(v.x, v.y) - 0.05, v.y), yaw, "dz_sign_red" if is_first else "dz_sign_blue")
+						banner_count += 1
+				prev = v
+	for drag_variant in game.get("drags", []):
+		var drag: Dictionary = drag_variant
+		var start: Array = drag.get("start", [])
+		var finish: Array = drag.get("finish", [])
+		if start.size() < 2 or finish.size() < 2:
+			continue
+		var sv := Vector2(float(start[0]), float(start[1]))
+		var fv := Vector2(float(finish[0]), float(finish[1]))
+		var dir := fv - sv
+		var yaw := atan2(-dir.x, -dir.y)
+		_dz_banner(root, Vector3(sv.x, height_at(sv.x, sv.y) - 0.05, sv.y), yaw, "dz_sign_red")
+		_dz_banner(root, Vector3(fv.x, height_at(fv.x, fv.y) - 0.05, fv.y), yaw, "dz_sign_blue")
+		banner_count += 2
+	for jump_variant in game.get("jumps", []):
+		var jump: Dictionary = jump_variant
+		var jx := _f(jump, "x")
+		var jz := _f(jump, "z")
+		var jyaw := _f(jump, "yaw")
+		var origin := Vector3(jx, height_at(jx, jz) - 0.05, jz)
+		var basis := Basis(Vector3.UP, jyaw)
+		_dz_lbox("dz_dirt", origin, basis, Vector3(0.0, 0.55, 0.0), Vector3(4.6, 1.1, 7.0), 0.0, -0.16, 0.0)
+		_dz_lbox("dz_wood", origin, basis, Vector3(0.0, 1.05, -0.4), Vector3(4.2, 0.14, 6.4), 0.0, -0.16, 0.0)
+		var ramp_shape := CollisionShape3D.new()
+		var ramp_box := BoxShape3D.new()
+		ramp_box.size = Vector3(4.6, 0.9, 7.0)
+		ramp_shape.shape = ramp_box
+		var ramp_centre := origin + basis * Vector3(0.0, 0.6, -0.2)
+		ramp_shape.transform = Transform3D(basis * Basis.from_euler(Vector3(-0.16, 0.0, 0.0)), ramp_centre)
+		if _collision_root != null:
+			_collision_root.add_child(ramp_shape)
+		_register_collider(ramp_shape, ramp_centre)
+	for ft_variant in game.get("fastTravel", []):
+		var ft: Dictionary = ft_variant
+		var fx := _f(ft, "x")
+		var fz := _f(ft, "z")
+		var origin := Vector3(fx, height_at(fx, fz) - 0.03, fz)
+		var basis := Basis.IDENTITY
+		_dz_lcyl("dz_pole", origin, basis, Vector3(3.4, 2.2, 0.0), 0.1, 4.4)
+		_dz_lbox("dz_sign_blue", origin, basis, Vector3(3.4, 4.5, 0.0), Vector3(1.7, 0.9, 0.12))
+		_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.06, 0.0), Vector3(7.5, 0.12, 5.2))
+	for tr_variant in game.get("treasures", []):
+		var tr: Dictionary = tr_variant
+		var tx := _f(tr, "x")
+		var tz := _f(tr, "z")
+		var origin := Vector3(tx, height_at(tx, tz) - 0.03, tz)
+		var basis := Basis(Vector3.UP, _hash01(int(tx), int(tz)) * TAU)
+		_dz_lbox("dz_rust", origin, basis, Vector3(0.0, 0.5, 0.0), Vector3(1.5, 1.0, 1.0))
+		_dz_lbox("dz_yellow", origin, basis, Vector3(0.0, 1.02, 0.0), Vector3(1.5, 0.16, 1.0))
+		_dz_lbox("dz_dirt", origin, basis, Vector3(1.3, 0.3, 0.8), Vector3(1.6, 0.5, 1.4))
+	var merged := _dz_flush_merge(root)
+	_enhancement_stats["desert_race_rings"] = ring_count
+	_enhancement_stats["desert_banners"] = banner_count
+	_enhancement_stats["desert_game_merged_chunks"] = merged
+
+
+# --- probes, skyline, animation -------------------------------------------------
+
+func _build_desert_reflection_probes() -> void:
+	_reflection_probes.clear()
+	var root := Node3D.new()
+	root.name = "ReflectionProbes"
+	add_child(root)
+	var specs := [
+		["Town", 820.0, 2050.0, 30.0],
+		["Quarry", 3280.0, 1080.0, 42.0],
+		["Oasis", 3350.0, 3500.0, 26.0],
+		["Salt", 2000.0, 2280.0, 24.0],
+		["Oil", 3520.0, 2380.0, 32.0],
+		["Canyon", 900.0, 1000.0, 36.0],
+	]
+	for spec_variant in specs:
+		var spec: Array = spec_variant
+		var label := String(spec[0])
+		var px := float(spec[1])
+		var pz := float(spec[2])
+		var ph := float(spec[3])
+		var probe := ReflectionProbe.new()
+		probe.name = "Probe" + label
+		probe.size = Vector3(340.0, 130.0, 340.0)
+		probe.position = Vector3(px, height_at(px, pz) + ph, pz)
+		probe.origin_offset = Vector3(0.0, ph * 0.5 - ph, 0.0)
+		probe.box_projection = true
+		probe.enable_shadows = false
+		probe.intensity = 0.68
+		probe.max_distance = 240.0
+		probe.mesh_lod_threshold = 0.65
+		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+		probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		probe.cull_mask = (1 << 19) - 1
+		probe.blend_distance = 60.0
+		root.add_child(probe)
+		_reflection_probes.append(probe)
+	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
+	_enhancement_stats["reflection_probe_mode"] = "once_box_projected_cell_grid"
+	_enhancement_stats["reflection_probe_update_budget_ms"] = 1.2
+	_enhancement_stats["reflection_probe_stagger"] = "per_4_cells"
+
+
+func _build_desert_bounds() -> void:
+	# Desert terrain reaches ~148 m (mesa tops at the north rim),
+	# far above the RichTown-height shared bounds, so the desert
+	# gets its own walls: span y -20..200 around the 4x4 km basin
+	# and a safety floor just under the lowest drivable ground
+	# (oasis lake bed, 23.6 m).
+	_add_box_collider(Vector3(-3.0, 90.0, 2000.0), Vector3(6.0, 220.0, 4012.0))
+	_add_box_collider(Vector3(4003.0, 90.0, 2000.0), Vector3(6.0, 220.0, 4012.0))
+	_add_box_collider(Vector3(2000.0, 90.0, -3.0), Vector3(4012.0, 220.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 90.0, 4003.0), Vector3(4012.0, 220.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 18.0, 2000.0), Vector3(4080.0, 2.0, 4080.0))
+
+
+func _build_desert_skyline() -> void:
+	if _skyline_root == null:
+		_skyline_root = Node3D.new()
+		_skyline_root.name = "DistantSkyline"
+		add_child(_skyline_root)
+	# The first screenshot audit showed the original skyline as huge,
+	# pale rectangular slabs: one rock texture was stretched across a
+	# 0.5-1.0 km BoxMesh face and the long axis pointed AT the player.
+	# These mesas are tapered nine-sided frustums with their long axis
+	# tangential to the horizon ring.  Local (not world) triplanar
+	# mapping keeps the rock detail attached to each mesa while the
+	# skyline root follows the car.
+	var mat := _material("dz_far_mesa_local", "rock.jpg", "rock_normal.jpg", Color(0.52, 0.34, 0.25), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat.uv1_world_triplanar = false
+	var mat_light := _material("dz_far_mesa_local_light", "rock.jpg", "rock_normal.jpg", Color(0.67, 0.46, 0.34), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat_light.uv1_world_triplanar = false
+	var base_mesh := _dz_unit_cyl(9, 0.66)
+	var cap_mesh := _dz_unit_cyl(9, 0.84)
+	var count := 0
+	for i in range(22):
+		var ang := TAU * float(i) / 22.0 + _hash01(i * 3 + 1, 7) * 0.18
+		var radius := 1780.0 + _hash01(i * 5 + 2, 11) * 280.0
+		var w := 620.0 + _hash01(i * 7 + 3, 13) * 560.0
+		var depth := 300.0 + _hash01(i * 13 + 4, 19) * 180.0
+		var hgt := 95.0 + _hash01(i * 11 + 5, 17) * 80.0
+		var base_h := hgt * 0.78
+		var cap_h := hgt * 0.30
+		var yaw := -ang + (_hash01(i * 17 + 6, 23) - 0.5) * 0.10
+		# make_transform()'s local X is radial at yaw=-ang and local Z is
+		# tangential, so scale is (radial depth, height, horizon width).
+		var base_pos := Vector3(cos(ang) * radius, base_h * 0.5 - 22.0, sin(ang) * radius)
+		var inst := _mesh_instance(_skyline_root, base_mesh, mat if i % 2 == 0 else mat_light, make_transform(base_pos, yaw, Vector3(depth, base_h, w)), "FarMesa", false)
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var cap_pos := Vector3(base_pos.x, base_h - 22.0 + cap_h * 0.5 - 5.0, base_pos.z)
+		var cap := _mesh_instance(_skyline_root, cap_mesh, mat_light if i % 2 == 0 else mat, make_transform(cap_pos, yaw + 0.04, Vector3(depth * 0.72, cap_h, w * 0.62)), "FarMesaCap", false)
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		count += 2
+	set_skyline_origin(spawn_transform.origin)
+	_set_skyline_time(time_of_day)
+	_enhancement_stats["skyline_layers"] = 1
+	_enhancement_stats["skyline_assets"] = count
+	_enhancement_stats["skyline_follow"] = true
+	_enhancement_stats["skyline_shader"] = false
+
+
+func _dz_animate(delta: float) -> void:
+	if _dz_pumpjack_pivots.is_empty() and _dz_rotors.is_empty() and _dz_beacon_material == null:
+		return
+	for entry in _dz_pumpjack_pivots:
+		var pivot := entry["node"] as Node3D
+		if pivot != null and is_instance_valid(pivot):
+			pivot.rotation.z = sin(_elapsed * float(entry["speed"]) + float(entry["phase"])) * 0.14
+	for entry in _dz_rotors:
+		var spinner := entry["node"] as Node3D
+		if spinner != null and is_instance_valid(spinner):
+			spinner.rotation.z += float(entry["speed"]) * delta
+	if _dz_beacon_material != null:
+		_dz_beacon_material.emission_energy_multiplier = 3.2 if fmod(_elapsed, 1.6) < 0.18 else 0.12
+	if _dz_flare_material != null:
+		_dz_flare_material.emission_energy_multiplier = 2.9 + sin(_elapsed * 11.0) * 0.45 + sin(_elapsed * 23.7) * 0.25

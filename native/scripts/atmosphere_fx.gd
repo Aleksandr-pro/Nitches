@@ -316,7 +316,7 @@ func _process(delta: float) -> void:
 	_petal_particles.emitting = _mode != "night"
 	_petal_particles.amount_ratio = clampf(0.08 + speed / 210.0, 0.08, 0.32) if _mode != "night" else 0.0
 	var surface := _vehicle.get_surface_kind()
-	var dusty_surface := surface == "sand" or surface == "grass" or surface == "rock"
+	var dusty_surface := surface == "sand" or surface == "grass" or surface == "rock" or surface == "packed_sand" or surface == "gravel" or surface == "salt"
 	var dust_strength := clampf((speed - 5.0) / 20.0, 0.0, 0.68) if dusty_surface else clampf((speed - 38.0) / 180.0, 0.0, 0.13)
 	_dust_particles.emitting = dust_strength > 0.01
 	_dust_particles.amount_ratio = dust_strength

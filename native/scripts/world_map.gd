@@ -116,11 +116,17 @@ func _ready() -> void:
         get_viewport().size_changed.connect(_layout)
 
 
+func _is_desert() -> bool:
+    return _world != null and _world.world_id == "desert"
+
+
 func bind(world: NativeWorldBuilder, vehicle: NativeVehicle) -> void:
     _world = world
     _vehicle = vehicle
     if _world != null:
         _data = _world.get_world_data().duplicate(true)
+    if _title_label != null:
+        _title_label.text = "КАРТА: ПУСТЫННЫЙ КАНЬОН" if _is_desert() else "КАРТА RICHTOWN"
     _build_pois()
     _build_labels()
     _rebuild_poi_list()
@@ -184,6 +190,8 @@ func get_smoke_state() -> Dictionary:
         "hint_visible": _hint_visible,
         "district_circles_removed": true,
         "zoom_label_tiers_0234": true,
+    "world_id": _world.world_id if _world != null else "",
+    "desert_map_0247": _is_desert(),
     }
 
 
@@ -494,8 +502,87 @@ func _poi_sort(a: Dictionary, b: Dictionary) -> bool:
     return String(a.get("name", "")) < String(b.get("name", ""))
 
 
+## 0.2.47: desert POIs come straight from the generated data —
+## named landmarks, fast-travel points, race starts (circuits,
+## sprints, drags), photo spots and jump ramps.  Treasures stay
+## unmarked on purpose: they are physical chests to discover.
+func _build_desert_pois() -> void:
+    var spawn: Dictionary = _data.get("spawn", {"x": 612.0, "z": 2052.0})
+    _add_poi("spawn", "Старт • городок Дюны", "Старт", float(spawn.get("x", 612.0)), float(spawn.get("z", 2052.0)), 1, Vector2(10.0, 8.0))
+    var index := 0
+    for landmark_variant in _data.get("landmarks", []):
+        var landmark: Dictionary = landmark_variant
+        var lname := String(landmark.get("name", ""))
+        if lname.is_empty():
+            continue
+        index += 1
+        _add_poi("lm_%d" % index, lname, "Достопримечательность", float(landmark.get("x", 0.0)), float(landmark.get("z", 0.0)), 2)
+    var dz: Dictionary = _data.get("desert", {})
+    var game: Dictionary = dz.get("game", {})
+    index = 0
+    for ft_variant in game.get("fastTravel", []):
+        var ft: Dictionary = ft_variant
+        index += 1
+        _add_poi("travel_%d" % index, String(ft.get("name", "Быстрый переход")), "Инфраструктура", float(ft.get("x", 0.0)), float(ft.get("z", 0.0)), 1)
+    for list_key in ["circuits", "sprints"]:
+        for route_variant in game.get(list_key, []):
+            var route: Dictionary = route_variant
+            var pts: Array = route.get("points", [])
+            if pts.is_empty():
+                continue
+            var first: Array = pts[0]
+            _add_poi("race_" + String(route.get("id", "route")), "Гонка: " + String(route.get("name", "Трасса")), "Гонка", float(first[0]), float(first[1]), 2)
+    for drag_variant in game.get("drags", []):
+        var drag: Dictionary = drag_variant
+        var start: Array = drag.get("start", [])
+        if start.size() < 2:
+            continue
+        _add_poi("race_" + String(drag.get("id", "drag")), String(drag.get("name", "Драг")), "Гонка", float(start[0]), float(start[1]), 2)
+    index = 0
+    for photo_variant in game.get("photoSpots", []):
+        var photo: Dictionary = photo_variant
+        index += 1
+        _add_poi("photo_%d" % index, String(photo.get("name", "Фототочка")), "Фототочка", float(photo.get("x", 0.0)), float(photo.get("z", 0.0)), 3)
+    index = 0
+    for jump_variant in game.get("jumps", []):
+        var jump: Dictionary = jump_variant
+        index += 1
+        _add_poi("jump_%d" % index, String(jump.get("name", "Трамплин")), "Трамплин", float(jump.get("x", 0.0)), float(jump.get("z", 0.0)), 3)
+    if _world != null:
+        for park_variant in _world.get_park_map_entries():
+            var park: Dictionary = park_variant
+            var rect: Rect2 = park.get("rect", Rect2())
+            _add_poi("oasis", "Оазис • озеро и пальмы", "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 1)
+
+
+func _road_labels_data() -> Array:
+    if not _is_desert():
+        return ROAD_LABELS
+    var labels: Array = []
+    for road_variant in _data.get("roads", []):
+        var road: Dictionary = road_variant
+        var rname := String(road.get("name", ""))
+        var samples: Array = road.get("samples", [])
+        if rname.is_empty() or samples.size() < 6:
+            continue
+        var prio := 1 if String(road.get("surface", "asphalt")) == "asphalt" else 3
+        var spots: Array = [samples.size() / 2]
+        if String(road.get("id", "")) == "dz-ring":
+            spots = [samples.size() / 5, samples.size() * 2 / 5, samples.size() * 3 / 5, samples.size() * 4 / 5]
+        for si in spots:
+            var s: Array = samples[int(si)]
+            labels.append({"name": rname.to_upper(), "x": float(s[0]), "z": float(s[2]), "priority": prio})
+    return labels
+
+
 func _build_pois() -> void:
     _pois.clear()
+    if _is_desert():
+        _build_desert_pois()
+        _pois.sort_custom(_poi_sort)
+        if not _pois.is_empty():
+            _selected_poi = _pois[0]
+        return
     var seen_lifeguard := false
     for landmark_variant in _data.get("landmarks", []):
         var landmark: Dictionary = landmark_variant
@@ -636,7 +723,7 @@ func _build_labels() -> void:
         label.set_meta("priority", int(poi_dict.get("priority", 3)))
         _poi_labels.append(label)
 
-    for road_variant in ROAD_LABELS:
+    for road_variant in _road_labels_data():
         var road: Dictionary = road_variant
         var label := _make_map_label(
             String(road.get("name", "")),
@@ -787,7 +874,7 @@ func _emit_destination_changed() -> void:
 
 
 func _district_name_at(x: float, z: float) -> String:
-    var best_name := "RichTown"
+    var best_name := "Пустынный каньон" if _is_desert() else "RichTown"
     var best_score := INF
     var point := Vector2(x, z)
     for district_variant in _data.get("districts", []):
@@ -974,17 +1061,26 @@ func _draw_map() -> void:
     if _canvas == null:
         return
     var rect := Rect2(Vector2.ZERO, _canvas.size)
-    _canvas.draw_rect(rect, Color(0.055, 0.11, 0.13, 1.0), true)
+    _canvas.draw_rect(rect, Color(0.13, 0.10, 0.06, 1.0) if _is_desert() else Color(0.055, 0.11, 0.13, 1.0), true)
     if _data.is_empty():
         _canvas.draw_line(Vector2(12.0, 12.0), _canvas.size - Vector2(12.0, 12.0), Color(1.0, 0.2, 0.1), 3.0, true)
         return
 
-    _draw_zone("sea", Color(0.035, 0.36, 0.62, 0.95))
-    _draw_zone("marina", Color(0.05, 0.46, 0.70, 0.88))
-    _draw_zone("beach", Color(0.72, 0.58, 0.32, 0.48))
-    _draw_zone("palmIsland", Color(0.20, 0.50, 0.28, 0.48))
-    _draw_zone("sailIsland", Color(0.20, 0.50, 0.28, 0.48))
-    _draw_zone("rtPlaza", Color(0.68, 0.68, 0.62, 0.36))
+    if _is_desert():
+        _draw_zone("salt", Color(0.92, 0.90, 0.82, 0.80))
+        _draw_zone("dunes", Color(0.85, 0.66, 0.38, 0.50))
+        _draw_zone("plateau", Color(0.62, 0.44, 0.32, 0.42))
+        _draw_zone("quarry", Color(0.55, 0.50, 0.44, 0.46))
+        _draw_zone("oilField", Color(0.45, 0.40, 0.34, 0.42))
+        _draw_zone("town", Color(0.80, 0.62, 0.42, 0.36))
+        _draw_zone("oasisLake", Color(0.10, 0.55, 0.62, 0.88))
+    else:
+        _draw_zone("sea", Color(0.035, 0.36, 0.62, 0.95))
+        _draw_zone("marina", Color(0.05, 0.46, 0.70, 0.88))
+        _draw_zone("beach", Color(0.72, 0.58, 0.32, 0.48))
+        _draw_zone("palmIsland", Color(0.20, 0.50, 0.28, 0.48))
+        _draw_zone("sailIsland", Color(0.20, 0.50, 0.28, 0.48))
+        _draw_zone("rtPlaza", Color(0.68, 0.68, 0.62, 0.36))
 
     var bounds := _bounds()
     var grid_color := Color(1.0, 1.0, 1.0, 0.055)

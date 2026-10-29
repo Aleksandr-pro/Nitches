@@ -1459,7 +1459,11 @@ func _update_vehicle_audio(delta: float) -> void:
 			squeal_surface_factor = 0.85
 		"rock":
 			squeal_surface_factor = 0.5
-		"grass", "sand", "water":
+		"gravel":
+			squeal_surface_factor = 0.25
+		"salt":
+			squeal_surface_factor = 0.65
+		"grass", "sand", "water", "packed_sand":
 			squeal_surface_factor = 0.0
 	tire_level *= squeal_surface_factor
 	var tire_pitch := 0.72 + clampf(absf(_forward_speed) / 42.0, 0.0, 1.0) * 0.38 + clampf(absf(_rear_slip_ratio), 0.0, 1.0) * 0.12
@@ -2257,9 +2261,16 @@ func _process(delta: float) -> void:
 			smoke_intensity = maxf(smoke_intensity, clampf(absf(_rear_slip_ratio) / 0.75, 0.30, 1.0))
 		if (_surface_kind == "sand" or _surface_kind == "grass" or _surface_kind == "rock") and absf(_forward_speed) > 9.0:
 			smoke_intensity = maxf(smoke_intensity, 0.42)
+		# 0.2.47: desert surfaces throw visible dust plumes.
+		if (_surface_kind == "packed_sand" or _surface_kind == "gravel" or _surface_kind == "salt") and absf(_forward_speed) > 7.0:
+			smoke_intensity = maxf(smoke_intensity, 0.55)
 	var smoke_color := Color(0.72, 0.72, 0.74, 0.34)
 	if _surface_kind == "sand":
 		smoke_color = Color(0.78, 0.66, 0.45, 0.38)
+	elif _surface_kind == "packed_sand" or _surface_kind == "gravel":
+		smoke_color = Color(0.80, 0.68, 0.48, 0.40)
+	elif _surface_kind == "salt":
+		smoke_color = Color(0.92, 0.90, 0.84, 0.36)
 	elif _surface_kind == "grass" or _surface_kind == "rock":
 		smoke_color = Color(0.48, 0.44, 0.34, 0.36)
 	for emitter in _smoke_emitters:
