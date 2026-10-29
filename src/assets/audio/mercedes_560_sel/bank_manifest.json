@@ -2,10 +2,12 @@
   "bank": "mercedes_560_sel",
   "car": "Mercedes-Benz 560 SEL (W126, M117 V8)",
   "format": "mono WAV 32000 Hz 16-bit",
+  "audio_0242": true,
   "anchors": [
     {
       "rpm": 805,
       "cycles": 23,
+      "measured_rpm": 805.2,
       "on": {
         "file": "engine_on_0805.wav",
         "seconds": 3.43034,
@@ -23,11 +25,13 @@
       "author": "romanholtwick",
       "license": "CC0 1.0",
       "url": "https://freesound.org/people/romanholtwick/sounds/391671/",
-      "cylinders": 8
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
     },
     {
       "rpm": 999,
       "cycles": 25,
+      "measured_rpm": 998.2,
       "on": {
         "file": "engine_on_0999.wav",
         "seconds": 3.00316,
@@ -45,11 +49,13 @@
       "author": "Therancher01",
       "license": "CC0 1.0",
       "url": "https://freesound.org/people/Therancher01/sounds/610772/",
-      "cylinders": 8
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
     },
     {
       "rpm": 1444,
       "cycles": 24,
+      "measured_rpm": 1444.0,
       "on": {
         "file": "engine_on_1444.wav",
         "seconds": 1.99406,
@@ -67,11 +73,13 @@
       "author": "romanholtwick",
       "license": "CC0 1.0",
       "url": "https://freesound.org/people/romanholtwick/sounds/391671/",
-      "cylinders": 8
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
     },
     {
       "rpm": 2265,
       "cycles": 11,
+      "measured_rpm": 2265.6,
       "on": {
         "file": "engine_on_2265.wav",
         "seconds": 0.58278,
@@ -89,11 +97,37 @@
       "author": "Henaway",
       "license": "CC0 1.0",
       "url": "https://freesound.org/people/Henaway/sounds/127980/",
-      "cylinders": 8
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
+    },
+    {
+      "rpm": 2900,
+      "cycles": 62,
+      "measured_rpm": 2835.0,
+      "on": {
+        "file": "engine_on_2900.wav",
+        "seconds": 2.56547,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_2900.wav",
+        "seconds": 2.56547,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8x50_mid",
+      "source_recording": "Lexus IS F 2UR-GSE V8 on a dynamometer",
+      "author": "Altair78",
+      "license": "CC BY-SA 4.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Lexus_IS-F_dynamometer_2UR-GSE_(2008).ogg",
+      "cylinders": 8,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v8x50_mid loop at 3747 rpm, ratio 0.774, pulse rate scaled to 2900 rpm by construction (comb spectral estimate 2835, biased toward the parent envelope PSOLA preserves); no synthesized tone."
     },
     {
       "rpm": 3747,
       "cycles": 62,
+      "measured_rpm": 3747.5,
       "on": {
         "file": "engine_on_3747.wav",
         "seconds": 1.98556,
@@ -111,29 +145,32 @@
       "author": "Altair78",
       "license": "CC BY-SA 4.0",
       "url": "https://commons.wikimedia.org/wiki/File:Lexus_IS-F_dynamometer_2UR-GSE_(2008).ogg",
-      "cylinders": 8
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
     },
     {
-      "rpm": 4342,
-      "cycles": 11,
+      "rpm": 5000,
+      "cycles": 62,
+      "measured_rpm": 5784.0,
       "on": {
-        "file": "engine_on_4342.wav",
-        "seconds": 0.30406,
+        "file": "engine_on_5000.wav",
+        "seconds": 1.48797,
         "sample_rate": 32000,
         "channels": 1
       },
       "off": {
-        "file": "engine_off_4342.wav",
-        "seconds": 0.30406,
+        "file": "engine_off_5000.wav",
+        "seconds": 1.48797,
         "sample_rate": 32000,
         "channels": 1
       },
-      "source_clip": "v8f_hi",
-      "source_recording": "Ferrari 360 Spider flat-plane V8",
-      "author": "PritzProductions",
-      "license": "CC0 1.0",
-      "url": "https://freesound.org/people/PritzProductions/sounds/241083/",
-      "cylinders": 8
+      "source_clip": "v8x50_mid",
+      "source_recording": "Lexus IS F 2UR-GSE V8 on a dynamometer",
+      "author": "Altair78",
+      "license": "CC BY-SA 4.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Lexus_IS-F_dynamometer_2UR-GSE_(2008).ogg",
+      "cylinders": 8,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v8x50_mid loop at 3747 rpm, ratio 1.334, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 5784, biased toward the parent envelope PSOLA preserves); no synthesized tone."
     }
   ],
   "idle": {
@@ -157,6 +194,71 @@
     "sample_rate": 32000,
     "channels": 1,
     "derivation": "This bank's recorded idle loop pitch-ramped 1.0x -> 0.38x and faded over the 0.82 s runtime shutdown."
+  },
+  "pops": {
+    "files": [
+      {
+        "file": "pop_01.wav",
+        "seconds": 0.09331,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_02.wav",
+        "seconds": 0.08859,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_03.wav",
+        "seconds": 0.09159,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_04.wav",
+        "seconds": 0.06997,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_05.wav",
+        "seconds": 0.05547,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_06.wav",
+        "seconds": 0.09069,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_07.wav",
+        "seconds": 0.11053,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_08.wav",
+        "seconds": 0.08338,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_09.wav",
+        "seconds": 0.09041,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_10.wav",
+        "seconds": 0.07794,
+        "sample_rate": 32000,
+        "channels": 1
+      }
+    ],
+    "derivation": "Single exhaust pulses cut from this bank's own high-RPM recorded loops, enveloped and resequenced stochastically at runtime for overrun crackle."
   },
   "off_throttle_derivation": "Same recording as the matching on-throttle loop, cyclically low-pass filtered (no seam break) and set 4.5 dB quieter.",
   "tire": "Shared recorded tire_squeal_loop.wav from the Shelby bank (Tom Haigh, CC BY 3.0)."

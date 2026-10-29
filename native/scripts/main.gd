@@ -112,6 +112,7 @@ func _ready() -> void:
 	_vehicle.car_changed.connect(_on_vehicle_car_changed)
 	_vehicle.reset_to_transform(_world.spawn_transform)
 	_vehicle.global_transform = _world.spawn_transform
+	_vehicle.set_audio_camera_mode(_camera_mode)
 
 	# 0.2.5: all AI/parked traffic cars are removed by request.  The
 	# freed CPU/GPU budget is spent on the denser static city instead;
@@ -1304,6 +1305,8 @@ func _update_camera_orbit_controls(delta: float) -> void:
 
 func _cycle_camera() -> void:
 	_camera_mode = (_camera_mode + 1) % 3
+	if _vehicle != null:
+		_vehicle.set_audio_camera_mode(_camera_mode)
 	_reset_camera_orbit()
 	_snap_camera = true
 	_refresh_menu_settings()
@@ -1668,12 +1671,39 @@ func _run_smoke_checks() -> void:
 	var drive_base_state := _vehicle.get_drive_base_state()
 	if not bool(drive_base_state.get("car_paint_shader", false)) or not bool(drive_base_state.get("paint_reflections_ready", false)) or float(drive_base_state.get("roll_reduction", 0.0)) <= 0.0 or int(drive_base_state.get("paint_materials", 0)) < 1:
 		failures.append("ArcadeCar reflective paint Drive base is not active: %s" % str(drive_base_state))
+	# 0.2.41 regression: exercise the real automatic-gear helper on a
+	# detached vehicle for every catalog car.  In particular the 560 SEL
+	# must leave first soon after 64.7 km/h, then reach third/fourth.
+	var drivetrain_probe := VehicleScript.new() as NativeVehicle
+	var automatic_gears_ok := drivetrain_probe != null
+	var automatic_gear_report := {}
+	if drivetrain_probe != null:
+		for probe_id in NativeCarCatalog.car_ids():
+			drivetrain_probe.configure_car(probe_id)
+			var probe_car := NativeCarCatalog.get_car(probe_id)
+			var ratios: Array = probe_car.get("gear_ratios", [])
+			var last_gear := maxi(ratios.size() - 1, 0)
+			var gears_at_speed := {}
+			for speed_kmh in [40.0, 70.0, 120.0, 180.0, 240.0]:
+				gears_at_speed[str(int(speed_kmh))] = drivetrain_probe.get_automatic_gear_for_speed(speed_kmh / 3.6, 0)
+			automatic_gear_report[probe_id] = gears_at_speed
+			var gears_ok := int(gears_at_speed.get("120", 0)) >= 2 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= mini(3, last_gear)
+			if probe_id == "mercedes_560_sel":
+				gears_ok = gears_ok and int(gears_at_speed.get("70", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 3
+			if not gears_ok:
+				automatic_gears_ok = false
+		drivetrain_probe.free()
+	if not automatic_gears_ok or not bool(drive_base_state.get("automatic_shift_0241", false)) or not bool(drive_base_state.get("paint_finish_0241", false)) or int(drive_base_state.get("paint_shader_surfaces", 0)) < 1 or float(drive_base_state.get("paint_metallic", 0.0)) < 0.6 or float(drive_base_state.get("paint_clearcoat_roughness", 1.0)) > 0.08:
+		failures.append("0.2.41 coupled-RPM automatic shifts / glossy paint finish are incomplete: drive=%s gears=%s" % [str(drive_base_state), str(automatic_gear_report)])
 	var smoothing_state := _vehicle.get_smoothing_state()
 	if not bool(smoothing_state.get("pedal_actuator_smoothing", false)) or not bool(smoothing_state.get("drive_force_smoothing", false)) or not bool(smoothing_state.get("filtered_suspension", false)) or not bool(smoothing_state.get("anti_roll_requires_both_wheels", false)):
 		failures.append("0.2.5 acceleration/suspension smoothing is incomplete: %s" % str(smoothing_state))
 	var vehicle_audio_state: Dictionary = smoothing_state.get("vehicle_audio", {})
-	if not bool(smoothing_state.get("ignition_0235", false)) or int(smoothing_state.get("engine_state", -1)) != NativeVehicle.ENGINE_OFF or bool(smoothing_state.get("engine_running", true)) or _vehicle.get_gear_label() != "N" or _vehicle.get_rpm_ratio() > 0.001 or not bool(vehicle_audio_state.get("recorded_audio_0235", false)) or not bool(vehicle_audio_state.get("recorded_gt500_bank", false)) or int(vehicle_audio_state.get("on_loop_count", 0)) != 16 or int(vehicle_audio_state.get("off_loop_count", 0)) != 16 or not bool(vehicle_audio_state.get("streams_ready", false)) or int(vehicle_audio_state.get("players_created", 0)) < 7 or not bool(vehicle_audio_state.get("bus_ready", false)):
+	if not bool(smoothing_state.get("ignition_0235", false)) or int(smoothing_state.get("engine_state", -1)) != NativeVehicle.ENGINE_OFF or bool(smoothing_state.get("engine_running", true)) or _vehicle.get_gear_label() != "N" or _vehicle.get_rpm_ratio() > 0.001 or not bool(vehicle_audio_state.get("recorded_audio_0235", false)) or not bool(vehicle_audio_state.get("recorded_gt500_bank", false)) or int(vehicle_audio_state.get("on_loop_count", 0)) != 18 or int(vehicle_audio_state.get("off_loop_count", 0)) != 18 or not bool(vehicle_audio_state.get("streams_ready", false)) or int(vehicle_audio_state.get("players_created", 0)) < 7 or not bool(vehicle_audio_state.get("bus_ready", false)):
 		failures.append("0.2.35 ignition-off spawn / recorded Shelby GT500 audio pass is incomplete: smoothing=%s audio=%s gear=%s rpm_ratio=%.3f" % [str(smoothing_state), str(vehicle_audio_state), _vehicle.get_gear_label(), _vehicle.get_rpm_ratio()])
+	var audio_anchor_rpms: Array = vehicle_audio_state.get("anchor_rpms", [])
+	if not bool(vehicle_audio_state.get("audio_realism_0242", false)) or int(vehicle_audio_state.get("pops_count", 0)) != 10 or not bool(vehicle_audio_state.get("foley_ready", false)) or not bool(vehicle_audio_state.get("engine_lowpass_ready", false)) or not bool(vehicle_audio_state.get("tire_panner_ready", false)) or int(vehicle_audio_state.get("players_created", 0)) < 14 or audio_anchor_rpms.size() < 18 or int(audio_anchor_rpms[audio_anchor_rpms.size() - 1]) != 5600 or float(vehicle_audio_state.get("pitch_max", 9.0)) > 1.31:
+		failures.append("0.2.42 recorded-audio realism pass is incomplete (dense PSOLA ladder, crackle pops, foley buses): %s" % str(vehicle_audio_state))
 	var camera_control_state := get_camera_control_state()
 	if not bool(smoothing_state.get("physics_interpolation_vehicle", false)) or int(smoothing_state.get("contact_patch_samples", 0)) < 3 or not bool(smoothing_state.get("tyre_relaxation", false)) or not bool(smoothing_state.get("filtered_suspension_velocity", false)) or not bool(smoothing_state.get("precision_steering_0231", false)) or float(drive_base_state.get("steer_response", 0.0)) < 20.0 or float(drive_base_state.get("steer_actuator_rate_low", 0.0)) < 6.0 or float(drive_base_state.get("digital_steer_attack", 0.0)) < 5.0 or float(drive_base_state.get("digital_steer_initial_bite", 0.0)) < 0.15 or not bool(camera_control_state.get("free_orbit_0231", false)) or not bool(camera_control_state.get("camera_interpolation_off", false)) or not bool(camera_control_state.get("camera_top_level", false)) or not bool(camera_control_state.get("target_interpolated", false)) or not bool(camera_control_state.get("physics_interpolation_project", false)) or not bool(camera_control_state.get("touch_orbit", false)) or not bool(camera_control_state.get("mouse_orbit", false)) or not bool(camera_control_state.get("gamepad_orbit", false)) or not is_finite(float(camera_control_state.get("orbit_yaw", 0.0))) or not is_finite(float(camera_control_state.get("orbit_pitch", 0.0))):
 		failures.append("0.2.31 anti-jitter / precision steering / free-orbit camera pass is incomplete: smoothing=%s drive=%s camera=%s" % [str(smoothing_state), str(drive_base_state), str(camera_control_state)])

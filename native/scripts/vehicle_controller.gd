@@ -89,6 +89,10 @@ var _headlights: Array[SpotLight3D] = []
 var _paint_materials: Dictionary = {}
 var _primary_paint_material: ShaderMaterial
 var _secondary_paint_material: ShaderMaterial
+var _paint_shader_surfaces := 0
+var _secondary_paint_shader_surfaces := 0
+var _gloss_trim_surfaces := 0
+var _textured_material_overrides := 0
 var _paint_color := Color(0.48, 0.025, 0.035)
 var _secondary_paint_color := Color(0.92, 0.88, 0.80)
 var _wheel_finish_surfaces: Array[Dictionary] = []
@@ -104,6 +108,18 @@ var _contact_shadow_material: StandardMaterial3D
 var _soft_disc_texture: Texture2D
 var _vehicle_audio: NativeVehicleAudio
 var _audio_suspended := false
+# 0.2.42 audio-impact sensing: previous-tick velocity for delta-V
+# crash detection, airborne timer for landings, per-axle suspension
+# compression tracking for kerb thumps, and a wall-scrape estimate.
+var _audio_camera_mode := 0
+var _audio_prev_velocity := Vector3.ZERO
+var _audio_air_time := 0.0
+var _audio_impact_cooldown := 0.0
+var _audio_teleport_guard := 0.0
+var _audio_prev_axle_disp: Array[float] = [0.0, 0.0]
+var _audio_axle_disp_ready := false
+var _audio_thump_cooldowns: Array[float] = [0.0, 0.0]
+var _scrape_level := 0.0
 var _nitro := 0.72
 var _forward_speed := 0.0
 var _lateral_speed := 0.0
@@ -140,6 +156,8 @@ var _shift_torque_blend := 1.0
 var _throttle_command := 0.0
 var _smoothed_drive_force_per_wheel := 0.0
 var _drivetrain_forward_speed := 0.0
+var _coupled_rpm := 0.0
+var _desired_automatic_gear := 0
 var _reverse_engaged := false
 var _drive_force_per_wheel := 0.0
 var _engine_brake_force_per_wheel := 0.0
@@ -318,12 +336,22 @@ func _reset_dynamic_state() -> void:
 	_throttle_command = 0.0
 	_smoothed_drive_force_per_wheel = 0.0
 	_drivetrain_forward_speed = 0.0
+	_coupled_rpm = 0.0
+	_desired_automatic_gear = 0
 	_reverse_engaged = false
 	_drive_force_per_wheel = 0.0
 	_engine_brake_force_per_wheel = 0.0
 	_wheelspin_excess_speed = 0.0
 	_rear_slip_ratio = 0.0
 	_brake_light_active = false
+	_audio_prev_velocity = Vector3.ZERO
+	_audio_air_time = 0.0
+	_audio_impact_cooldown = 0.0
+	_audio_teleport_guard = 0.35
+	_audio_prev_axle_disp = [0.0, 0.0]
+	_audio_axle_disp_ready = false
+	_audio_thump_cooldowns = [0.0, 0.0]
+	_scrape_level = 0.0
 	_set_engine_state(ENGINE_OFF)
 
 
@@ -349,6 +377,10 @@ func switch_car(car_id: String) -> bool:
 	_paint_materials.clear()
 	_primary_paint_material = null
 	_secondary_paint_material = null
+	_paint_shader_surfaces = 0
+	_secondary_paint_shader_surfaces = 0
+	_gloss_trim_surfaces = 0
+	_textured_material_overrides = 0
 	_wheel_finish_surfaces.clear()
 	_plate_labels.clear()
 	_headlight_materials.clear()
@@ -523,6 +555,10 @@ func _load_car_model() -> bool:
 		model.free()
 		return false
 	_visual_root.add_child(model)
+	_paint_shader_surfaces = 0
+	_secondary_paint_shader_surfaces = 0
+	_gloss_trim_surfaces = 0
+	_textured_material_overrides = 0
 	_apply_model_materials(model)
 	_collect_wheel_visuals(model)
 	_model_loaded = true
@@ -549,16 +585,28 @@ func _paint_material(color: Color) -> ShaderMaterial:
 
 
 func _configure_paint_material(material: ShaderMaterial, color: Color) -> void:
+	# 0.2.41: the old warm/orange flake and Fresnel tints were tuned for
+	# Shelby's warm factory colours.  On silver and black they produced
+	# visible beige/brown speckle and made an active clearcoat shader
+	# read as dusty matte paint.  Keep Shelby's defaults, but use the
+	# catalog's per-car finish and only keep warm tints for warm colours.
+	var flake_target := Color(0.82, 0.88, 0.96)
+	var fresnel_target := Color(0.34, 0.56, 0.88)
+	if color.r > color.b * 1.18 and color.r > color.g * 1.12:
+		flake_target = Color(1.0, 0.86, 0.72)
+		fresnel_target = Color(1.0, 0.28, 0.08)
+	var flake_amount := clampf(float(_car_definition.get("paint_flake_tint_amount", 0.58)), 0.0, 1.0)
+	var fresnel_amount := clampf(float(_car_definition.get("paint_fresnel_tint_amount", 0.32)), 0.0, 1.0)
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("flake_color", color.lerp(Color(1.0, 0.86, 0.72), 0.58))
-	material.set_shader_parameter("fresnel_color", color.lerp(Color(1.0, 0.28, 0.08), 0.32))
-	material.set_shader_parameter("metallic_amount", 0.68)
-	material.set_shader_parameter("roughness_amount", 0.19)
-	material.set_shader_parameter("clearcoat_amount", 1.0)
-	material.set_shader_parameter("clearcoat_rough", 0.075)
-	material.set_shader_parameter("flake_density", 180.0)
-	material.set_shader_parameter("flake_strength", 0.5)
-	material.set_shader_parameter("fresnel_strength", 0.24)
+	material.set_shader_parameter("flake_color", color.lerp(flake_target, flake_amount))
+	material.set_shader_parameter("fresnel_color", color.lerp(fresnel_target, fresnel_amount))
+	material.set_shader_parameter("metallic_amount", clampf(float(_car_definition.get("paint_metallic", 0.68)), 0.0, 1.0))
+	material.set_shader_parameter("roughness_amount", clampf(float(_car_definition.get("paint_roughness", 0.19)), 0.02, 1.0))
+	material.set_shader_parameter("clearcoat_amount", clampf(float(_car_definition.get("paint_clearcoat", 1.0)), 0.0, 1.0))
+	material.set_shader_parameter("clearcoat_rough", clampf(float(_car_definition.get("paint_clearcoat_roughness", 0.075)), 0.005, 1.0))
+	material.set_shader_parameter("flake_density", maxf(1.0, float(_car_definition.get("paint_flake_density", 180.0))))
+	material.set_shader_parameter("flake_strength", clampf(float(_car_definition.get("paint_flake_strength", 0.5)), 0.0, 1.0))
+	material.set_shader_parameter("fresnel_strength", clampf(float(_car_definition.get("paint_fresnel_strength", 0.24)), 0.0, 1.0))
 
 
 func set_paint_color(color: Color) -> void:
@@ -754,15 +802,68 @@ func _apply_model_materials(node: Node) -> void:
 					# textures (Mercedes interior/tyres/lights, the
 					# Camaro livery shell and atlas wheels).  Semantic
 					# flat replacements below are only for untextured
-					# surfaces; never flatten a textured one.
-					pass
+					# surfaces; never flatten a textured one.  0.2.41:
+					# preserve the texture but normalise scalar response;
+					# several imported materials omit glTF roughness, so
+					# Godot correctly reads them as fully matte (1.0).
+					var textured_override := _textured_material_override(material as StandardMaterial3D, lower_name)
+					if textured_override != null:
+						mesh_instance.set_surface_override_material(surface_index, textured_override)
+						_textured_material_overrides += 1
 				elif material_name == "Paint":
 					_primary_paint_material = _paint_material(_paint_color)
 					mesh_instance.set_surface_override_material(surface_index, _primary_paint_material)
+					_paint_shader_surfaces += 1
 				elif material_name == "PaintSecondary":
 					_secondary_paint_material = _paint_material(_secondary_paint_color)
 					mesh_instance.set_surface_override_material(surface_index, _secondary_paint_material)
-				elif lower_name.contains("glass") or lower_name.contains("window"):
+					_secondary_paint_shader_surfaces += 1
+				elif lower_name == "blackgloss" or lower_name.contains("black gloss"):
+					# Give the converter's exact BlackGloss semantic its
+					# own opaque piano-black clearcoat.  Previously it
+					# fell through every runtime branch and kept the
+					# softer imported scalar finish at gameplay range.
+					var piano_black := StandardMaterial3D.new()
+					piano_black.albedo_color = Color(0.012, 0.013, 0.016)
+					piano_black.metallic = 0.28
+					piano_black.roughness = 0.16
+					piano_black.metallic_specular = 1.0
+					piano_black.clearcoat_enabled = true
+					piano_black.clearcoat = 0.9
+					piano_black.clearcoat_roughness = 0.05
+					mesh_instance.set_surface_override_material(surface_index, piano_black)
+					_gloss_trim_surfaces += 1
+				elif lower_name == "blacktrim" or lower_name.contains("black trim"):
+					var black_trim := StandardMaterial3D.new()
+					black_trim.albedo_color = Color(0.014, 0.015, 0.017)
+					black_trim.metallic = 0.08
+					black_trim.roughness = 0.46
+					black_trim.clearcoat_enabled = true
+					black_trim.clearcoat = 0.35
+					black_trim.clearcoat_roughness = 0.18
+					mesh_instance.set_surface_override_material(surface_index, black_trim)
+					_gloss_trim_surfaces += 1
+				elif lower_name == "greytrim" or lower_name == "graytrim":
+					var grey_trim := StandardMaterial3D.new()
+					grey_trim.albedo_color = Color(0.16, 0.165, 0.17)
+					grey_trim.metallic = 0.12
+					grey_trim.roughness = 0.50
+					grey_trim.clearcoat_enabled = true
+					grey_trim.clearcoat = 0.25
+					grey_trim.clearcoat_roughness = 0.22
+					mesh_instance.set_surface_override_material(surface_index, grey_trim)
+					_gloss_trim_surfaces += 1
+				elif lower_name == "redtrim":
+					var red_trim := StandardMaterial3D.new()
+					red_trim.albedo_color = Color(0.48, 0.012, 0.018)
+					red_trim.metallic = 0.18
+					red_trim.roughness = 0.20
+					red_trim.clearcoat_enabled = true
+					red_trim.clearcoat = 0.7
+					red_trim.clearcoat_roughness = 0.08
+					mesh_instance.set_surface_override_material(surface_index, red_trim)
+					_gloss_trim_surfaces += 1
+				elif lower_name == "glass" or lower_name == "glasswindow" or lower_name.contains("window") or lower_name.contains("windshield"):
 					var glass := StandardMaterial3D.new()
 					glass.albedo_color = Color(0.025, 0.055, 0.078, 0.70)
 					glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -819,6 +920,67 @@ func _apply_model_materials(node: Node) -> void:
 		_apply_model_materials(child)
 
 
+func _textured_material_override(material: StandardMaterial3D, lower_name: String) -> StandardMaterial3D:
+	if material == null:
+		return null
+	# Atlas-painted wheels already encode tyre and metal in one texture;
+	# leave that two-material albedo exactly as authored.
+	if lower_name == "tirerimtexture":
+		return null
+	var roughness := -1.0
+	var metallic := -1.0
+	var clearcoat := 0.0
+	var clearcoat_roughness := 0.12
+	if lower_name.contains("livery"):
+		roughness = 0.22
+		metallic = 0.38
+		clearcoat = 0.85
+		clearcoat_roughness = 0.06
+	elif lower_name.contains("lighttexture") or lower_name.contains("headlight") or lower_name.contains("taillight"):
+		roughness = 0.16
+		metallic = 0.08
+		clearcoat = 0.75
+		clearcoat_roughness = 0.05
+	elif lower_name.contains("plastic"):
+		roughness = 0.52
+		metallic = 0.04
+		clearcoat = 0.28
+		clearcoat_roughness = 0.20
+	elif lower_name.contains("chassis"):
+		roughness = 0.48
+		metallic = 0.22
+		clearcoat = 0.22
+		clearcoat_roughness = 0.18
+	elif lower_name.contains("engine"):
+		roughness = 0.58
+		metallic = 0.35
+	elif lower_name.contains("leather"):
+		roughness = 0.72
+		metallic = 0.0
+	elif lower_name.contains("velvet") or lower_name.contains("cover"):
+		roughness = 0.88
+		metallic = 0.0
+	elif lower_name.contains("interior"):
+		roughness = 0.68
+		metallic = 0.02
+	elif lower_name.contains("tire") or lower_name.contains("tyre"):
+		roughness = 0.94
+		metallic = 0.0
+	else:
+		return null
+	var tuned := material.duplicate() as StandardMaterial3D
+	if tuned == null:
+		return null
+	tuned.roughness = roughness
+	tuned.metallic = metallic
+	tuned.metallic_specular = maxf(tuned.metallic_specular, 0.75)
+	if clearcoat > 0.0:
+		tuned.clearcoat_enabled = true
+		tuned.clearcoat = clearcoat
+		tuned.clearcoat_roughness = clearcoat_roughness
+	return tuned
+
+
 func _find_node_by_name(node: Node, target_name: String) -> Node:
 	if String(node.name) == target_name:
 		return node
@@ -861,6 +1023,7 @@ func _collect_wheel_visuals(model: Node) -> void:
 func _create_fallback_visual() -> void:
 	var paint := _paint_material(_paint_color)
 	_primary_paint_material = paint
+	_paint_shader_surfaces = 2
 	var dark := StandardMaterial3D.new()
 	dark.albedo_color = Color(0.025, 0.03, 0.04)
 	dark.metallic = 0.45
@@ -1136,7 +1299,7 @@ func stop_engine(play_sound: bool = true) -> void:
 	_set_engine_state(ENGINE_STOPPING)
 	if _vehicle_audio != null:
 		if play_sound:
-			_vehicle_audio.play_stop()
+			_vehicle_audio.play_stop(clampf(_engine_rpm / maxf(_redline_rpm, 1.0), 0.0, 1.0))
 		else:
 			_vehicle_audio.cancel_event()
 			_vehicle_audio.stop_engine_loops()
@@ -1154,6 +1317,12 @@ func set_audio_suspended(suspended: bool) -> void:
 	_audio_suspended = suspended
 	if _vehicle_audio != null:
 		_vehicle_audio.set_suspended(suspended)
+
+
+## Main pushes the active camera (0 chase / 1 hood / 2 top) so the
+## audio mixer can move the listener with the player's ears.
+func set_audio_camera_mode(mode: int) -> void:
+	_audio_camera_mode = clampi(mode, 0, 2)
 
 
 func get_engine_load() -> float:
@@ -1237,8 +1406,93 @@ func _update_vehicle_audio(delta: float) -> void:
 			tire_level = maxf(tire_level, 0.62 * speed_factor)
 		if absf(_rear_slip_ratio) > 0.18 and absf(throttle_input) > 0.05:
 			tire_level = maxf(tire_level, clampf((absf(_rear_slip_ratio) - 0.18) / 0.55, 0.0, 1.0))
+	# Rubber only sings on hard surfaces; grass/sand scrub silently
+	# and feed the road bed instead.
+	var squeal_surface_factor := 1.0
+	match _surface_kind:
+		"sidewalk", "concrete", "plaza":
+			squeal_surface_factor = 0.85
+		"rock":
+			squeal_surface_factor = 0.5
+		"grass", "sand", "water":
+			squeal_surface_factor = 0.0
+	tire_level *= squeal_surface_factor
 	var tire_pitch := 0.72 + clampf(absf(_forward_speed) / 42.0, 0.0, 1.0) * 0.38 + clampf(absf(_rear_slip_ratio), 0.0, 1.0) * 0.12
-	_vehicle_audio.update_audio(delta, _engine_state, _engine_rpm, get_engine_load(), boost_active, tire_level, tire_pitch)
+	_vehicle_audio.update_audio(delta, {
+		"engine_state": _engine_state,
+		"engine_rpm": _engine_rpm,
+		"engine_load": get_engine_load(),
+		"boost": boost_active,
+		"speed_ms": _forward_speed,
+		"gear_index": _current_gear,
+		"reverse": _reverse_engaged,
+		"tire_squeal": tire_level,
+		"tire_pitch": tire_pitch,
+		"drift_pan": clampf(_lateral_speed / 13.0, -1.0, 1.0),
+		"surface_kind": _surface_kind,
+		"grounded": grounded_wheel_count >= 2,
+		"camera_mode": _audio_camera_mode,
+		"scrape": _scrape_level,
+	})
+
+
+## 0.2.42: convert physics events the ears should hear — delta-V
+## impacts, landings, kerb/suspension thumps and wall scrapes — into
+## one-shot/level calls on the audio node.  Runs after the tyre pass
+## so grounded count and suspension displacements are current.
+func _update_audio_impacts(delta: float) -> void:
+	_audio_impact_cooldown = maxf(_audio_impact_cooldown - delta, 0.0)
+	_audio_teleport_guard = maxf(_audio_teleport_guard - delta, 0.0)
+	for axle in 2:
+		_audio_thump_cooldowns[axle] = maxf(_audio_thump_cooldowns[axle] - delta, 0.0)
+	var velocity_now := linear_velocity
+	if _vehicle_audio != null and not _audio_suspended and _audio_teleport_guard <= 0.0 and delta > 0.0:
+		# Crash: the body lost (or gained) speed in a single tick far
+		# faster than engine/brakes/drag can explain.
+		var delta_v := (velocity_now - _audio_prev_velocity).length()
+		if delta_v > 1.15 and _audio_impact_cooldown <= 0.0 and velocity_now.length() + delta_v > 2.0:
+			var impact_strength := clampf((delta_v - 1.15) / 5.5, 0.0, 1.0)
+			if impact_strength > 0.03:
+				_vehicle_audio.play_impact(impact_strength)
+				_audio_impact_cooldown = 0.13
+		# Landing after real airtime.
+		if grounded_wheel_count == 0:
+			_audio_air_time += delta
+		else:
+			if _audio_air_time > 0.22 and _audio_prev_velocity.y < -2.5:
+				_vehicle_audio.play_thump(clampf(absf(_audio_prev_velocity.y) / 9.0, 0.15, 1.0))
+				if _audio_prev_velocity.y < -6.5:
+					_vehicle_audio.play_impact(0.3)
+			_audio_air_time = 0.0
+		# Kerb strikes and harsh compressions, per axle.
+		var axle_disp: Array[float] = [0.0, 0.0]
+		var axle_count: Array[int] = [0, 0]
+		for wheel in _wheels:
+			var axle := clampi(int(wheel.get("axle", 0)), 0, 1)
+			axle_disp[axle] += float(wheel.get("displacement", 0.0))
+			axle_count[axle] += 1
+		for axle in 2:
+			if axle_count[axle] > 0:
+				axle_disp[axle] /= float(axle_count[axle])
+		if _audio_axle_disp_ready and absf(_forward_speed) > 2.5:
+			for axle in 2:
+				var compression_velocity := (axle_disp[axle] - _audio_prev_axle_disp[axle]) / delta
+				if compression_velocity > 1.25 and _audio_thump_cooldowns[axle] <= 0.0:
+					_vehicle_audio.play_thump(clampf((compression_velocity - 1.25) / 2.4, 0.0, 0.85))
+					_audio_thump_cooldowns[axle] = 0.09
+		_audio_prev_axle_disp = axle_disp
+		_audio_axle_disp_ready = true
+		# Grinding along a wall: persistent body contact at speed.
+		var scrape_target := 0.0
+		if grounded_wheel_count > 0 and absf(_forward_speed) > 2.5 and get_colliding_bodies().size() > 0:
+			scrape_target = clampf((absf(_forward_speed) - 2.5) / 13.0, 0.0, 1.0) * 0.85
+		var scrape_rate := 3.5 if scrape_target > _scrape_level else 5.0
+		_scrape_level = move_toward(_scrape_level, scrape_target, scrape_rate * delta)
+	else:
+		_scrape_level = move_toward(_scrape_level, 0.0, 5.0 * delta)
+		if grounded_wheel_count > 0:
+			_audio_air_time = 0.0
+	_audio_prev_velocity = velocity_now
 
 
 func set_touch_input(action_name: String, pressed: bool) -> void:
@@ -1404,6 +1658,7 @@ func _physics_process(delta: float) -> void:
 	_brake_light_active = handbrake_active or (throttle_input < -0.03 and _forward_speed > 0.45)
 	_update_drivetrain(delta)
 	_apply_suspension_and_tyres(delta)
+	_update_audio_impacts(delta)
 	_apply_aerodynamics()
 	_update_flip_recovery(delta)
 	_update_safe_transform(delta)
@@ -1443,9 +1698,42 @@ func _ackermann_angle_for(angle: float, side: int) -> float:
 	return signf(angle) * atan(_wheelbase / denominator)
 
 
+func _coupled_rpm_for_gear(speed_ms: float, gear_index: int) -> float:
+	if _gear_ratios.is_empty():
+		return _idle_rpm
+	var safe_gear := clampi(gear_index, 0, _gear_ratios.size() - 1)
+	return absf(speed_ms) / maxf(_wheel_radius, 0.01) * 60.0 / TAU * float(_gear_ratios[safe_gear]) * _final_drive
+
+
+func _desired_automatic_gear_for_speed(speed_ms: float, current_gear: int) -> int:
+	if _gear_ratios.is_empty():
+		return 0
+	var desired := clampi(current_gear, 0, _gear_ratios.size() - 1)
+	var minimum_next_gear_rpm := maxf(_idle_rpm + 250.0, _shift_down_rpm * 0.82)
+	while desired < _gear_ratios.size() - 1:
+		if _coupled_rpm_for_gear(speed_ms, desired) < _shift_up_rpm:
+			break
+		if _coupled_rpm_for_gear(speed_ms, desired + 1) < minimum_next_gear_rpm:
+			break
+		desired += 1
+	while desired > 0:
+		if _coupled_rpm_for_gear(speed_ms, desired) >= _shift_down_rpm:
+			break
+		if _coupled_rpm_for_gear(speed_ms, desired - 1) > _redline_rpm * 0.97:
+			break
+		desired -= 1
+	return desired
+
+
+func get_automatic_gear_for_speed(speed_ms: float, current_gear: int) -> int:
+	return _desired_automatic_gear_for_speed(speed_ms, current_gear)
+
+
 func _update_drivetrain(delta: float) -> void:
 	if _engine_state != ENGINE_RUNNING:
 		_reverse_engaged = false
+		_coupled_rpm = 0.0
+		_desired_automatic_gear = _current_gear
 		_gear_shift_timer = 0.0
 		_gear_shift_duration = 0.0
 		_shift_torque_blend = 1.0
@@ -1458,37 +1746,55 @@ func _update_drivetrain(delta: float) -> void:
 		_rear_slip_ratio = _wheelspin_excess_speed / maxf(absf(_forward_speed), 4.0)
 		return
 
+	var was_reverse_engaged := _reverse_engaged
 	if throttle_input > 0.03:
 		_reverse_engaged = false
 	elif throttle_input < -0.03 and _forward_speed <= 0.45:
 		_reverse_engaged = true
 	elif _forward_speed > 0.6:
 		_reverse_engaged = false
+	if _reverse_engaged and not was_reverse_engaged and _vehicle_audio != null and not _audio_suspended:
+		_vehicle_audio.play_shift(false, 0.35)
 
 	_gear_shift_timer = maxf(_gear_shift_timer - delta, 0.0)
 	var ratio := _reverse_ratio if _reverse_engaged else _gear_ratios[_current_gear]
-	var wheel_rpm := absf(_drivetrain_forward_speed) / _wheel_radius * 60.0 / TAU
-	var coupled_rpm := wheel_rpm * ratio * _final_drive
-	var target_rpm := maxf(coupled_rpm, _idle_rpm)
+	_coupled_rpm = absf(_drivetrain_forward_speed) / maxf(_wheel_radius, 0.01) * 60.0 / TAU * ratio * _final_drive
+	_desired_automatic_gear = _current_gear
+	if not _reverse_engaged:
+		_desired_automatic_gear = _desired_automatic_gear_for_speed(_drivetrain_forward_speed, _current_gear)
+	var target_rpm := maxf(_coupled_rpm, _idle_rpm)
 	if absf(throttle_input) > 0.03 and absf(_drivetrain_forward_speed) < 7.0:
 		target_rpm = maxf(target_rpm, _idle_rpm + absf(throttle_input) * 1750.0)
 	_engine_rpm = clampf(move_toward(_engine_rpm, target_rpm, 4600.0 * delta), _idle_rpm, _redline_rpm)
 
+	# 0.2.41 automatic shift fix.  The old box looked only at the
+	# heavily rate-limited display/engine RPM and also required the
+	# accelerator to be above a small threshold.  Near an upshift that
+	# can leave a short-geared car (notably the 560 SEL, whose first
+	# gear ends at 64.7 km/h) sitting against the low gear while the
+	# road-speed-coupled gearbox is already past the shift point.
+	# Decide from output-shaft/road speed instead: step one gear at a
+	# time towards the gear whose coupled RPM is actually viable, then
+	# resynchronise engine RPM to that new gear's coupled RPM.
 	if not _reverse_engaged and _gear_shift_timer <= 0.0:
-		if throttle_input > 0.04 and _engine_rpm > _shift_up_rpm and _current_gear < _gear_ratios.size() - 1:
-			var old_ratio := _gear_ratios[_current_gear]
+		if _desired_automatic_gear > _current_gear and throttle_input > -0.03:
 			_current_gear += 1
 			ratio = _gear_ratios[_current_gear]
-			_engine_rpm *= ratio / old_ratio
+			_coupled_rpm = _coupled_rpm_for_gear(_drivetrain_forward_speed, _current_gear)
+			_engine_rpm = clampf(maxf(_coupled_rpm, _idle_rpm), _idle_rpm, _redline_rpm)
 			_gear_shift_timer = 0.24
 			_gear_shift_duration = 0.24
-		elif _current_gear > 0 and _engine_rpm < _shift_down_rpm and absf(_forward_speed) > 3.0:
-			var old_ratio_down := _gear_ratios[_current_gear]
+			if _vehicle_audio != null and not _audio_suspended:
+				_vehicle_audio.play_shift(false, clampf(absf(throttle_input), 0.2, 1.0))
+		elif _desired_automatic_gear < _current_gear and absf(_forward_speed) > 3.0:
 			_current_gear -= 1
 			ratio = _gear_ratios[_current_gear]
-			_engine_rpm *= ratio / old_ratio_down
+			_coupled_rpm = _coupled_rpm_for_gear(_drivetrain_forward_speed, _current_gear)
+			_engine_rpm = clampf(maxf(_coupled_rpm, _idle_rpm), _idle_rpm, _redline_rpm)
 			_gear_shift_timer = 0.17
 			_gear_shift_duration = 0.17
+			if _vehicle_audio != null and not _audio_suspended:
+				_vehicle_audio.play_shift(true, clampf(absf(throttle_input), 0.25, 1.0))
 
 	var throttle_magnitude := 0.0
 	if _reverse_engaged:
@@ -1940,6 +2246,8 @@ func _apply_reset_transform(target: Transform3D) -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
+	_audio_prev_velocity = Vector3.ZERO
+	_audio_teleport_guard = 0.35
 	_current_gear = 0
 	if _engine_state == ENGINE_RUNNING:
 		_engine_rpm = _idle_rpm
@@ -2172,18 +2480,41 @@ func get_drive_base_state() -> Dictionary:
 	var state := NativeArcadeCarAssist.get_smoke_state()
 	var paint_reflections_ready := false
 	var paint_roughness := 1.0
+	var paint_metallic := 0.0
 	var paint_clearcoat := 0.0
+	var paint_clearcoat_roughness := 1.0
+	var paint_flake_strength := 1.0
 	for paint_variant in _paint_materials.values():
 		var paint := paint_variant as ShaderMaterial
 		if paint == null or paint.shader != CAR_PAINT_SHADER:
 			continue
 		paint_roughness = minf(paint_roughness, float(paint.get_shader_parameter("roughness_amount")))
+		paint_metallic = maxf(paint_metallic, float(paint.get_shader_parameter("metallic_amount")))
 		paint_clearcoat = maxf(paint_clearcoat, float(paint.get_shader_parameter("clearcoat_amount")))
-		paint_reflections_ready = paint_roughness <= 0.24 and paint_clearcoat >= 0.9 and float(paint.get_shader_parameter("metallic_amount")) > 0.5
+		paint_clearcoat_roughness = minf(paint_clearcoat_roughness, float(paint.get_shader_parameter("clearcoat_rough")))
+		paint_flake_strength = minf(paint_flake_strength, float(paint.get_shader_parameter("flake_strength")))
+		paint_reflections_ready = paint_roughness <= 0.24 and paint_clearcoat >= 0.9 and paint_metallic > 0.5
+	var shift_speeds_kmh: Array = []
+	for gear_index in _gear_ratios.size():
+		var speed_ms := _shift_up_rpm * TAU * maxf(_wheel_radius, 0.01) / (60.0 * float(_gear_ratios[gear_index]) * _final_drive)
+		shift_speeds_kmh.append(speed_ms * 3.6)
 	state["car_paint_shader"] = CAR_PAINT_SHADER != null
+	state["paint_finish_0241"] = true
 	state["paint_materials"] = _paint_materials.size()
-	state["paint_reflections_ready"] = paint_reflections_ready
+	state["paint_shader_surfaces"] = _paint_shader_surfaces
+	state["secondary_paint_shader_surfaces"] = _secondary_paint_shader_surfaces
+	state["gloss_trim_surfaces"] = _gloss_trim_surfaces
+	state["textured_material_overrides"] = _textured_material_overrides
+	state["paint_reflections_ready"] = paint_reflections_ready and _paint_shader_surfaces > 0
 	state["paint_roughness"] = paint_roughness
+	state["paint_metallic"] = paint_metallic
 	state["paint_clearcoat"] = paint_clearcoat
+	state["paint_clearcoat_roughness"] = paint_clearcoat_roughness
+	state["paint_flake_strength"] = paint_flake_strength
+	state["automatic_shift_0241"] = true
+	state["current_gear"] = _current_gear
+	state["desired_automatic_gear"] = _desired_automatic_gear
+	state["coupled_rpm"] = _coupled_rpm
+	state["shift_speeds_kmh"] = shift_speeds_kmh
 	state["customization"] = get_customization_state()
 	return state
