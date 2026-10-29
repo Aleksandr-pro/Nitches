@@ -1407,6 +1407,18 @@ func _add_box_collider(center: Vector3, size: Vector3, yaw: float = 0.0) -> void
 	_register_collider(collision, center)
 
 
+func _add_pitched_box_collider(center: Vector3, size: Vector3, yaw: float, pitch: float) -> void:
+	if _collision_root == null:
+		return
+	var shape := BoxShape3D.new()
+	shape.size = size
+	var collision := CollisionShape3D.new()
+	collision.shape = shape
+	collision.transform = Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch), center)
+	_collision_root.add_child(collision)
+	_register_collider(collision, center)
+
+
 func _add_cylinder_collider(center: Vector3, radius: float, height: float) -> void:
 	if _collision_root == null:
 		return
@@ -10805,6 +10817,52 @@ func _dz_road_points(road: Dictionary) -> Array[Vector3]:
 	var pts: Array[Vector3] = []
 	for s_variant in road.get("samples", []):
 		pts.append(_sample_point(s_variant))
+	# 0.2.49: smooth the driving profile.  The raw sample heights come
+	# from the 8 m heightmap, whose steps and junction stamps made the
+	# car hop on climbs.  A few Laplacian passes plus a grade clamp
+	# give rounded vertical curves; ribbon, bridges and tunnel all
+	# read heights through here, so they stay consistent.
+	var n := pts.size()
+	if n >= 3:
+		var closed := bool(road.get("closed", false))
+		var ys: Array[float] = []
+		ys.resize(n)
+		for i in range(n):
+			ys[i] = pts[i].y
+		for pass_i in range(3):
+			var src: Array[float] = []
+			src.resize(n)
+			for i in range(n):
+				src[i] = ys[i]
+			for i in range(n):
+				var ip := i - 1
+				var inx := i + 1
+				if closed:
+					ip = (i - 1 + n) % n
+					inx = (i + 1) % n
+				else:
+					ip = maxi(i - 1, 0)
+					inx = mini(i + 1, n - 1)
+				ys[i] = src[i] + 0.30 * ((src[ip] + src[inx]) * 0.5 - src[i])
+		var surf := String(road.get("surface", "asphalt"))
+		var max_grade := 0.17
+		if surf == "asphalt":
+			max_grade = 0.12
+		elif String(road.get("id", "")).begins_with("dz-trail_"):
+			max_grade = 0.20
+		for pass_i in range(2):
+			for i in range(n - 1):
+				var seg := Vector2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z).length()
+				var lim := max_grade * maxf(seg, 1.0)
+				ys[i + 1] = clampf(ys[i + 1], ys[i] - lim, ys[i] + lim)
+			for i in range(n - 2, -1, -1):
+				var seg2 := Vector2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z).length()
+				var lim2 := max_grade * maxf(seg2, 1.0)
+				ys[i] = clampf(ys[i], ys[i + 1] - lim2, ys[i + 1] + lim2)
+		for i in range(n):
+			var smoothed := pts[i]
+			smoothed.y = ys[i]
+			pts[i] = smoothed
 	return pts
 
 
@@ -10839,6 +10897,7 @@ func _build_desert_roads() -> void:
 	var marking_tool := SurfaceTool.new()
 	marking_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var marking_count := 0
+	var deck_colliders := 0
 	var crown_offsets: Array = [-1.0, -0.42, 0.42, 1.0]
 	var crown_heights: Array = [0.0, 0.045, 0.045, 0.0]
 	for road_variant in data.get("roads", []):
@@ -10857,6 +10916,22 @@ func _build_desert_roads() -> void:
 		for i in range(1, pts.size()):
 			cumlen.append(cumlen[i - 1] + Vector2(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z).length())
 		var seg_count := pts.size() if closed else pts.size() - 1
+		# Physical driving deck (0.2.49): pitched box colliders follow
+		# the smoothed sample profile, so the wheels ride the road
+		# surface itself instead of the 8 m heightmap steps below it.
+		for i in range(seg_count):
+			var j := (i + 1) % pts.size()
+			var a := pts[i]
+			var b := pts[j]
+			var flat := Vector2(b.x - a.x, b.z - a.z)
+			var seg_len := flat.length()
+			if seg_len < 0.5:
+				continue
+			var mid := (a + b) * 0.5
+			var yaw := atan2(-flat.x, -flat.y)
+			var pitch := atan2(b.y - a.y, seg_len)
+			_add_pitched_box_collider(Vector3(mid.x, mid.y + y_off - 0.205, mid.z), Vector3(width + 0.4, 0.5, seg_len + 0.6), yaw, pitch)
+			deck_colliders += 1
 		for i in range(seg_count):
 			var j := (i + 1) % pts.size()
 			# Closed loops wrap to sample 0: keep the travelled-metre
@@ -10945,6 +11020,8 @@ func _build_desert_roads() -> void:
 		var inst := _mesh_instance(root, marking_mesh, marking_mat, Transform3D.IDENTITY, "DesertMarkings", false)
 		inst.custom_aabb = _active_aabb
 	_enhancement_stats["road_markings"] = marking_count
+	_enhancement_stats["desert_road_deck_colliders"] = deck_colliders
+	_enhancement_stats["desert_smooth_roads_0249"] = deck_colliders > 3000
 	_dz_build_bridges(root)
 	_dz_build_tunnel(root)
 
@@ -10999,11 +11076,21 @@ func _dz_build_bridges(root: Node) -> void:
 			var mid := (a + b) * 0.5
 			var seg_len := Vector2(b.x - a.x, b.z - a.z).length()
 			var yaw := atan2(-(b.x - a.x), -(b.z - a.z))
-			_add_box_collider(Vector3(mid.x, mid.y - 0.16, mid.z), Vector3(width + 0.5, 0.55, seg_len + 0.6), yaw)
+			# Deck collision: the pitched road-deck colliders from
+			# _build_desert_roads (flat boxes left steps at joints).
 			for side in [-1.0, 1.0]:
 				var ea := Vector3(a.x + perps[i].x * side * (half_w + 0.18), a.y - 0.28, a.z + perps[i].y * side * (half_w + 0.18))
 				var eb := Vector3(b.x + perps[i + 1].x * side * (half_w + 0.18), b.y - 0.28, b.z + perps[i + 1].y * side * (half_w + 0.18))
 				_dz_beam("dz_concrete", ea, eb, 0.38, 0.85)
+				var ta := Vector3(a.x + perps[i].x * side * (half_w + 0.18), a.y + 0.82, a.z + perps[i].y * side * (half_w + 0.18))
+				var tb := Vector3(b.x + perps[i + 1].x * side * (half_w + 0.18), b.y + 0.82, b.z + perps[i + 1].y * side * (half_w + 0.18))
+				_dz_beam("dz_metal", ta, tb, 0.07, 0.30)
+				var pmid := (ta + tb) * 0.5
+				_add_pitched_box_collider(Vector3(pmid.x, pmid.y - 0.32, pmid.z), Vector3(0.35, 1.0, seg_len + 0.5), yaw, atan2(b.y - a.y, seg_len))
+		for i in range(span.x, span.y + 1):
+			var pp := pts[i]
+			for side in [-1.0, 1.0]:
+				_dz_box("dz_metal_dark", Vector3(pp.x + perps[i].x * side * (half_w + 0.18), pp.y + 0.42, pp.z + perps[i].y * side * (half_w + 0.18)), Vector3(0.14, 0.85, 0.14))
 		# Piers at thirds + abutments at both ends.
 		var pier_indices: Array = [span.x, int(lerpf(float(span.x), float(span.y), 0.36)), int(lerpf(float(span.x), float(span.y), 0.66)), span.y]
 		for pi_variant in pier_indices:
@@ -11365,6 +11452,11 @@ func _build_desert_structures() -> void:
 			var top := Vector3(p.x, height_at(p.x, p.z) + 1.15, p.z)
 			_dz_pipe_beam("dz_rust_light", prev, top, 0.30)
 			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
+			var pipe_flat := Vector2(top.x - prev.x, top.z - prev.z)
+			var pipe_len := pipe_flat.length()
+			if pipe_len > 0.5:
+				var pipe_mid := (prev + top) * 0.5
+				_add_pitched_box_collider(pipe_mid, Vector3(0.75, 0.85, pipe_len + 0.4), atan2(-pipe_flat.x, -pipe_flat.y), atan2(top.y - prev.y, pipe_len))
 			prev = top
 	for rail_variant in dz.get("guardrails", []):
 		var rail: Array = rail_variant
@@ -11427,6 +11519,9 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 		for ci in range(1, maxi(steps, 1)):
 			var p := a.lerp(b, float(ci) / float(maxi(steps, 1)))
 			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.3, p.z), p + Vector3(0, -0.3, 0), 0.35, 0.35)
+			var support_ground := height_at(p.x, p.z) - 0.3
+			var support_h := maxf(p.y - 0.3 - support_ground, 1.0)
+			_add_cylinder_collider(Vector3(p.x, support_ground + support_h * 0.5, p.z), 0.32, support_h)
 		return
 	var big_kinds := ["gas_station", "garage", "motel", "diner", "warehouse", "church", "house", "ranch_house", "barn", "oasis_house", "office", "shed", "roadstop", "stage", "crusher", "station_ruin"]
 	var gy := _dz_footprint_y(x, z, w, d, yaw) if kind in big_kinds else _dz_ground_y(x, z, 0.04)
@@ -11519,6 +11614,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 					_dz_lcyl("dz_wood", o, basis, Vector3(sx * w * 0.45, h * 0.45, sz * d * 0.45), 0.07, h * 0.9)
 			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, h, 0.0), Vector3(w + 0.7, 0.1, d + 0.7), 0.0, 0.16, 0.0)
 			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.55, -d * 0.3), Vector3(w * 0.9, 1.1, d * 0.45))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.55, -d * 0.3), Vector3(w * 0.9, 1.1, d * 0.45))
 		"stage":
 			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.6, 0.0), Vector3(w, 1.2, d))
 			_dz_lbox("dz_wood_dark", o, basis, Vector3(0.0, h * 0.55, d * 0.5 - 0.3), Vector3(w, h * 1.1, 0.3))
@@ -11539,12 +11635,14 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 				_dz_lbox("dz_wood", o, basis, Vector3(0.75, 0.45, 0.5), Vector3(0.9, 0.9, 0.9), 0.4)
 			if hash_pick == 2:
 				_dz_lbox("dz_wood_dark", o, basis, Vector3(-0.15, 1.55, 0.1), Vector3(0.85, 0.85, 0.85), -0.3)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.65, 0.0), Vector3(1.7, 1.3, 1.7))
 		"barrel_group":
 			var spots := [Vector3.ZERO, Vector3(0.65, 0, 0.3), Vector3(0.25, 0, -0.6), Vector3(-0.6, 0, -0.35)]
 			for bi in range(3 + hash_pick):
 				var bp: Vector3 = spots[bi % spots.size()]
 				var bm := "dz_rust" if (bi + hash_pick) % 2 == 0 else "dz_metal_dark"
 				_dz_lcyl(bm, o, basis, Vector3(bp.x, 0.45, bp.z), 0.30, 0.9, 0.0, 0.0, 0.0, 1.0, 10)
+			_dz_collider(o, basis, yaw, Vector3(0.0, 0.5, 0.0), Vector3(1.8, 0.95, 1.8))
 		"tank_small":
 			_dz_lcyl("dz_rust_light", o, basis, Vector3(0.0, 0.85, 0.0), 0.55, 1.9, 0.0, 0.0, PI * 0.5, 1.0, 12)
 			for fx in [-0.6, 0.6]:
@@ -11750,6 +11848,8 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			for sx in [-1.4, 1.4]:
 				_dz_lcyl("dz_wood", o, basis, Vector3(sx, h * 0.42, 0.0), 0.09, h * 0.85)
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h * 0.88, 0.0), Vector3(4.4, 0.95, 0.12))
+			for sx in [-1.4, 1.4]:
+				_add_cylinder_collider(o + basis * Vector3(sx, 1.3, 0.0), 0.16, 2.6)
 		"car_wreck":
 			var wm: String = ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
 			var roll := 0.10 if hash_pick == 1 else 0.0
@@ -11770,6 +11870,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 0.95, 0.0), Vector3(minf(w * 0.55, 5.2), 0.9, 0.1))
 		"salt_marker":
 			_dz_lcyl("dz_concrete", o, basis, Vector3(0.0, h * 0.5, 0.0), 0.42, h, PI * 0.25, 0.0, 0.0, 0.55, 4)
+			_add_cylinder_collider(Vector3(x, gy + 1.2, z), 0.5, 2.4)
 		"salt_pylon":
 			_dz_lcyl("dz_concrete", o, basis, Vector3(0.0, h * 0.5, 0.0), 1.15, h, PI * 0.25, 0.0, 0.0, 0.45, 4)
 			_dz_lsphere("dz_sign_red", o, basis, Vector3(0.0, h + 0.8, 0.0), Vector3(0.8, 0.8, 0.8))
@@ -11779,9 +11880,11 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_canvas", o, basis, Vector3(-w * 0.24, h * 0.52, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, 0.78)
 			_dz_lbox("dz_canvas", o, basis, Vector3(w * 0.24, h * 0.52, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, -0.78)
 			_dz_lbox("dz_dirt", o, basis, Vector3(0.0, 0.05, 0.0), Vector3(w + 0.6, 0.1, d + 0.6))
+			_dz_collider(o, basis, yaw, Vector3(0.0, h * 0.4, 0.0), Vector3(w * 0.8, h * 0.8, d * 0.85))
 		"pier":
 			var plen := maxf(d, 12.0)
 			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 1.15, -plen * 0.5), Vector3(2.6, 0.18, plen))
+			_dz_collider(o, basis, yaw, Vector3(0.0, 1.02, -plen * 0.5), Vector3(2.6, 0.4, plen))
 			var psteps := int(plen / 3.5)
 			for pi in range(psteps + 1):
 				for sx in [-1.1, 1.1]:
@@ -11798,6 +11901,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			var sm := "dz_sign_red" if kind == "sign_smash" else ("dz_sign_blue" if hash_pick != 1 else "dz_sign_cream")
 			_dz_lbox(sm, o, basis, Vector3(0.0, h * 0.9, 0.0), Vector3(1.15, 0.85, 0.07))
 			_dz_lbox("dz_white", o, basis, Vector3(0.0, h * 0.9, -0.05), Vector3(0.85, 0.24, 0.03))
+			_add_cylinder_collider(Vector3(x, gy + 1.2, z), 0.14, 2.4)
 		_:
 			_dz_building(o, basis, yaw, w, d, h, "dz_adobe", "dz_roof_metal", false)
 
@@ -12007,8 +12111,8 @@ func _build_desert_scatter() -> void:
 
 	var cfg := {
 		"cactus_saguaro": {"mesh": saguaro_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
-		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05},
-		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05},
+		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.34, "collider_h": 0.8},
+		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.38, "collider_h": 0.6},
 		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.06, "foliage": true},
 		"rock_small": {"mesh": rock_small_mesh, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
 		"rock_medium": {"mesh": rock_medium_mesh, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
@@ -12017,7 +12121,7 @@ func _build_desert_scatter() -> void:
 		"bones": {"mesh": bones_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.04},
 		"tumbleweed": {"mesh": tumble_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.03},
 		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.30},
-		"gravel_pile": {"mesh": pile_mesh, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15},
+		"gravel_pile": {"mesh": pile_mesh, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
 	var total := 0
@@ -12049,6 +12153,8 @@ func _build_desert_scatter() -> void:
 			total += 1
 			if collider_r > 0.0:
 				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+			elif kind == "rock_small" and sc > 0.70:
+				_add_cylinder_collider(Vector3(px, pos.y + 0.35 * sc, pz), 0.30 * sc, 0.7 * sc)
 			if is_foliage:
 				_foliage_points.append(pos)
 		for key_variant in buckets.keys():
@@ -12066,6 +12172,8 @@ func _build_desert_scatter() -> void:
 		var pz := float(item[1])
 		var pos := Vector3(px, height_at(px, pz) - 0.06, pz)
 		_foliage_points.append(pos)
+		var palm_scale := float(item[2])
+		_add_cylinder_collider(Vector3(px, pos.y + 2.9 * palm_scale, pz), 0.34 * palm_scale, 5.8 * palm_scale)
 		var t := make_transform(pos, float(item[3]), Vector3.ONE * float(item[2]))
 		if i % 5 < 3:
 			date_t.append(t)
