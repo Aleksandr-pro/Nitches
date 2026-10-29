@@ -75,10 +75,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.49-native-alpha"'), 'Native project version metadata must match 0.2.49-native-alpha');
-assert(preset.includes('version/code=52'), 'Native 0.2.49 must bump Android versionCode to 52');
-assert(preset.includes('version/name="0.2.49-native-alpha"'), 'Native version name must be 0.2.49-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.49-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.50-native-alpha"'), 'Native project version metadata must match 0.2.50-native-alpha');
+assert(preset.includes('version/code=53'), 'Native 0.2.50 must bump Android versionCode to 53');
+assert(preset.includes('version/name="0.2.50-native-alpha"'), 'Native version name must be 0.2.50-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.50-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -123,7 +123,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.49"') && preset.includes('application/product_version="0.2.49"'), 'Desktop Windows version metadata must match native 0.2.49');
+assert(preset.includes('application/file_version="0.2.50"') && preset.includes('application/product_version="0.2.50"'), 'Desktop Windows version metadata must match native 0.2.50');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -902,10 +902,10 @@ const desertScatterTotal = Object.values(desertData.desert.scatter).reduce((sum,
 assert(desertScatterTotal >= 37000, 'Desert scatter is below the authored budget');
 assert(desertData.desert.game.fastTravel.length === 8 && desertData.desert.game.photoSpots.length === 10, 'Desert game markers are incomplete');
 assert(desertData.spawn.x > 0 && desertData.spawn.x < 4000 && desertData.spawn.z > 0 && desertData.spawn.z < 4000, 'Desert spawn must be inside the basin');
-for (const marker of ['DESERT_DATA_PATH', '_build_desert_world', 'desert_world_0247', '_build_desert_scatter', '_dz_animate', '_add_pitched_box_collider', 'desert_road_deck_colliders', 'desert_smooth_roads_0249']) {
+for (const marker of ['DESERT_DATA_PATH', '_build_desert_world', 'desert_world_0247', '_build_desert_scatter', '_dz_animate', '_add_pitched_box_collider', 'desert_road_deck_colliders', 'desert_smooth_roads_0249', 'desert_detail_0250', '_dz_saguaro_mesh', 'dz_cactus_skin.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel_roughness.jpg']) {
   assert(worldScript.includes(marker), `0.2.47 desert builder marker is missing: ${marker}`);
 }
-for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders']) {
+for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders', 'desert_scatter_variants']) {
   assert(mainScript.includes(marker), `0.2.47 world-switch marker is missing: ${marker}`);
 }
 for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 50000']) {
@@ -916,7 +916,7 @@ assert(mainMenuScript.includes('worlds_free_for_all_0248'), '0.2.48 free-world s
 for (const marker of ['_build_desert_pois', '_road_labels_data']) {
   assert(worldMapScript.includes(marker), `0.2.47 world-map desert marker is missing: ${marker}`);
 }
-for (const name of ['user_dirt_cracked.jpg', 'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg', 'metal_pole.jpg', 'metal_pole_normal.jpg']) {
+for (const name of ['user_dirt_cracked.jpg', 'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg', 'metal_pole.jpg', 'metal_pole_normal.jpg', 'dz_packed_earth.jpg', 'dz_packed_earth_normal.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel.jpg', 'dz_trail_gravel_normal.jpg', 'dz_trail_gravel_roughness.jpg', 'dz_sand_dune.jpg', 'dz_sand_dune_normal.jpg', 'dz_sand_dune_roughness.jpg', 'dz_salt_crust.jpg', 'dz_salt_crust_normal.jpg', 'dz_salt_crust_roughness.jpg', 'dz_rock_red.jpg', 'dz_rock_red_normal.jpg', 'dz_rock_red_roughness.jpg', 'dz_cactus_skin.jpg', 'dz_cactus_skin_normal.jpg', 'dz_cactus_skin_roughness.jpg']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the desert texture ${name}`);
 }
 

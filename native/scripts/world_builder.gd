@@ -1755,16 +1755,19 @@ func _terrain_material(kind: String) -> Material:
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"dune":
-			material = _material("terrain_dune_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.95, 0.81, 0.57), 0.98)
+			material = _material("terrain_dune_sand_dz", "dz_sand_dune.jpg", "dz_sand_dune_normal.jpg", Color(1.0, 0.98, 0.94), 1.0, 0.0, Vector3.ONE, false, "dz_sand_dune_roughness.jpg")
 		"salt":
-			material = _material("terrain_salt", "user_sand_beach_white.jpg", "", Color(0.96, 0.95, 0.91), 0.52)
+			material = _material("terrain_salt_dz", "dz_salt_crust.jpg", "dz_salt_crust_normal.jpg", Color(1.0, 1.0, 0.99), 1.0, 0.0, Vector3.ONE, false, "dz_salt_crust_roughness.jpg")
 		"packed":
-			material = _material("terrain_packed_dirt", "user_dirt_cracked.jpg", "", Color(0.82, 0.67, 0.48), 1.0)
+			material = _material("terrain_packed_dz", "dz_packed_earth.jpg", "dz_packed_earth_normal.jpg", Color(1.0, 0.98, 0.95), 1.0, 0.0, Vector3.ONE, false, "dz_packed_earth_roughness.jpg")
 		"gravel":
-			material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
+			if _is_desert:
+				material = _material("terrain_gravel_dz", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3.ONE, false, "dz_trail_gravel_roughness.jpg")
+			else:
+				material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
 		"rock":
 			if _is_desert:
-				material = _material("terrain_red_rock", "rock.jpg", "rock_normal.jpg", Color(0.70, 0.45, 0.34), 1.0)
+				material = _material("terrain_red_rock_dz", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(1.0, 0.98, 0.95), 1.0, 0.0, Vector3.ONE, false, "dz_rock_red_roughness.jpg")
 			else:
 				material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
@@ -11007,7 +11010,7 @@ func _build_desert_roads() -> void:
 	gravel_tool.generate_tangents()
 	var gravel_mesh := gravel_tool.commit()
 	if gravel_mesh != null:
-		var gravel_mat := _material("dz_gravel_road", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.76, 0.67, 0.54), 1.0)
+		var gravel_mat := _material("dz_gravel_road_dz", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3.ONE, false, "dz_trail_gravel_roughness.jpg")
 		gravel_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		var inst := _mesh_instance(root, gravel_mesh, gravel_mat, Transform3D.IDENTITY, "DesertGravel", false)
 		inst.custom_aabb = _active_aabb
@@ -11951,18 +11954,71 @@ func _dz_scatter_mesh(parts: Array) -> ArrayMesh:
 	return mesh
 
 
+func _dz_saguaro_mesh(variant: int) -> ArrayMesh:
+	# 0.2.50: three authored saguaro silhouettes (classic two-arm,
+	# tall one-arm, squat three-arm) instead of identical clones.
+	# Parts stay white: the ribbed dz_cactus_skin PBR material
+	# colours them through the cylinder UVs that _dz_scatter_mesh
+	# preserves.  Elbow spheres hide the arm joints.
+	var trunk_prim := _dz_unit_cyl(14, 0.86)
+	var arm_prim := _dz_unit_cyl(12, 0.82)
+	var cap_prim := _dz_unit_sphere(12, 8)
+	var skin := Color(1.0, 1.0, 1.0)
+	var trunk_h := 4.6
+	var trunk_r := 0.30
+	var arms: Array = [[-1.0, 2.4, 1.5, 0.17], [1.0, 1.9, 1.1, 0.15]]
+	match variant:
+		1:
+			trunk_h = 5.4
+			trunk_r = 0.27
+			arms = [[-1.0, 3.0, 1.7, 0.16]]
+		2:
+			trunk_h = 3.8
+			trunk_r = 0.34
+			arms = [[-1.0, 2.0, 1.2, 0.17], [1.0, 2.5, 1.4, 0.16], [1.0, 1.4, 0.7, 0.13]]
+	var parts: Array = []
+	parts.append(_dz_scatter_part(trunk_prim, Vector3(0.0, trunk_h * 0.5, 0.0), Vector3(trunk_r * 2.0, trunk_h, trunk_r * 2.0), skin))
+	parts.append(_dz_scatter_part(cap_prim, Vector3(0.0, trunk_h, 0.0), Vector3(trunk_r * 1.72, trunk_r * 1.1, trunk_r * 1.72), skin))
+	for arm_variant in arms:
+		var arm: Array = arm_variant
+		var side := float(arm[0])
+		var ay := float(arm[1])
+		var ah := float(arm[2])
+		var ar := float(arm[3])
+		var reach := trunk_r + ar + 0.34
+		var elbow_x := side * reach
+		parts.append(_dz_scatter_part(arm_prim, Vector3(side * (trunk_r * 0.4 + reach * 0.5), ay, 0.0), Vector3(ar * 2.0, reach + trunk_r * 0.6, ar * 2.0), skin, 0.0, 0.0, side * PI * 0.5))
+		parts.append(_dz_scatter_part(cap_prim, Vector3(elbow_x, ay, 0.0), Vector3(ar * 2.1, ar * 2.1, ar * 2.1), skin))
+		parts.append(_dz_scatter_part(arm_prim, Vector3(elbow_x, ay + ah * 0.5, 0.0), Vector3(ar * 2.0, ah, ar * 2.0), skin))
+		parts.append(_dz_scatter_part(cap_prim, Vector3(elbow_x, ay + ah, 0.0), Vector3(ar * 1.65, ar * 1.0, ar * 1.65), skin))
+	return _dz_scatter_mesh(parts)
+
+
 func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
-	var prim := _dz_unit_sphere(9, 6)
+	# 0.2.50: coherent multi-octave displacement on a denser sphere
+	# (the old 9x6 sphere with per-vertex hash jitter read as crumpled
+	# paper).  Flat shading and baked face tints stay; the fine surface
+	# detail comes from the world-triplanar dz_rock_red PBR set, and
+	# the squashed underside lets boulders sit in the ground.
+	var prim := _dz_unit_sphere(18, 12)
 	var arrays: Array = prim.surface_get_arrays(0)
 	var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var ph := float(seed_i) * 1.73
+	var stretch_x := 0.88 + _hash01(seed_i * 7 + 1, 13) * 0.30
+	var stretch_z := 0.88 + _hash01(seed_i * 11 + 5, 29) * 0.30
 	var displaced := PackedVector3Array()
 	displaced.resize(pv.size())
 	for i in range(pv.size()):
 		var p := pv[i]
-		var hsh := _hash01(int(round(p.x * 40.0)) + seed_i * 131, int(round(p.y * 40.0 + p.z * 57.0)) - seed_i * 17)
-		var r := 0.76 + hsh * 0.48
-		displaced[i] = Vector3(p.x * r, p.y * 0.74 * r, p.z * r)
+		var noise := 0.55 * sin(p.x * 3.1 + ph) * sin(p.y * 2.7 + ph * 1.3) * sin(p.z * 3.4 - ph)
+		noise += 0.30 * sin(p.x * 6.3 - ph * 0.7) * sin(p.y * 5.1 + ph) * sin(p.z * 5.7 + ph * 0.5)
+		noise += 0.15 * sin(p.x * 11.0 + ph * 2.1) * sin(p.y * 9.3 - ph * 0.4) * sin(p.z * 9.0 - ph)
+		var r := clampf(1.0 + noise * 0.30, 0.64, 1.30)
+		var y := p.y * 0.76 * r
+		if y < -0.30:
+			y = -0.30 + (y + 0.30) * 0.22
+		displaced[i] = Vector3(p.x * r * stretch_x, y, p.z * r * stretch_z)
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
@@ -11976,7 +12032,8 @@ func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
 		if n.length_squared() < 0.000001:
 			continue
 		n = n.normalized()
-		var shade := 0.72 + clampf(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.38
+		var shade := 0.70 + clampf(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.40
+		shade *= 0.93 + _hash01(t * 3 + seed_i, seed_i * 31 + t) * 0.14
 		var face_color := Color(color.r * shade, color.g * shade, color.b * shade)
 		for v in [a, b, c]:
 			verts.append(v)
@@ -12048,20 +12105,18 @@ func _build_desert_scatter() -> void:
 		_dz_scatter_material.vertex_color_use_as_albedo = true
 		_dz_scatter_material.roughness = 0.95
 		_dz_scatter_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	var cyl8 := _dz_unit_cyl(8, 0.85)
 	var cyl7 := _dz_unit_cyl(7, 0.4)
 	var cyl11 := _dz_unit_cyl(11, 0.05)
 	var sph := _dz_unit_sphere(10, 7)
 	var torus := _dz_unit_torus()
-	var cactus_green := Color(0.20, 0.40, 0.19)
-	var saguaro_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl8, Vector3(0, 2.1, 0), Vector3(0.55, 4.2, 0.55), cactus_green),
-		_dz_scatter_part(sph, Vector3(0, 4.25, 0), Vector3(0.52, 0.5, 0.52), cactus_green),
-		_dz_scatter_part(cyl8, Vector3(-0.62, 2.55, 0), Vector3(0.32, 1.05, 0.32), cactus_green, 0.0, 0.0, PI * 0.5),
-		_dz_scatter_part(cyl8, Vector3(-1.05, 3.25, 0), Vector3(0.34, 1.5, 0.34), cactus_green),
-		_dz_scatter_part(cyl8, Vector3(0.55, 1.95, 0), Vector3(0.28, 0.8, 0.28), cactus_green, 0.0, 0.0, -PI * 0.5),
-		_dz_scatter_part(cyl8, Vector3(0.9, 2.5, 0), Vector3(0.3, 1.1, 0.3), cactus_green),
-	])
+	# 0.2.50: dedicated PBR materials for the hero scatter kinds.
+	# The shared vertex-colour material still serves shrubs/bones.
+	var cactus_mat := _material("dz_cactus_skin_mat", "dz_cactus_skin.jpg", "dz_cactus_skin_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3(1.0, 2.0, 1.0), false, "dz_cactus_skin_roughness.jpg")
+	var rock_mat := _material("dz_rock_red_mat", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3(0.22, 0.22, 0.22), true, "dz_rock_red_roughness.jpg")
+	rock_mat.vertex_color_use_as_albedo = true
+	var pile_mat := _material("dz_gravel_pile_mat", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.97), 1.0, 0.0, Vector3(0.35, 0.35, 0.35), true, "dz_trail_gravel_roughness.jpg")
+	pile_mat.vertex_color_use_as_albedo = true
+	var saguaro_meshes: Array = [_dz_saguaro_mesh(0), _dz_saguaro_mesh(1), _dz_saguaro_mesh(2)]
 	var barrel_mesh := _dz_scatter_mesh([
 		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.30, 0.46, 0.22)),
 		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.92, 0.52, 0.16)),
@@ -12102,26 +12157,26 @@ func _build_desert_scatter() -> void:
 		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.8, sin(rang) * 0.3), Vector3(0.06, 1.7, 0.06), Color(0.34, 0.50, 0.24), 0.0, cos(rang) * 0.14, sin(rang) * 0.14))
 	var reed_mesh := _dz_scatter_mesh(reed_parts)
 	var pile_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl11, Vector3(0, 1.45, 0), Vector3(6.2, 2.9, 6.2), Color(0.60, 0.53, 0.43)),
-		_dz_scatter_part(cyl11, Vector3(3.4, 0.8, 1.6), Vector3(3.4, 1.6, 3.4), Color(0.56, 0.49, 0.40)),
+		_dz_scatter_part(cyl11, Vector3(0, 1.45, 0), Vector3(6.2, 2.9, 6.2), Color(0.95, 0.92, 0.88)),
+		_dz_scatter_part(cyl11, Vector3(3.4, 0.8, 1.6), Vector3(3.4, 1.6, 3.4), Color(0.87, 0.85, 0.81)),
 	])
-	var rock_small_mesh := _dz_rock_mesh(1, Color(0.58, 0.47, 0.38))
-	var rock_medium_mesh := _dz_rock_mesh(2, Color(0.60, 0.44, 0.34))
-	var rock_large_mesh := _dz_rock_mesh(3, Color(0.62, 0.43, 0.32))
+	var rock_small_meshes: Array = [_dz_rock_mesh(11, Color(0.93, 0.89, 0.83)), _dz_rock_mesh(12, Color(0.90, 0.86, 0.81)), _dz_rock_mesh(13, Color(0.95, 0.90, 0.84))]
+	var rock_medium_meshes: Array = [_dz_rock_mesh(21, Color(0.96, 0.90, 0.83)), _dz_rock_mesh(22, Color(0.93, 0.88, 0.82)), _dz_rock_mesh(23, Color(0.98, 0.92, 0.85))]
+	var rock_large_meshes: Array = [_dz_rock_mesh(31, Color(1.0, 0.94, 0.87)), _dz_rock_mesh(32, Color(0.97, 0.91, 0.84)), _dz_rock_mesh(33, Color(1.0, 0.96, 0.89))]
 
 	var cfg := {
-		"cactus_saguaro": {"mesh": saguaro_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
+		"cactus_saguaro": {"meshes": saguaro_meshes, "material": cactus_mat, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
 		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.34, "collider_h": 0.8},
 		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.38, "collider_h": 0.6},
 		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.06, "foliage": true},
-		"rock_small": {"mesh": rock_small_mesh, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
-		"rock_medium": {"mesh": rock_medium_mesh, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
-		"rock_large": {"mesh": rock_large_mesh, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.30, "collider_r": 1.35, "collider_h": 2.4},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.30, "collider_r": 1.35, "collider_h": 2.4},
 		"dead_tree": {"mesh": dead_tree_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
 		"bones": {"mesh": bones_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.04},
 		"tumbleweed": {"mesh": tumble_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.03},
 		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.30},
-		"gravel_pile": {"mesh": pile_mesh, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
+		"gravel_pile": {"mesh": pile_mesh, "material": pile_mat, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
 	var total := 0
@@ -12157,8 +12212,19 @@ func _build_desert_scatter() -> void:
 				_add_cylinder_collider(Vector3(px, pos.y + 0.35 * sc, pz), 0.30 * sc, 0.7 * sc)
 			if is_foliage:
 				_foliage_points.append(pos)
+		var kind_meshes: Array = conf.get("meshes", [])
+		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
 		for key_variant in buckets.keys():
-			_dz_emit_multimesh(root, conf["mesh"], _dz_scatter_material, buckets[key_variant], "DzScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			var bucket_xforms: Array = buckets[key_variant]
+			if kind_meshes.is_empty():
+				_dz_emit_multimesh(root, conf["mesh"] as Mesh, kind_mat, bucket_xforms, "DzScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			else:
+				for vi in range(kind_meshes.size()):
+					var sub: Array = []
+					for ti in range(bucket_xforms.size()):
+						if ti % kind_meshes.size() == vi:
+							sub.append(bucket_xforms[ti])
+					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "DzScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
 	# Oasis palms reuse the detailed date/royal GLBs (same batching path
 	# as RichTown so LOD/streaming treatment is identical).
 	var palm_items: Array = scatter.get("oasis_palm", [])
@@ -12183,6 +12249,8 @@ func _build_desert_scatter() -> void:
 	_add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_t, "DesertOasisPalms")
 	_add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_t, "DesertOasisPalms")
 	_enhancement_stats["desert_scatter"] = total
+	_enhancement_stats["desert_detail_0250"] = true
+	_enhancement_stats["desert_scatter_variants"] = saguaro_meshes.size() + rock_small_meshes.size() + rock_medium_meshes.size() + rock_large_meshes.size()
 	_enhancement_stats["palm_count"] = palm_items.size()
 
 
