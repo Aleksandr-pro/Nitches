@@ -3287,14 +3287,22 @@ func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int
 		# green scatter reads against earth, not loose dune sand.
 		if _in_zone(x, z, "salt") and h < 35.4:
 			return "salt"
+		if Vector2(x - 3350.0, z - 3500.0).length() < 430.0:
+			# The oasis bowl overlaps the dune zone rectangle; keep its
+			# packed-earth shore so the green scatter reads against soil.
+			return "packed"
+		if _in_zone(x, z, "dunes"):
+			# Dune slip faces are intentionally steep (sampled slopes can
+			# exceed 1.0 on the 8 m grid).  They are still sand, not rock:
+			# classifying them by the generic slope gate produced a hard
+			# black/orange checkerboard across every ridge in the sunset
+			# screenshot audit.  Rocky outcrops in the dune sea come from
+			# scatter boulders, not from the terrain splat.
+			return "dune"
 		if slope > 0.30 or h > 108.0:
 			return "rock"
-		if Vector2(x - 3350.0, z - 3500.0).length() < 430.0:
-			return "packed"
 		if _in_zone(x, z, "quarry") and slope < 0.22:
 			return "gravel"
-		if _in_zone(x, z, "dunes"):
-			return "dune"
 		return "packed"
 	if _is_in_park(x, z):
 		return "grass"
@@ -12113,7 +12121,21 @@ func _build_desert_game_markers() -> void:
 				var is_first := pi == 0
 				var is_last := pi == points.size() - 1
 				if is_first or is_last or acc >= 150.0:
-					var ring := _mesh_instance(root, ring_mesh, ring_mat, make_transform(Vector3(v.x, height_at(v.x, v.y) + 4.6, v.y)), "RaceRing", false)
+					# TorusMesh lies in the local XZ plane.  Rotate it
+					# upright and yaw it with the route so each marker is
+					# a checkpoint gate across the road, not a flat halo
+					# hovering parallel to the ground (screenshot audit).
+					var route_dir := Vector2.RIGHT
+					if pi + 1 < points.size():
+						var next_point: Array = points[pi + 1]
+						route_dir = Vector2(float(next_point[0]), float(next_point[1])) - v
+					elif prev != Vector2.INF:
+						route_dir = v - prev
+					if route_dir.length_squared() < 0.01:
+						route_dir = Vector2.RIGHT
+					var ring_yaw := atan2(-route_dir.x, -route_dir.y)
+					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 1.15)
+					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 5.6, v.y)), "RaceRing", false)
 					ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 					ring_count += 1
 					acc = 0.0
@@ -12241,18 +12263,36 @@ func _build_desert_skyline() -> void:
 		_skyline_root = Node3D.new()
 		_skyline_root.name = "DistantSkyline"
 		add_child(_skyline_root)
-	var mat := _material("dz_far_mesa", "rock.jpg", "rock_normal.jpg", Color(0.62, 0.45, 0.35), 1.0)
-	var mat_light := _material("dz_far_mesa_light", "rock.jpg", "rock_normal.jpg", Color(0.72, 0.55, 0.43), 1.0)
+	# The first screenshot audit showed the original skyline as huge,
+	# pale rectangular slabs: one rock texture was stretched across a
+	# 0.5-1.0 km BoxMesh face and the long axis pointed AT the player.
+	# These mesas are tapered nine-sided frustums with their long axis
+	# tangential to the horizon ring.  Local (not world) triplanar
+	# mapping keeps the rock detail attached to each mesa while the
+	# skyline root follows the car.
+	var mat := _material("dz_far_mesa_local", "rock.jpg", "rock_normal.jpg", Color(0.52, 0.34, 0.25), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat.uv1_world_triplanar = false
+	var mat_light := _material("dz_far_mesa_local_light", "rock.jpg", "rock_normal.jpg", Color(0.67, 0.46, 0.34), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat_light.uv1_world_triplanar = false
+	var base_mesh := _dz_unit_cyl(9, 0.66)
+	var cap_mesh := _dz_unit_cyl(9, 0.84)
 	var count := 0
-	for i in range(20):
-		var ang := TAU * float(i) / 20.0 + _hash01(i * 3 + 1, 7) * 0.20
-		var radius := 1750.0 + _hash01(i * 5 + 2, 11) * 300.0
-		var w := 540.0 + _hash01(i * 7 + 3, 13) * 520.0
-		var hgt := 115.0 + _hash01(i * 11 + 5, 17) * 140.0
-		var pos := Vector3(cos(ang) * radius, hgt * 0.5 - 16.0, sin(ang) * radius)
-		var inst := _add_box(_skyline_root, Vector3(w, hgt, 320.0), pos, mat if i % 2 == 0 else mat_light, -ang, "FarMesa")
+	for i in range(22):
+		var ang := TAU * float(i) / 22.0 + _hash01(i * 3 + 1, 7) * 0.18
+		var radius := 1780.0 + _hash01(i * 5 + 2, 11) * 280.0
+		var w := 620.0 + _hash01(i * 7 + 3, 13) * 560.0
+		var depth := 300.0 + _hash01(i * 13 + 4, 19) * 180.0
+		var hgt := 95.0 + _hash01(i * 11 + 5, 17) * 80.0
+		var base_h := hgt * 0.78
+		var cap_h := hgt * 0.30
+		var yaw := -ang + (_hash01(i * 17 + 6, 23) - 0.5) * 0.10
+		# make_transform()'s local X is radial at yaw=-ang and local Z is
+		# tangential, so scale is (radial depth, height, horizon width).
+		var base_pos := Vector3(cos(ang) * radius, base_h * 0.5 - 22.0, sin(ang) * radius)
+		var inst := _mesh_instance(_skyline_root, base_mesh, mat if i % 2 == 0 else mat_light, make_transform(base_pos, yaw, Vector3(depth, base_h, w)), "FarMesa", false)
 		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var cap := _add_box(_skyline_root, Vector3(w * 0.62, hgt * 0.22, 260.0), pos + Vector3(0.0, hgt * 0.58, 0.0), mat_light if i % 2 == 0 else mat, -ang + 0.05, "FarMesaCap")
+		var cap_pos := Vector3(base_pos.x, base_h - 22.0 + cap_h * 0.5 - 5.0, base_pos.z)
+		var cap := _mesh_instance(_skyline_root, cap_mesh, mat_light if i % 2 == 0 else mat, make_transform(cap_pos, yaw + 0.04, Vector3(depth * 0.72, cap_h, w * 0.62)), "FarMesaCap", false)
 		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		count += 2
 	set_skyline_origin(spawn_transform.origin)
