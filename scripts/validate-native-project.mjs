@@ -75,10 +75,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.47-native-alpha"'), 'Native project version metadata must match 0.2.47-native-alpha');
-assert(preset.includes('version/code=50'), 'Native 0.2.47 must bump Android versionCode to 50');
-assert(preset.includes('version/name="0.2.47-native-alpha"'), 'Native version name must be 0.2.47-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.47-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.48-native-alpha"'), 'Native project version metadata must match 0.2.48-native-alpha');
+assert(preset.includes('version/code=51'), 'Native 0.2.48 must bump Android versionCode to 51');
+assert(preset.includes('version/name="0.2.48-native-alpha"'), 'Native version name must be 0.2.48-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.48-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -123,7 +123,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.47"') && preset.includes('application/product_version="0.2.47"'), 'Desktop Windows version metadata must match native 0.2.47');
+assert(preset.includes('application/file_version="0.2.48"') && preset.includes('application/product_version="0.2.48"'), 'Desktop Windows version metadata must match native 0.2.48');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -909,6 +909,8 @@ for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_chec
 for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 50000']) {
   assert(mainMenuScript.includes(marker), `0.2.47 menu world-selection marker is missing: ${marker}`);
 }
+assert(mainMenuScript.includes('const WORLDS_FREE_FOR_ALL := true'), '0.2.48 temporary free-world flag is missing');
+assert(mainMenuScript.includes('worlds_free_for_all_0248'), '0.2.48 free-world smoke marker is missing');
 for (const marker of ['_build_desert_pois', '_road_labels_data']) {
   assert(worldMapScript.includes(marker), `0.2.47 world-map desert marker is missing: ${marker}`);
 }
