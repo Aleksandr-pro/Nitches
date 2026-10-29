@@ -13,6 +13,7 @@ const HudScript := preload("res://scripts/hud.gd")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
 const RouteGuideScript := preload("res://scripts/route_guide.gd")
+const LoadingScreenScript := preload("res://scripts/loading_screen.gd")
 const PROFILE_PATH := "user://nitches_profile.cfg"
 const SETTINGS_PATH := "user://nitches_settings.cfg"
 
@@ -36,6 +37,10 @@ var _hud: NativeHud
 var _menu: NativeMainMenu
 var _world_map: NativeWorldMap
 var _route_guide: NativeRouteGuide
+var _loading_screen: NativeLoadingScreen
+var _is_bootstrapping := false
+var _bootstrap_completed := false
+var _world_switch_in_progress := false
 var _map_open := false
 var _in_menu := false
 var _has_entered_game := false
@@ -109,15 +114,122 @@ func _ready() -> void:
 			var wanted := String(arg).trim_prefix("--native-world=")
 			if wanted == "richtown" or wanted == "desert":
 				_selected_world_id = wanted
+	_ensure_loading_screen()
+	if _smoke_mode or _screenshot_mode:
+		_loading_screen.hide_immediately()
+		_bootstrap_game_sync()
+		return
+	_is_bootstrapping = true
+	_show_loading_screen("Открываем фестиваль скорости")
+	call_deferred("_bootstrap_game_async")
+
+
+func _bootstrap_game_sync() -> void:
+	_create_world_node()
+	var stats := _world.build_world()
+	_handle_world_build_result(_world, stats)
+	_bootstrap_create_vehicle()
+	_bootstrap_create_camera_and_systems()
+	_bootstrap_create_profile_and_menu()
+	_bootstrap_create_world_map()
+	_bootstrap_finish_startup()
+	_bootstrap_completed = true
+
+
+func _bootstrap_game_async() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_set_loading_progress(0.04, "Читаем данные мира")
+	await get_tree().process_frame
+	_create_world_node()
+	_world.process_mode = Node.PROCESS_MODE_DISABLED
+	await _build_world_with_loading(_world, 0.08, 0.72)
+	_world.process_mode = Node.PROCESS_MODE_INHERIT
+	_set_loading_progress(0.76, "Готовим автомобиль")
+	await get_tree().process_frame
+	_bootstrap_create_vehicle()
+	_set_loading_progress(0.84, "Настраиваем камеру и эффекты")
+	await get_tree().process_frame
+	_bootstrap_create_camera_and_systems()
+	_set_loading_progress(0.92, "Собираем меню и профиль")
+	await get_tree().process_frame
+	_bootstrap_create_profile_and_menu()
+	_set_loading_progress(0.97, "Подключаем карту и маршрут")
+	await get_tree().process_frame
+	_bootstrap_create_world_map()
+	_set_loading_progress(1.0, "Мир готов")
+	_bootstrap_finish_startup()
+	_bootstrap_completed = true
+	_is_bootstrapping = false
+	await _finish_loading_screen()
+
+
+func _create_world_node() -> void:
 	_world = WorldBuilderScript.new() as NativeWorldBuilder
 	_world.name = "NativeWorld"
 	_world.world_id = _selected_world_id
 	add_child(_world)
-	var stats := _world.build_world()
-	print("[native] World build stats (%s): " % _selected_world_id, stats)
-	if not _world.build_error.is_empty():
-		push_error("Native world failed to build: %s" % _world.build_error)
 
+
+func _handle_world_build_result(world: NativeWorldBuilder, stats: Dictionary) -> void:
+	print("[native] World build stats (%s): " % world.world_id, stats)
+	if not world.build_error.is_empty():
+		push_error("Native world failed to build: %s" % world.build_error)
+		if _loading_screen != null and _loading_screen.visible:
+			_loading_screen.set_error(world.build_error)
+
+
+func _build_world_with_loading(world: NativeWorldBuilder, from_fraction: float, to_fraction: float) -> Dictionary:
+	world.begin_build_world()
+	while not world.is_build_finished():
+		var before: Dictionary = world.get_build_progress_state()
+		_set_loading_progress(
+			lerpf(from_fraction, to_fraction, float(before.get("fraction", 0.0))),
+			String(before.get("stage", "Строим мир"))
+		)
+		await get_tree().process_frame
+		var after: Dictionary = world.build_world_step()
+		_set_loading_progress(
+			lerpf(from_fraction, to_fraction, float(after.get("fraction", 0.0))),
+			String(after.get("completed_stage", after.get("stage", "Строим мир")))
+		)
+	var stats: Dictionary = {}
+	if world.get_world_data().is_empty():
+		stats = {"error": world.build_error}
+	else:
+		stats = world.get_stats()
+	_handle_world_build_result(world, stats)
+	if not world.build_error.is_empty() and _loading_screen != null and _loading_screen.visible:
+		await _loading_screen.error_continue_requested
+		_loading_screen.clear_error()
+	return stats
+
+
+func _ensure_loading_screen() -> void:
+	if _loading_screen != null:
+		return
+	_loading_screen = LoadingScreenScript.new() as NativeLoadingScreen
+	_loading_screen.name = "LoadingScreen"
+	add_child(_loading_screen)
+
+
+func _show_loading_screen(initial_stage: String) -> void:
+	_ensure_loading_screen()
+	_loading_screen.restart(_selected_world_id)
+	_loading_screen.set_progress(0.0, initial_stage)
+
+
+func _set_loading_progress(fraction: float, stage: String) -> void:
+	if _loading_screen != null:
+		_loading_screen.set_progress(fraction, stage)
+
+
+func _finish_loading_screen() -> void:
+	if _loading_screen != null:
+		await _loading_screen.finish()
+
+
+func _bootstrap_create_vehicle() -> void:
 	_vehicle = VehicleScript.new() as NativeVehicle
 	_selected_car_id = _load_saved_selected_car_id()
 	_vehicle.configure_car(_selected_car_id)
@@ -134,6 +246,8 @@ func _ready() -> void:
 	# there is deliberately no hidden traffic node or parked-car fleet.
 	print("[native] Traffic removed: player vehicle only")
 
+
+func _bootstrap_create_camera_and_systems() -> void:
 	_create_camera()
 	_atmosphere_fx = AtmosphereFxScript.new() as NativeAtmosphereFX
 	_atmosphere_fx.configure(_vehicle, _camera, _world)
@@ -156,6 +270,8 @@ func _ready() -> void:
 	_hud.reset_requested.connect(_reset_vehicle_to_road)
 	_hud.menu_requested.connect(_show_menu)
 
+
+func _bootstrap_create_profile_and_menu() -> void:
 	# 0.2.29: the game opens on the main menu (profile / garage /
 	# store / worlds) over a cinematic orbit of the car; Play enters
 	# the world.  Smoke and screenshot runs skip straight to driving.
@@ -185,6 +301,8 @@ func _ready() -> void:
 	_menu.set_current_world(_selected_world_id)
 	_apply_settings(_settings, false)
 
+
+func _bootstrap_create_world_map() -> void:
 	# 0.2.32: full-screen named RichTown map over the game.  The HUD
 	# minimap and M/Tab open it; the car is frozen while it is read.
 	_world_map = WorldMapScript.new() as NativeWorldMap
@@ -197,6 +315,9 @@ func _ready() -> void:
 	_hud.set_minimap_points(_world_map.get_minimap_points())
 	_on_world_map_destination_changed(_world_map.get_route_destination())
 	_hud.map_requested.connect(_show_world_map)
+
+
+func _bootstrap_finish_startup() -> void:
 	if _smoke_mode or _screenshot_mode:
 		_enter_game()
 	else:
@@ -906,7 +1027,8 @@ func _save_profile(record_history: bool = false) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
-		_save_profile(true)
+		if _bootstrap_completed:
+			_save_profile(true)
 		_save_settings()
 
 
@@ -1240,6 +1362,9 @@ func _create_camera() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_bootstrapping or _world_switch_in_progress:
+		get_viewport().set_input_as_handled()
+		return
 	if _map_open:
 		if event.is_action_pressed("ui_cancel") or event.is_action_pressed(&"map_toggle"):
 			_hide_world_map()
@@ -1435,6 +1560,8 @@ func _reset_vehicle_to_road() -> void:
 
 
 func _process(delta: float) -> void:
+	if _is_bootstrapping or _world_switch_in_progress:
+		return
 	_update_adaptive_render_quality(delta)
 	if _world != null and _camera != null and _vehicle != null and not _garage_active:
 		# 0.2.30 directional streaming retired load behind the
@@ -1657,6 +1784,12 @@ func _run_smoke_checks() -> void:
 		failures.append("HUD node is missing")
 	if _world_map == null:
 		failures.append("world map node is missing")
+	if _loading_screen == null:
+		failures.append("0.2.52 branded loading screen node is missing")
+	else:
+		var loading_state := _loading_screen.get_visual_state()
+		if not bool(loading_state.get("custom_loading_screen_0252", false)) or not bool(loading_state.get("real_gameplay_background", false)) or int(loading_state.get("checkpoints", 0)) < 5:
+			failures.append("0.2.52 branded loading screen is incomplete: %s" % str(loading_state))
 	if not failures.is_empty():
 		_finish_smoke(failures)
 		return
@@ -2260,18 +2393,43 @@ func switch_world(world_id: String) -> void:
 		return
 	if world_id == _selected_world_id and _world != null:
 		return
+	if _is_bootstrapping or _world_switch_in_progress or not _bootstrap_completed:
+		return
+	_world_switch_in_progress = true
+	call_deferred("_switch_world_async", world_id)
+
+
+func _switch_world_async(world_id: String) -> void:
 	_selected_world_id = world_id
 	_settings["selected_world"] = world_id
 	_save_settings()
+	_show_loading_screen("Переезжаем в новый мир")
+	_set_loading_progress(0.03, "Сохраняем настройки")
+	if _vehicle != null:
+		_vehicle.freeze = true
+		_vehicle.set_physics_process(false)
+		_vehicle.set_audio_suspended(true)
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(false)
+	if _hud != null:
+		_hud.visible = false
+	if _world_map != null:
+		_world_map.hide_map()
+	_map_open = false
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var old_world := _world
+	if old_world != null:
+		old_world.process_mode = Node.PROCESS_MODE_DISABLED
 	var new_world := WorldBuilderScript.new() as NativeWorldBuilder
 	new_world.name = "NativeWorld"
 	new_world.world_id = world_id
+	new_world.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(new_world)
-	var stats := new_world.build_world()
-	print("[native] World build stats (%s): " % world_id, stats)
-	if not new_world.build_error.is_empty():
-		push_error("Native world failed to build: %s" % new_world.build_error)
+	await _build_world_with_loading(new_world, 0.07, 0.84)
+	new_world.process_mode = Node.PROCESS_MODE_INHERIT
+	_set_loading_progress(0.90, "Подключаем автомобиль и интерфейс")
+	await get_tree().process_frame
 	_world = new_world
 	_vehicle.set_world(_world)
 	_vehicle.reset_to_transform(_world.spawn_transform)
@@ -2289,6 +2447,21 @@ func switch_world(world_id: String) -> void:
 	if old_world != null:
 		old_world.queue_free()
 	_update_camera(0.0, true)
+	if _in_menu:
+		if _hud != null:
+			_hud.visible = false
+	else:
+		if _atmosphere_fx != null:
+			_atmosphere_fx.set_active(true)
+		if _hud != null:
+			_hud.visible = true
+		if _vehicle != null:
+			_vehicle.freeze = false
+			_vehicle.set_physics_process(true)
+			_vehicle.set_audio_suspended(false)
+	_set_loading_progress(1.0, "Мир готов")
+	_world_switch_in_progress = false
+	await _finish_loading_screen()
 
 
 ## 0.2.47 desert smoke gate: the RichTown assert battery below is

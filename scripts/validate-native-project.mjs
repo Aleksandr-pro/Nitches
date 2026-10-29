@@ -21,12 +21,33 @@ function parseGlbJson(bytes) {
   return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText] = await Promise.all([
+function parseJpegDimensions(bytes) {
+  assert(bytes[0] === 0xff && bytes[1] === 0xd8, 'JPEG header is missing');
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    assert(bytes[offset] === 0xff, 'JPEG marker is missing');
+    const marker = bytes[offset + 1];
+    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+      return { height: bytes.readUInt16BE(offset + 5), width: bytes.readUInt16BE(offset + 7) };
+    }
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    const segmentLength = bytes.readUInt16BE(offset + 2);
+    assert(segmentLength >= 2, 'JPEG segment length is invalid');
+    offset += 2 + segmentLength;
+  }
+  throw new Error('JPEG dimensions are missing');
+}
+
+const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
   readText('data/richtown_native.json'),
   readText('scripts/main.gd'),
+  readText('scripts/loading_screen.gd'),
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
   readText('scripts/hud.gd'),
@@ -75,10 +96,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.51-native-alpha"'), 'Native project version metadata must match 0.2.51-native-alpha');
-assert(preset.includes('version/code=54'), 'Native 0.2.51 must bump Android versionCode to 54');
-assert(preset.includes('version/name="0.2.51-native-alpha"'), 'Native version name must be 0.2.51-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.51-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.52-native-alpha"'), 'Native project version metadata must match 0.2.52-native-alpha');
+assert(preset.includes('version/code=55'), 'Native 0.2.52 must bump Android versionCode to 55');
+assert(preset.includes('version/name="0.2.52-native-alpha"'), 'Native version name must be 0.2.52-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.52-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -87,6 +108,20 @@ for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) 
 }
 for (const marker of ['skyline_panorama_textures_0243', 'near_field_lod_0243', 'range_fade_mode', 'tree_detail_end_m', 'palm_detail_end_m', 'shrub_detail_end_m']) {
   assert(worldScript.includes(marker), `0.2.43 near-field/skyline validation marker is missing: ${marker}`);
+}
+assert(project.includes('boot_splash/image="res://assets/ui/boot_splash_richtown.jpg"') && project.includes('boot_splash/fullsize=true') && project.includes('boot_splash/show_image=true') && project.includes('boot_splash/min_display_time=0'), 'Native 0.2.52 must replace the default Godot boot splash with the branded fullscreen RichTown splash');
+assert(syncScript.includes('boot_splash_richtown.jpg'), 'Native asset sync must stage the 0.2.52 boot splash');
+const bootSplash = await readFile('src/assets/ui/boot_splash_richtown.jpg');
+const bootSplashSize = parseJpegDimensions(bootSplash);
+assert(bootSplash.length > 150_000 && bootSplashSize.width === 1920 && bootSplashSize.height === 1080, `Native 0.2.52 boot splash must be a detailed 1920x1080 gameplay frame, got ${bootSplashSize.width}x${bootSplashSize.height}`);
+for (const marker of ['class_name NativeLoadingScreen', 'custom_loading_screen_0252', 'menu_richtown_gameplay.jpg', 'error_continue_requested', 'get_visual_state', 'hide_immediately']) {
+  assert(loadingScreenScript.includes(marker), `Native 0.2.52 loading-screen marker is missing: ${marker}`);
+}
+for (const marker of ['begin_build_world', 'build_world_step', 'get_build_progress_state', 'is_build_finished']) {
+  assert(worldScript.includes(marker), `Native 0.2.52 staged world-build marker is missing: ${marker}`);
+}
+for (const marker of ['_bootstrap_game_async', '_build_world_with_loading', '_switch_world_async', '0.2.52 branded loading screen']) {
+  assert(mainScript.includes(marker), `Native 0.2.52 async bootstrap marker is missing: ${marker}`);
 }
 for (const marker of ['wet_streak', 'wet_roughness', 'puddle_roughness']) {
   assert(wetAsphaltShader.includes(marker), `0.2.43 low-cost wet-road shading marker is missing: ${marker}`);
@@ -123,7 +158,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.51"') && preset.includes('application/product_version="0.2.51"'), 'Desktop Windows version metadata must match native 0.2.51');
+assert(preset.includes('application/file_version="0.2.52"') && preset.includes('application/product_version="0.2.52"'), 'Desktop Windows version metadata must match native 0.2.52');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -134,7 +169,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${loadingScreenScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
 for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -630,7 +665,7 @@ for (const marker of [
   assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
-for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/ui/boot_splash_richtown.jpg', 150_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
   const info = await stat(relative);
   assert(info.size > minimumSize, `Native 0.2.36 canonical UI asset is unexpectedly small: ${relative}`);
   if (relative.endsWith('.jpg')) {
@@ -868,6 +903,7 @@ if (requireAssets) {
     'assets/ui/menu_mercedes_560_sel_gameplay.jpg',
     'assets/ui/menu_richtown_gameplay.jpg',
     'assets/ui/menu_world_gameplay.jpg',
+    'assets/ui/boot_splash_richtown.jpg',
     'assets/ui/steering_wheel_common.png',
     'assets/audio/ui_click.wav',
     ...shelbyAudioFiles.map((name) => `assets/audio/shelby/${name}`),

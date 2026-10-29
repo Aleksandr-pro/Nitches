@@ -56,6 +56,7 @@ const uiCopies = [
   ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 'ui/menu_mercedes_560_sel_gameplay.jpg'],
   ['src/assets/ui/menu_richtown_gameplay.jpg', 'ui/menu_richtown_gameplay.jpg'],
   ['src/assets/ui/menu_world_gameplay.jpg', 'ui/menu_world_gameplay.jpg'],
+  ['src/assets/ui/boot_splash_richtown.jpg', 'ui/boot_splash_richtown.jpg'],
   ['src/assets/ui/steering_wheel_common.png', 'ui/steering_wheel_common.png'],
   ['src/assets/audio/ui_click.wav', 'audio/ui_click.wav'],
 ];
