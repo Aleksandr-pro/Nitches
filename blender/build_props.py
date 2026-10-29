@@ -2322,13 +2322,25 @@ def build_villa():
 
 
 # --------------------------------------------------------------------------- #
-# Building Model No.4 — detailed fixed-scale glass district tower.
+# Building Model No.4 - detailed fixed-scale glass district tower.
 # Planned envelope: 34.00 x 34.00 m, 72.90 m high. A two-storey stone
 # podium carries two set-back curtain-wall shaft tiers and a mechanical
-# crown; the runtime places the finished design at scale 1.0. The old
-# finned-glass proxy is preserved below only for the separate 148 m
-# landmark, whose own detailed pass remains a future building.
-# --------------------------------------------------------------------------- #
+# crown; the runtime places the finished design at scale 1.0.
+# 0.2.45 photoreal pass: the old continuous glass skins with 6.5 m
+# mullion spacing and tray-like spandrel rings become a true unitized
+# curtain wall on a ~1.65 m module - individual vision lites with
+# shadow gaps, pressure-cap mullions/transoms, expressed fins on the
+# same grid, a 450 mm facade zone with slab nosings and per-bay tenant
+# backings (dark office, blind states, lit bays) behind the glass.
+# The podium gains a subdivided storefront with stallrisers, a real
+# four-leaf entrance against a lit lobby backdrop and a segmented
+# clerestory; the crown gains posted rails, cooling towers with pipe
+# runs, exhaust stacks, a PV row, BMU rails with a parked cradle and
+# an octagonal helipad.  Facade geometry is accumulated into one
+# MeshBuilder per semantic material, so the mesh count drops while
+# the detail rises.  The exact outer envelope, tier heights and the
+# 72.90 m beacon top are unchanged, so all eight audited placements,
+# colliders and the far proxy stay exact.  Exterior only throughout.
 def build_glass_tower():
     glass = MATS["TowerGlass"]
     spandrel = MATS["TowerSpandrel"]
@@ -2347,72 +2359,166 @@ def build_glass_tower():
     dark = MATS["RoofDark"]
     glow = MATS["LampGlow"]
     wood = MATS["VillaWood"]
+    solar = MATS["SolarCell"]
 
-    def curtain_tier(half, z_bottom, z_top, floors, seed):
+    # ---- merged-geometry helpers (0.2.45) ------------------------------- #
+    # The curtain wall and podium storefront are accumulated into one
+    # MeshBuilder per semantic material, so thousands of real panes,
+    # mullions and tenant backings export as a handful of meshes.
+    builders = {}
+
+    def bb(material):
+        if material.name not in builders:
+            builders[material.name] = (MeshBuilder(), material)
+        return builders[material.name][0]
+
+    def builder_box(builder, cx, cy, cz, dx, dy, dz):
+        x0, x1 = cx - dx / 2.0, cx + dx / 2.0
+        y0, y1 = cy - dy / 2.0, cy + dy / 2.0
+        z0, z1 = cz - dz / 2.0, cz + dz / 2.0
+
+        def v(x, y, z):
+            return builder.add_vertex(Vector((x, y, z)))
+
+        quads = (
+            # +Z, -Z, +Y, -Y, +X, -X (outward windings)
+            ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((x0, y1, z0), (x1, y1, z0), (x1, y0, z0), (x0, y0, z0)),
+            ((x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)),
+            ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+            ((x0, y1, z0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1)),
+        )
+        for quad_corners in quads:
+            ids = [v(*corner) for corner in quad_corners]
+            builder.quad(*ids)
+
+    def face_box(material, face, along_c, out_c, z_c, along_sz, out_sz, z_sz):
+        builder = bb(material)
+        if face in ("front", "back"):
+            sign = -1.0 if face == "front" else 1.0
+            builder_box(builder, along_c, sign * out_c, z_c, along_sz, out_sz, z_sz)
+        else:
+            sign = -1.0 if face == "left" else 1.0
+            builder_box(builder, sign * out_c, along_c, z_c, out_sz, along_sz, z_sz)
+
+    def face_quad(material, face, along_0, along_1, z_0, z_1, out_c):
+        builder = bb(material)
+        if face in ("front", "back"):
+            sign = -1.0 if face == "front" else 1.0
+            points = {
+                (0, 0): Vector((along_0, sign * out_c, z_0)),
+                (1, 0): Vector((along_1, sign * out_c, z_0)),
+                (1, 1): Vector((along_1, sign * out_c, z_1)),
+                (0, 1): Vector((along_0, sign * out_c, z_1)),
+            }
+            outward = Vector((0.0, sign, 0.0))
+        else:
+            sign = -1.0 if face == "left" else 1.0
+            points = {
+                (0, 0): Vector((sign * out_c, along_0, z_0)),
+                (1, 0): Vector((sign * out_c, along_1, z_0)),
+                (1, 1): Vector((sign * out_c, along_1, z_1)),
+                (0, 1): Vector((sign * out_c, along_0, z_1)),
+            }
+            outward = Vector((sign, 0.0, 0.0))
+        order = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        a = points[(0, 0)]
+        normal = (points[(1, 0)] - a).cross(points[(0, 1)] - a)
+        if normal.dot(outward) < 0.0:
+            order = [(1, 0), (0, 0), (0, 1), (1, 1)]
+        ids = [builder.add_vertex(points[key]) for key in order]
+        builder.quad(*ids)
+
+    def tenant_material(floor_index, bay_index, face_index, tier_seed):
+        value = (floor_index * 31 + bay_index * 17 + face_index * 7 + tier_seed * 13) % 100
+        if value < 50:
+            return core, 1.0
+        if value < 68:
+            return curtain, 1.0
+        if value < 80:
+            return curtain, 0.52  # half-drawn blind
+        return glow, 1.0
+
+    # ---- curtain-wall shaft tiers --------------------------------------- #
+    def curtain_tier(half, z_bottom, z_top, floors, bays, seed):
         height = z_top - z_bottom
         centre_z = (z_bottom + z_top) * 0.5
         floor_h = height / float(floors)
-        box("tower_shaft_core", 0.0, 0.0, centre_z, half * 2.0 - 0.30, half * 2.0 - 0.30, height, core, bevel=0.035)
-        # Four continuous glass skins over a dark occupied core. Floor
-        # slabs, continuous mullions, feature fins and varied interior
-        # blind/lit panels give the curtain wall its scale without a
-        # separate deep window assembly for every office pane.
-        for axis in ("y", "x"):
-            for sign in (-1.0, 1.0):
-                if axis == "y":
-                    box("tower_curtain_glass", 0.0, sign * (half + 0.020), centre_z, half * 2.0, 0.080, height, glass)
-                else:
-                    box("tower_curtain_glass", sign * (half + 0.020), 0.0, centre_z, 0.080, half * 2.0, height, glass)
-                for offset_ratio in (-0.75, -0.50, -0.25, 0.0, 0.25, 0.50, 0.75):
-                    offset = offset_ratio * half
-                    if axis == "y":
-                        box("tower_curtain_mullion", offset, sign * (half + 0.085), centre_z, 0.110, 0.150, height, frame)
-                    else:
-                        box("tower_curtain_mullion", sign * (half + 0.085), offset, centre_z, 0.150, 0.110, height, frame)
-                for fin_ratio in (-0.50, 0.0, 0.50):
-                    fin_offset = fin_ratio * half
-                    if axis == "y":
-                        box("tower_feature_fin", fin_offset, sign * (half + 0.270), centre_z, 0.300, 0.500, height, tower_metal)
-                        if fin_ratio == 0.0:
-                            box("tower_feature_light", fin_offset, sign * (half + 0.535), centre_z, 0.075, 0.035, height * 0.94, glow)
-                    else:
-                        box("tower_feature_fin", sign * (half + 0.270), fin_offset, centre_z, 0.500, 0.300, height, tower_metal)
-                        if fin_ratio == 0.0:
-                            box("tower_feature_light", sign * (half + 0.535), fin_offset, centre_z, 0.035, 0.075, height * 0.94, glow)
-        for slab_index in range(floors + 1):
-            slab_z = z_bottom + slab_index * floor_h
-            box("tower_floor_spandrel", 0.0, 0.0, slab_z, half * 2.0 + 0.35, half * 2.0 + 0.35, 0.270, spandrel)
+        field_half = half - 0.475  # glass field between corner-pier faces
+        bay_w = (field_half * 2.0) / float(bays)
+        glass_out = half + 0.025
+        backing_out = half - 0.42
+
+        # Occupied core, inset so slab edges and tenant backings have a
+        # real 450 mm facade zone in front of it.
+        box("tower_shaft_core", 0.0, 0.0, centre_z, half * 2.0 - 0.90, half * 2.0 - 0.90, height, core, bevel=0.035)
         for corner_x in (-1.0, 1.0):
             for corner_y in (-1.0, 1.0):
                 box("tower_corner_pier", corner_x * (half - 0.050), corner_y * (half - 0.050), centre_z, 0.850, 0.850, height, trim)
-        for floor_index in range(floors):
-            panel_z = z_bottom + (floor_index + 0.52) * floor_h
-            for face_index, (axis, sign) in enumerate((("y", -1.0), ("y", 1.0), ("x", -1.0), ("x", 1.0))):
-                pattern = (floor_index * 3 + face_index * 2 + seed) % 5
-                panel_specs = ((-0.46, 0.48), (0.34, 0.36)) if pattern in (0, 1) else ((-0.18, 0.72),)
-                for panel_ratio, panel_width_ratio in panel_specs:
-                    panel_offset = panel_ratio * half
-                    panel_width = panel_width_ratio * half
-                    panel_material = glow if pattern == 0 else (curtain if pattern in (1, 2) else spandrel)
-                    if axis == "y":
-                        box("tower_interior_panel", panel_offset, sign * (half - 0.085), panel_z, panel_width, 0.030, 1.12, panel_material)
-                    else:
-                        box("tower_interior_panel", sign * (half - 0.085), panel_offset, panel_z, 0.030, panel_width, 1.12, panel_material)
+                box("tower_corner_pier_cap", corner_x * (half - 0.050), corner_y * (half - 0.050), z_top - 0.055, 0.94, 0.94, 0.11, tower_metal)
 
-    def podium_bay(face, offset):
-        sign = -1.0 if face in ("front", "left") else 1.0
-        if face in ("front", "back"):
-            box("tower_podium_bay_interior", offset, sign * 15.540, 3.15, 3.55, 0.040, 4.65, core)
-            box("tower_podium_bay_glass", offset, sign * 15.600, 3.15, 3.55, 0.060, 4.65, glass)
-            box("tower_podium_bay_mullion", offset, sign * 15.645, 3.15, 0.065, 0.055, 4.65, frame)
-            box("tower_podium_bay_transom", offset, sign * 15.645, 4.55, 3.55, 0.055, 0.065, frame)
-            box("tower_podium_bay_sill", offset, sign * 15.610, 0.78, 3.75, 0.18, 0.10, trim)
-        else:
-            box("tower_podium_bay_interior", sign * 15.540, offset, 3.15, 0.040, 3.55, 4.65, core)
-            box("tower_podium_bay_glass", sign * 15.600, offset, 3.15, 0.060, 3.55, 4.65, glass)
-            box("tower_podium_bay_mullion", sign * 15.645, offset, 3.15, 0.055, 0.065, 4.65, frame)
-            box("tower_podium_bay_transom", sign * 15.645, offset, 4.55, 0.055, 3.55, 0.065, frame)
-            box("tower_podium_bay_sill", sign * 15.610, offset, 0.78, 0.18, 3.75, 0.10, trim)
+        fin_bays = {bays // 4, bays // 2, (3 * bays) // 4}
+        for face_index, face in enumerate(("front", "back", "left", "right")):
+            # Continuous mullions on every bay boundary; every fourth
+            # line deepens into an expressed fin tied to the same grid.
+            for boundary in range(bays + 1):
+                along = -field_half + boundary * bay_w
+                if boundary in fin_bays:
+                    face_box(tower_metal, face, along, half + 0.235, centre_z, 0.150, 0.470, height)
+                    face_box(frame, face, along, half + 0.020, centre_z, 0.170, 0.120, height)
+                    if boundary == bays // 2:
+                        face_box(glow, face, along, half + 0.478, centre_z, 0.060, 0.020, height * 0.94)
+                else:
+                    face_box(frame, face, along, half + 0.045, centre_z, 0.075, 0.170, height)
+            for floor_index in range(floors):
+                z_floor = z_bottom + floor_index * floor_h
+                # Slab nosing bridging core -> glass line.
+                face_box(core, face, 0.0, half - 0.225, z_floor + 0.11, field_half * 2.0, 0.450, 0.220)
+                # Floor-line transom, spandrel band, sill transom.
+                face_box(frame, face, 0.0, half + 0.035, z_floor + 0.075, field_half * 2.0, 0.150, 0.150)
+                # Shadow-box spandrel: panel recessed behind a glass strip
+                # flush with the vision lites, so the shaft reads as one
+                # glass surface with a darker band behind it.
+                face_box(spandrel, face, 0.0, half - 0.100, z_floor + 0.600, field_half * 2.0, 0.060, 0.900)
+                face_box(glass, face, 0.0, glass_out - 0.025, z_floor + 0.600, field_half * 2.0, 0.050, 0.900)
+                face_box(frame, face, 0.0, half + 0.035, z_floor + 1.090, field_half * 2.0, 0.150, 0.090)
+                # Ceiling-edge hint behind the head of the vision zone.
+                face_quad(trim, face, -field_half, field_half, z_floor + 3.200, z_floor + 3.330, backing_out + 0.010)
+                for bay_index in range(bays):
+                    bay_centre = -field_half + (bay_index + 0.5) * bay_w
+                    # Vision lite with a real shadow gap to its frame.
+                    face_box(glass, face, bay_centre, glass_out - 0.025, z_floor + 2.210, bay_w - 0.095, 0.050, 2.210)
+                    # Tenant backing: dark office, blind states, lit bay.
+                    backing_material, height_fraction = tenant_material(floor_index, bay_index, face_index, seed)
+                    backing_height = 2.210 * height_fraction
+                    face_quad(
+                        backing_material, face,
+                        bay_centre - (bay_w - 0.120) / 2.0, bay_centre + (bay_w - 0.120) / 2.0,
+                        z_floor + 1.135, z_floor + 1.135 + backing_height, backing_out,
+                    )
+                    if height_fraction < 1.0:
+                        # Blind headrail at the drop line.
+                        face_box(frame, face, bay_centre, backing_out + 0.015, z_floor + 1.135 + backing_height, bay_w - 0.120, 0.030, 0.045)
+            # Head transom closing the tier.
+            face_box(frame, face, 0.0, half + 0.035, z_top - 0.075, field_half * 2.0, 0.150, 0.150)
+
+    # ---- podium storefront ---------------------------------------------- #
+    def podium_bay(face, offset, lit=False):
+        # 3.55 m structural bay subdivided into three lites with a real
+        # transom at door-head height and a stallriser below the sill.
+        backing = glow if lit else core
+        face_quad(backing, face, offset - 1.715, offset + 1.715, 0.880, 5.400, 15.500)
+        for lite in (-1, 0, 1):
+            lite_centre = offset + lite * 1.183
+            face_box(glass, face, lite_centre, 15.585, 1.980, 1.100, 0.050, 2.140)
+            face_box(glass, face, lite_centre, 15.585, 4.310, 1.100, 0.050, 2.240)
+        for mullion_offset in (-0.592, 0.592):
+            face_box(frame, face, offset + mullion_offset, 15.605, 3.145, 0.060, 0.110, 4.530)
+        face_box(frame, face, offset, 15.605, 3.145, 3.550, 0.110, 0.080)   # transom
+        face_box(frame, face, offset, 15.605, 5.450, 3.550, 0.110, 0.090)   # head
+        face_box(granite, face, offset, 15.560, 0.545, 3.600, 0.100, 0.470)  # stallriser
+        face_box(trim, face, offset, 15.610, 0.810, 3.750, 0.180, 0.090)     # sill
 
     # Plaza parcel and two-storey stone podium.
     box("tower_lot_plinth", 0.0, 0.0, 0.15, 34.00, 34.00, 0.30, granite, bevel=0.015)
@@ -2428,33 +2534,56 @@ def build_glass_tower():
         box("tower_podium_column_left", -15.62, column_offset, 3.65, 0.30, 0.95, 5.70, trim)
         box("tower_podium_column_right", 15.62, column_offset, 3.65, 0.30, 0.95, 5.70, trim)
     for bay_offset in (-10.83, -6.50, -2.17, 2.17, 6.50, 10.83):
-        podium_bay("front", bay_offset)
+        podium_bay("front", bay_offset, lit=bay_offset in (-2.17, 2.17))
         podium_bay("left", bay_offset)
-        podium_bay("right", bay_offset)
+        if bay_offset != 6.50:  # garage portal occupies this bay
+            podium_bay("right", bay_offset)
     for bay_offset in (-10.83, -6.50, -2.17, 2.17):
         podium_bay("back", bay_offset)
-    for strip_sign in (-1.0, 1.0):
-        box("tower_podium_clerestory", 0.0, strip_sign * 15.575, 6.35, 27.00, 0.060, 0.75, glass)
-        box("tower_podium_clerestory_side", strip_sign * 15.575, 0.0, 6.35, 0.060, 27.00, 0.75, glass)
-    box("tower_sign_band", 0.0, -15.700, 5.78, 10.20, 0.180, 0.78, tower_metal)
-    box("tower_sign_glow", 0.0, -15.800, 5.78, 9.55, 0.035, 0.28, glow)
+    # Segmented clerestory under the cornice, aligned to the bay grid,
+    # over a recessed dark shadow gap.
+    for face in ("front", "back", "left", "right"):
+        face_box(spandrel, face, 0.0, 15.520, 6.820, 27.40, 0.060, 0.420)
+        for bay_offset in (-10.83, -6.50, -2.17, 2.17, 6.50, 10.83):
+            face_box(glass, face, bay_offset, 15.575, 6.100, 3.430, 0.050, 0.900)
+            face_box(frame, face, bay_offset, 15.600, 6.100, 0.060, 0.110, 0.900)
+        face_box(frame, face, 0.0, 15.600, 5.620, 27.40, 0.110, 0.070)
+        face_box(frame, face, 0.0, 15.600, 6.590, 27.40, 0.110, 0.070)
+    box("tower_sign_band", 0.0, -15.700, 5.78, 10.20, 0.180, 0.64, tower_metal)
+    for sign_segment, (seg_x, seg_w) in enumerate(((-3.05, 2.40), (-0.60, 1.50), (2.40, 2.90))):
+        box(f"tower_sign_glow_{sign_segment}", seg_x, -15.800, 5.78, seg_w, 0.035, 0.26, glow)
     for banner_side in (-1.0, 1.0):
         box("tower_entry_banner", banner_side * 5.85, -15.720, 5.20, 0.78, 0.055, 2.15, spandrel)
         box("tower_entry_banner_stripe", banner_side * 5.85, -15.755, 5.20, 0.14, 0.025, 1.85, glow)
+        box("tower_entry_banner_rail", banner_side * 5.85, -15.730, 6.32, 0.92, 0.070, 0.070, tower_metal)
+        box("tower_entry_banner_rail", banner_side * 5.85, -15.730, 4.08, 0.92, 0.070, 0.070, tower_metal)
 
-    # Main entrance: stone header, canopy on columns/tie rods, steps,
-    # ramp and paired lobby-door handles behind the podium glazing.
+    # Main entrance: stone portal, canopy on columns/tie rods, steps and
+    # four real door leaves with a lit lobby backdrop behind the glass.
     box("tower_entry_header", 0.0, -15.700, 5.12, 9.60, 0.35, 0.58, trim)
     box("tower_entry_canopy", 0.0, -16.150, 4.66, 9.80, 1.35, 0.22, granite, bevel=0.020)
     box("tower_entry_canopy_soffit", 0.0, -16.150, 4.52, 9.35, 1.18, 0.055, wood)
+    box("tower_entry_portal_left", -3.05, -15.620, 2.45, 0.46, 0.38, 4.90, granite)
+    box("tower_entry_portal_right", 3.05, -15.620, 2.45, 0.46, 0.38, 4.90, granite)
+    face_quad(core, "front", -2.78, 2.78, 0.30, 4.90, 15.460)
+    face_quad(glow, "front", -2.20, 2.20, 1.45, 3.60, 15.470)
+    face_box(granite, "front", 0.0, 15.490, 0.780, 2.60, 0.060, 0.900)  # reception desk silhouette
+    for leaf_centre in (-1.425, -0.475, 0.475, 1.425):
+        face_box(glass, "front", leaf_centre, 15.590, 1.700, 0.880, 0.045, 2.760)
+        face_box(frame, "front", leaf_centre, 15.600, 0.500, 0.880, 0.080, 0.360)
+        face_box(frame, "front", leaf_centre, 15.600, 3.110, 0.880, 0.080, 0.080)
+    face_box(glass, "front", 0.0, 15.590, 3.920, 3.800, 0.045, 1.460)  # fanlight
+    face_box(frame, "front", 0.0, 15.605, 3.165, 3.800, 0.110, 0.070)
     for column_side in (-1.0, 1.0):
         column_x = column_side * 4.40
         box("tower_entry_column_base", column_x, -16.55, 0.48, 0.38, 0.38, 0.36, granite)
         cyl("tower_entry_column", column_x, -16.55, 2.50, 0.120, 3.95, tower_metal, vertices=14)
         tube_between("tower_entry_tie_rod", (column_x, -16.55, 4.50), (column_x, -15.55, 5.55), 0.025, 0.025, tower_metal, vertices=8)
-        cyl("tower_lobby_door_handle", column_side * 0.35, -15.700, 1.55, 0.024, 0.92, metal, vertices=10)
+        cyl("tower_lobby_door_handle", column_side * 0.18, -15.680, 1.55, 0.024, 0.92, metal, vertices=10)
+        cyl("tower_lobby_door_handle", column_side * 1.12, -15.680, 1.55, 0.024, 0.92, metal, vertices=10)
     for step_index, (step_y, step_top) in enumerate(((-15.85, 0.75), (-16.30, 0.60), (-16.72, 0.45))):
         box("tower_entry_step", 0.0, step_y, (0.30 + step_top) / 2.0, 7.40 - step_index * 0.40, 0.48, step_top - 0.30, pavement)
+    box("tower_entry_mat", 0.0, -16.05, 0.765, 4.40, 0.85, 0.030, dark)
     box("tower_address_plaque", -4.95, -15.720, 1.75, 0.62, 0.060, 0.85, granite)
     box("tower_address_inset", -4.95, -15.760, 1.75, 0.40, 0.025, 0.56, metal)
 
@@ -2464,31 +2593,48 @@ def build_glass_tower():
     for seam_z in (1.10, 1.95, 2.80):
         box("tower_service_door_seam", 8.70, 15.740, seam_z, 3.75, 0.025, 0.045, frame)
     box("tower_loading_dock", 8.70, 16.15, 0.50, 5.40, 1.30, 0.42, pavement)
+    for bumper_x in (7.15, 10.25):
+        box("tower_dock_bumper", bumper_x, 15.720, 0.95, 0.42, 0.16, 0.55, dark)
     box("tower_service_canopy", 8.70, 16.05, 3.95, 5.20, 1.05, 0.15, granite)
+    box("tower_service_canopy_light", 8.70, 16.05, 3.855, 1.60, 0.28, 0.045, glow)
     box("tower_garage_portal", 15.600, 8.00, 2.00, 0.18, 5.00, 3.40, trim)
     box("tower_garage_door", 15.680, 8.00, 1.95, 0.10, 4.45, 3.05, tower_metal, bevel=0.010)
     for seam_y in (6.85, 8.00, 9.15):
         box("tower_garage_door_seam", 15.740, seam_y, 1.95, 0.025, 0.045, 2.95, frame)
+    box("tower_garage_clearance_bar", 15.760, 8.00, 3.62, 0.070, 4.30, 0.22, glow)
     rbox("tower_garage_ramp", 16.25, 8.00, 0.38, 1.35, 5.30, 0.12, pavement, rotation=(0.0, 0.11, 0.0))
     for bin_x in (-12.20, -10.00):
         box("tower_waste_bin", bin_x, 16.15, 0.82, 1.85, 1.00, 1.08, dark, bevel=0.025)
         box("tower_waste_bin_lid", bin_x, 16.15, 1.40, 1.92, 1.05, 0.09, tower_metal)
+    for vent_x in (-6.0, -3.2, 3.4):
+        box("tower_rear_vent", vent_x, 15.560, 4.35, 1.90, 0.10, 1.15, tower_metal)
+        for louvre_index in range(4):
+            box("tower_rear_vent_slat", vent_x, 15.620, 3.98 + louvre_index * 0.25, 1.74, 0.035, 0.085, frame)
+    box("tower_utility_cabinet", -13.90, 15.75, 1.05, 1.30, 0.45, 1.55, tower_metal, bevel=0.015)
+    box("tower_utility_cabinet_door", -13.90, 15.990, 1.05, 1.10, 0.030, 1.35, frame)
 
     # Two shaft tiers and the setback between them.
-    curtain_tier(13.00, 7.35, 41.85, 10, 1)
+    curtain_tier(13.00, 7.35, 41.85, 10, 15, 1)
     box("tower_setback_slab", 0.0, 0.0, 42.05, 27.40, 27.40, 0.45, trim)
-    curtain_tier(11.00, 42.30, 66.45, 7, 3)
+    box("tower_setback_flashing", 0.0, 0.0, 42.315, 27.52, 27.52, 0.070, tower_metal)
+    curtain_tier(11.00, 42.30, 66.45, 7, 13, 3)
 
-    # Podium and setback roof terraces: glass rails, planters and plant.
-    for rail_sign in (-1.0, 1.0):
-        box("tower_podium_roof_rail", 0.0, rail_sign * 15.25, 7.82, 29.40, 0.055, 0.78, glass)
-        box("tower_podium_roof_rail_side", rail_sign * 15.25, 0.0, 7.82, 0.055, 29.40, 0.78, glass)
-        box("tower_podium_roof_toprail", 0.0, rail_sign * 15.25, 8.25, 29.55, 0.075, 0.065, frame)
-        box("tower_podium_roof_toprail_side", rail_sign * 15.25, 0.0, 8.25, 0.075, 29.55, 0.065, frame)
-        box("tower_setback_rail", 0.0, rail_sign * 13.35, 42.75, 25.80, 0.055, 0.78, glass)
-        box("tower_setback_rail_side", rail_sign * 13.35, 0.0, 42.75, 0.055, 25.80, 0.78, glass)
-        box("tower_setback_toprail", 0.0, rail_sign * 13.35, 43.18, 25.95, 0.075, 0.065, frame)
-        box("tower_setback_toprail_side", rail_sign * 13.35, 0.0, 43.18, 0.075, 25.95, 0.065, frame)
+    # Podium and setback roof terraces: posted glass rails, planters,
+    # pergola and rooftop plant.
+    def terrace_rail(half_extent, z_base, prefix):
+        for rail_sign in (-1.0, 1.0):
+            box(prefix + "_rail", 0.0, rail_sign * half_extent, z_base + 0.42, half_extent * 2.0 - 0.60, 0.055, 0.78, glass)
+            box(prefix + "_rail_side", rail_sign * half_extent, 0.0, z_base + 0.42, 0.055, half_extent * 2.0 - 0.60, 0.78, glass)
+            box(prefix + "_toprail", 0.0, rail_sign * half_extent, z_base + 0.85, half_extent * 2.0 - 0.45, 0.075, 0.065, frame)
+            box(prefix + "_toprail_side", rail_sign * half_extent, 0.0, z_base + 0.85, 0.075, half_extent * 2.0 - 0.45, 0.065, frame)
+            post = -half_extent + 0.85
+            while post < half_extent - 0.60:
+                box(prefix + "_rail_post", post, rail_sign * half_extent, z_base + 0.42, 0.055, 0.075, 0.84, frame)
+                box(prefix + "_rail_post_side", rail_sign * half_extent, post, z_base + 0.42, 0.075, 0.055, 0.84, frame)
+                post += 1.75
+
+    terrace_rail(15.25, 7.40, "tower_podium_roof")
+    terrace_rail(13.35, 42.33, "tower_setback")
     for planter_x in (-10.0, -5.0, 5.0, 10.0):
         for planter_y in (-14.25, 14.25):
             box("tower_podium_roof_planter", planter_x, planter_y, 7.62, 1.90, 0.72, 0.48, granite)
@@ -2499,6 +2645,8 @@ def build_glass_tower():
     for hvac_x, hvac_y in ((-14.30, -8.00), (-14.30, 8.00), (14.30, -8.00), (14.30, 8.00)):
         box("tower_podium_hvac", hvac_x, hvac_y, 7.78, 1.60, 1.45, 0.92, metal, bevel=0.018)
         cyl("tower_podium_hvac_fan", hvac_x, hvac_y, 8.27, 0.32, 0.045, frame, vertices=16)
+        for louvre_index in range(3):
+            box("tower_podium_hvac_slat", hvac_x, hvac_y - 0.735, 7.56 + louvre_index * 0.22, 1.30, 0.025, 0.070, frame)
     for post_x in (-7.0, 7.0):
         for post_y in (-12.85, -11.55):
             box("tower_setback_pergola_post", post_x, post_y, 43.35, 0.15, 0.15, 2.05, wood)
@@ -2507,15 +2655,24 @@ def build_glass_tower():
     for slat_index in range(8):
         box("tower_setback_pergola_slat", -6.65 + slat_index * 1.90, -12.20, 44.60, 0.14, 1.58, 0.12, wood)
 
-    # Mechanical crown, corner fins, cooling towers, helipad and mast.
+    # Mechanical crown: parapet cap, posted rail, louvred penthouse,
+    # cooling towers with pipe runs, PV row, BMU rails + parked cradle,
+    # octagonal helipad, exhaust stacks and the aviation mast.
     box("tower_crown_frame", 0.0, 0.0, 66.65, 19.40, 19.40, 0.40, trim)
-    box("tower_mechanical_penthouse", 0.0, 0.0, 68.65, 14.50, 14.50, 3.60, spandrel, bevel=0.020)
-    box("tower_mechanical_roof", 0.0, 0.0, 70.60, 15.30, 15.30, 0.30, trim)
+    for cap_sign in (-1.0, 1.0):
+        box("tower_roof_parapet_cap", 0.0, cap_sign * 10.95, 66.58, 22.30, 0.30, 0.14, tower_metal)
+        box("tower_roof_parapet_cap_side", cap_sign * 10.95, 0.0, 66.58, 0.30, 22.30, 0.14, tower_metal)
+    box("tower_mechanical_penthouse", 0.0, 0.0, 68.65, 15.50, 15.50, 3.60, spandrel, bevel=0.020)
+    box("tower_mechanical_roof", 0.0, 0.0, 70.60, 16.30, 16.30, 0.30, trim)
     for louvre_z in (67.85, 68.45, 69.05, 69.65):
-        box("tower_crown_louvre_front", 0.0, -7.30, louvre_z, 11.80, 0.10, 0.16, frame)
-        box("tower_crown_louvre_rear", 0.0, 7.30, louvre_z, 11.80, 0.10, 0.16, frame)
-        box("tower_crown_louvre_left", -7.30, 0.0, louvre_z, 0.10, 11.80, 0.16, frame)
-        box("tower_crown_louvre_right", 7.30, 0.0, louvre_z, 0.10, 11.80, 0.16, frame)
+        box("tower_crown_louvre_front", 0.0, -7.80, louvre_z, 12.60, 0.10, 0.16, frame)
+        box("tower_crown_louvre_rear", 0.0, 7.80, louvre_z, 12.60, 0.10, 0.16, frame)
+        box("tower_crown_louvre_left", -7.80, 0.0, louvre_z, 0.10, 12.60, 0.16, frame)
+        box("tower_crown_louvre_right", 7.80, 0.0, louvre_z, 0.10, 12.60, 0.16, frame)
+    box("tower_penthouse_door", -3.40, -7.820, 67.95, 0.95, 0.07, 2.15, tower_metal)
+    box("tower_penthouse_door_handle", -3.02, -7.870, 67.95, 0.16, 0.040, 0.05, frame)
+    box("tower_roof_access_bulkhead", 5.90, 5.90, 67.55, 2.20, 1.60, 1.35, spandrel, bevel=0.015)
+    box("tower_roof_access_lid", 5.90, 5.90, 68.27, 2.34, 1.74, 0.10, tower_metal)
     for fin_x in (-9.35, 9.35):
         for fin_y in (-9.35, 9.35):
             box("tower_crown_fin", fin_x, fin_y, 68.98, 0.55, 0.55, 5.15, tower_metal)
@@ -2523,20 +2680,53 @@ def build_glass_tower():
     for rail_sign in (-1.0, 1.0):
         box("tower_crown_rail", 0.0, rail_sign * 9.45, 67.30, 18.20, 0.050, 0.72, glass)
         box("tower_crown_rail_side", rail_sign * 9.45, 0.0, 67.30, 0.050, 18.20, 0.72, glass)
+        post = -8.40
+        while post < 8.60:
+            box("tower_crown_rail_post", post, rail_sign * 9.45, 67.30, 0.050, 0.070, 0.72, frame)
+            box("tower_crown_rail_post_side", rail_sign * 9.45, post, 67.30, 0.070, 0.050, 0.72, frame)
+            post += 1.70
     for tower_x, tower_y in ((8.45, -4.00), (-8.45, 4.00)):
-        cyl("tower_cooling_tower", tower_x, tower_y, 67.82, 0.86, 1.92, metal, vertices=18)
-        cyl("tower_cooling_fan", tower_x, tower_y, 68.82, 0.55, 0.06, frame, vertices=18)
-    cyl("tower_helipad", 0.0, 0.0, 70.82, 5.35, 0.12, dark, vertices=36)
-    cyl("tower_helipad_ring", 0.0, 0.0, 70.90, 4.35, 0.035, trim, vertices=36)
-    cyl("tower_helipad_centre", 0.0, 0.0, 70.925, 3.95, 0.030, dark, vertices=36)
+        cyl("tower_cooling_tower", tower_x, tower_y, 67.82, 0.95, 1.92, metal, vertices=18)
+        cyl("tower_cooling_fan", tower_x, tower_y, 68.82, 0.62, 0.06, frame, vertices=18)
+        for band_index in range(3):
+            cyl("tower_cooling_band", tower_x, tower_y, 67.30 + band_index * 0.42, 0.965, 0.09, frame, vertices=18)
+        tube_between("tower_cooling_pipe", (tower_x, tower_y, 67.15), (tower_x * 0.72, tower_y * 0.72, 67.15), 0.09, 0.09, tower_metal, vertices=10)
+    for stack_x, stack_y in ((-8.60, -7.60), (8.60, 7.60)):
+        cyl("tower_exhaust_stack", stack_x, stack_y, 67.60, 0.21, 1.50, tower_metal, vertices=14)
+        cyl("tower_exhaust_cap", stack_x, stack_y, 68.48, 0.30, 0.10, frame, vertices=14)
+    # Rooftop PV row along the south roof ring.
+    for pv_index in range(6):
+        pv_x = -6.25 + pv_index * 2.50
+        box("tower_roof_pv_frame", pv_x, -9.55, 66.78, 2.05, 0.90, 0.08, frame)
+        rbox("tower_roof_pv_panel", pv_x, -9.55, 67.02, 1.95, 1.05, 0.05, solar, rotation=(math.radians(-18.0), 0.0, 0.0))
+    # BMU (window-washing) rails, machine and a cradle parked at the
+    # east crown edge.
+    for rail_y in (-10.30, 10.30):
+        box("tower_bmu_rail", 0.0, rail_y, 66.52, 19.60, 0.14, 0.10, tower_metal)
+    box("tower_bmu_machine", 8.90, -10.30, 67.05, 1.70, 0.95, 0.95, tower_metal, bevel=0.02)
+    box("tower_bmu_jib", 9.85, -10.30, 67.62, 0.35, 0.22, 0.18, frame)
+    rbox("tower_bmu_jib_arm", 10.55, -10.30, 67.30, 1.30, 0.16, 0.14, frame, rotation=(0.0, math.radians(35.0), 0.0))
+    box("tower_bmu_cradle", 11.38, -10.30, 64.60, 0.62, 2.30, 1.05, tower_metal)
+    box("tower_bmu_cradle_rail", 11.38, -10.30, 65.18, 0.66, 2.36, 0.06, frame)
+    for cable_y in (-11.25, -9.35):
+        cyl("tower_bmu_cable", 11.38, cable_y, 65.95, 0.016, 1.70, frame, vertices=6)
+    # Octagonal helipad on the penthouse roof with edge lights.
+    cyl("tower_helipad", 0.0, 0.0, 70.86, 5.60, 0.22, dark, vertices=8, rotation=(0.0, 0.0, math.radians(22.5)))
+    cyl("tower_helipad_ring", 0.0, 0.0, 70.985, 4.35, 0.035, trim, vertices=36)
+    cyl("tower_helipad_centre", 0.0, 0.0, 70.99, 3.95, 0.030, dark, vertices=36)
     for h_side in (-0.85, 0.85):
-        box("tower_helipad_h_leg", h_side, 0.0, 70.95, 0.45, 3.10, 0.035, glow)
-    box("tower_helipad_h_cross", 0.0, 0.0, 70.95, 2.10, 0.45, 0.035, glow)
+        box("tower_helipad_h_leg", h_side, 0.0, 71.01, 0.45, 3.10, 0.035, glow)
+    box("tower_helipad_h_cross", 0.0, 0.0, 71.01, 2.10, 0.45, 0.035, glow)
+    for light_index in range(8):
+        angle = math.radians(22.5 + light_index * 45.0)
+        box("tower_helipad_edge_light", 5.05 * math.cos(angle), 5.05 * math.sin(angle), 71.00, 0.20, 0.20, 0.09, glow)
     cyl("tower_mast", 8.85, 8.85, 69.72, 0.075, 5.75, tower_metal, vertices=10)
     box("tower_beacon", 8.85, 8.85, 72.75, 0.30, 0.30, 0.30, glow)
 
-    # Forecourt, lit bollards, benches and narrow landscape strips.
+    # Forecourt, lit bollards, benches, flag poles and landscape strips.
     box("tower_forecourt_paving", 0.0, -16.15, 0.345, 24.00, 1.55, 0.07, pavement)
+    for joint_x in (-9.0, -6.0, -3.0, 0.0, 3.0, 6.0, 9.0):
+        box("tower_forecourt_joint", joint_x, -16.15, 0.383, 0.045, 1.55, 0.006, granite)
     box("tower_dropoff_strip", 0.0, -16.88, 0.335, 18.00, 0.22, 0.05, granite)
     box("tower_rear_paving", 0.0, 16.20, 0.345, 23.00, 1.45, 0.07, pavement)
     for landscape_side in (-1.0, 1.0):
@@ -2555,8 +2745,17 @@ def build_glass_tower():
     for bench_x in (-12.20, 12.20):
         box("tower_front_bench", bench_x, -16.05, 0.58, 2.20, 0.50, 0.10, wood)
         box("tower_front_bench_base", bench_x, -16.05, 0.42, 1.80, 0.36, 0.24, granite)
+    for flag_x in (13.60, 14.45, 15.30):
+        cyl("tower_flag_pole", flag_x, -15.90, 3.95, 0.045, 7.30, tower_metal, vertices=10)
+        sphere("tower_flag_finial", flag_x, -15.90, 7.68, 0.11, 0.11, 0.11, tower_metal)
+        box("tower_flag_base", flag_x, -15.90, 0.42, 0.34, 0.34, 0.24, granite)
     for rear_hedge_x in (-14.0, -4.5, 0.5, 13.5):
         box("tower_rear_hedge", rear_hedge_x, 16.35, 0.60, 2.60, 0.55, 0.52, hedge, bevel=0.055)
+
+    # Emit the merged facade/storefront geometry, one mesh per material.
+    for material_name, (builder, material) in builders.items():
+        builder.build("tower_facade_" + material_name.lower(), material, smooth=False)
+
 
 # --------------------------------------------------------------------------- #
 # Building Model No.5 — detailed fixed-scale 148 m main tower.
@@ -4688,7 +4887,21 @@ def build_museum():
     travertine plinth plaza, reflecting pool, sculpture court,
     exhibition banners and a serviced rear dock complete the parcel.
     Authored envelope 54.0 x 38.0 m, 19.0 m to the lantern cap;
-    Blender -Y is the public front (fountain axis in game)."""
+    Blender -Y is the public front (fountain axis in game).
+
+    0.2.45 photoreal pass: every glazed surface becomes per-lite
+    unitized glazing with recessed panes behind expressed bronze
+    framing (atrium slot, rear garden slot, four-face lantern, slit
+    windows, cafe ribbons); the rainscreen, stair and slit geometry
+    is accumulated into merged MeshBuilders, cutting the mesh count
+    while adding corner quoins, framed double-leaf entrance doors,
+    canopy tie-rods and soffit lights, a ceremonial axis step with
+    handrails, plaza expansion joints and a drainage slot, roof
+    membrane seams/walkway pads/hatch/vents, a serviced dock with
+    seal, bumpers, leveler and roof ladder, multi-blob clipped
+    trees, civic flagpoles and furnished atrium depth (desk,
+    benches, plinth sculptures, wall-washer).  The authored
+    envelope and all masses are unchanged; exterior only."""
     stone = MATS["MuseumStone"]
     stone_pale = MATS["MuseumStonePale"]
     core_mat = MATS["MuseumCore"]
@@ -4715,6 +4928,58 @@ def build_museum():
         obj.data.update()
         return obj
 
+    # ---- merged-geometry helpers (0.2.45) ------------------------------- #
+    # Rainscreen panels, slit/stair parts and all new unitized glazing
+    # accumulate into one MeshBuilder per semantic material.
+    builders = {}
+
+    def bb(material):
+        if material.name not in builders:
+            builders[material.name] = (MeshBuilder(), material)
+        return builders[material.name][0]
+
+    def builder_box(builder, cx, cy, cz, dx, dy, dz):
+        x0, x1 = cx - dx / 2.0, cx + dx / 2.0
+        y0, y1 = cy - dy / 2.0, cy + dy / 2.0
+        z0, z1 = cz - dz / 2.0, cz + dz / 2.0
+
+        def v(x, y, z):
+            return builder.add_vertex(Vector((x, y, z)))
+
+        quads = (
+            # +Z, -Z, +Y, -Y, +X, -X (outward windings)
+            ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((x0, y1, z0), (x1, y1, z0), (x1, y0, z0), (x0, y0, z0)),
+            ((x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)),
+            ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+            ((x0, y1, z0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1)),
+        )
+        for quad_corners in quads:
+            ids = [v(*corner) for corner in quad_corners]
+            builder.quad(*ids)
+
+    def glazed_slot(y_c, sign, width, module, row_edges):
+        # Per-lite unitized glazing in a vertical slot: recessed panes
+        # with shadow gaps behind expressed bronze mullions/transoms.
+        cols = int(round(width / module))
+        bay = width / cols
+        fy = y_c + sign * 0.055
+        z_mid_slot = (row_edges[0] + row_edges[-1]) * 0.5
+        z_len_slot = row_edges[-1] - row_edges[0]
+        for i in range(cols + 1):
+            mx = -width * 0.5 + bay * i
+            builder_box(bb(bronze), mx, fy, z_mid_slot, 0.10, 0.15, z_len_slot)
+        for tz in row_edges[1:-1]:
+            builder_box(bb(bronze), 0.0, fy, tz, width, 0.15, 0.10)
+        builder_box(bb(bronze), 0.0, fy, row_edges[0] + 0.04, width, 0.18, 0.16)
+        builder_box(bb(bronze), 0.0, fy, row_edges[-1] - 0.04, width, 0.18, 0.16)
+        for ci in range(cols):
+            pcx = -width * 0.5 + bay * (ci + 0.5)
+            for ri in range(len(row_edges) - 1):
+                z0, z1 = row_edges[ri], row_edges[ri + 1]
+                builder_box(bb(glass), pcx, y_c, (z0 + z1) * 0.5, bay - 0.15, 0.045, (z1 - z0) - 0.15)
+
     def panel_wall(face, fixed, sign, cols, pitch, openings, rows=8, pitch_h=1.95, z_base=0.60, centre_offset=0.0):
         length = cols * pitch
         for c in range(cols):
@@ -4730,41 +4995,58 @@ def build_museum():
                     continue
                 m = stone_pale if (c * 7 + r * 13) % 5 == 0 else stone
                 if face in ("front", "back"):
-                    box("museum_panel", centre, fixed + sign * 0.05, zc, pitch - 0.06, 0.10, pitch_h - 0.06, m)
+                    builder_box(bb(m), centre, fixed + sign * 0.05, zc, pitch - 0.06, 0.10, pitch_h - 0.06)
                 else:
-                    box("museum_panel", fixed + sign * 0.05, centre, zc, 0.10, pitch - 0.06, pitch_h - 0.06, m)
+                    builder_box(bb(m), fixed + sign * 0.05, centre, zc, 0.10, pitch - 0.06, pitch_h - 0.06)
 
     def slit(face, fixed, sign, centre, z_lo=2.55, z_hi=14.25, width=1.04, pitch=3.04):
+        # The tall slit is four stacked lites behind bronze transoms,
+        # not one 11.7 m glass strip (0.2.45).
         z_mid = (z_lo + z_hi) * 0.5
         z_len = z_hi - z_lo
         strip = (pitch - 0.06 - width) * 0.5
+        lite_edges = [z_lo + z_len * f for f in (0.0, 0.25, 0.5, 0.75, 1.0)]
         for sd in (-1.0, 1.0):
             off = centre + sd * (width * 0.5 + strip * 0.5 + 0.01)
             if face in ("front", "back"):
-                box("museum_slit_strip", off, fixed + sign * 0.05, z_mid, strip, 0.10, z_len, stone)
+                builder_box(bb(stone), off, fixed + sign * 0.05, z_mid, strip, 0.10, z_len)
             else:
-                box("museum_slit_strip", fixed + sign * 0.05, off, z_mid, 0.10, strip, z_len, stone)
+                builder_box(bb(stone), fixed + sign * 0.05, off, z_mid, 0.10, strip, z_len)
         if face in ("front", "back"):
             box("museum_slit_interior", centre, fixed - sign * 0.30, z_mid, width - 0.04, 0.06, z_len - 0.04, interior)
-            box("museum_slit_glass", centre, fixed + sign * 0.015, z_mid, width, 0.05, z_len, glass)
+            for li in range(4):
+                lz0, lz1 = lite_edges[li], lite_edges[li + 1]
+                builder_box(bb(glass), centre, fixed + sign * 0.010, (lz0 + lz1) * 0.5, width - 0.06, 0.045, (lz1 - lz0) - 0.13)
+            for tz in lite_edges[1:-1]:
+                builder_box(bb(bronze), centre, fixed + sign * 0.045, tz, width + 0.04, 0.10, 0.085)
             box("museum_slit_head", centre, fixed + sign * 0.07, z_hi + 0.055, width + 0.24, 0.16, 0.11, bronze)
             box("museum_slit_sill", centre, fixed + sign * 0.07, z_lo - 0.055, width + 0.24, 0.16, 0.11, bronze)
         else:
             box("museum_slit_interior", fixed - sign * 0.30, centre, z_mid, 0.06, width - 0.04, z_len - 0.04, interior)
-            box("museum_slit_glass", fixed + sign * 0.015, centre, z_mid, 0.05, width, z_len, glass)
+            for li in range(4):
+                lz0, lz1 = lite_edges[li], lite_edges[li + 1]
+                builder_box(bb(glass), fixed + sign * 0.010, centre, (lz0 + lz1) * 0.5, 0.045, width - 0.06, (lz1 - lz0) - 0.13)
+            for tz in lite_edges[1:-1]:
+                builder_box(bb(bronze), fixed + sign * 0.045, centre, tz, 0.10, width + 0.04, 0.085)
             box("museum_slit_head", fixed + sign * 0.07, centre, z_hi + 0.055, 0.16, width + 0.24, 0.11, bronze)
             box("museum_slit_sill", fixed + sign * 0.07, centre, z_lo - 0.055, 0.16, width + 0.24, 0.11, bronze)
 
     def punched_window(face, fixed, sign, centre, zc, w=1.70, h=1.55):
+        # Deep-set bronze window: glass recessed behind a slender
+        # cross mullion instead of sitting proud of its frame (0.2.45).
         if face in ("front", "back"):
             box("museum_win_frame", centre, fixed + sign * 0.045, zc, w + 0.16, 0.13, h + 0.16, bronze)
+            builder_box(bb(bronze), centre, fixed + sign * 0.075, zc, 0.055, 0.06, h - 0.02)
+            builder_box(bb(bronze), centre, fixed + sign * 0.075, zc, w - 0.02, 0.06, 0.055)
             box("museum_win_interior", centre, fixed - sign * 0.22, zc, w - 0.04, 0.05, h - 0.04, interior)
-            box("museum_win_glass", centre, fixed + sign * 0.085, zc, w, 0.04, h, glass)
+            box("museum_win_glass", centre, fixed + sign * 0.015, zc, w, 0.04, h, glass)
             box("museum_win_sill", centre, fixed + sign * 0.09, zc - h * 0.5 - 0.06, w + 0.30, 0.24, 0.09, trav)
         else:
-            box("museum_win_frame", fixed + sign * 0.045, centre, zc, 0.13, w + 0.16, h + 0.16, frame)
+            box("museum_win_frame", fixed + sign * 0.045, centre, zc, 0.13, w + 0.16, h + 0.16, bronze)
+            builder_box(bb(bronze), fixed + sign * 0.075, centre, zc, 0.06, 0.055, h - 0.02)
+            builder_box(bb(bronze), fixed + sign * 0.075, centre, zc, 0.06, w - 0.02, 0.055)
             box("museum_win_interior", fixed - sign * 0.22, centre, zc, 0.05, w - 0.04, h - 0.04, interior)
-            box("museum_win_glass", fixed + sign * 0.085, centre, zc, 0.04, w, h, glass)
+            box("museum_win_glass", fixed + sign * 0.015, centre, zc, 0.04, w, h, glass)
             box("museum_win_sill", fixed + sign * 0.09, centre, zc - h * 0.5 - 0.06, 0.24, w + 0.30, 0.09, trav)
 
     # ---- travertine plinth plaza (two monumental steps) ---------------
@@ -4775,6 +5057,24 @@ def build_museum():
         for sd in (-1.0, 1.0):
             tube_between("museum_ramp_rail", (rx + sd * 0.78, -18.80, 0.85), (rx + sd * 0.78, -15.30, 1.45), 0.035, 0.035, bronze, vertices=8)
             cyl("museum_ramp_rail_post", rx + sd * 0.78, -15.45, 1.02, 0.030, 0.84, bronze, vertices=8)
+    # Ceremonial centre step with bronze handrails on the entry axis,
+    # so the monumental climb reads at the door, not only at ramps.
+    box("museum_axis_step", 0.0, -17.42, 0.375, 14.00, 0.82, 0.15, trav)
+    for sx2 in (-6.20, 6.20):
+        cyl("museum_axis_rail_post", sx2, -18.55, 0.75, 0.030, 0.90, bronze, vertices=8)
+        cyl("museum_axis_rail_post", sx2, -16.55, 1.05, 0.030, 0.90, bronze, vertices=8)
+        tube_between("museum_axis_rail", (sx2, -18.55, 1.20), (sx2, -16.55, 1.50), 0.032, 0.032, bronze, vertices=8)
+    # Plaza expansion joints and a facade drainage slot (merged lines).
+    for jy in (-16.00, -15.00):
+        builder_box(bb(core_mat), 0.0, jy, 0.606, 49.60, 0.055, 0.014)
+    for jx2 in range(-4, 5):
+        builder_box(bb(core_mat), jx2 * 6.08, -15.45, 0.606, 0.055, 3.05, 0.014)
+    for sx3 in (-23.95, 23.95):
+        builder_box(bb(core_mat), sx3, 0.0, 0.606, 0.055, 33.60, 0.014)
+    builder_box(bb(core_mat), 0.0, -14.28, 0.606, 45.80, 0.20, 0.016)
+    builder_box(bb(core_mat), 0.0, 16.28, 0.606, 45.80, 0.20, 0.016)
+    for sx3 in (-23.28, 23.28):
+        builder_box(bb(core_mat), sx3, 1.00, 0.606, 0.20, 30.00, 0.016)
 
     # ---- gallery mass: two side blocks + rear block around the atrium --
     box("museum_block_left", -14.45, 1.00, 8.40, 16.70, 29.60, 15.60, core_mat, bevel=0.02)
@@ -4816,8 +5116,20 @@ def build_museum():
         for my in (-13.30, -11.85, -10.40, -8.95):
             box("museum_cafe_mullion", fixed + sign * 0.06, my, 2.55, 0.07, 0.09, 3.80, bronze)
         box("museum_cafe_head", fixed + sign * 0.07, -10.84, 4.52, 0.16, 6.10, 0.14, bronze)
+        builder_box(bb(bronze), fixed + sign * 0.06, -10.84, 3.38, 0.09, 5.80, 0.07)
+        builder_box(bb(bronze), fixed + sign * 0.06, -10.84, 0.72, 0.10, 5.90, 0.12)
     for sc in (-18.24, -12.16, 12.16, 18.24):
         slit("front", front_y, -1.0, sc)
+    # Corner quoins: alternating pale stones proud of the panel field,
+    # so the gallery mass gains crafted corners, not butt joints.
+    for qx in (-1.0, 1.0):
+        for qy, edge_y in ((-1.0, front_y), (1.0, back_y)):
+            for r in range(8):
+                qzc = 0.60 + 1.95 * (r + 0.5)
+                fw = 1.10 if r % 2 == 0 else 0.70
+                swq = 0.70 if r % 2 == 0 else 1.10
+                builder_box(bb(stone_pale), qx * (side_x - fw * 0.5 + 0.02), edge_y + qy * 0.075, qzc, fw, 0.15, 1.84)
+                builder_box(bb(stone_pale), qx * (side_x + 0.075), edge_y - qy * (swq * 0.5 - 0.02), qzc, 0.15, swq, 1.84)
 
     # ---- atrium slot: glass curtain, mezzanines, stair, artwork --------
     box("museum_atrium_floor", 0.0, -10.90, 0.66, 12.20, 5.80, 0.12, trav)
@@ -4827,12 +5139,7 @@ def build_museum():
     for sx in (-6.05, 6.05):
         box("museum_atrium_reveal", sx, -10.90, 8.40, 0.12, 5.80, 15.60, white)
     glass_y = -13.25
-    box("museum_atrium_glass", 0.0, glass_y, 8.40, 12.20, 0.05, 15.60, glass)
-    for i in range(11):
-        mx = -6.10 + 1.22 * i
-        box("museum_atrium_mullion", mx, glass_y - 0.05, 8.40, 0.09, 0.07, 15.60, bronze)
-    for tz in (3.20, 5.80, 8.40, 11.00, 13.60):
-        box("museum_atrium_transom", 0.0, glass_y - 0.05, tz, 12.20, 0.07, 0.09, bronze)
+    glazed_slot(glass_y, -1.0, 12.20, 1.22, [0.68, 3.20, 5.80, 8.40, 11.00, 13.60, 16.12])
     for fx in (-6.55, 6.55):
         box("museum_atrium_fin", fx, -13.62, 8.40, 0.85, 0.44, 15.60, bronze)
     for mz in (6.00, 11.20):
@@ -4847,38 +5154,80 @@ def build_museum():
         tread = 0.30
         for i in range(steps):
             sx = x_from + direction * tread * (i + 0.5)
-            box("museum_stair_step", sx, -9.85, z_from + rise * (i + 0.5), tread + 0.02, 2.30, 0.16, white)
+            builder_box(bb(white), sx, -9.85, z_from + rise * (i + 0.5), tread + 0.02, 2.30, 0.16)
         x_to = x_from + direction * tread * steps
         for ry in (-10.92, -8.78):
             tube_between("museum_stair_rail", (x_from, ry, z_from + 1.00), (x_to, ry, z_to + 1.00), 0.035, 0.035, bronze, vertices=8)
 
     atrium_stair(0.72, 6.00, -5.60, 1.0)
     atrium_stair(6.00, 11.20, 5.60, -1.0)
+    # Closed stringers under both flights so the stair reads as a
+    # folded sculptural ribbon, not floating treads.
+    rbox("museum_stair_stringer_a", -1.10, -9.85, 3.08, 10.45, 1.90, 0.30, white, rotation=(0.0, -0.531, 0.0))
+    rbox("museum_stair_stringer_b", 1.10, -9.85, 8.32, 10.45, 1.90, 0.30, white, rotation=(0.0, 0.524, 0.0))
     for lx in (-3.60, 0.0, 3.60):
         cyl("museum_atrium_pendant_rod", lx, -11.20, 15.35, 0.025, 1.50, frame, vertices=8)
         box("museum_atrium_pendant", lx, -11.20, 14.55, 2.60, 0.10, 0.10, light)
+    # Atrium furnishings legible through the glazing: information
+    # desk, benches, two plinth sculptures and a backdrop wall-washer.
+    box("museum_atrium_desk", 0.0, -10.55, 1.27, 3.40, 0.85, 1.10, granite)
+    box("museum_atrium_desk_top", 0.0, -10.55, 1.86, 3.56, 1.00, 0.08, trav)
+    for bx4 in (-3.60, 3.60):
+        box("museum_atrium_bench", bx4, -11.55, 0.97, 2.20, 0.50, 0.50, white)
+    box("museum_atrium_plinth_a", 4.65, -9.55, 1.32, 0.70, 0.70, 1.20, white)
+    sphere("museum_atrium_sculpture_a", 4.65, -9.55, 2.32, 0.80, 0.80, 0.80, bronze)
+    box("museum_atrium_plinth_b", -4.65, -9.55, 1.02, 0.85, 0.85, 0.60, white)
+    rbox("museum_atrium_sculpture_b", -4.65, -9.55, 2.25, 0.18, 1.15, 1.85, trav, rotation=(0.0, 0.30, 0.0))
+    box("museum_atrium_washer", 0.0, -8.28, 14.85, 10.50, 0.06, 0.09, light)
+    for mz2 in (6.00, 11.20):
+        box("museum_mezzanine_underlight", 0.0, -11.78, mz2 - 0.21, 11.80, 0.05, 0.05, light)
 
     # Entrance doors, canopy and threshold at the atrium base.
+    # Three monumental doorways rebuilt as framed double leaves:
+    # stiles, top/lock/bottom rails, two lites per leaf and pull
+    # handles on standoff mounts (merged bronze/glass).
     for dx in (-3.65, 0.0, 3.65):
-        box("museum_door_frame", dx, glass_y - 0.03, 2.35, 2.20, 0.14, 3.40, bronze)
-        box("museum_door_glass", dx, glass_y - 0.06, 2.35, 1.96, 0.05, 3.16, glass)
-        for hx in (-0.14, 0.14):
-            tube_between("museum_door_handle", (dx + hx, glass_y - 0.16, 1.55), (dx + hx, glass_y - 0.16, 2.75), 0.028, 0.028, bronze, vertices=8)
+        for jx in (-1.07, 1.07):
+            builder_box(bb(bronze), dx + jx, glass_y - 0.115, 2.28, 0.12, 0.19, 3.36)
+        builder_box(bb(bronze), dx, glass_y - 0.115, 4.00, 2.26, 0.19, 0.12)
+        builder_box(bb(bronze), dx, glass_y - 0.115, 0.645, 2.26, 0.21, 0.05)
+        for leaf_side in (-1.0, 1.0):
+            lc = dx + leaf_side * 0.515
+            for stx in (-0.475, 0.475):
+                builder_box(bb(bronze), lc + stx, glass_y - 0.105, 2.28, 0.075, 0.11, 3.26)
+            builder_box(bb(bronze), lc, glass_y - 0.105, 3.76, 1.02, 0.11, 0.32)
+            builder_box(bb(bronze), lc, glass_y - 0.105, 1.56, 1.02, 0.11, 0.13)
+            builder_box(bb(bronze), lc, glass_y - 0.105, 0.87, 1.02, 0.11, 0.44)
+            builder_box(bb(glass), lc, glass_y - 0.100, 2.61, 0.88, 0.04, 1.92)
+            builder_box(bb(glass), lc, glass_y - 0.100, 1.29, 0.88, 0.04, 0.36)
+            hx = dx + leaf_side * 0.10
+            tube_between("museum_door_handle", (hx, glass_y - 0.24, 1.30), (hx, glass_y - 0.24, 2.50), 0.026, 0.026, bronze, vertices=8)
+            for mz in (1.45, 2.35):
+                builder_box(bb(bronze), hx, glass_y - 0.175, mz, 0.05, 0.14, 0.05)
     box("museum_threshold", 0.0, -13.85, 0.66, 12.40, 0.90, 0.12, granite)
     box("museum_canopy", 0.0, -15.15, 4.62, 13.20, 3.10, 0.16, white)
     box("museum_canopy_edge", 0.0, -16.68, 4.62, 13.20, 0.08, 0.30, bronze)
     for cxp in (-5.90, 5.90):
         cyl("museum_canopy_column", cxp, -16.20, 2.57, 0.09, 3.94, bronze, vertices=12)
+    # Tie rods back to the 8.40 transom line, side edge beams and a
+    # row of recessed soffit lights complete the canopy.
+    for rod_x in (-4.60, -1.55, 1.55, 4.60):
+        tube_between("museum_canopy_tie_rod", (rod_x, -16.55, 4.78), (rod_x, -13.38, 8.42), 0.022, 0.022, bronze, vertices=8)
+    for side_edge_x in (-6.56, 6.56):
+        box("museum_canopy_edge_side", side_edge_x, -15.15, 4.62, 0.08, 3.10, 0.30, bronze)
+    for light_i in range(7):
+        box("museum_canopy_light", -5.40 + 1.80 * light_i, -16.00, 4.525, 0.55, 0.20, 0.03, light)
 
     # Exhibition banners flanking the slot: cloth on a pale backing
     # plate with bronze standoffs, so they read as banners, not slits.
     for bx, bmat in ((-8.90, banner_teal), (8.90, banner_ochre)):
-        box("museum_banner_backing", bx, -13.98, 9.60, 2.15, 0.05, 6.30, white)
-        box("museum_banner", bx, -14.03, 9.60, 1.85, 0.05, 5.90, bmat)
-        tube_between("museum_banner_rod", (bx - 1.10, -14.08, 12.72), (bx + 1.10, -14.08, 12.72), 0.035, 0.035, bronze, vertices=8)
-        box("museum_banner_bar", bx, -14.03, 6.58, 1.95, 0.08, 0.10, bronze)
+        box("museum_banner_backing", bx, -14.12, 9.60, 2.15, 0.05, 6.30, white)
+        box("museum_banner", bx, -14.18, 9.60, 1.85, 0.05, 5.90, bmat)
+        tube_between("museum_banner_rod", (bx - 1.10, -14.22, 12.72), (bx + 1.10, -14.22, 12.72), 0.035, 0.035, bronze, vertices=8)
+        box("museum_banner_bar", bx, -14.18, 6.58, 1.95, 0.08, 0.10, bronze)
         for ax in (-0.85, 0.85):
-            tube_between("museum_banner_arm", (bx + ax, -13.90, 12.72), (bx + ax, -14.10, 12.72), 0.028, 0.028, bronze, vertices=8)
+            tube_between("museum_banner_arm", (bx + ax, -13.90, 12.72), (bx + ax, -14.24, 12.72), 0.028, 0.028, bronze, vertices=8)
+            tube_between("museum_banner_arm", (bx + ax, -13.90, 6.58), (bx + ax, -14.24, 6.58), 0.028, 0.028, bronze, vertices=8)
     # Entrance pylons marking the axis.
     for tx in (-7.80, 7.80):
         box("museum_entry_pylon", tx, -16.35, 2.70, 0.62, 0.34, 4.20, granite)
@@ -4888,12 +5237,7 @@ def build_museum():
     # ---- rear garden slot, cafe depth and loading dock ------------------
     box("museum_rear_backdrop", 0.0, 12.40, 8.40, 9.00, 0.30, 15.60, white)
     box("museum_rear_floor", 0.0, 14.05, 0.66, 9.00, 3.40, 0.12, trav)
-    box("museum_rear_glass", 0.0, 15.30, 8.40, 9.00, 0.05, 15.60, glass)
-    for i in range(8):
-        mx = -4.50 + 1.285 * i
-        box("museum_rear_mullion", mx, 15.36, 8.40, 0.09, 0.07, 15.60, bronze)
-    for tz in (3.20, 8.40, 13.60):
-        box("museum_rear_transom", 0.0, 15.36, tz, 9.00, 0.07, 0.09, bronze)
+    glazed_slot(15.30, 1.0, 9.00, 9.00 / 7.0, [0.68, 3.20, 5.80, 8.40, 11.00, 13.60, 16.12])
     for fx in (-4.95, 4.95):
         box("museum_rear_fin", fx, 15.62, 8.40, 0.80, 0.42, 15.60, bronze)
     box("museum_rear_counter", 0.0, 12.95, 1.30, 6.40, 0.70, 1.10, granite)
@@ -4912,6 +5256,21 @@ def build_museum():
     box("museum_service_door", 17.50, 15.90, 1.75, 1.10, 0.10, 2.30, bronze)
     for i in range(4):
         box("museum_vent_louvre", -17.50, 15.90, 3.30 + 0.34 * i, 2.20, 0.08, 0.20, frame)
+    # Dock seal, bumpers, leveler plate, framed vent bank and a
+    # fixed roof-access ladder up the rear wall (0.2.45 servicing).
+    for dsx in (9.86, 14.46):
+        box("museum_dock_seal", dsx, 15.99, 2.35, 0.38, 0.20, 3.90, core_mat)
+    box("museum_dock_seal_top", 12.16, 15.99, 4.42, 4.98, 0.20, 0.38, core_mat)
+    for dbx in (10.55, 13.77):
+        box("museum_dock_bumper", dbx, 16.02, 0.90, 0.52, 0.26, 0.72, dark)
+    box("museum_dock_leveler", 12.16, 16.08, 0.63, 2.05, 0.55, 0.06, frame)
+    box("museum_vent_back", -17.50, 15.855, 3.81, 2.42, 0.05, 1.52, core_mat)
+    for lrx in (20.38, 20.82):
+        builder_box(bb(frame), lrx, 16.08, 8.40, 0.06, 0.06, 15.50)
+    for lri in range(27):
+        builder_box(bb(frame), 20.60, 16.08, 1.15 + 0.55 * lri, 0.40, 0.05, 0.05)
+    for lbz in (3.00, 9.00, 15.00):
+        builder_box(bb(frame), 20.60, 15.97, lbz, 0.44, 0.18, 0.06)
 
     # Granite base band around the gallery mass.
     box("museum_base_band_f_l", -14.90, -13.88, 1.05, 15.80, 0.12, 0.90, granite)
@@ -4938,17 +5297,38 @@ def build_museum():
     box("museum_roof_light_slot_b", 0.0, 17.15, 16.18, 48.20, 0.14, 0.05, light)
     box("museum_roof_field", 0.0, 1.00, 16.79, 45.00, 29.00, 0.06, dark)
     box("museum_lantern_base", 0.0, 1.00, 16.95, 30.00, 9.00, 0.40, trav)
-    box("museum_lantern_glass_f", 0.0, -3.30, 17.90, 29.20, 0.06, 1.50, glass)
-    box("museum_lantern_glass_b", 0.0, 5.30, 17.90, 29.20, 0.06, 1.50, glass)
-    box("museum_lantern_glass_l", -14.60, 1.00, 17.90, 0.06, 8.60, 1.50, glass)
-    box("museum_lantern_glass_r", 14.60, 1.00, 17.90, 0.06, 8.60, 1.50, glass)
     box("museum_lantern_core", 0.0, 1.00, 17.90, 28.60, 8.00, 1.50, interior)
+    # Per-lite lantern glazing on all four faces with corner posts
+    # and continuous sill/head channels (merged geometry).
+    for chan_z in (17.19, 18.61):
+        builder_box(bb(bronze), 0.0, -3.30, chan_z, 29.35, 0.17, 0.12)
+        builder_box(bb(bronze), 0.0, 5.30, chan_z, 29.35, 0.17, 0.12)
+        builder_box(bb(bronze), -14.60, 1.00, chan_z, 0.17, 8.75, 0.12)
+        builder_box(bb(bronze), 14.60, 1.00, chan_z, 0.17, 8.75, 0.12)
     for i in range(13):
         mx = -14.60 + 2.433 * i
-        box("museum_lantern_mullion_f", mx, -3.36, 17.90, 0.08, 0.06, 1.50, bronze)
-        box("museum_lantern_mullion_b", mx, 5.36, 17.90, 0.08, 0.06, 1.50, bronze)
+        builder_box(bb(bronze), mx, -3.365, 17.90, 0.09, 0.13, 1.36)
+        builder_box(bb(bronze), mx, 5.365, 17.90, 0.09, 0.13, 1.36)
+    for sx5 in (-14.665, 14.665):
+        for my2 in (-1.15, 1.00, 3.15):
+            builder_box(bb(bronze), sx5, my2, 17.90, 0.13, 0.09, 1.36)
+    for cx6 in (-14.60, 14.60):
+        for cy6 in (-3.30, 5.30):
+            builder_box(bb(bronze), cx6, cy6, 17.90, 0.15, 0.15, 1.50)
+    for i in range(12):
+        pcx2 = -14.60 + 2.433 * (i + 0.5)
+        builder_box(bb(glass), pcx2, -3.30, 17.90, 2.28, 0.045, 1.24)
+        builder_box(bb(glass), pcx2, 5.30, 17.90, 2.28, 0.045, 1.24)
+    for sx5 in (-14.60, 14.60):
+        for pcy2 in (-2.225, -0.075, 2.075, 4.225):
+            builder_box(bb(glass), sx5, pcy2, 17.90, 0.045, 2.00, 1.24)
     box("museum_lantern_cap", 0.0, 1.00, 18.83, 31.40, 10.40, 0.35, white, bevel=0.02)
     box("museum_lantern_cap_edge", 0.0, -4.22, 18.83, 31.40, 0.08, 0.20, bronze)
+    box("museum_lantern_cap_edge_b", 0.0, 6.22, 18.83, 31.40, 0.08, 0.20, bronze)
+    box("museum_lantern_cap_edge_l", -15.72, 1.00, 18.83, 0.08, 10.40, 0.20, bronze)
+    box("museum_lantern_cap_edge_r", 15.72, 1.00, 18.83, 0.08, 10.40, 0.20, bronze)
+    for csx in (-10.00, 0.00, 10.00):
+        builder_box(bb(core_mat), csx, 1.00, 19.002, 0.06, 10.30, 0.012)
     for hx, hy in ((-18.0, 10.0), (-13.0, 10.0), (17.0, 10.5)):
         box("museum_hvac", hx, hy, 17.45, 3.60, 2.20, 1.25, frame)
         for i in range(4):
@@ -4959,6 +5339,22 @@ def build_museum():
         cyl("museum_roof_rail_post", px, 15.90, 17.30, 0.035, 1.05, bronze, vertices=8)
     box("museum_roof_rail_top", 0.0, 15.90, 17.82, 40.40, 0.06, 0.06, bronze)
     box("museum_roof_rail_mid", 0.0, 15.90, 17.32, 40.40, 0.05, 0.05, bronze)
+    # Roof membrane seams, maintenance walkway pads, an access
+    # hatch and two vent stacks break up the bare field.
+    for sy in (-8.00, -2.00, 4.00, 10.00):
+        builder_box(bb(core_mat), 0.0, sy, 16.828, 44.80, 0.07, 0.016)
+    for sx4 in (-15.00, 0.00, 15.00):
+        builder_box(bb(core_mat), sx4, 1.00, 16.828, 0.07, 28.80, 0.016)
+    for px2 in (-18.00, -12.00, -6.00, 0.00, 6.00, 12.00, 18.00):
+        box("museum_roof_pad", px2, 8.20, 16.845, 2.40, 0.95, 0.045, trav)
+    for py2 in (-8.00, -4.00, 0.00, 4.00):
+        box("museum_roof_pad", -20.50, py2, 16.845, 0.95, 2.40, 0.045, trav)
+    box("museum_roof_hatch", 5.50, -8.50, 17.12, 1.10, 1.10, 0.55, frame)
+    box("museum_roof_hatch_lid", 5.50, -8.50, 17.43, 1.18, 1.18, 0.07, dark)
+    for vx, vy in ((-8.00, 12.50), (11.00, -9.00)):
+        cyl("museum_roof_vent", vx, vy, 17.32, 0.27, 1.00, frame, vertices=14)
+        cyl("museum_roof_vent_cap", vx, vy, 17.90, 0.38, 0.09, dark, vertices=14)
+        cyl("museum_roof_vent_band", vx, vy, 17.05, 0.29, 0.10, bronze, vertices=14)
 
     # ---- plaza: reflecting pool, sculpture court, planters, totems ------
     box("museum_pool_basin", -15.50, -15.35, 0.66, 17.00, 2.60, 0.12, granite)
@@ -4969,6 +5365,13 @@ def build_museum():
         box("museum_pool_rim_e", ex, -15.35, 0.72, 0.16, 2.60, 0.24, granite)
     for i in range(5):
         box("museum_pool_step_stone", -21.50 + 3.0 * i, -15.35, 0.78, 1.30, 1.50, 0.07, trav)
+    # Travertine coping caps and bronze bubbler discs finish the pool.
+    box("museum_pool_coping_f", -15.50, -16.73, 0.865, 17.10, 0.26, 0.05, trav)
+    box("museum_pool_coping_b", -15.50, -13.97, 0.865, 17.10, 0.26, 0.05, trav)
+    for ex2 in (-23.92, -7.08):
+        box("museum_pool_coping_e", ex2, -15.35, 0.865, 0.26, 2.70, 0.05, trav)
+    for bubx in (-20.00, -15.50, -11.00):
+        cyl("museum_pool_bubbler", bubx, -15.35, 0.78, 0.14, 0.06, bronze, vertices=12)
     # Sculpture court (east forecourt): sphere, crossed slabs, ring.
     box("museum_plinth_a", 13.50, -15.40, 1.15, 1.30, 1.30, 1.10, granite)
     sphere("museum_sculpture_sphere", 13.50, -15.40, 2.60, 1.75, 1.75, 1.75, bronze)
@@ -4993,6 +5396,13 @@ def build_museum():
     for bx3 in (-20.0, -17.0, 17.0, 20.0):
         cyl("museum_plaza_bollard", bx3, -18.55, 0.72, 0.07, 0.85, bronze, vertices=10)
         cyl("museum_plaza_bollard_light", bx3, -18.55, 1.16, 0.073, 0.06, light, vertices=10)
+    # Civic flagpoles flanking the axis, cloth in banner colours,
+    # based on the lower plinth beside the totems.
+    for fpx, fmat in ((-15.20, banner_teal), (-13.60, white), (13.60, banner_ochre), (15.20, banner_teal)):
+        cyl("museum_flagpole_base", fpx, -18.15, 0.55, 0.20, 0.50, granite, vertices=12)
+        cyl("museum_flagpole", fpx, -18.15, 4.90, 0.045, 9.20, bronze, vertices=10)
+        sphere("museum_flagpole_finial", fpx, -18.15, 9.58, 0.16, 0.16, 0.16, bronze)
+        rbox("museum_flag", fpx + 0.80, -18.15, 8.80, 1.50, 0.03, 0.95, fmat, rotation=(0.0, 0.0, 0.05))
     # Side aprons: long planter hedges, stone benches and clipped trees
     # so the flanks are furnished, not empty travertine.
     for sx in (-24.35, 24.35):
@@ -5004,8 +5414,18 @@ def build_museum():
                 box("museum_side_bench_foot", sx * 0.965, by + fy, 0.82, 0.48, 0.18, 0.42, granite)
         for ty in (-13.00, 15.00):
             box("museum_tree_planter", sx, ty, 0.95, 1.50, 1.50, 0.70, granite)
-            cyl("museum_tree_trunk", sx, ty, 1.75, 0.07, 1.00, frame, vertices=8)
-            sphere("museum_tree_crown", sx, ty, 2.95, 2.10, 2.10, 2.00, hedge)
+            cyl("museum_tree_trunk", sx, ty, 1.85, 0.085, 1.15, frame, vertices=8)
+            tube_between("museum_tree_branch", (sx, ty, 2.30), (sx - 0.42, ty + 0.30, 2.85), 0.045, 0.030, frame, vertices=6)
+            tube_between("museum_tree_branch", (sx, ty, 2.35), (sx + 0.40, ty - 0.28, 2.90), 0.045, 0.030, frame, vertices=6)
+            # Clipped multi-blob canopy instead of one lollipop sphere.
+            sphere("museum_tree_crown", sx, ty, 3.15, 2.35, 2.35, 1.85, hedge)
+            sphere("museum_tree_crown", sx - 0.58, ty + 0.34, 2.82, 1.45, 1.45, 1.25, hedge)
+            sphere("museum_tree_crown", sx + 0.54, ty - 0.38, 2.88, 1.55, 1.55, 1.30, hedge)
+            sphere("museum_tree_crown", sx + 0.10, ty - 0.04, 3.62, 1.35, 1.35, 1.05, hedge)
+
+
+    for material_name, (builder, material) in builders.items():
+        builder.build("museum_merged_" + material_name.lower(), material, smooth=False)
 
 
 def main():
