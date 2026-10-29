@@ -2326,6 +2326,8 @@ func _run_desert_smoke_checks(failures: Array[String]) -> void:
 		failures.append("desert far-mesa skyline is incomplete: %s" % str(es))
 	if int(es.get("desert_road_deck_colliders", 0)) < 3000:
 		failures.append("desert physical road deck is incomplete: %s" % str(es))
+	if int(es.get("desert_scatter_variants", 0)) < 12 or not bool(es.get("desert_detail_0250", false)):
+		failures.append("desert 0.2.50 cactus/rock detail is incomplete: %s" % str(es))
 	if int(es.get("desert_fences_0251", 0)) < 85:
 		failures.append("desert 0.2.51 fences are incomplete: %s" % str(es))
 	var salt_point := Vector3(2000.0, _world.height_at(2000.0, 1900.0) + 0.5, 1900.0)
