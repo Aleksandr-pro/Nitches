@@ -298,13 +298,21 @@ STREAM = [(2960, 3560), (3100, 3520), (3220, 3505), (3290, 3500)]
 
 
 def carve_channel(ctrl, depth, half_w, base_drop=0.0):
+    global H
     dense = catmull_rom(ctrl, step=6.0)
+    # _polyline_local_op_s applies fn once per segment over overlapping
+    # windows, so a subtractive fn ACCUMULATES: the wadis were carved
+    # up to ~68 m deep instead of the intended 7.5 m, leaving absurd
+    # gorges under the bridges and along the wadi trails.  Build an
+    # idempotent min-distance field first, then subtract exactly once.
+    dist_grid = np.full(H.shape, 1e9)
 
-    def fn(sub, dist, s):
-        k = 1.0 - smoothstep(half_w * 0.45, half_w, dist)
-        return sub - (depth + base_drop) * k
+    def d_fn(sub, dist, s):
+        return np.minimum(sub, dist)
 
-    polyline_local_op(H, dense, half_w + STEP, fn)
+    polyline_local_op(dist_grid, dense, half_w + STEP, d_fn)
+    k = 1.0 - smoothstep(half_w * 0.45, half_w, dist_grid)
+    H -= (depth + base_drop) * k
     return dense
 
 
@@ -444,7 +452,7 @@ def road_profile(dense, max_grade, closed, follow=False):
     """Smooth, grade-limited target heights along a road centreline."""
     hs = np.array([bilinear(H, p[0], p[1]) for p in dense])
     # wide smoothing (two box passes); trails mostly follow the terrain
-    for win in ((9,) if follow else (61, 31)):
+    for win in ((31, 15) if follow else (61, 31)):
         k = np.ones(win) / win
         if closed:
             ext = np.concatenate([hs[-win:], hs, hs[:win]])
@@ -467,17 +475,39 @@ def road_profile(dense, max_grade, closed, follow=False):
                 hs[i] = hs[i + 1] + lim
             elif d < -lim:
                 hs[i] = hs[i + 1] - lim
+    # Vertical-curve smoothing: round off grade breaks so crests and
+    # sags are curves, not kinks (the car used to hop at every break).
+    for _ in range(10):
+        if closed:
+            hs = hs + 0.35 * (0.5 * (np.roll(hs, 1) + np.roll(hs, -1)) - hs)
+        else:
+            hs[1:-1] = hs[1:-1] + 0.35 * (0.5 * (hs[:-2] + hs[2:]) - hs[1:-1])
+    for i in range(len(ds)):
+        lim = max_grade * max(ds[i], 0.5)
+        d = hs[i + 1] - hs[i]
+        if d > lim:
+            hs[i + 1] = hs[i] + lim
+        elif d < -lim:
+            hs[i + 1] = hs[i] - lim
+    for i in range(len(ds) - 1, -1, -1):
+        lim = max_grade * max(ds[i], 0.5)
+        d = hs[i] - hs[i + 1]
+        if d > lim:
+            hs[i] = hs[i + 1] + lim
+        elif d < -lim:
+            hs[i] = hs[i + 1] - lim
     return hs
 
 
 road_profiles = {}
+flatten_jobs = {}
 bridge_s_ranges = {}   # road_id -> list of (s0, s1)
 tunnel_s_range = None
 
 for (rid, _name, _ctrl, width, _lanes, surf, closed, _spd) in ROAD_DEFS:
     dense = roads_dense[rid]
     follow = rid.startswith("trail_")
-    max_grade = 0.075 if surf == "asphalt" else (0.24 if follow else 0.11)
+    max_grade = 0.075 if surf == "asphalt" else (0.16 if follow else 0.10)
     prof = road_profile(dense, max_grade, closed, follow=follow)
     road_profiles[rid] = prof
     seg_lens = np.linalg.norm(np.diff(dense, axis=0), axis=1)
@@ -498,27 +528,50 @@ for (rid, _name, _ctrl, width, _lanes, surf, closed, _spd) in ROAD_DEFS:
         tunnel_s_range = (s0 - TUNNEL[2], s0 + TUNNEL[2])
 
     half_w = width * 0.5
-    falloff = 8.0 if follow else 16.0
+    falloff = 14.0 if follow else 18.0
 
     def make_fn(prof=prof, dense=dense, s_cum=s_cum, half_w=half_w,
                 falloff=falloff, skip_ranges=skip_ranges):
         def fn(sub, dist, s):
             target_h = np.interp(s, s_cum, prof)
-            w = 1.0 - smoothstep(half_w + 1.5, half_w + falloff, dist)
+            w = 1.0 - smoothstep(half_w + 3.0, half_w + falloff, dist)
             for (a, b) in skip_ranges:
                 w = np.where((s > a) & (s < b), 0.0, w)
             return sub * (1.0 - w) + target_h * w
         return fn
 
     _polyline_local_op_s(H, dense, half_w + falloff + STEP, make_fn(), s_cum)
+    flatten_jobs[rid] = (dense, s_cum, prof, half_w, falloff, list(skip_ranges))
 
-# Final road samples (~14 m) with heights: terrain after flattening,
+# Re-assert the asphalt corridors LAST: dirt roads flattened later in
+# ROAD_DEFS order used to stamp their own profiles across the ring
+# highway at every junction, leaving metre-scale bumps on the main
+# roads.  Asphalt wins at crossings; dirt approaches ramp into it
+# through their feather zone.
+for (rid, _name, _ctrl, _width, _lanes, surf, _closed, _spd) in ROAD_DEFS:
+    if surf != "asphalt":
+        continue
+    dense, s_cum, prof, half_w, falloff, skip_ranges = flatten_jobs[rid]
+
+    def make_fn2(prof=prof, s_cum=s_cum, half_w=half_w,
+                 falloff=falloff, skip_ranges=skip_ranges):
+        def fn(sub, dist, s):
+            target_h = np.interp(s, s_cum, prof)
+            w = 1.0 - smoothstep(half_w + 3.0, half_w + falloff, dist)
+            for (a, b) in skip_ranges:
+                w = np.where((s > a) & (s < b), 0.0, w)
+            return sub * (1.0 - w) + target_h * w
+        return fn
+
+    _polyline_local_op_s(H, dense, half_w + falloff + STEP, make_fn2(), s_cum)
+
+# Final road samples (~10 m) with heights: terrain after flattening,
 # except bridge spans which follow the deck profile.
 roads_out = []
 road_samples_by_id = {}
 for (rid, name, _ctrl, width, lanes, surf, closed, spd) in ROAD_DEFS:
     dense = roads_dense[rid]
-    samples_pts = resample_even(dense, 14.0)
+    samples_pts = resample_even(dense, 10.0)
     seg_lens = np.linalg.norm(np.diff(dense, axis=0), axis=1)
     s_cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
     prof = road_profiles[rid]
@@ -1077,13 +1130,59 @@ for i in range(10, len(ring_dense) - 10):
             curv_ranges.append((float(in_range), float(ring_cum[i])))
         in_range = None
 add_guardrails(ring_dense, ring_cum, curv_ranges)
-for (a, b) in bridge_s_ranges.get("ring", []):
-    add_guardrails(ring_dense, ring_cum, [(a - 14, b + 14)], offset=8.0)
-    add_guardrails(ring_dense, ring_cum, [(a - 14, b + 14)], offset=-8.0)
+# Bridges get their parapets from the builder at deck height;
+# terrain-following rails here would dip into the wadi bed.
 serp_dense = roads_dense["serpentine"]
 serp_lens = np.linalg.norm(np.diff(serp_dense, axis=0), axis=1)
 serp_cum = np.concatenate([[0.0], np.cumsum(serp_lens)])
 add_guardrails(serp_dense, serp_cum, [(80.0, float(serp_cum[-1] - 60.0))], offset=6.4)
+
+
+# Drop-edge guardrails on every road: wherever the ground falls away
+# more than 3.2 m within 9 m of the road edge, fence that side so
+# canyon-rim and mesa-edge roads are not bare precipices.
+def add_drop_guardrails():
+    for (rid, _n, _c, width, _l, _sf, _cl, _spd) in ROAD_DEFS:
+        dense = roads_dense[rid]
+        seg = np.linalg.norm(np.diff(dense, axis=0), axis=1)
+        cum_local = np.concatenate([[0.0], np.cumsum(seg)])
+        half_w = width * 0.5
+        skip = bridge_s_ranges.get(rid, [])
+        for side in (-1.0, 1.0):
+            ranges = []
+            start = None
+            last_bad = None
+            for i in range(len(dense)):
+                i0 = max(i - 1, 0)
+                i1 = min(i + 1, len(dense) - 1)
+                dvec = dense[i1] - dense[i0]
+                n = np.linalg.norm(dvec)
+                if n < 1e-6:
+                    continue
+                perp = np.array([-dvec[1], dvec[0]]) / n * side
+                pnt = dense[i]
+                edge_h = height_at(pnt[0] + perp[0] * (half_w + 1.0), pnt[1] + perp[1] * (half_w + 1.0))
+                outer_h = height_at(pnt[0] + perp[0] * (half_w + 9.0), pnt[1] + perp[1] * (half_w + 9.0))
+                s_here = float(cum_local[i])
+                bad = (edge_h - outer_h) > 3.2
+                if any(a - 6.0 <= s_here <= b + 6.0 for (a, b) in skip):
+                    bad = False
+                if bad:
+                    if start is None:
+                        start = s_here
+                    last_bad = s_here
+                elif start is not None and last_bad is not None and s_here - last_bad > 18.0:
+                    if last_bad - start > 24.0:
+                        ranges.append((start, last_bad))
+                    start = None
+                    last_bad = None
+            if start is not None and last_bad is not None and last_bad - start > 24.0:
+                ranges.append((start, last_bad))
+            if ranges:
+                add_guardrails(dense, cum_local, ranges, offset=side * (half_w + 1.0))
+
+
+add_drop_guardrails()
 
 print(f"[desert] structures: {len(structures)} (poles {len(pole_points)}, "
       f"guardrail sections {len(guardrails)}, pipe segments {len(pipes)})")
