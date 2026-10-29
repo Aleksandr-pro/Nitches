@@ -11,7 +11,7 @@ const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const AtmosphereFxScript := preload("res://scripts/atmosphere_fx.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
-const TIME_MODES: Array[String] = ["day", "sunset", "night"]
+const TIME_MODES: Array[String] = ["sunset", "day", "night"]
 const CAMERA_CHASE := 0
 const CAMERA_HOOD := 1
 const CAMERA_TOP := 2
@@ -69,7 +69,7 @@ func _ready() -> void:
 
 	_create_camera()
 	_atmosphere_fx = AtmosphereFxScript.new() as NativeAtmosphereFX
-	_atmosphere_fx.configure(_vehicle, _camera)
+	_atmosphere_fx.configure(_vehicle, _camera, _world)
 	add_child(_atmosphere_fx)
 	_hud = HudScript.new() as NativeHud
 	add_child(_hud)
@@ -203,6 +203,7 @@ func _apply_time_mode() -> void:
 	_world.set_time_of_day(mode)
 	if _atmosphere_fx != null:
 		_atmosphere_fx.set_time_mode(mode)
+		_atmosphere_fx.set_headlights_enabled(mode != "day")
 	if _vehicle != null:
 		_vehicle.set_headlights_enabled(mode != "day")
 
@@ -390,10 +391,14 @@ func _run_smoke_checks() -> void:
 		failures.append("landmark stats are incomplete")
 
 	var enhancement_stats := _world.get_enhancement_stats()
-	if int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)):
-		failures.append("two-layer distant skyline is incomplete: %s" % str(enhancement_stats))
+	if int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)) or not bool(enhancement_stats.get("skyline_panorama_textures_0219", false)) or int(enhancement_stats.get("skyline_panorama_width", 0)) != 4096 or int(enhancement_stats.get("skyline_panorama_height", 0)) != 512:
+		failures.append("two textured distant skyline layers are incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("near_field_lod_0219", false)) or String(enhancement_stats.get("range_fade_mode", "")) != "dithered_self" or float(enhancement_stats.get("tree_detail_end_m", 9999.0)) > 110.0 or float(enhancement_stats.get("palm_detail_end_m", 9999.0)) > 140.0 or float(enhancement_stats.get("shrub_detail_end_m", 9999.0)) > 100.0:
+		failures.append("near-field detail/fade budget is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("rich_town_vertical_slice_0219", false)) or float(enhancement_stats.get("vertical_slice_width_m", 0.0)) > 1100.0 or float(enhancement_stats.get("vertical_slice_depth_m", 0.0)) > 1100.0:
+		failures.append("RichTown vertical-slice world bounds are unexpected: %s" % str(enhancement_stats))
 	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
-	if not bool(atmosphere_state.get("ready", false)) or not bool(atmosphere_state.get("light_shafts", false)) or int(atmosphere_state.get("leaves", 0)) < 16 or int(atmosphere_state.get("petals", 0)) < 8:
+	if not bool(atmosphere_state.get("ready", false)) or not bool(atmosphere_state.get("light_shafts", false)) or not bool(atmosphere_state.get("headlight_bokeh", false)) or not bool(atmosphere_state.get("headlight_glints_enabled", false)) or float(atmosphere_state.get("foliage_density", 0.0)) <= 0.0 or int(atmosphere_state.get("leaves", 0)) < 16 or int(atmosphere_state.get("petals", 0)) < 8:
 		failures.append("near-car atmosphere particle/light-shaft pass is incomplete: %s" % str(atmosphere_state))
 	if int(enhancement_stats.get("reflection_probes", 0)) < 6 or not bool(enhancement_stats.get("reflection_probe_box_projection", false)) or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) < 0.5 or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) > 0.75:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
@@ -436,7 +441,7 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.5 beach/marina detail is incomplete: %s" % str(enhancement_stats))
 
 	var dynamic_world_state := _world.get_dynamic_world_state()
-	if int(dynamic_world_state.get("presets", 0)) < 5 or String(dynamic_world_state.get("preset", "")) != "clear_day" or not bool(dynamic_world_state.get("physical_sky", false)):
+	if int(dynamic_world_state.get("presets", 0)) < 5 or String(dynamic_world_state.get("preset", "")) != "golden_hour" or not bool(dynamic_world_state.get("physical_sky", false)):
 		failures.append("DynamicWorld Drive base is not active: %s" % str(dynamic_world_state))
 	if not bool(dynamic_world_state.get("bloom_enabled", false)) or float(dynamic_world_state.get("cinematic_contrast", 0.0)) < 1.05 or float(dynamic_world_state.get("cinematic_brightness", 1.0)) >= 1.0:
 		failures.append("cinematic bloom/color grade is not active: %s" % str(dynamic_world_state))

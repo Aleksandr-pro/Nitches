@@ -1,24 +1,33 @@
 class_name NativeAtmosphereFX
 extends Node3D
 
-## Cheap near-car ambience: drifting leaves/petals, a short road dust wake,
-## and camera-space shafts that sell the low sun without volumetric fog.
+## Low-cost near-car ambience: movement-swept leaves/petals/dust, foliage-aware
+## camera-space sun shafts, and subtle headlamp lens ghosts for sunset/night.
 ## All particle draw calls are unlit, shadowless and tightly budgeted on mobile.
 
 const SHAFT_SHADER: Shader = preload("res://shaders/light_shafts.gdshader")
+const BOKEH_SIZE := 128
 
 var _vehicle: NativeVehicle
 var _camera: Camera3D
+var _world: NativeWorldBuilder
 var _leaf_particles: GPUParticles3D
 var _petal_particles: GPUParticles3D
 var _dust_particles: GPUParticles3D
 var _shaft_material: ShaderMaterial
+var _bokeh_layer: CanvasLayer
+var _bokeh_texture: ImageTexture
+var _bokeh_items: Array[Dictionary] = []
 var _mode := "day"
+var _headlights_enabled := false
+var _foliage_density := 0.0
+var _foliage_update_timer := 0.0
 
 
-func configure(vehicle: NativeVehicle, camera: Camera3D) -> void:
+func configure(vehicle: NativeVehicle, camera: Camera3D, world: NativeWorldBuilder) -> void:
 	_vehicle = vehicle
 	_camera = camera
+	_world = world
 
 
 func _ready() -> void:
@@ -56,6 +65,7 @@ func _ready() -> void:
 	)
 	_dust_particles.position = Vector3(0.0, 0.13, 0.0)
 	_create_light_shafts()
+	_create_headlight_bokeh()
 	set_time_mode("day")
 
 
@@ -144,17 +154,99 @@ func _create_light_shafts() -> void:
 	_camera.add_child(instance)
 
 
+func _create_headlight_bokeh() -> void:
+	var image := Image.create(BOKEH_SIZE, BOKEH_SIZE, false, Image.FORMAT_RGBA8)
+	var centre := float(BOKEH_SIZE - 1) * 0.5
+	for y in BOKEH_SIZE:
+		for x in BOKEH_SIZE:
+			var dx := (float(x) - centre) / centre
+			var dy := (float(y) - centre) / centre
+			var radius := sqrt(dx * dx + dy * dy)
+			var halo := exp(-pow((radius - 0.58) / 0.105, 2.0)) * 0.20
+			var core := exp(-radius * radius * 15.0) * 0.64
+			var cross := (exp(-abs(dx) * 78.0) * exp(-abs(dy) * 5.0)
+				+ exp(-abs(dy) * 78.0) * exp(-abs(dx) * 5.0)) * 0.10
+			var alpha := clampf(halo + core + cross, 0.0, 0.92)
+			image.set_pixel(x, y, Color(1.0, 0.82, 0.56, alpha))
+	_bokeh_texture = ImageTexture.create_from_image(image)
+	_bokeh_layer = CanvasLayer.new()
+	_bokeh_layer.name = "HeadlightBokehLayer"
+	_bokeh_layer.layer = 8
+	add_child(_bokeh_layer)
+	for source_index in 2:
+		for ghost in [false, true]:
+			var rect := TextureRect.new()
+			rect.name = ("HeadlampGhost%d" % source_index) if ghost else ("HeadlampGlint%d" % source_index)
+			rect.texture = _bokeh_texture
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.stretch_mode = TextureRect.STRETCH_SCALE
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rect.modulate = Color(1.0, 0.82, 0.58, 0.0)
+			_bokeh_layer.add_child(rect)
+			_bokeh_items.append({"rect": rect, "source": source_index, "ghost": ghost})
+
+
 func set_time_mode(mode: String) -> void:
 	_mode = mode
+	if _shaft_material != null:
+		var intensity := 0.72 if mode == "day" else (0.42 if mode == "sunset" else 0.0)
+		var tint := Color(1.0, 0.84, 0.62) if mode == "day" else Color(1.0, 0.56, 0.32)
+		_shaft_material.set_shader_parameter("shaft_tint", Vector3(tint.r, tint.g, tint.b))
+		_shaft_material.set_shader_parameter("shaft_intensity", intensity * smoothstep(0.04, 0.52, _foliage_density))
+
+
+func set_headlights_enabled(enabled: bool) -> void:
+	_headlights_enabled = enabled
+
+
+func _update_foliage_shafts(delta: float) -> void:
+	_foliage_update_timer -= delta
+	if _foliage_update_timer <= 0.0 and _world != null and _vehicle != null:
+		_foliage_density = _world.get_foliage_density_at(_vehicle.global_position, 110.0)
+		_foliage_update_timer = 0.28
 	if _shaft_material == null:
 		return
-	var intensity := 0.72 if mode == "day" else (0.42 if mode == "sunset" else 0.0)
-	var tint := Color(1.0, 0.84, 0.62) if mode == "day" else Color(1.0, 0.56, 0.32)
-	_shaft_material.set_shader_parameter("shaft_intensity", intensity)
-	_shaft_material.set_shader_parameter("shaft_tint", Vector3(tint.r, tint.g, tint.b))
+	var mode_intensity := 0.72 if _mode == "day" else (0.42 if _mode == "sunset" else 0.0)
+	var foliage_gate := smoothstep(0.04, 0.52, _foliage_density)
+	_shaft_material.set_shader_parameter("shaft_intensity", mode_intensity * foliage_gate)
 
 
-func _process(_delta: float) -> void:
+func _update_headlight_bokeh() -> void:
+	if _camera == null or _vehicle == null or _bokeh_items.is_empty():
+		return
+	var viewport := _camera.get_viewport()
+	if viewport == null:
+		return
+	var viewport_size := viewport.get_visible_rect().size
+	var screen_centre := viewport_size * 0.5
+	var flare_mode := _mode != "day" and _headlights_enabled
+	var vehicle_transform := _vehicle.global_transform
+	var lens_positions: Array[Vector3] = [
+		vehicle_transform * Vector3(-0.62, 0.74, -2.22),
+		vehicle_transform * Vector3(0.62, 0.74, -2.22),
+	]
+	for item in _bokeh_items:
+		var rect := item.get("rect") as TextureRect
+		if rect == null:
+			continue
+		var source_index := int(item.get("source", 0))
+		var ghost := bool(item.get("ghost", false))
+		var world_position: Vector3 = lens_positions[source_index]
+		if not flare_mode or _camera.is_position_behind(world_position):
+			rect.modulate.a = 0.0
+			continue
+		var source_screen := _camera.unproject_position(world_position)
+		if source_screen.x < -30.0 or source_screen.y < -30.0 or source_screen.x > viewport_size.x + 30.0 or source_screen.y > viewport_size.y + 30.0:
+			rect.modulate.a = 0.0
+			continue
+		var flare_position := screen_centre + (screen_centre - source_screen) * 0.38 if ghost else source_screen
+		var flare_size := Vector2(124.0, 124.0) if ghost else Vector2(76.0, 76.0)
+		rect.position = flare_position - flare_size * 0.5
+		rect.size = flare_size
+		rect.modulate.a = 0.11 if ghost else (0.24 if _mode == "sunset" else 0.32)
+
+
+func _process(delta: float) -> void:
 	if _vehicle == null:
 		return
 	var car_position := _vehicle.global_position
@@ -185,6 +277,8 @@ func _process(_delta: float) -> void:
 	var dust_process := _dust_particles.process_material as ParticleProcessMaterial
 	if dust_process != null and speed > 0.5:
 		dust_process.direction = travel_direction + Vector3(0.0, 0.08, 0.0)
+	_update_foliage_shafts(delta)
+	_update_headlight_bokeh()
 
 
 func get_state() -> Dictionary:
@@ -195,5 +289,8 @@ func get_state() -> Dictionary:
 		"dust": _dust_particles.amount if _dust_particles != null else 0,
 		"light_shafts": _shaft_material != null,
 		"shaft_intensity": float(_shaft_material.get_shader_parameter("shaft_intensity")) if _shaft_material != null else 0.0,
+		"foliage_density": _foliage_density,
+		"headlight_bokeh": _bokeh_texture != null,
+		"headlight_glints_enabled": _headlights_enabled and _mode != "day",
 		"mobile_particle_budget": OS.has_feature("android"),
 	}

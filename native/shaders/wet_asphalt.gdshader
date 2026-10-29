@@ -86,6 +86,13 @@ void fragment() {
 		1.0
 	);
 	float grain = mix(0.86, 1.14, vnoise(p * 4.2));
+	// Narrow, road-aligned wet streaks make the sunset/headlamp specular
+	// response directional without a screen-space or planar reflection pass.
+	float streak_noise = fbm2(vec2(road_s * 0.10 + TIME * 0.018, lateral * 5.2));
+	float wet_streak = smoothstep(0.57, 0.79, streak_noise)
+		* (1.0 - smoothstep(0.88, 1.0, abs_lateral))
+		* clamp(damp * 0.82 + puddle * 0.55, 0.0, 1.0)
+		* mix(0.40, 1.0, detail_fade);
 
 	// Polished wheel paths follow the road itself. Four broad bands cover
 	// both two-lane streets and the four-lane Boulevard/Corniche without
@@ -229,16 +236,17 @@ void fragment() {
 	// Влажный асфальт темнеет; лужи не должны становиться светлее дороги.
 	ALBEDO *= mix(1.0, 0.72, damp);
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.58, 0.62, 0.68), puddle);
+	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.86, 0.90, 0.96), wet_streak * 0.18);
 
 	float surface_roughness = dry_roughness;
 	surface_roughness += (wear_luma - 0.065) * 0.65;
 	surface_roughness -= wheel_track * 0.10 + oil * 0.18;
 	surface_roughness += crack * 0.045 + joint * 0.05 + repair_patch * 0.015;
-	surface_roughness = clamp(surface_roughness, 0.70, 0.985);
+	surface_roughness = clamp(surface_roughness - wet_streak * 0.12, 0.56, 0.985);
 
 	ROUGHNESS = mix(surface_roughness, wet_roughness, damp);
 	ROUGHNESS = mix(ROUGHNESS, puddle_roughness, puddle);
 	METALLIC = 0.0;
-	SPECULAR = mix(0.30, 0.56, max(damp, puddle));
+	SPECULAR = clamp(mix(0.30, 0.56, max(damp, puddle)) + wet_streak * 0.10, 0.0, 0.74);
 	AO = clamp(1.0 - crack * 0.18 - joint * 0.12 - tar_border * 0.15, 0.62, 1.0);
 }

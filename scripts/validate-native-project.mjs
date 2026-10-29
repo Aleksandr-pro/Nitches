@@ -50,14 +50,23 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=21'), 'Native 0.2.18 must bump Android versionCode to 21');
-assert(preset.includes('version/name="0.2.18-native-alpha"'), 'Native version name must be 0.2.18-native-alpha');
+assert(preset.includes('version/code=22'), 'Native 0.2.19 must bump Android versionCode to 22');
+assert(preset.includes('version/name="0.2.19-native-alpha"'), 'Native version name must be 0.2.19-native-alpha');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
 }
 
 const combinedRuntime = `${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${atmosphereFxScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${lightShaftShader}\n${horizonSkylineShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}`;
+const skylineSourceFiles = [
+  'src/assets/textures/realworld/skyline_rich_town_near.png',
+  'src/assets/textures/realworld/skyline_rich_town_far.png',
+];
+for (const file of skylineSourceFiles) {
+  const bytes = await readFile(file);
+  assert(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${file} is not a PNG`);
+  assert(bytes.readUInt32BE(16) === 4096 && bytes.readUInt32BE(20) === 512, `${file} must be a 4096x512 skyline panorama`);
+}
 assert(!combinedRuntime.includes('NativeTrafficManager') && !combinedRuntime.includes('traffic_manager.gd') && !mainScript.includes('TrafficScript'), 'Native 0.2.16 must not load any traffic-car system');
 assert(!worldScript.includes('user_facade_blue_glass.jpg') && !worldScript.includes('user_facade_gold_grid.jpg'), 'Native 0.2.16 must not return to photographic blue/gold facade sheets');
 assert(!curtainWallGlassShader.includes('\n\tCLEARCOAT') && !curtainWallFacadeShader.includes('\n\tCLEARCOAT'), 'Native 0.2.16 curtain-wall shaders must not pay for a clearcoat lighting layer');
@@ -78,6 +87,9 @@ for (const vegetationModel of ['palm_date.glb', 'palm_royal.glb', 'grass_tuft.gl
   assert(worldScript.includes(`res://assets/vegetation/${vegetationModel}`), `Native world does not load ${vegetationModel}`);
 }
 assert(syncScript.includes('user_sand_beach_white.jpg'), 'Native asset sync is missing the 0.2.18 white-pebble texture');
+for (const skylineTexture of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
+  assert(syncScript.includes(skylineTexture), `Native asset sync is missing ${skylineTexture}`);
+}
 for (const marker of ['def build_palm_date():', 'def build_palm_royal():', 'def build_grass_tuft():', 'def build_flower_clump():', 'def build_ornamental_shrub():']) {
   assert(blenderScript.includes(marker), `Blender vegetation builder is missing: ${marker}`);
 }
@@ -99,6 +111,18 @@ for (const marker of [
   'DriftingLeaves',
   'GoldenPetals',
   'RoadWakeDust',
+  'HeadlightBokehLayer',
+  'headlight_bokeh',
+  'get_foliage_density_at',
+  'foliage_gate',
+  'skyline_rich_town_near.png',
+  'skyline_rich_town_far.png',
+  'skyline_tex',
+  'VISIBILITY_RANGE_FADE_SELF',
+  'near_field_lod_0219',
+  'rich_town_vertical_slice_0219',
+  'golden_hour',
+  'wet_streak',
   'HandbrakeTireSparks',
   'SpeedWindAudio',
   'light_shafts.gdshader',
@@ -419,6 +443,8 @@ if (requireAssets) {
     'assets/textures/user_sky_night.jpg',
     'assets/textures/cafe_linen.jpg',
     'assets/textures/cafe_linen_normal.png',
+    'assets/textures/skyline_rich_town_near.png',
+    'assets/textures/skyline_rich_town_far.png',
   ];
   for (const relative of required) {
     const file = path.join(root, relative);
@@ -427,6 +453,11 @@ if (requireAssets) {
     if (file.endsWith('.glb')) {
       const bytes = await readFile(file);
       assert(bytes.subarray(0, 4).toString('utf8') === 'glTF', `${file} is an LFS pointer or corrupt GLB`);
+    }
+    if (file.includes('skyline_rich_town_')) {
+      const bytes = await readFile(file);
+      assert(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${file} is not a PNG`);
+      assert(bytes.readUInt32BE(16) === 4096 && bytes.readUInt32BE(20) === 512, `${file} must be a 4096x512 skyline panorama`);
     }
   }
 }
