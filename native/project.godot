@@ -1,5 +1,7 @@
 ; Engine configuration file.
 ; Nitches Horizon Native — a real Godot game project.
+; 0.2.45 ships the photoreal second-pass glass tower (No.4) and museum
+; (No.9) prop GLBs; envelopes and placements unchanged.
 ; There is deliberately no HTML, JavaScript, Capacitor or WebView runtime in
 ; this directory. Android receives a native Godot ARM64 executable/APK.
 
