@@ -129,6 +129,9 @@ const audioCopies = [
 const textureNames = [
   'user_grass.jpg', 'user_grass_normal.jpg',
   'user_sand_rippled.jpg', 'user_sand_rippled_normal.jpg', 'user_sand_beach_white.jpg',
+  'user_dirt_cracked.jpg',
+  'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg',
+  'metal_pole.jpg', 'metal_pole_normal.jpg',
   'user_concrete_slabs.jpg', 'user_concrete_slabs_normal.jpg',
   'rock.jpg', 'rock_normal.jpg',
   'user_asphalt_dashed.jpg', 'user_asphalt_dashed_normal.jpg',

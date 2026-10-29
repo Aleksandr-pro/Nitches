@@ -30,6 +30,7 @@ const GARAGE_STUDIO_ORIGIN := Vector3(0.0, 250.0, 0.0)
 const TUNING_COSTS: Array[int] = [0, 5000, 12000]
 
 var _world: NativeWorldBuilder
+var _selected_world_id := "richtown"
 var _vehicle: NativeVehicle
 var _hud: NativeHud
 var _menu: NativeMainMenu
@@ -98,11 +99,22 @@ func _ready() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_configure_render_quality(true)
 
+	# 0.2.47: settings must be known before the world is built so
+	# the persisted world choice (or --native-world= override used
+	# by CI screenshot runs) selects the data set up front.
+	_load_settings()
+	_selected_world_id = String(_settings.get("selected_world", "richtown"))
+	for arg in OS.get_cmdline_user_args() + OS.get_cmdline_args():
+		if String(arg).begins_with("--native-world="):
+			var wanted := String(arg).trim_prefix("--native-world=")
+			if wanted == "richtown" or wanted == "desert":
+				_selected_world_id = wanted
 	_world = WorldBuilderScript.new() as NativeWorldBuilder
 	_world.name = "NativeWorld"
+	_world.world_id = _selected_world_id
 	add_child(_world)
 	var stats := _world.build_world()
-	print("[native] RichTown build stats: ", stats)
+	print("[native] World build stats (%s): " % _selected_world_id, stats)
 	if not _world.build_error.is_empty():
 		push_error("Native world failed to build: %s" % _world.build_error)
 
@@ -169,6 +181,8 @@ func _ready() -> void:
 	_menu.tuning_purchase_requested.connect(_on_tuning_purchase_requested)
 	_menu.profile_changed.connect(_on_profile_changed)
 	_menu.car_selection_requested.connect(_select_car)
+	_menu.world_selected.connect(switch_world)
+	_menu.set_current_world(_selected_world_id)
 	_apply_settings(_settings, false)
 
 	# 0.2.32: full-screen named RichTown map over the game.  The HUD
@@ -205,6 +219,7 @@ func _default_settings() -> Dictionary:
 		"developer_mode": false,
 		"map_hint_seen": false,
 		"graphics_quality": "balanced",
+		"selected_world": "richtown",
 	}
 
 
@@ -227,6 +242,10 @@ func _sanitize_settings(source: Dictionary) -> Dictionary:
 	if graphics_quality != "performance" and graphics_quality != "balanced" and graphics_quality != "beauty":
 		graphics_quality = "balanced"
 	result["graphics_quality"] = graphics_quality
+	var selected_world := String(result.get("selected_world", "richtown"))
+	if selected_world != "richtown" and selected_world != "desert":
+		selected_world = "richtown"
+	result["selected_world"] = selected_world
 	return result
 
 
@@ -1642,6 +1661,11 @@ func _run_smoke_checks() -> void:
 		_finish_smoke(failures)
 		return
 
+	if _selected_world_id == "desert":
+		_run_desert_smoke_checks(failures)
+		_finish_smoke(failures)
+		return
+
 	var stats := _world.get_stats()
 	var world_data := _world.get_world_data()
 	if not _world.has_world_data() or world_data.is_empty():
@@ -2112,6 +2136,8 @@ func _run_screenshot_tour() -> void:
 		{"name": "13_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
 		{"name": "14_menu_settings", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_SETTINGS, "frames": 5},
 	]
+	if _selected_world_id == "desert":
+		shots = _desert_screenshot_shots()
 
 	# Warm-up: import/runtime LOD, reflection probes and visibility
 	# ranges all settle over the first rendered frames.
@@ -2224,3 +2250,166 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 		float(Time.get_ticks_msec() - shot_started_ms) / 1000.0,
 	])
 	return true
+
+
+## 0.2.47: live world switch (menu -> Worlds).  Builds the new world
+## first, rebinds every system that cached a world reference and only
+## then frees the old one, so the car never points at a dead world.
+func switch_world(world_id: String) -> void:
+	if world_id != "richtown" and world_id != "desert":
+		return
+	if world_id == _selected_world_id and _world != null:
+		return
+	_selected_world_id = world_id
+	_settings["selected_world"] = world_id
+	_save_settings()
+	var old_world := _world
+	var new_world := WorldBuilderScript.new() as NativeWorldBuilder
+	new_world.name = "NativeWorld"
+	new_world.world_id = world_id
+	add_child(new_world)
+	var stats := new_world.build_world()
+	print("[native] World build stats (%s): " % world_id, stats)
+	if not new_world.build_error.is_empty():
+		push_error("Native world failed to build: %s" % new_world.build_error)
+	_world = new_world
+	_vehicle.set_world(_world)
+	_vehicle.reset_to_transform(_world.spawn_transform)
+	_vehicle.global_transform = _world.spawn_transform
+	_atmosphere_fx.configure(_vehicle, _camera, _world)
+	_route_guide.bind(_world, _vehicle)
+	_hud.bind(_world, _vehicle)
+	_world_map.bind(_world, _vehicle)
+	_hud.set_minimap_points(_world_map.get_minimap_points())
+	_on_world_map_destination_changed(_world_map.get_route_destination())
+	_apply_graphics_quality()
+	_apply_time_mode()
+	if _menu != null:
+		_menu.set_current_world(world_id)
+	if old_world != null:
+		old_world.queue_free()
+	_update_camera(0.0, true)
+
+
+## 0.2.47 desert smoke gate: the RichTown assert battery below is
+## data-specific (boulevard/parks/Sail Island), so the desert build
+## gets its own equally strict checklist against the spec numbers.
+func _run_desert_smoke_checks(failures: Array[String]) -> void:
+	if not _world.has_world_data() or _world.get_world_data().is_empty():
+		failures.append("desert world data is empty: %s" % _world.build_error)
+		return
+	var world_data := _world.get_world_data()
+	var terrain: Dictionary = world_data.get("terrain", {})
+	if (terrain.get("heights", []) as Array).size() != 251001:
+		failures.append("desert terrain heights are incomplete")
+	if (world_data.get("roads", []) as Array).size() < 40:
+		failures.append("desert road network is incomplete")
+	var data_stats: Dictionary = world_data.get("stats", {})
+	if float(data_stats.get("roadLengthKm", 0.0)) < 55.0:
+		failures.append("desert road length is below the 55 km spec floor: %s" % str(data_stats))
+	var es := _world.get_enhancement_stats()
+	if not bool(es.get("desert_world_0247", false)):
+		failures.append("desert build flag is missing: %s" % str(es))
+	if int(es.get("desert_scatter", 0)) < 36000:
+		failures.append("desert scatter is below budget: %s" % str(es))
+	if int(es.get("desert_structures", 0)) < 700:
+		failures.append("desert structures are incomplete: %s" % str(es))
+	if int(es.get("desert_terrain_chunks", 0)) < 100:
+		failures.append("desert terrain chunks are missing: %s" % str(es))
+	if int(es.get("reflection_probes", 0)) < 6:
+		failures.append("desert reflection probes are incomplete: %s" % str(es))
+	if int(es.get("road_markings", 0)) < 1000:
+		failures.append("desert road markings are incomplete: %s" % str(es))
+	if int(es.get("desert_bridges", 0)) != 3 or not bool(es.get("desert_tunnel", false)) or not bool(es.get("desert_lake", false)):
+		failures.append("desert bridges/tunnel/lake are incomplete: %s" % str(es))
+	if int(es.get("skyline_layers", 0)) < 1 or not bool(es.get("skyline_follow", false)):
+		failures.append("desert far-mesa skyline is incomplete: %s" % str(es))
+	var salt_point := Vector3(2000.0, _world.height_at(2000.0, 1900.0) + 0.5, 1900.0)
+	var salt_surface := _world.get_surface_at(salt_point)
+	if String(salt_surface.get("kind", "")) != "salt":
+		failures.append("salt flat surface is misclassified: %s" % str(salt_surface))
+	var found_gravel := false
+	for road_variant in world_data.get("roads", []):
+		var road: Dictionary = road_variant
+		if String(road.get("surface", "asphalt")) != "gravel":
+			continue
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 3:
+			continue
+		var sample: Array = samples[samples.size() / 2]
+		var road_surface := _world.get_surface_at(Vector3(float(sample[0]), float(sample[1]) + 0.5, float(sample[2])))
+		if String(road_surface.get("kind", "")) == "gravel":
+			found_gravel = true
+			break
+	if not found_gravel:
+		failures.append("no gravel road classifies as gravel surface")
+	var spawn_surface := _world.get_surface_at(_world.spawn_transform.origin + Vector3(0.0, 0.5, 0.0))
+	if String(spawn_surface.get("kind", "")) != "asphalt":
+		failures.append("desert spawn is not on asphalt: %s" % str(spawn_surface))
+	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
+	if not bool(atmosphere_state.get("ready", false)):
+		failures.append("atmosphere is not ready in desert: %s" % str(atmosphere_state))
+	var vehicle_effect_state := _vehicle.get_effect_state()
+	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)):
+		failures.append("vehicle effects/audio incomplete in desert: %s" % str(vehicle_effect_state))
+
+
+func _desert_screenshot_shots() -> Array[Dictionary]:
+	return [
+		{
+			"name": "01_spawn_gameplay", "time": "day", "hud": true,
+			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
+		},
+		{
+			"name": "d02_town_main_street", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(700.0, 0.0, 2052.0),
+			"camera": Vector3(545.0, 6.0, 2078.0), "target": Vector3(820.0, 5.0, 2032.0),
+		},
+		{
+			"name": "d03_quarry", "time": "day", "vehicle": "hide",
+			"camera": Vector3(3040.0, 42.0, 800.0), "target": Vector3(3290.0, 8.0, 1100.0),
+		},
+		{
+			"name": "d04_oil_field_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(3340.0, 10.0, 2240.0), "target": Vector3(3585.0, 10.0, 2100.0),
+		},
+		{
+			"name": "d05_salt_flat", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1800.0, 0.0, 2280.0),
+			"camera": Vector3(1620.0, 7.0, 2385.0), "target": Vector3(2050.0, 3.0, 2280.0),
+		},
+		{
+			"name": "d06_canyon_arch", "time": "day", "vehicle": "hide",
+			"camera": Vector3(762.0, 5.0, 678.0), "target": Vector3(806.0, 8.0, 726.0),
+		},
+		{
+			"name": "d07_dunes_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(1720.0, 22.0, 3040.0), "target": Vector3(2040.0, 6.0, 3340.0),
+		},
+		{
+			"name": "d08_oasis", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(3260.0, 0.0, 3450.0),
+			"camera": Vector3(3170.0, 8.0, 3370.0), "target": Vector3(3390.0, 4.0, 3520.0),
+		},
+		{
+			"name": "d09_wind_farm", "time": "day", "vehicle": "hide",
+			"camera": Vector3(840.0, 16.0, 2660.0), "target": Vector3(1130.0, 26.0, 2870.0),
+		},
+		{
+			"name": "d10_tunnel_portal", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2668.0, 5.0, 712.0), "target": Vector3(2745.0, 5.0, 756.0),
+		},
+		{
+			"name": "d11_mesa_serpentine", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1480.0, 55.0, 920.0), "target": Vector3(1760.0, 18.0, 640.0),
+		},
+		{
+			"name": "d12_plane_wreck", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2928.0, 6.0, 1548.0), "target": Vector3(2954.0, 3.0, 1578.0),
+		},
+		{
+			"name": "d13_basin_aerial", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2000.0, 650.0, 150.0), "target": Vector3(2000.0, 0.0, 2300.0),
+		},
+		{"name": "d14_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
+	]

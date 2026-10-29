@@ -21,6 +21,7 @@ signal customization_changed(customization: Dictionary)
 signal tuning_purchase_requested(level: int)
 signal profile_changed(player_name: String, avatar_id: String)
 signal car_selection_requested(car_id: String)
+signal world_selected(world_id: String)
 
 const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
 const AvatarIconScript := preload("res://scripts/avatar_icon.gd")
@@ -211,6 +212,12 @@ var _store_drive_button: Button
 
 var _world_progress_label: Label
 var _world_detail_label: Label
+var _current_world_id := "richtown"
+var _richtown_card: Button
+var _desert_card: Button
+var _desert_card_subtitle: Label
+var _desert_lock_icon: Control
+var _world_title_label: Label
 var _paint_options: Array[Dictionary] = [
     {"id": "red", "name": "Красный", "color": Color(0.48, 0.025, 0.035)},
     {"id": "blue", "name": "Синий", "color": Color(0.03, 0.16, 0.55)},
@@ -299,6 +306,9 @@ func get_smoke_state() -> Dictionary:
         "profile_single_scroll_0236": _profile_scroll != null,
         "achievement_cards_0236": _achievement_card_count,
         "locked_world_conditions_0236": _world_progress_label != null and _world_detail_label != null,
+        "desert_world_0247": _desert_card != null,
+        "current_world_id": _current_world_id,
+        "desert_unlocked_0247": _desert_unlocked(),
         "hover_sound_0236": _hover_player != null,
         "panel_transition_018_0236": is_equal_approx(PANEL_TRANSITION_SECONDS, 0.18),
         "gameplay_card_textures_0236": MENU_PLAY_TEXTURE != null and MENU_SHELBY_TEXTURE != null and MENU_RICHTOWN_TEXTURE != null and MENU_WORLD_TEXTURE != null,
@@ -936,7 +946,7 @@ func _refresh_car_presentation() -> void:
             int(specs.get("power_hp", tuning.get("power", 0))), int(specs.get("torque_nm", tuning.get("torque", 0))), int(specs.get("top_speed_kmh", 0)),
         ]
     if _home_play_button != null:
-        _set_picture_card(_home_play_button, MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • %s • свободная езда" % display_name)
+        _set_picture_card(_home_play_button, MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "%s • %s • свободная езда" % [_world_display_name(), display_name])
     if _home_car_card != null:
         _set_picture_card(_home_car_card, _texture_for_car(_selected_car_id), display_name.to_upper(), "открыть гараж →")
     if _garage_title_label != null:
@@ -1840,18 +1850,17 @@ func _build_worlds_panel(parent: Node) -> Control:
     var row := HBoxContainer.new()
     row.add_theme_constant_override("separation", 12)
     vbox.add_child(row)
-    var richtown := _picture_button(MENU_WORLD_TEXTURE, "RICHTOWN", "игровой обзор города • побережье • Остров-Пальма", Vector2(0.0, 224.0), 34)
-    richtown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    richtown.size_flags_stretch_ratio = 1.7
-    richtown.pressed.connect(func() -> void: play_requested.emit())
-    row.add_child(richtown)
+    _richtown_card = _picture_button(MENU_WORLD_TEXTURE, "RICHTOWN", "игровой обзор города • побережье • Остров-Пальма", Vector2(0.0, 224.0), 34)
+    _richtown_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _richtown_card.size_flags_stretch_ratio = 1.7
+    _richtown_card.pressed.connect(func() -> void: _on_world_card_pressed("richtown"))
+    row.add_child(_richtown_card)
     var locked_column := VBoxContainer.new()
     locked_column.add_theme_constant_override("separation", 12)
     locked_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     row.add_child(locked_column)
     var locked_specs := [
         ["СЕВЕРНЫЕ ГОРЫ", "открывается на уровне %d • мир в разработке" % WORLD_MOUNTAINS_REQUIRED_LEVEL],
-        ["ПУСТЫННЫЙ КАНЬОН", "нужно накопить CR %s • мир в разработке" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS)],
     ]
     for spec in locked_specs:
         var locked := _tile(String(spec[0]), String(spec[1]), COL_LOCKED, Vector2(0.0, 106.0), 21)
@@ -1865,6 +1874,20 @@ func _build_worlds_panel(parent: Node) -> Control:
         lock_icon.offset_bottom = 46.0
         locked.add_child(lock_icon)
         locked_column.add_child(locked)
+    _desert_card = _tile("ПУСТЫННЫЙ КАНЬОН", "нужно накопить CR %s" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS), Color(0.78, 0.50, 0.24), Vector2(0.0, 106.0), 21)
+    _desert_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    for child in _desert_card.get_children():
+        if child is Label:
+            _desert_card_subtitle = child as Label
+    _desert_lock_icon = LockIconScript.new() as NativeLockIcon
+    _desert_lock_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+    _desert_lock_icon.offset_left = -46.0
+    _desert_lock_icon.offset_top = 12.0
+    _desert_lock_icon.offset_right = -12.0
+    _desert_lock_icon.offset_bottom = 46.0
+    _desert_card.add_child(_desert_lock_icon)
+    _desert_card.pressed.connect(func() -> void: _on_world_card_pressed("desert"))
+    locked_column.add_child(_desert_card)
 
     var detail_panel := _panel_box(vbox)
     detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1876,7 +1899,7 @@ func _build_worlds_panel(parent: Node) -> Control:
     description_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     description_box.size_flags_stretch_ratio = 1.35
     detail_row.add_child(description_box)
-    _label(description_box, "RICHTOWN — ТЕКУЩИЙ МИР", 18, Color.WHITE, true)
+    _world_title_label = _label(description_box, "RICHTOWN — ТЕКУЩИЙ МИР", 18, Color.WHITE, true)
     _world_detail_label = _label(description_box, "Открытый прибрежный город: центральный деловой район и главная башня, мечеть, опера и бульвары с кафе, центральный парк, набережная, порт и Остров-Пальма. Полноэкранная карта строит маршрут по настоящим дорогам, показывает районы и точки интереса, а быстрый переход переносит выбранный автомобиль к выбранному месту.", MIN_FONT_SIZE, COL_TEXT)
     _world_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     var progress_box := VBoxContainer.new()
@@ -1892,6 +1915,7 @@ func _build_worlds_panel(parent: Node) -> Control:
     _world_map_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _world_map_button.pressed.connect(func() -> void: world_map_requested.emit())
     vbox.add_child(_world_map_button)
+    _refresh_world_cards()
     return vbox.get_parent().get_parent() as Control
 
 
@@ -2009,7 +2033,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.46-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.47-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2201,10 +2225,78 @@ func _update_world_progress() -> void:
     var credits := int(_profile_view.get("credits", 35000))
     var mountains_left := maxi(WORLD_MOUNTAINS_REQUIRED_LEVEL - level, 0)
     var canyon_left := maxi(WORLD_CANYON_REQUIRED_CREDITS - credits, 0)
-    _world_progress_label.text = "СЕВЕРНЫЕ ГОРЫ: уровень %d / %d%s\nПУСТЫННЫЙ КАНЬОН: CR %s / %s%s\n\nДаже после выполнения условия миры появятся только в обновлении с готовой территорией — пустые заглушки не открываем." % [
+    var canyon_line := ""
+    if canyon_left == 0:
+        canyon_line = "ПУСТЫННЫЙ КАНЬОН: ОТКРЫТ • выберите карточку мира выше, чтобы поехать в пустыню"
+    else:
+        canyon_line = "ПУСТЫННЫЙ КАНЬОН: CR %s / %s • не хватает CR %s" % [_fmt_int(credits), _fmt_int(WORLD_CANYON_REQUIRED_CREDITS), _fmt_int(canyon_left)]
+    _world_progress_label.text = "СЕВЕРНЫЕ ГОРЫ: уровень %d / %d%s • мир в разработке\n%s" % [
         level, WORLD_MOUNTAINS_REQUIRED_LEVEL, " • условие выполнено" if mountains_left == 0 else " • осталось уровней: %d" % mountains_left,
-        _fmt_int(credits), _fmt_int(WORLD_CANYON_REQUIRED_CREDITS), " • условие выполнено" if canyon_left == 0 else " • не хватает CR %s" % _fmt_int(canyon_left),
+        canyon_line,
     ]
+    _refresh_world_cards()
+
+
+## 0.2.47 world selection: RichTown is always available, the desert
+## canyon unlocks at WORLD_CANYON_REQUIRED_CREDITS.  Selecting a card
+## asks main to rebuild the world and then starts driving there.
+func _world_display_name(world_id: String = "") -> String:
+    var id := world_id if not world_id.is_empty() else _current_world_id
+    return "ПУСТЫННЫЙ КАНЬОН" if id == "desert" else "RICHTOWN"
+
+
+func _desert_unlocked() -> bool:
+    return int(_profile_view.get("credits", 35000)) >= WORLD_CANYON_REQUIRED_CREDITS
+
+
+func _on_world_card_pressed(world_id: String) -> void:
+    if world_id == "desert" and not _desert_unlocked():
+        return
+    if world_id != _current_world_id:
+        world_selected.emit(world_id)
+    play_requested.emit()
+
+
+func set_current_world(world_id: String) -> void:
+    if world_id != "richtown" and world_id != "desert":
+        return
+    _current_world_id = world_id
+    _refresh_world_cards()
+    _refresh_car_presentation()
+
+
+func _richtown_detail_text() -> String:
+    return "Открытый прибрежный город: центральный деловой район и главная башня, мечеть, опера и бульвары с кафе, центральный парк, набережная, порт и Остров-Пальма. Полноэкранная карта строит маршрут по настоящим дорогам, показывает районы и точки интереса, а быстрый переход переносит выбранный автомобиль к выбранному месту."
+
+
+func _desert_detail_text() -> String:
+    return "Открытая пустынная котловина 4×4 км: городок Дюны со стартом на главной улице, 55 км дорог кольцом и тропами, каньоны и серпантин у северных мез, карьер с техникой, нефтяное поле с качалками, солончак для рекордов скорости, море дюн, ветроферма и оазис с озером и пальмами. Асфальт, гравий, утрамбованный песок, соль и дюны держат машину по-разному — следите за сцеплением и пылью из-под колёс."
+
+
+func _refresh_world_cards() -> void:
+    var desert := _current_world_id == "desert"
+    if _richtown_card != null:
+        _set_picture_card(_richtown_card, MENU_WORLD_TEXTURE, "RICHTOWN" + ("" if desert else " • ТЕКУЩИЙ МИР"), "игровой обзор города • побережье • Остров-Пальма")
+    if _desert_card != null:
+        var unlocked := _desert_unlocked()
+        _desert_card.disabled = not unlocked
+        _desert_card.modulate = Color.WHITE if unlocked else Color(0.52, 0.54, 0.58)
+        _desert_card.text = "ПУСТЫННЫЙ КАНЬОН" + ("" if not desert else " • ТЕКУЩИЙ")
+        if _desert_lock_icon != null:
+            _desert_lock_icon.visible = not unlocked
+        if _desert_card_subtitle != null:
+            if not unlocked:
+                _desert_card_subtitle.text = "нужно накопить CR %s" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS)
+            elif desert:
+                _desert_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • каньоны • солончак • оазис"
+            else:
+                _desert_card_subtitle.text = "открыт • 4×4 км • каньоны • солончак • оазис"
+    if _world_title_label != null:
+        _world_title_label.text = "%s — ТЕКУЩИЙ МИР" % _world_display_name()
+    if _world_detail_label != null:
+        _world_detail_label.text = _desert_detail_text() if desert else _richtown_detail_text()
+    if _world_map_button != null:
+        _world_map_button.text = "⌖  ОТКРЫТЬ КАРТУ: %s" % _world_display_name()
 
 
 func refresh_profile(view: Dictionary) -> void:

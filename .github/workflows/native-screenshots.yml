@@ -45,7 +45,7 @@ jobs:
   screenshots:
     name: Render in-game screenshots (software Vulkan)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout (LFS runtime model is pulled explicitly)
         uses: actions/checkout@v4
@@ -141,11 +141,37 @@ jobs:
           echo "PNG screenshots: $count"
           test "$count" -ge 8
 
+      - name: Run the desert screenshot tour (0.2.47 second world)
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/$SHOT_DIR/desert"
+          ICD="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n 1)"
+          export VK_ICD_FILENAMES="$ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          timeout 1800 xvfb-run -a -s "-screen 0 960x540x24 +render" \
+            stdbuf -oL -eL "$GODOT_BIN" --path "$PROJECT_PATH" \
+            --resolution 960x540 \
+            --rendering-driver vulkan \
+            --rendering-method mobile \
+            --audio-driver Dummy \
+            -- --native-screenshots="$GITHUB_WORKSPACE/$SHOT_DIR/desert" --native-world=desert \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/screenshots-desert.log"
+          grep -F "[native-screenshots] DONE" "$RUNNER_TEMP/native-logs/screenshots-desert.log"
+          if grep -E "SCRIPT ERROR|SHADER ERROR|\[native-screenshots\] FAIL" "$RUNNER_TEMP/native-logs/screenshots-desert.log"; then
+            echo "Desert screenshot tour reported a runtime problem" >&2
+            exit 1
+          fi
+          ls -lh "$GITHUB_WORKSPACE/$SHOT_DIR/desert"
+          count="$(find "$GITHUB_WORKSPACE/$SHOT_DIR/desert" -name '*.png' | wc -l)"
+          echo "Desert PNG screenshots: $count"
+          test "$count" -ge 8
+
       - name: Collect diagnostics next to the screenshots
         if: always()
         run: |
           mkdir -p "$GITHUB_WORKSPACE/$SHOT_DIR"
           cp -f "$RUNNER_TEMP/native-logs/screenshots.log" "$GITHUB_WORKSPACE/$SHOT_DIR/screenshot-run.log" 2>/dev/null || true
+          cp -f "$RUNNER_TEMP/native-logs/screenshots-desert.log" "$GITHUB_WORKSPACE/$SHOT_DIR/screenshot-desert-run.log" 2>/dev/null || true
           cp -f "$RUNNER_TEMP/native-logs/import.log" "$GITHUB_WORKSPACE/$SHOT_DIR/import.log" 2>/dev/null || true
           if [ -f "$GITHUB_WORKSPACE/$SHOT_DIR/screenshot-run.log" ]; then
             grep -E "\[native-screenshots\]|SCRIPT ERROR" "$GITHUB_WORKSPACE/$SHOT_DIR/screenshot-run.log" | head -n 10 | while IFS= read -r line; do
