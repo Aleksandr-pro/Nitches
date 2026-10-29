@@ -1508,6 +1508,15 @@ def build_hero():
 # Fixed real-metre envelope: 18.87 x 16.37 m, 11.05 m high. Two mirrored
 # 9.4 m homes share a party wall; the runtime places the complete design
 # at scale 1.0 rather than stretching one small house over every parcel.
+# 0.2.46 photoreal pass: windows are rebuilt as layered framed units
+# (the old solid frame slab hid the interior, curtains and blinds,
+# leaving grey panels) with recessed glass and glazing bars; the
+# rear ground opening becomes a real two-leaf sliding patio door;
+# bay side panes gain full frames; eaves gain soffits with rafter
+# tails and a segmented ridge; festoon lights, garden trees and
+# wheelie bins add lived-in detail.  Repeated parts (windows, pavers,
+# slats, seams, pillars) merge into per-material MeshBuilders,
+# roughly halving the mesh count.  Envelope unchanged.
 # --------------------------------------------------------------------------- #
 def build_townhouse():
     plaster = MATS["TownPlaster"]
@@ -1537,87 +1546,148 @@ def build_townhouse():
     # the dark stone edge separates the parcel from the city terrain.
     box("townhouse_lot_plinth", 0.0, 0.0, 0.09, 18.80, 16.20, 0.18, granite, bevel=0.015)
 
+    # ---- merged-geometry helpers (0.2.46) ------------------------------- #
+    builders = {}
+
+    def bb(material):
+        if material.name not in builders:
+            builders[material.name] = (MeshBuilder(), material)
+        return builders[material.name][0]
+
+    def builder_box(builder, cx, cy, cz, dx, dy, dz):
+        x0, x1 = cx - dx / 2.0, cx + dx / 2.0
+        y0, y1 = cy - dy / 2.0, cy + dy / 2.0
+        z0, z1 = cz - dz / 2.0, cz + dz / 2.0
+
+        def v(x, y, z):
+            return builder.add_vertex(Vector((x, y, z)))
+
+        quads = (
+            ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((x0, y1, z0), (x1, y1, z0), (x1, y0, z0), (x0, y0, z0)),
+            ((x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)),
+            ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+            ((x0, y1, z0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1)),
+        )
+        for quad_corners in quads:
+            ids = [v(*corner) for corner in quad_corners]
+            builder.quad(*ids)
+
+    def builder_rbox(builder, cx, cy, cz, dx, dy, dz, yaw):
+        cs = math.cos(yaw)
+        sn = math.sin(yaw)
+        corners = {}
+        for sx in (-1.0, 1.0):
+            for sy in (-1.0, 1.0):
+                for sz in (-1.0, 1.0):
+                    lx = sx * dx / 2.0
+                    ly = sy * dy / 2.0
+                    corners[(sx, sy, sz)] = builder.add_vertex(Vector((
+                        cx + lx * cs - ly * sn,
+                        cy + lx * sn + ly * cs,
+                        cz + sz * dz / 2.0,
+                    )))
+        faces = (
+            ((-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)),
+            ((-1, 1, -1), (1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+            ((1, 1, -1), (-1, 1, -1), (-1, 1, 1), (1, 1, 1)),
+            ((-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)),
+            ((1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)),
+            ((-1, 1, -1), (-1, -1, -1), (-1, -1, 1), (-1, 1, 1)),
+        )
+        for face in faces:
+            builder.quad(*[corners[key] for key in face])
+
     def face_window(cx, cy, cz, width, height, face, shutters=False):
+        # Layered framed window (0.2.46, merged builders): interior
+        # reveal, curtain/blind states and a warm light line sit
+        # BEHIND recessed glass - the old solid frame slab hid them
+        # completely, leaving grey metal panels for windows.
         sign = -1.0 if face in ("front", "left") else 1.0
         variant = int(abs(cx * 4.3 + cy * 6.1 + cz * 7.7)) % 4
         blind_drop = height * (0.28, 0.44, 0.0, 0.58)[variant]
-        if face in ("front", "back"):
-            box("town_window_reveal", cx, cy + sign * 0.016, cz, width + 0.34, 0.080, height + 0.34, trim)
-            box("town_window_interior", cx, cy + sign * 0.036, cz, width - 0.03, 0.038, height - 0.03, interior)
-            if variant != 1:
-                for side in (-1.0, 1.0):
-                    box("town_window_curtain", cx + side * (width / 2.0 - 0.16), cy + sign * 0.060, cz, 0.22, 0.032, height - 0.13, curtain)
-            if blind_drop > 0.05:
-                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
-                box("town_window_blind", cx, cy + sign * 0.062, blind_z, width - 0.10, 0.030, blind_drop, curtain)
-                box("town_window_blind_rail", cx, cy + sign * 0.066, blind_z - blind_drop / 2.0, width - 0.08, 0.036, 0.040, frame)
-            box("town_window_light", cx - width * 0.17, cy + sign * 0.064, cz + height * 0.33, width * 0.34, 0.024, 0.035, glow)
-            box("town_window_frame", cx, cy + sign * 0.026, cz, width + 0.18, 0.155, height + 0.18, frame)
-            box("town_window_glass", cx, cy + sign * 0.090, cz, width, 0.042, height, glass)
-            divisions = max(1, int(width // 0.95))
-            for division in range(1, divisions):
-                mx = cx - width / 2.0 + width * division / divisions
-                box("town_window_mullion", mx, cy + sign * 0.103, cz, 0.050, 0.052, height, frame)
-            box("town_window_transom", cx, cy + sign * 0.103, cz + height * 0.22, width, 0.052, 0.050, frame)
-            box("town_window_handle", cx + width * 0.21, cy + sign * 0.118, cz - 0.04, 0.040, 0.032, 0.28, metal)
-            box("town_window_sill", cx, cy + sign * 0.100, cz - height / 2.0 - 0.075, width + 0.40, 0.28, 0.095, trim)
-            box("town_window_header", cx, cy + sign * 0.060, cz + height / 2.0 + 0.085, width + 0.30, 0.15, 0.10, trim)
-            if shutters:
-                for side in (-1.0, 1.0):
-                    sx = cx + side * (width / 2.0 + 0.28)
-                    box("town_window_shutter", sx, cy + sign * 0.045, cz, 0.38, 0.055, height + 0.08, wood)
-                    for groove in (-0.30, 0.0, 0.30):
-                        box("town_window_shutter_groove", sx, cy + sign * 0.078, cz + groove * height, 0.32, 0.020, 0.035, frame)
-            if cz < 3.0 and variant in (0, 3):
-                box("town_window_flower_box", cx, cy + sign * 0.18, cz - height / 2.0 - 0.24, width * 0.72, 0.22, 0.20, granite)
-                box("town_window_flower_hedge", cx, cy + sign * 0.18, cz - height / 2.0 - 0.10, width * 0.64, 0.16, 0.16, hedge, bevel=0.035)
-        else:
-            box("town_window_reveal", cx + sign * 0.016, cy, cz, 0.080, width + 0.34, height + 0.34, trim)
-            box("town_window_interior", cx + sign * 0.036, cy, cz, 0.038, width - 0.03, height - 0.03, interior)
-            if variant != 1:
-                for side in (-1.0, 1.0):
-                    box("town_window_curtain", cx + sign * 0.060, cy + side * (width / 2.0 - 0.16), cz, 0.032, 0.22, height - 0.13, curtain)
-            if blind_drop > 0.05:
-                blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
-                box("town_window_blind", cx + sign * 0.062, cy, blind_z, 0.030, width - 0.10, blind_drop, curtain)
-                box("town_window_blind_rail", cx + sign * 0.066, cy, blind_z - blind_drop / 2.0, 0.036, width - 0.08, 0.040, frame)
-            box("town_window_light", cx + sign * 0.064, cy - width * 0.17, cz + height * 0.33, 0.024, width * 0.34, 0.035, glow)
-            box("town_window_frame", cx + sign * 0.026, cy, cz, 0.155, width + 0.18, height + 0.18, frame)
-            box("town_window_glass", cx + sign * 0.090, cy, cz, 0.042, width, height, glass)
-            divisions = max(1, int(width // 0.95))
-            for division in range(1, divisions):
-                my = cy - width / 2.0 + width * division / divisions
-                box("town_window_mullion", cx + sign * 0.103, my, cz, 0.052, 0.050, height, frame)
-            box("town_window_transom", cx + sign * 0.103, cy, cz + height * 0.22, 0.052, width, 0.050, frame)
-            box("town_window_handle", cx + sign * 0.118, cy + width * 0.21, cz - 0.04, 0.032, 0.040, 0.28, metal)
-            box("town_window_sill", cx + sign * 0.100, cy, cz - height / 2.0 - 0.075, 0.28, width + 0.40, 0.095, trim)
-            box("town_window_header", cx + sign * 0.060, cy, cz + height / 2.0 + 0.085, 0.15, width + 0.30, 0.10, trim)
-            if shutters:
-                for side in (-1.0, 1.0):
-                    sy = cy + side * (width / 2.0 + 0.28)
-                    box("town_window_shutter", cx + sign * 0.045, sy, cz, 0.055, 0.38, height + 0.08, wood)
-                    for groove in (-0.30, 0.0, 0.30):
-                        box("town_window_shutter_groove", cx + sign * 0.078, sy, cz + groove * height, 0.020, 0.32, 0.035, frame)
+
+        def wbox(material, along, out, zc, along_sz, out_sz, z_sz):
+            if face in ("front", "back"):
+                builder_box(bb(material), cx + along, cy + sign * out, zc, along_sz, out_sz, z_sz)
+            else:
+                builder_box(bb(material), cx + sign * out, cy + along, zc, out_sz, along_sz, z_sz)
+
+        wbox(trim, 0.0, 0.030, cz + height * 0.5 + 0.10, width + 0.34, 0.060, 0.12)
+        wbox(trim, 0.0, 0.030, cz - height * 0.5 - 0.10, width + 0.34, 0.060, 0.12)
+        for sd in (-1.0, 1.0):
+            wbox(trim, sd * (width * 0.5 + 0.10), 0.030, cz, 0.12, 0.060, height + 0.10)
+        wbox(interior, 0.0, 0.030, cz, width - 0.03, 0.035, height - 0.03)
+        if variant != 1:
+            for sd in (-1.0, 1.0):
+                wbox(curtain, sd * (width / 2.0 - 0.16), 0.060, cz, 0.22, 0.030, height - 0.13)
+        if blind_drop > 0.05:
+            blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
+            wbox(curtain, 0.0, 0.062, blind_z, width - 0.10, 0.028, blind_drop)
+            wbox(frame, 0.0, 0.066, blind_z - blind_drop / 2.0, width - 0.08, 0.034, 0.040)
+        wbox(glow, -width * 0.17, 0.058, cz + height * 0.33, width * 0.34, 0.022, 0.035)
+        wbox(glass, 0.0, 0.080, cz, width, 0.040, height)
+        wbox(frame, 0.0, 0.095, cz + height * 0.5 + 0.030, width + 0.18, 0.150, 0.10)
+        wbox(frame, 0.0, 0.095, cz - height * 0.5 - 0.030, width + 0.18, 0.150, 0.10)
+        for sd in (-1.0, 1.0):
+            wbox(frame, sd * (width * 0.5 + 0.030), 0.095, cz, 0.10, 0.150, height)
+        divisions = max(1, int(width // 0.95))
+        for division in range(1, divisions):
+            wbox(frame, -width / 2.0 + width * division / divisions, 0.090, cz, 0.050, 0.050, height)
+        wbox(frame, 0.0, 0.090, cz + height * 0.22, width, 0.050, 0.050)
+        wbox(metal, width * 0.21, 0.125, cz - 0.04, 0.040, 0.035, 0.28)
+        wbox(trim, 0.0, 0.110, cz - height / 2.0 - 0.075, width + 0.40, 0.26, 0.095)
+        wbox(trim, 0.0, 0.075, cz + height / 2.0 + 0.085, width + 0.30, 0.13, 0.10)
+        if shutters:
+            for sd in (-1.0, 1.0):
+                sx = sd * (width / 2.0 + 0.28)
+                wbox(wood, sx, 0.045, cz, 0.38, 0.055, height + 0.08)
+                for groove in (-0.30, 0.0, 0.30):
+                    wbox(frame, sx, 0.080, cz + groove * height, 0.32, 0.018, 0.035)
+        if cz < 3.0 and variant in (0, 3) and face in ("front", "back"):
+            wbox(granite, 0.0, 0.180, cz - height / 2.0 - 0.24, width * 0.72, 0.22, 0.20)
+            wbox(hedge, 0.0, 0.180, cz - height / 2.0 - 0.10, width * 0.64, 0.16, 0.16)
 
     def juliet_balcony(cx, face_y, sign):
         slab_y = face_y + sign * 0.30
         rail_y = face_y + sign * 0.54
-        box("town_juliet_slab", cx, slab_y, 3.68, 1.95, 0.58, 0.14, granite)
+        builder_box(bb(granite), cx, slab_y, 3.68, 1.95, 0.58, 0.14)
         for bracket_x in (cx - 0.72, cx + 0.72):
             rbox("town_juliet_bracket", bracket_x, slab_y, 3.42, 0.08, 0.48, 0.08, metal, rotation=(sign * 0.62, 0.0, 0.0))
         for post_offset in (-0.88, -0.44, 0.0, 0.44, 0.88):
-            box("town_juliet_post", cx + post_offset, rail_y, 4.18, 0.038, 0.045, 0.86, frame)
-        box("town_juliet_top_rail", cx, rail_y, 4.64, 1.92, 0.07, 0.06, frame)
-        box("town_juliet_mid_rail", cx, rail_y, 4.18, 1.92, 0.045, 0.04, frame)
+            builder_box(bb(frame), cx + post_offset, rail_y, 4.18, 0.038, 0.045, 0.86)
+        builder_box(bb(frame), cx, rail_y, 4.64, 1.92, 0.07, 0.06)
+        builder_box(bb(frame), cx, rail_y, 4.18, 1.92, 0.045, 0.04)
         for side in (-1.0, 1.0):
-            box("town_juliet_side_rail", cx + side * 0.92, face_y + sign * 0.30, 4.64, 0.06, 0.52, 0.06, frame)
+            builder_box(bb(frame), cx + side * 0.92, face_y + sign * 0.30, 4.64, 0.06, 0.52, 0.06)
+
+    def rear_slider(cx, face_y):
+        # Two-leaf sliding patio door (0.2.46): fixed and sliding
+        # sashes at two depths, meeting stiles, granite sill track.
+        z0, z1 = 0.45, 2.79
+        zc = (z0 + z1) * 0.5
+        builder_box(bb(interior), cx, face_y + 0.015, zc, 2.60, 0.030, 2.30)
+        builder_box(bb(curtain), cx - 0.85, face_y + 0.045, zc, 0.55, 0.025, 2.20)
+        for leaf, lout in ((-0.66, 0.055), (0.66, 0.095)):
+            builder_box(bb(glass), cx + leaf, face_y + lout, zc + 0.10, 1.24, 0.040, 1.86)
+            builder_box(bb(frame), cx + leaf, face_y + lout, z1 - 0.06, 1.32, 0.070, 0.09)
+            builder_box(bb(frame), cx + leaf, face_y + lout, z0 + 0.10, 1.32, 0.070, 0.20)
+            for stile in (-0.63, 0.63):
+                builder_box(bb(frame), cx + leaf + stile, face_y + lout, zc, 0.09, 0.070, 2.24)
+        builder_box(bb(frame), cx, face_y + 0.075, z1 + 0.05, 2.83, 0.140, 0.11)
+        builder_box(bb(frame), cx - 1.36, face_y + 0.075, zc, 0.11, 0.140, 2.45)
+        builder_box(bb(frame), cx + 1.36, face_y + 0.075, zc, 0.11, 0.140, 2.45)
+        builder_box(bb(metal), cx + 0.10, face_y + 0.135, 1.55, 0.05, 0.040, 0.55)
+        builder_box(bb(granite), cx, face_y + 0.16, 0.40, 2.95, 0.34, 0.07)
+        builder_box(bb(trim), cx, face_y + 0.070, z1 + 0.16, 2.95, 0.12, 0.10)
 
     def roof_dormer(cx, unit_material):
-        box("town_dormer_body", cx, -3.55, 7.88, 1.35, 1.28, 1.60, unit_material, bevel=0.015)
+        builder_box(bb(unit_material), cx, -3.55, 7.88, 1.35, 1.28, 1.60)
         for cheek_side in (-1.0, 1.0):
-            box("town_dormer_cheek", cx + cheek_side * 0.72, -3.55, 7.88, 0.09, 1.34, 1.62, trim)
+            builder_box(bb(trim), cx + cheek_side * 0.72, -3.55, 7.88, 0.09, 1.34, 1.62)
         gable_roof("town_dormer_roof", cx, -3.55, 8.98, 1.62, 1.52, 0.66, roof_tile, ridge_axis="y")
-        box("town_dormer_ridge", cx, -3.55, 9.34, 0.20, 1.58, 0.09, granite)
+        builder_box(bb(granite), cx, -3.55, 9.34, 0.20, 1.58, 0.09)
         face_window(cx, -4.20, 7.95, 0.86, 1.02, "front")
 
     # Party wall between the two homes, carried up both roof slopes as a
@@ -1637,6 +1707,16 @@ def build_townhouse():
     for rake_x in (-9.34, 9.34):
         tube_between("town_roof_rake_front", (rake_x, -4.92, 6.62), (rake_x, 0.55, 10.12), 0.055, 0.055, trim, vertices=8)
         tube_between("town_roof_rake_rear", (rake_x, 6.02, 6.62), (rake_x, 0.55, 10.12), 0.055, 0.055, trim, vertices=8)
+    # Eaves soffits with exposed rafter tails and a segmented ridge
+    # (0.2.46) so the roof edge reads carpentered from the street.
+    builder_box(bb(trim), 0.0, -4.68, 6.47, 18.70, 0.56, 0.05)
+    builder_box(bb(trim), 0.0, 5.78, 6.47, 18.70, 0.56, 0.05)
+    for tail_i in range(14):
+        tail_x = -8.77 + tail_i * 1.35
+        builder_box(bb(trim), tail_x, -4.72, 6.38, 0.12, 0.50, 0.14)
+        builder_box(bb(trim), tail_x, 5.82, 6.38, 0.12, 0.50, 0.14)
+    for joint_i in range(13):
+        builder_box(bb(frame), -9.0 + joint_i * 1.5, 0.55, 10.16, 0.05, 0.36, 0.16)
 
     for unit_side in (-1.0, 1.0):
         unit_x = unit_side * 4.60
@@ -1650,15 +1730,15 @@ def build_townhouse():
         # Main two-storey volume, stone foundation and string course.
         box("town_foundation", unit_x, 0.55, 0.28, 9.30, 10.20, 0.56, stone, bevel=0.02)
         box("town_main_body", unit_x, 0.55, 3.45, 9.00, 9.90, 6.30, body_material, bevel=0.035)
-        box("town_base_front", unit_x, -4.46, 0.72, 9.08, 0.14, 0.88, stone)
-        box("town_base_rear", unit_x, 5.56, 0.72, 9.08, 0.14, 0.88, stone)
-        box("town_base_outer", unit_x + unit_side * 4.54, 0.55, 0.72, 0.14, 9.98, 0.88, stone)
-        box("town_string_front", unit_x, -4.47, 3.42, 9.10, 0.15, 0.20, trim)
-        box("town_string_rear", unit_x, 5.57, 3.42, 9.10, 0.15, 0.20, trim)
-        box("town_string_outer", unit_x + unit_side * 4.55, 0.55, 3.42, 0.15, 10.00, 0.20, trim)
+        builder_box(bb(stone), unit_x, -4.46, 0.72, 9.08, 0.14, 0.88)
+        builder_box(bb(stone), unit_x, 5.56, 0.72, 9.08, 0.14, 0.88)
+        builder_box(bb(stone), unit_x + unit_side * 4.54, 0.55, 0.72, 0.14, 9.98, 0.88)
+        builder_box(bb(trim), unit_x, -4.47, 3.42, 9.10, 0.15, 0.20)
+        builder_box(bb(trim), unit_x, 5.57, 3.42, 9.10, 0.15, 0.20)
+        builder_box(bb(trim), unit_x + unit_side * 4.55, 0.55, 3.42, 0.15, 10.00, 0.20)
         for quoin_z in (1.25, 2.55, 4.65, 5.95):
-            box("town_corner_quoin", unit_x + unit_side * 4.38, -4.42, quoin_z, 0.42, 0.16, 0.62, trim)
-            box("town_corner_quoin", unit_x + unit_side * 4.38, 5.52, quoin_z, 0.42, 0.16, 0.62, trim)
+            builder_box(bb(trim), unit_x + unit_side * 4.38, -4.42, quoin_z, 0.42, 0.16, 0.62)
+            builder_box(bb(trim), unit_x + unit_side * 4.38, 5.52, quoin_z, 0.42, 0.16, 0.62)
 
         # Attached garage: projecting volume, front gable, sectional
         # timber-look door, windows, lights and a real paved driveway.
@@ -1668,12 +1748,14 @@ def build_townhouse():
         box("town_garage_portal", garage_x, -5.25, 1.50, 3.25, 0.16, 2.62, trim)
         box("town_garage_door", garage_x, -5.35, 1.48, 2.78, 0.09, 2.24, garage_mat, bevel=0.010)
         for seam_z in (0.83, 1.38, 1.93):
-            box("town_garage_seam_h", garage_x, -5.405, seam_z, 2.70, 0.025, 0.045, frame)
+            builder_box(bb(frame), garage_x, -5.405, seam_z, 2.70, 0.025, 0.045)
         for seam_offset in (-0.70, 0.0, 0.70):
-            box("town_garage_seam_v", garage_x + seam_offset, -5.405, 1.48, 0.035, 0.025, 2.16, frame)
+            builder_box(bb(frame), garage_x + seam_offset, -5.405, 1.48, 0.035, 0.025, 2.16)
         for window_offset in (-0.82, 0.0, 0.82):
-            box("town_garage_window", garage_x + window_offset, -5.415, 2.28, 0.56, 0.030, 0.32, glass)
+            builder_box(bb(glass), garage_x + window_offset, -5.415, 2.28, 0.56, 0.030, 0.32)
         box("town_garage_handle", garage_x, -5.425, 1.08, 0.42, 0.035, 0.07, frame)
+        for jamb_offset in (-1.56, 1.56):
+            builder_box(bb(trim), garage_x + jamb_offset, -5.30, 1.50, 0.20, 0.24, 2.62)
         box("town_garage_bottom_seal", garage_x, -5.41, 0.42, 2.74, 0.035, 0.09, frame)
         for light_offset in (-1.70, 1.70):
             box("town_garage_light_body", garage_x + light_offset, -5.27, 2.55, 0.16, 0.10, 0.28, frame)
@@ -1681,7 +1763,7 @@ def build_townhouse():
         box("town_driveway_bed", garage_x, -6.68, 0.205, 3.45, 2.75, 0.045, granite)
         for paver_dx in (-1.12, 0.0, 1.12):
             for paver_y in (-5.83, -6.68, -7.53):
-                box("town_driveway_paver", garage_x + paver_dx, paver_y, 0.245, 1.00, 0.72, 0.045, pavement)
+                builder_box(bb(pavement), garage_x + paver_dx, paver_y, 0.245, 1.00, 0.72, 0.045)
         box("town_driveway_drain", garage_x, -5.50, 0.255, 2.90, 0.16, 0.030, frame)
 
         # Two-storey front bay. The angled side panes are separate
@@ -1696,10 +1778,17 @@ def build_townhouse():
         face_window(bay_x, -4.87, 4.86, 2.05, 1.78, "front", shutters=True)
         for pane_side in (-1.0, 1.0):
             pane_x = bay_x + pane_side * 1.43
-            rotation = (0.0, 0.0, pane_side * 0.62)
-            rbox("town_bay_side_interior", pane_x, -4.86, 1.72, 0.78, 0.045, 1.78, interior, rotation=rotation)
-            rbox("town_bay_side_glass", pane_x, -4.92, 1.72, 0.82, 0.055, 1.82, glass, rotation=rotation)
-            rbox("town_bay_side_frame", pane_x, -4.96, 1.72, 0.90, 0.045, 0.12, frame, rotation=rotation)
+            pane_yaw = pane_side * 0.62
+            pdir_x = math.cos(pane_yaw)
+            pdir_y = math.sin(pane_yaw)
+            builder_rbox(bb(interior), pane_x, -4.84, 1.72, 0.78, 0.040, 1.78, pane_yaw)
+            builder_rbox(bb(glass), pane_x, -4.90, 1.72, 0.82, 0.040, 1.82, pane_yaw)
+            builder_rbox(bb(frame), pane_x, -4.94, 2.66, 0.94, 0.10, 0.10, pane_yaw)
+            builder_rbox(bb(frame), pane_x, -4.94, 0.78, 0.94, 0.10, 0.10, pane_yaw)
+            builder_rbox(bb(frame), pane_x, -4.94, 1.72, 0.94, 0.07, 0.06, pane_yaw)
+            for jamb_off in (-0.44, 0.44):
+                builder_rbox(bb(frame), pane_x + pdir_x * jamb_off, -4.94 + pdir_y * jamb_off, 1.72, 0.09, 0.10, 1.90, pane_yaw)
+            builder_rbox(bb(trim), pane_x, -4.97, 0.68, 1.02, 0.16, 0.08, pane_yaw)
 
         # Porch and entrance. Each home has its own door colour,
         # sidelight, lanterns, number plaque, mailbox and paved path.
@@ -1718,6 +1807,7 @@ def build_townhouse():
         for groove_offset in (-0.28, 0.08, 0.38):
             box("town_entry_door_groove", door_x + groove_offset, -4.592, 1.56, 0.025, 0.022, 2.18, frame)
         cyl("town_entry_handle", door_x + 0.43, -4.63, 1.55, 0.022, 0.72, metal, vertices=10)
+        builder_box(bb(metal), door_x, -4.60, 0.62, 1.00, 0.020, 0.28)
         for lantern_offset in (-1.18, 1.18):
             lantern_x = door_x + lantern_offset
             box("town_entry_lantern_body", lantern_x, -5.90, 2.30, 0.15, 0.12, 0.28, frame)
@@ -1731,7 +1821,7 @@ def build_townhouse():
         box("town_mailbox_slot", mailbox_x, -7.60, 1.16, 0.18, 0.025, 0.04, metal)
         box("town_mailbox_flag", mailbox_x + 0.18, -7.45, 1.28, 0.03, 0.20, 0.16, door_mat)
         for path_y in (-6.55, -7.22, -7.82):
-            box("town_entry_path_paver", door_x, path_y, 0.235, 1.28, 0.52, 0.045, pavement)
+            builder_box(bb(pavement), door_x, path_y, 0.235, 1.28, 0.52, 0.045)
 
         # Remaining front windows and a Juliet balcony over the porch.
         face_window(garage_x, -4.40, 5.18, 1.65, 1.62, "front", shutters=True)
@@ -1739,7 +1829,7 @@ def build_townhouse():
         juliet_balcony(door_x, -4.40, -1.0)
 
         # Rear elevation: sliding doors, kitchen window and bedrooms.
-        face_window(unit_x - unit_side * 1.55, 5.50, 1.62, 2.65, 2.34, "back")
+        rear_slider(unit_x - unit_side * 1.55, 5.50)
         face_window(garage_x, 5.50, 1.92, 1.75, 1.42, "back", shutters=True)
         face_window(garage_x, 5.50, 5.02, 1.65, 1.70, "back", shutters=True)
         face_window(door_x, 5.50, 5.02, 1.45, 1.70, "back", shutters=True)
@@ -1784,7 +1874,7 @@ def build_townhouse():
             tube_between("town_downspout_shoe", (pipe_x, pipe_y, 0.58), (pipe_x, pipe_y - 0.28 if pipe_y < 0 else pipe_y + 0.28, 0.24), 0.055, 0.055, frame, vertices=8)
             bracket_y = pipe_y + 0.20 if pipe_y < 0 else pipe_y - 0.20
             for bracket_z in (1.25, 3.40, 5.55):
-                box("town_downspout_bracket", pipe_x, bracket_y, bracket_z, 0.16, 0.52, 0.05, metal)
+                builder_box(bb(metal), pipe_x, bracket_y, bracket_z, 0.16, 0.52, 0.05)
         meter_x = garage_x + unit_side * 1.94
         box("town_meter_cabinet", meter_x, -4.20, 1.25, 0.16, 0.72, 1.05, metal, bevel=0.012)
         box("town_meter_window", meter_x + unit_side * 0.09, -4.20, 1.42, 0.025, 0.34, 0.34, glass)
@@ -1792,7 +1882,7 @@ def build_townhouse():
         box("town_ac_unit", ac_x, 6.05, 0.68, 1.00, 0.42, 0.78, metal, bevel=0.018)
         cyl("town_ac_fan", ac_x, 6.285, 0.68, 0.27, 0.045, frame, vertices=20, rotation=(math.pi / 2.0, 0.0, 0.0))
         for grille_offset in (-0.18, 0.0, 0.18):
-            box("town_ac_grille", ac_x + grille_offset, 6.315, 0.68, 0.040, 0.025, 0.52, metal)
+            builder_box(bb(metal), ac_x + grille_offset, 6.315, 0.68, 0.040, 0.025, 0.52)
 
         # Rear patio with pergola, outdoor counter and garden furniture.
         box("town_rear_patio", unit_x, 6.50, 0.27, 7.80, 2.25, 0.12, pavement)
@@ -1803,7 +1893,7 @@ def build_townhouse():
             box("town_pergola_beam", unit_x, beam_y, 2.80, 7.15, 0.17, 0.18, wood)
         for slat_index in range(11):
             slat_x = unit_x - 3.3 + slat_index * 0.66
-            box("town_pergola_slat", slat_x, 6.55, 2.94, 0.14, 1.95, 0.13, wood)
+            builder_box(bb(wood), slat_x, 6.55, 2.94, 0.14, 1.95, 0.13)
         counter_x = unit_x + unit_side * 2.55
         box("town_outdoor_counter", counter_x, 6.55, 0.72, 0.72, 1.85, 0.86, stone)
         box("town_outdoor_grill", counter_x, 6.35, 1.22, 0.58, 0.72, 0.18, dark)
@@ -1811,6 +1901,18 @@ def build_townhouse():
         box("town_outdoor_table_leg", unit_x - unit_side * 0.65, 6.55, 0.52, 0.16, 0.58, 0.42, granite)
         for bench_y in (6.02, 7.08):
             box("town_outdoor_bench", unit_x - unit_side * 0.65, bench_y, 0.54, 1.35, 0.30, 0.09, deck)
+        # Festoon string lights sagging between the pergola beams.
+        for string_x in (unit_x - 1.65, unit_x + 1.65):
+            festoon_points = []
+            for fp in range(9):
+                ft = fp / 8.0
+                festoon_points.append(Vector((string_x, 5.74 + 1.62 * ft, 2.86 - 0.72 * ft * (1.0 - ft))))
+            builder_tube(bb(frame), festoon_points, [0.012] * len(festoon_points), sides=4, uv_v_scale=0.35)
+            for bulb_t in (0.17, 0.34, 0.50, 0.66, 0.83):
+                bulb_y = 5.74 + 1.62 * bulb_t
+                bulb_z = 2.86 - 0.72 * bulb_t * (1.0 - bulb_t) - 0.07
+                cyl("town_festoon_bulb", string_x, bulb_y, bulb_z, 0.035, 0.075, glow, vertices=8)
+                cyl("town_festoon_cap", string_x, bulb_y, bulb_z + 0.055, 0.016, 0.035, frame, vertices=6)
 
         # Finished front/rear planting and lawn areas per home.
         box("town_front_lawn", unit_side * 2.60, -7.05, 0.215, 4.90, 1.75, 0.05, lawn)
@@ -1825,12 +1927,29 @@ def build_townhouse():
             box("town_porch_planter_hedge", planter_x, -5.75, 0.83, 0.40, 0.28, 0.22, hedge, bevel=0.040)
         for hedge_x in (unit_side * 1.35, unit_side * 3.05):
             box("town_front_hedge", hedge_x, -7.55, 0.52, 1.35, 0.34, 0.50, hedge, bevel=0.05)
+        # One small clipped garden tree per home and a wheelie bin
+        # against the rear wall (0.2.46 lived-in details).
+        tree_x = unit_side * 1.05
+        cyl("town_garden_tree_ring", tree_x, -7.00, 0.26, 0.55, 0.06, mulch, vertices=14)
+        cyl("town_garden_tree_trunk", tree_x, -7.00, 1.05, 0.065, 1.55, wood, vertices=8)
+        tube_between("town_garden_tree_branch", (tree_x, -7.00, 1.65), (tree_x - 0.35, -6.85, 2.25), 0.040, 0.026, wood, vertices=6)
+        tube_between("town_garden_tree_branch", (tree_x, -7.00, 1.70), (tree_x + 0.33, -7.18, 2.30), 0.040, 0.026, wood, vertices=6)
+        builder_ellipsoid(bb(hedge), Vector((tree_x, -7.00, 2.72)), (0.92, 0.86, 0.78), segments=9, yaw=0.3, pitch=0.1, rings=2)
+        builder_ellipsoid(bb(hedge), Vector((tree_x - 0.45, -6.82, 2.42)), (0.62, 0.58, 0.54), segments=8, yaw=-0.4, pitch=0.0, rings=2)
+        builder_ellipsoid(bb(hedge), Vector((tree_x + 0.42, -7.16, 2.50)), (0.66, 0.60, 0.56), segments=8, yaw=0.8, pitch=0.2, rings=2)
+        builder_ellipsoid(bb(hedge), Vector((tree_x + 0.05, -7.02, 3.18)), (0.60, 0.56, 0.50), segments=8, yaw=0.1, pitch=0.0, rings=2)
+        bin_x = unit_side * 1.05
+        box("town_wheelie_bin", bin_x, 5.95, 0.74, 0.52, 0.58, 1.02, dark, bevel=0.03)
+        rbox("town_wheelie_bin_lid", bin_x, 5.95, 1.29, 0.56, 0.62, 0.07, frame, rotation=(0.06, 0.0, 0.0))
+        box("town_wheelie_bin_handle", bin_x, 6.28, 1.18, 0.40, 0.05, 0.05, frame)
+        for wheel_dx in (-0.18, 0.18):
+            cyl("town_wheelie_bin_wheel", bin_x + wheel_dx, 6.20, 0.24, 0.085, 0.05, frame, vertices=10, rotation=(0.0, math.pi / 2.0, 0.0))
 
     # Boundary walls and gates. Driveways and both pedestrian paths are
     # left open; the timber pedestrian gates are parked ajar.
     def boundary_wall(cx, cy, dx, dy):
-        box("town_boundary_wall", cx, cy, 0.58, dx, dy, 0.72, stone)
-        box("town_boundary_coping", cx, cy, 0.99, dx + 0.07, dy + 0.07, 0.09, granite)
+        builder_box(bb(stone), cx, cy, 0.58, dx, dy, 0.72)
+        builder_box(bb(granite), cx, cy, 0.99, dx + 0.07, dy + 0.07, 0.09)
 
     boundary_wall(0.0, -8.00, 7.20, 0.20)
     boundary_wall(-5.12, -8.00, 0.38, 0.20)
@@ -1842,14 +1961,17 @@ def build_townhouse():
     boundary_wall(0.0, 8.00, 18.80, 0.20)
     boundary_wall(0.0, 6.78, 0.16, 2.45)
     for pillar_x in (-8.68, -5.32, -3.62, 3.62, 5.32, 8.68):
-        box("town_gate_pillar", pillar_x, -8.00, 0.72, 0.36, 0.36, 1.02, granite)
-        box("town_gate_pillar_cap", pillar_x, -8.00, 1.29, 0.46, 0.46, 0.10, trim)
-        box("town_gate_pillar_light", pillar_x, -8.20, 1.00, 0.16, 0.035, 0.22, glow)
+        builder_box(bb(granite), pillar_x, -8.00, 0.72, 0.36, 0.36, 1.02)
+        builder_box(bb(trim), pillar_x, -8.00, 1.29, 0.46, 0.46, 0.10)
+        builder_box(bb(glow), pillar_x, -8.20, 1.00, 0.16, 0.035, 0.22)
     for gate_side in (-1.0, 1.0):
         rbox("town_pedestrian_gate", gate_side * 3.86, -7.58, 0.82, 1.08, 0.06, 1.02, wood, rotation=(0.0, 0.0, gate_side * 0.48))
         box("town_driveway_gate_track", gate_side * 8.92, -6.70, 0.25, 0.15, 2.55, 0.035, metal)
         box("town_driveway_gate_panel", gate_side * 9.02, -6.70, 0.92, 0.07, 2.45, 1.22, wood)
         box("town_driveway_gate_rail", gate_side * 9.02, -6.70, 1.58, 0.10, 2.55, 0.08, frame)
+
+    for material_name, (builder, material) in builders.items():
+        builder.build("town_merged_" + material_name.lower(), material, smooth=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -3153,6 +3275,17 @@ def build_main_tower():
 # tower, loading dock and service yard occupy the rear (+Y).  The design
 # is original: three interlocking dhow-sail shells stand on a tall
 # travertine podium rather than copying an existing opera house.
+# 0.2.46 photoreal pass: the curved foyer wall becomes per-lite
+# glazing (two columns by three rows per bay) with framed double-leaf
+# entrance doors and sidelights; podium side/rear windows and the
+# artists' door become framed units with recessed glass instead of
+# glass slabs on solid bronze panels; the shells gain half-module
+# ceramic panel seams; podium corners gain quoins; the fly-tower
+# roof rails gain posts; the dock gains a seal and leveler; the
+# emergency stairs move out of the solid podium volume (where they
+# were invisible) onto the rear wall with treads and handrails.
+# Repeated parts merge into per-material MeshBuilders.  The 52 x 56 m
+# parcel, masses and the exact 22.00 m finial are unchanged.
 # --------------------------------------------------------------------------- #
 def build_opera():
     shell_mat = MATS["OperaShell"]
@@ -3174,24 +3307,90 @@ def build_opera():
     metal = MATS["PropsMetal"]
     roof_dark = MATS["RoofDark"]
 
+    # ---- merged-geometry helpers (0.2.46) ------------------------------- #
+    builders = {}
+
+    def bb(material):
+        if material.name not in builders:
+            builders[material.name] = (MeshBuilder(), material)
+        return builders[material.name][0]
+
+    def builder_box(builder, cx, cy, cz, dx, dy, dz):
+        x0, x1 = cx - dx / 2.0, cx + dx / 2.0
+        y0, y1 = cy - dy / 2.0, cy + dy / 2.0
+        z0, z1 = cz - dz / 2.0, cz + dz / 2.0
+
+        def v(x, y, z):
+            return builder.add_vertex(Vector((x, y, z)))
+
+        quads = (
+            ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((x0, y1, z0), (x1, y1, z0), (x1, y0, z0), (x0, y0, z0)),
+            ((x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)),
+            ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+            ((x0, y1, z0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1)),
+        )
+        for quad_corners in quads:
+            ids = [v(*corner) for corner in quad_corners]
+            builder.quad(*ids)
+
+    def builder_rbox(builder, cx, cy, cz, dx, dy, dz, yaw):
+        cs = math.cos(yaw)
+        sn = math.sin(yaw)
+        corners = {}
+        for sx in (-1.0, 1.0):
+            for sy in (-1.0, 1.0):
+                for sz in (-1.0, 1.0):
+                    lx = sx * dx / 2.0
+                    ly = sy * dy / 2.0
+                    corners[(sx, sy, sz)] = builder.add_vertex(Vector((
+                        cx + lx * cs - ly * sn,
+                        cy + lx * sn + ly * cs,
+                        cz + sz * dz / 2.0,
+                    )))
+        faces = (
+            ((-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)),
+            ((-1, 1, -1), (1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+            ((1, 1, -1), (-1, 1, -1), (-1, 1, 1), (1, 1, 1)),
+            ((-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)),
+            ((1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)),
+            ((-1, 1, -1), (-1, -1, -1), (-1, -1, 1), (-1, 1, 1)),
+        )
+        for face in faces:
+            builder.quad(*[corners[key] for key in face])
+
     def side_window(face_x, centre_y, centre_z, depth=2.45, height=3.35):
+        # Framed punched window (0.2.46): dark reveal on the wall
+        # face, glass recessed behind a bronze frame and cross.
         side_sign = 1.0 if face_x >= 0.0 else -1.0
-        outer_x = face_x + side_sign * 0.055
-        box("opera_side_window_frame", outer_x, centre_y, centre_z, 0.11, depth + 0.22, height + 0.22, bronze)
-        box("opera_side_window_glass", outer_x + side_sign * 0.065, centre_y, centre_z, 0.055, depth, height, opera_glass)
-        box("opera_side_window_mullion", outer_x + side_sign * 0.10, centre_y, centre_z, 0.045, 0.09, height, frame)
-        box("opera_side_window_sill", outer_x + side_sign * 0.11, centre_y, centre_z - height * 0.5 - 0.16,
+        builder_box(bb(interior), face_x + side_sign * 0.015, centre_y, centre_z, 0.030, depth - 0.04, height - 0.04)
+        builder_box(bb(opera_glass), face_x + side_sign * 0.055, centre_y, centre_z, 0.040, depth, height)
+        frame_x = face_x + side_sign * 0.095
+        builder_box(bb(bronze), frame_x, centre_y, centre_z + height * 0.5 + 0.045, 0.150, depth + 0.22, 0.11)
+        builder_box(bb(bronze), frame_x, centre_y, centre_z - height * 0.5 - 0.045, 0.150, depth + 0.22, 0.11)
+        for sd in (-1.0, 1.0):
+            builder_box(bb(bronze), frame_x, centre_y + sd * (depth * 0.5 + 0.045), centre_z, 0.150, 0.11, height)
+        builder_box(bb(bronze), face_x + side_sign * 0.100, centre_y, centre_z, 0.060, 0.07, height)
+        builder_box(bb(bronze), face_x + side_sign * 0.100, centre_y, centre_z + height * 0.18, 0.060, depth, 0.07)
+        box("opera_side_window_sill", face_x + side_sign * 0.165, centre_y, centre_z - height * 0.5 - 0.16,
             0.20, depth + 0.38, 0.13, limestone)
-        box("opera_side_window_light", outer_x + side_sign * 0.105, centre_y, centre_z + height * 0.5 + 0.20,
+        box("opera_side_window_light", face_x + side_sign * 0.160, centre_y, centre_z + height * 0.5 + 0.20,
             0.05, depth * 0.72, 0.055, opera_light)
 
     def rear_window(centre_x, face_y, centre_z, width=2.60, height=3.10):
+        # Framed punched window (0.2.46), as side_window.
         side_sign = 1.0 if face_y >= 0.0 else -1.0
-        outer_y = face_y + side_sign * 0.055
-        box("opera_rear_window_frame", centre_x, outer_y, centre_z, width + 0.22, 0.11, height + 0.22, bronze)
-        box("opera_rear_window_glass", centre_x, outer_y + side_sign * 0.065, centre_z, width, 0.055, height, opera_glass)
-        box("opera_rear_window_mullion", centre_x, outer_y + side_sign * 0.10, centre_z, 0.09, 0.045, height, frame)
-        box("opera_rear_window_sill", centre_x, outer_y + side_sign * 0.11, centre_z - height * 0.5 - 0.16,
+        builder_box(bb(interior), centre_x, face_y + side_sign * 0.015, centre_z, width - 0.04, 0.030, height - 0.04)
+        builder_box(bb(opera_glass), centre_x, face_y + side_sign * 0.055, centre_z, width, 0.040, height)
+        frame_y = face_y + side_sign * 0.095
+        builder_box(bb(bronze), centre_x, frame_y, centre_z + height * 0.5 + 0.045, width + 0.22, 0.150, 0.11)
+        builder_box(bb(bronze), centre_x, frame_y, centre_z - height * 0.5 - 0.045, width + 0.22, 0.150, 0.11)
+        for sd in (-1.0, 1.0):
+            builder_box(bb(bronze), centre_x + sd * (width * 0.5 + 0.045), frame_y, centre_z, 0.11, 0.150, height)
+        builder_box(bb(bronze), centre_x, face_y + side_sign * 0.100, centre_z, 0.07, 0.060, height)
+        builder_box(bb(bronze), centre_x, face_y + side_sign * 0.100, centre_z + height * 0.18, width, 0.060, 0.07)
+        box("opera_rear_window_sill", centre_x, face_y + side_sign * 0.165, centre_z - height * 0.5 - 0.16,
             width + 0.38, 0.20, 0.13, limestone)
 
     # --- Civic stone parcel, ceremonial steps, ramps and inlay joints. ---
@@ -3221,6 +3420,11 @@ def build_opera():
     box("opera_reflecting_pool_water", 0.0, -21.55, 0.585, 38.15, 2.78, 0.045, opera_water)
     box("opera_reflecting_pool_bridge", 0.0, -21.55, 0.62, 6.4, 3.82, 0.16, limestone)
     box("opera_pool_bridge_light", 0.0, -21.55, 0.715, 0.12, 3.35, 0.025, opera_light)
+    # Limestone coping caps finish the basin rim (0.2.46).
+    for coping_dy in (-1.62, 1.62):
+        builder_box(bb(limestone), 0.0, -21.55 + coping_dy, 0.615, 39.10, 0.30, 0.05)
+    for coping_x in (-19.42, 19.42):
+        builder_box(bb(limestone), coping_x, -21.55, 0.615, 0.30, 3.55, 0.05)
     for fountain_x in (-17.5, -14.5, -11.5, -8.5, -5.5, 5.5, 8.5, 11.5, 14.5, 17.5):
         cyl("opera_fountain_nozzle", fountain_x, -21.55, 0.65, 0.075, 0.16, bronze, vertices=10)
         cyl("opera_fountain_ring_outer", fountain_x, -21.55, 0.615, 0.46, 0.018, opera_water, vertices=12)
@@ -3252,16 +3456,28 @@ def build_opera():
         for window_y in (-11.75, -2.75, 6.25, 15.25):
             side_window(face_x, window_y, 3.10, depth=2.55, height=3.35)
         for clerestory_y in (-8.0, 3.0, 14.0):
-            box("opera_clerestory_frame", side_sign * 21.04, clerestory_y, 8.65, 0.10, 4.10, 1.25, bronze)
-            box("opera_clerestory_glass", side_sign * 21.11, clerestory_y, 8.65, 0.055, 3.82, 1.02, opera_glass)
-            box("opera_clerestory_fin", side_sign * 21.22, clerestory_y - 1.28, 8.65, 0.16, 0.10, 1.02, bronze)
-            box("opera_clerestory_fin", side_sign * 21.22, clerestory_y + 1.28, 8.65, 0.16, 0.10, 1.02, bronze)
+            builder_box(bb(interior), side_sign * 21.015, clerestory_y, 8.65, 0.030, 3.86, 1.06)
+            builder_box(bb(opera_glass), side_sign * 21.055, clerestory_y, 8.65, 0.040, 3.90, 1.10)
+            builder_box(bb(bronze), side_sign * 21.095, clerestory_y, 9.225, 0.150, 4.10, 0.10)
+            builder_box(bb(bronze), side_sign * 21.095, clerestory_y, 8.075, 0.150, 4.10, 0.10)
+            for fin_dy in (-2.00, -1.28, -0.64, 0.0, 0.64, 1.28, 2.00):
+                builder_box(bb(bronze), side_sign * 21.16, clerestory_y + fin_dy, 8.65, 0.20, 0.09, 1.25)
     for rear_pier_x in range(-20, 21, 5):
         box("opera_rear_pier", float(rear_pier_x), 20.17, 2.98, 0.78, 0.34, 5.05, limestone)
     for rear_seam_z in (1.55, 2.85, 4.15, 5.25):
         box("opera_rear_stone_seam", 0.0, 20.055, rear_seam_z, 45.3, 0.07, 0.065, frame)
     for rear_window_x in (-17.5, -12.5, 12.5, 17.5):
         rear_window(rear_window_x, 20.0, 3.15, width=2.70, height=3.30)
+    # Corner quoins on the podium's outer corners (0.2.46), coursing
+    # with the horizontal stone seams front and rear.
+    for qx in (-1.0, 1.0):
+        for qedge_y, qsign in ((20.0, 1.0), (-16.0, -1.0)):
+            for course in range(4):
+                qz = 0.98 + course * 1.30
+                qlen_a = 1.05 if course % 2 == 0 else 0.68
+                qlen_b = 0.68 if course % 2 == 0 else 1.05
+                builder_box(bb(limestone), qx * (23.0 - qlen_a * 0.5 + 0.02), qedge_y + qsign * 0.075, qz, qlen_a, 0.15, 1.18)
+                builder_box(bb(limestone), qx * 23.075, qedge_y - qsign * (qlen_b * 0.5 - 0.02), qz, 0.15, qlen_b, 1.18)
 
     # Fly tower: tall stone volume, bronze louvre field, coping, roof
     # plant, guard rails and a working rear elevation.
@@ -3301,6 +3517,19 @@ def build_opera():
         box("opera_fly_roof_rail", 0.0, rail_y, 20.78, 24.2, 0.055, 0.055, bronze)
     for rail_x in (-12.1, 12.1):
         box("opera_fly_roof_side_rail", rail_x, 14.5, 20.78, 0.055, 9.3, 0.055, bronze)
+    # Guard-rail posts and mid rails so the roof rails do not float.
+    for post_i in range(11):
+        post_x = -12.1 + post_i * 2.42
+        builder_box(bb(bronze), post_x, 9.85, 20.52, 0.045, 0.045, 0.52)
+        builder_box(bb(bronze), post_x, 19.15, 20.52, 0.045, 0.045, 0.52)
+    for post_i in range(5):
+        post_y = 9.85 + post_i * 2.325
+        builder_box(bb(bronze), -12.1, post_y, 20.52, 0.045, 0.045, 0.52)
+        builder_box(bb(bronze), 12.1, post_y, 20.52, 0.045, 0.045, 0.52)
+    builder_box(bb(bronze), 0.0, 9.85, 20.52, 24.2, 0.035, 0.035)
+    builder_box(bb(bronze), 0.0, 19.15, 20.52, 24.2, 0.035, 0.035)
+    builder_box(bb(bronze), -12.1, 14.5, 20.52, 0.035, 9.3, 0.035)
+    builder_box(bb(bronze), 12.1, 14.5, 20.52, 0.035, 9.3, 0.035)
     cyl("opera_lightning_mast", 11.2, 18.4, 20.98, 0.035, 1.45, bronze, vertices=8)
     sphere("opera_lightning_mast_tip", 11.2, 18.4, 21.74, 0.13, 0.13, 0.13, opera_light)
 
@@ -3309,6 +3538,11 @@ def build_opera():
     for slat_index in range(8):
         box("opera_stage_door_slat", 0.0, 19.79, 0.95 + slat_index * 0.72, 7.05, 0.08, 0.62, metal)
     box("opera_stage_door_centre_rail", 0.0, 19.84, 3.55, 0.14, 0.07, 5.85, frame)
+    # Dock seal cushions and a leveler plate at the stage door.
+    for seal_x in (-3.98, 3.98):
+        box("opera_dock_seal", seal_x, 19.82, 3.55, 0.36, 0.22, 6.30, interior)
+    box("opera_dock_seal_top", 0.0, 19.82, 6.85, 8.30, 0.22, 0.36, interior)
+    box("opera_dock_leveler", 0.0, 20.15, 1.02, 2.20, 0.60, 0.06, frame)
     box("opera_loading_dock", 0.0, 21.55, 0.68, 12.5, 3.55, 0.64, limestone)
     box("opera_loading_dock_edge", 0.0, 23.30, 0.98, 12.5, 0.16, 0.08, opera_light)
     for dock_side in (-1.0, 1.0):
@@ -3362,6 +3596,11 @@ def build_opera():
     for facade_x in facade_xs:
         facade_y = -16.55 - 1.15 * (1.0 - (facade_x / 19.0) ** 2)
         facade_points.append((facade_x, facade_y))
+    # Per-lite glazing (0.2.46): each 3.8 m bay is two columns by
+    # three rows of recessed lites behind bronze rails and mullions
+    # (merged builder geometry); the four centre bays carry framed
+    # double-leaf doors with sidelights instead of glass slabs.
+    lite_rows = ((1.96, 5.36), (5.52, 9.01), (9.15, 12.54))
     for bay_index in range(10):
         x0, y0 = facade_points[bay_index]
         x1, y1 = facade_points[bay_index + 1]
@@ -3371,29 +3610,60 @@ def build_opera():
         bay_dy = y1 - y0
         bay_length = math.hypot(bay_dx, bay_dy)
         bay_yaw = math.atan2(bay_dy, bay_dx)
-        rbox("opera_curved_glass_pane", mid_x, mid_y, 7.15, bay_length + 0.035, 0.065, 10.85, opera_glass,
-             rotation=(0.0, 0.0, bay_yaw))
-        rbox("opera_glass_kick_plate", mid_x, mid_y - 0.055, 0.98, bay_length, 0.13, 1.08, opera_granite,
-             rotation=(0.0, 0.0, bay_yaw))
+        dir_x = bay_dx / bay_length
+        dir_y = bay_dy / bay_length
+        normal_x = dir_y
+        normal_y = -dir_x
+        is_door_bay = 3 <= bay_index <= 6
+
+        def bay_bar(along, out, zc, w, d, h, material):
+            builder_rbox(bb(material), mid_x + dir_x * along + normal_x * out,
+                         mid_y + dir_y * along + normal_y * out, zc, w, d, h, bay_yaw)
+
+        def bay_lite(along, z0, z1, w):
+            bay_bar(along, 0.0, (z0 + z1) * 0.5, w, 0.045, z1 - z0, opera_glass)
+
         for rail_z in (1.82, 5.45, 9.08, 12.62):
-            rbox("opera_curved_glass_rail", mid_x, mid_y - 0.065, rail_z, bay_length + 0.04, 0.13, 0.16, bronze,
-                 rotation=(0.0, 0.0, bay_yaw))
-        if 3 <= bay_index <= 6:
-            direction_x = bay_dx / bay_length
-            direction_y = bay_dy / bay_length
-            normal_x = direction_y
-            normal_y = -direction_x
-            for door_side in (-0.82, 0.82):
-                door_x = mid_x + direction_x * door_side + normal_x * 0.10
-                door_y = mid_y + direction_y * door_side + normal_y * 0.10
-                rbox("opera_entrance_door", door_x, door_y, 2.02, 1.52, 0.055, 3.18, opera_glass,
-                     rotation=(0.0, 0.0, bay_yaw))
-                handle_offset = 0.58 if door_side < 0.0 else -0.58
-                handle_x = door_x + direction_x * handle_offset + normal_x * 0.075
-                handle_y = door_y + direction_y * handle_offset + normal_y * 0.075
-                cyl("opera_door_handle", handle_x, handle_y, 1.62, 0.026, 0.84, bronze, vertices=8)
-            rbox("opera_door_header", mid_x + normal_x * 0.12, mid_y + normal_y * 0.12, 3.82,
-                 bay_length * 0.92, 0.11, 0.24, bronze, rotation=(0.0, 0.0, bay_yaw))
+            bay_bar(0.0, 0.055, rail_z, bay_length + 0.04, 0.14, 0.16, bronze)
+        bay_bar(0.0, 0.05, 12.74, bay_length + 0.04, 0.19, 0.10, bronze)
+        if is_door_bay:
+            bay_bar(0.0, 0.045, 8.28, 0.09, 0.20, 8.68, bronze)
+            # Sidelights flanking the door unit, fanlight above it.
+            for side_along in (-1.40, 1.40):
+                bay_bar(side_along, 0.055, 0.98, 0.85, 0.13, 1.08, opera_granite)
+                bay_bar(side_along, 0.04, 1.73, 0.85, 0.10, 0.36, bronze)
+                bay_lite(side_along, 1.98, 3.92, 0.80)
+            for col in (-0.25, 0.25):
+                bay_lite(col * bay_length, 4.02, 5.36, bay_length * 0.5 - 0.10)
+            for (lz0, lz1) in lite_rows[1:]:
+                for col in (-0.25, 0.25):
+                    bay_lite(col * bay_length, lz0, lz1, bay_length * 0.5 - 0.10)
+            # Framed double-leaf door: jambs, stiles, rails, lites.
+            for jamb in (-0.99, 0.99):
+                bay_bar(jamb, 0.06, 2.15, 0.11, 0.18, 3.10, bronze)
+            bay_bar(0.0, 0.06, 3.82, 2.10, 0.18, 0.24, bronze)
+            bay_bar(0.0, 0.03, 0.60, 2.10, 0.24, 0.06, opera_granite)
+            for leaf in (-0.475, 0.475):
+                for stile in (-0.435, 0.435):
+                    bay_bar(leaf + stile, 0.05, 2.15, 0.075, 0.11, 3.00, bronze)
+                bay_bar(leaf, 0.05, 3.54, 0.90, 0.11, 0.28, bronze)
+                bay_bar(leaf, 0.05, 1.84, 0.90, 0.11, 0.12, bronze)
+                bay_bar(leaf, 0.05, 0.92, 0.90, 0.11, 0.60, bronze)
+                bay_bar(leaf, 0.045, 2.66, 0.76, 0.04, 1.40, opera_glass)
+                bay_bar(leaf, 0.045, 1.51, 0.76, 0.04, 0.52, opera_glass)
+                handle_along = leaf + (0.36 if leaf < 0.0 else -0.36)
+                hx = mid_x + dir_x * handle_along + normal_x * 0.16
+                hy = mid_y + dir_y * handle_along + normal_y * 0.16
+                cyl("opera_door_handle", hx, hy, 1.62, 0.026, 0.90, bronze, vertices=8)
+                for mount_z in (1.32, 1.92):
+                    bay_bar(handle_along, 0.105, mount_z, 0.05, 0.12, 0.05, bronze)
+        else:
+            bay_bar(0.0, 0.045, 7.28, 0.09, 0.20, 10.68, bronze)
+            bay_bar(0.0, 0.055, 0.98, bay_length, 0.13, 1.08, opera_granite)
+            bay_bar(0.0, 0.04, 1.73, bay_length, 0.10, 0.36, bronze)
+            for (lz0, lz1) in lite_rows:
+                for col in (-0.25, 0.25):
+                    bay_lite(col * bay_length, lz0, lz1, bay_length * 0.5 - 0.10)
     for point_index, (point_x, point_y) in enumerate(facade_points):
         if point_index == 0:
             tangent_yaw = math.atan2(facade_points[1][1] - point_y, facade_points[1][0] - point_x)
@@ -3402,8 +3672,7 @@ def build_opera():
         else:
             tangent_yaw = math.atan2(facade_points[point_index + 1][1] - facade_points[point_index - 1][1],
                                      facade_points[point_index + 1][0] - facade_points[point_index - 1][0])
-        rbox("opera_curved_glass_mullion", point_x, point_y - 0.03, 7.15, 0.20, 0.27, 11.35, bronze,
-             rotation=(0.0, 0.0, tangent_yaw))
+        builder_rbox(bb(bronze), point_x, point_y - 0.03, 7.15, 0.20, 0.27, 11.35, tangent_yaw)
 
     # Nine public colonnade fins carry the shell springing beam.  A
     # segmented tied canopy turns the doors into a real entrance in
@@ -3589,6 +3858,18 @@ def build_opera():
                            for seam_index in range(25)]
             builder_tube(shell_seam_builder, seam_points, [0.040] * len(seam_points),
                          sides=5, uv_v_scale=0.45)
+        # Finer ceramic panel grain between the main ribs and joints
+        # (0.2.46): half-module seams so the vaults do not read as
+        # smooth moulded shells at boulevard distance.
+        for seam_u in (-0.945, -0.735, -0.525, -0.315, -0.105, 0.105, 0.315, 0.525, 0.735, 0.945):
+            fine_points = [offset_shell_point(spec, seam_u, seam_i / 18.0, outward=0.052) for seam_i in range(19)]
+            builder_tube(shell_seam_builder, fine_points, [0.026] * len(fine_points),
+                         sides=4, uv_v_scale=0.45)
+        for seam_t2 in (0.08, 0.24, 0.40, 0.56, 0.72, 0.88):
+            fine_points2 = [offset_shell_point(spec, -1.0 + seam_j / 12.0, seam_t2, outward=0.042)
+                            for seam_j in range(25)]
+            builder_tube(shell_seam_builder, fine_points2, [0.024] * len(fine_points2),
+                         sides=4, uv_v_scale=0.45)
         # Heavy front/rear fasciae and side edge beams show shell depth.
         for fascia_t, fascia_radius in ((0.0, 0.165), (1.0, 0.135)):
             fascia_points = [offset_shell_point(spec, -1.0 + fascia_index / 12.0, fascia_t, outward=0.035)
@@ -3648,22 +3929,48 @@ def build_opera():
                 1.27, 0.46, 0.06, 0.48, opera_wood)
         box("opera_terrace_table_light", 24.25, table_y, 1.43, 0.12, 0.12, 0.12, opera_light)
 
-    box("opera_artist_door_frame", -23.12, 0.0, 2.05, 0.18, 1.75, 3.35, bronze)
-    box("opera_artist_door", -23.24, 0.0, 2.05, 0.08, 1.48, 3.05, opera_glass)
+    # Framed artist door leaf (0.2.46) instead of a glass slab.
+    builder_box(bb(interior), -23.015, 0.0, 2.05, 0.03, 1.44, 3.01)
+    builder_box(bb(opera_glass), -23.055, 0.0, 2.41, 0.04, 1.10, 1.72)
+    builder_box(bb(opera_glass), -23.055, 0.0, 1.21, 0.04, 1.10, 0.42)
+    builder_box(bb(bronze), -23.10, 0.0, 3.66, 0.16, 1.75, 0.12)
+    builder_box(bb(bronze), -23.10, 0.0, 0.44, 0.16, 1.75, 0.12)
+    for jamb_y in (-0.82, 0.82):
+        builder_box(bb(bronze), -23.10, jamb_y, 2.05, 0.16, 0.11, 3.35)
+    for stile_y in (-0.60, 0.60):
+        builder_box(bb(bronze), -23.085, stile_y, 2.05, 0.09, 0.09, 3.10)
+    builder_box(bb(bronze), -23.085, 0.0, 3.42, 0.09, 1.28, 0.24)
+    builder_box(bb(bronze), -23.085, 0.0, 1.48, 0.09, 1.28, 0.12)
+    builder_box(bb(bronze), -23.085, 0.0, 0.78, 0.09, 1.28, 0.55)
+    cyl("opera_artist_door_handle", -23.20, 0.42, 1.95, 0.024, 0.85, bronze, vertices=8)
     box("opera_artist_canopy", -23.82, 0.0, 3.92, 1.55, 2.75, 0.15, bronze)
     box("opera_artist_entrance_light", -23.34, 0.0, 3.48, 0.06, 1.25, 0.08, opera_light)
     box("opera_artist_step", -23.75, 0.0, 0.48, 1.35, 2.55, 0.14, limestone)
 
-    # Emergency stairs at the service corners, with landings and rails.
+    # Emergency stairs at the service corners (0.2.46: moved out of
+    # the solid podium volume, where the flights were invisible, to
+    # the rear wall face with real treads, landings and handrails).
     for stair_side in (-1.0, 1.0):
         stair_x = stair_side * 21.65
         for flight_index in range(4):
             flight_base_z = 0.55 + flight_index * 1.28
-            rbox("opera_emergency_flight", stair_x, 18.65, flight_base_z + 0.56, 1.05, 2.75, 0.12, metal,
-                 rotation=(0.43 if flight_index % 2 == 0 else -0.43, 0.0, 0.0))
-            box("opera_emergency_landing", stair_x, 19.95 if flight_index % 2 == 0 else 17.35,
-                flight_base_z + 1.18, 1.15, 0.95, 0.11, metal)
-        box("opera_emergency_rail", stair_x + stair_side * 0.55, 18.65, 3.15, 0.045, 3.65, 0.045, bronze)
+            rise_dir = 1.0 if flight_index % 2 == 0 else -1.0
+            rbox("opera_emergency_flight", stair_x, 21.55, flight_base_z + 0.56, 1.05, 2.75, 0.12, metal,
+                 rotation=(0.43 * rise_dir, 0.0, 0.0))
+            for tread_i in range(7):
+                tread_along = -1.25 + 2.50 * (tread_i + 0.5) / 7.0
+                builder_box(bb(metal), stair_x, 21.55 + tread_along,
+                            flight_base_z + 0.645 + rise_dir * tread_along * 0.4587, 1.00, 0.30, 0.05)
+            box("opera_emergency_landing", stair_x, 21.55 + rise_dir * 1.62,
+                flight_base_z + 1.18, 1.15, 0.85, 0.11, metal)
+            tube_between("opera_emergency_rail",
+                         (stair_x + stair_side * 0.52, 21.55 - rise_dir * 1.25, flight_base_z + 0.95),
+                         (stair_x + stair_side * 0.52, 21.55 + rise_dir * 1.25, flight_base_z + 2.10),
+                         0.030, 0.030, bronze, vertices=8)
+        for post_dx in (-0.52, 0.52):
+            box("opera_emergency_post", stair_x + post_dx, 23.17, 2.12, 0.07, 0.07, 4.24, metal)
+        tube_between("opera_emergency_brace", (stair_x, 22.80, 4.20), (stair_x, 20.05, 3.00),
+                     0.035, 0.035, metal, vertices=8)
 
     # --- Forecourt sculpture, banners, furniture and landscape. ---
     sculpture_builder = MeshBuilder()
@@ -3739,6 +4046,9 @@ def build_opera():
         box("opera_rear_planter", rear_planter_x, 26.35, 0.62, 2.45, 0.72, 0.52, opera_granite)
         box("opera_rear_planter_hedge", rear_planter_x, 26.35, 1.00, 2.12, 0.48, 0.34, hedge, bevel=0.045)
     formal_tree_builder.build("opera_formal_tree_canopies", hedge, smooth=True)
+
+    for material_name, (builder, material) in builders.items():
+        builder.build("opera_merged_" + material_name.lower(), material, smooth=False)
 
 
 # --------------------------------------------------------------------------- #
