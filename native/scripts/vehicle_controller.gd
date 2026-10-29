@@ -103,6 +103,7 @@ var _plate_labels: Array[Label3D] = []
 var _headlight_materials: Array[StandardMaterial3D] = []
 var _tail_light_materials: Array[StandardMaterial3D] = []
 var _smoke_emitters: Array[GPUParticles3D] = []
+var _spark_emitters: Array[GPUParticles3D] = []
 var _nitro_emitters: Array[GPUParticles3D] = []
 var _contact_shadow_material: StandardMaterial3D
 var _soft_disc_texture: Texture2D
@@ -386,6 +387,7 @@ func switch_car(car_id: String) -> bool:
 	_headlight_materials.clear()
 	_tail_light_materials.clear()
 	_smoke_emitters.clear()
+	_spark_emitters.clear()
 	_nitro_emitters.clear()
 	_contact_shadow_material = null
 	_vehicle_audio = null
@@ -1105,6 +1107,14 @@ func set_headlights_enabled(enabled: bool) -> void:
 		material.emission_energy_multiplier = 3.2 if enabled else 0.0
 
 
+func get_headlight_world_positions() -> Array[Vector3]:
+	var positions: Array[Vector3] = []
+	for light in _headlights:
+		if is_instance_valid(light):
+			positions.append(light.global_position)
+	return positions
+
+
 func _get_soft_disc_texture() -> Texture2D:
 	if _soft_disc_texture != null:
 		return _soft_disc_texture
@@ -1232,6 +1242,21 @@ func _create_vehicle_effects() -> void:
 			_particle_material(Color(0.72, 0.72, 0.74, 0.34)),
 			Vector3(0.0, 0.45, 0.0)
 		))
+		_spark_emitters.append(_make_particle_emitter(
+			"HandbrakeTireSparks",
+			Vector3(x, 0.14, smoke_z),
+			16,
+			0.26,
+			Vector3(0.0, 0.65, 1.0),
+			48.0,
+			1.2,
+			6.2,
+			0.07,
+			0.18,
+			0.10,
+			_particle_material(Color(1.0, 0.48, 0.12, 0.94), true),
+			Vector3(0.0, -5.0, 0.0)
+		))
 	var exhaust := _car_definition.get("exhaust_position", Vector3(0.56, 0.36, 2.34)) as Vector3
 	for x in [-exhaust.x, exhaust.x]:
 		_nitro_emitters.append(_make_particle_emitter(
@@ -1352,6 +1377,16 @@ func get_audio_state() -> Dictionary:
 	state["engine_rpm"] = _engine_rpm
 	state["engine_load"] = get_engine_load()
 	return state
+
+
+func get_effect_state() -> Dictionary:
+	return {
+		"tire_smoke_emitters": _smoke_emitters.size(),
+		"tire_spark_emitters": _spark_emitters.size(),
+		"nitro_emitters": _nitro_emitters.size(),
+		"engine_audio": _vehicle_audio != null,
+		"speed_wind_audio": bool(get_audio_state().get("foley_ready", false)),
+	}
 
 
 func _update_engine_state(delta: float) -> void:
@@ -2222,6 +2257,12 @@ func _process(delta: float) -> void:
 		var process := emitter.process_material as ParticleProcessMaterial
 		if process != null:
 			process.color = smoke_color
+	var spark_intensity := 0.0
+	if handbrake_active and grounded_wheel_count >= 2 and absf(_forward_speed) > 14.0 and absf(_rear_slip_ratio) > 0.32:
+		spark_intensity = clampf((absf(_forward_speed) - 10.0) / 22.0, 0.0, 0.72) * clampf(absf(_rear_slip_ratio) / 0.85, 0.35, 1.0)
+	for emitter in _spark_emitters:
+		emitter.emitting = spark_intensity > 0.025
+		emitter.amount_ratio = spark_intensity
 	for emitter in _nitro_emitters:
 		emitter.emitting = boost_active
 		emitter.amount_ratio = 1.0 if boost_active else 0.0

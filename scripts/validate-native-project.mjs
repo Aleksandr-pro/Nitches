@@ -74,8 +74,29 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(preset.includes('version/code=45'), 'Native 0.2.42 must bump Android versionCode to 45');
-assert(preset.includes('version/name="0.2.42-native-alpha"'), 'Native version name must be 0.2.42-native-alpha');
+assert(project.includes('config/version="0.2.43-native-alpha"'), 'Native project version metadata must match 0.2.43-native-alpha');
+assert(preset.includes('version/code=46'), 'Native 0.2.43 must bump Android versionCode to 46');
+assert(preset.includes('version/name="0.2.43-native-alpha"'), 'Native version name must be 0.2.43-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.43-native-alpha'), 'Main menu version label must match the native export version');
+for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
+  assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
+  const png = await readFile(path.join('src/assets/textures/realworld', name));
+  assert(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${name} is not a valid PNG`);
+  assert(png.readUInt32BE(16) === 4096 && png.readUInt32BE(20) === 512, `${name} must be a 4096x512 skyline panorama`);
+}
+for (const marker of ['skyline_panorama_textures_0243', 'near_field_lod_0243', 'range_fade_mode', 'tree_detail_end_m', 'palm_detail_end_m', 'shrub_detail_end_m']) {
+  assert(worldScript.includes(marker), `0.2.43 near-field/skyline validation marker is missing: ${marker}`);
+}
+for (const marker of ['wet_streak', 'wet_roughness', 'puddle_roughness']) {
+  assert(wetAsphaltShader.includes(marker), `0.2.43 low-cost wet-road shading marker is missing: ${marker}`);
+}
+const atmosphereFxScript = await readText('scripts/atmosphere_fx.gd');
+for (const marker of ['get_foliage_density_at', 'get_headlight_world_positions', 'leaves', 'petals', 'light_shafts', 'headlight_bokeh']) {
+  assert(atmosphereFxScript.includes(marker), `0.2.43 near-car atmosphere effect marker is missing: ${marker}`);
+}
+for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate', 'camera far plane no longer reaches the 2.1 km skyline']) {
+  assert(mainScript.includes(marker), `Native smoke test is missing acceptance check: ${marker}`);
+}
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -86,6 +107,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
+assert(preset.includes('application/file_version="0.2.43"') && preset.includes('application/product_version="0.2.43"'), 'Desktop Windows version metadata must match native 0.2.43');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);

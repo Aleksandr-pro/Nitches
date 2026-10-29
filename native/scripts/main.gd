@@ -8,6 +8,7 @@ extends Node3D
 const WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
+const AtmosphereFxScript := preload("res://scripts/atmosphere_fx.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
@@ -60,6 +61,7 @@ var _profile: Dictionary = {}
 var _profile_save_timer := 0.0
 var _camera: Camera3D
 var _speed_post: NativeSpeedPost
+var _atmosphere_fx: NativeAtmosphereFX
 var _camera_mode := CAMERA_CHASE
 var _snap_camera := true
 var _time_index := 0
@@ -120,6 +122,10 @@ func _ready() -> void:
 	print("[native] Traffic removed: player vehicle only")
 
 	_create_camera()
+	_atmosphere_fx = AtmosphereFxScript.new() as NativeAtmosphereFX
+	_atmosphere_fx.configure(_vehicle, _camera, _world)
+	_atmosphere_fx.set_active(false)
+	add_child(_atmosphere_fx)
 	_route_guide = RouteGuideScript.new() as NativeRouteGuide
 	_route_guide.name = "RouteGuide"
 	add_child(_route_guide)
@@ -910,6 +916,8 @@ func _show_menu() -> void:
 	if _hud != null:
 		_hud.reset_touch_controls()
 	_in_menu = true
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(false)
 	if _vehicle != null:
 		_vehicle.freeze = true
 		_vehicle.set_physics_process(false)
@@ -934,6 +942,8 @@ func _enter_game() -> void:
 		_world_map.hide_map()
 	_map_open = false
 	_in_menu = false
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(true)
 	if _menu != null:
 		_menu.hide_menu()
 	if _hud != null:
@@ -951,6 +961,8 @@ func _show_world_map() -> void:
 	_camera_drag_touch_index = -1
 	_camera_mouse_dragging = false
 	_map_open = true
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(false)
 	if _hud != null:
 		_hud.reset_touch_controls()
 	if _vehicle != null:
@@ -975,6 +987,8 @@ func _hide_world_map() -> void:
 	if not _map_open:
 		return
 	_map_open = false
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(not _in_menu)
 	if _in_menu:
 		return
 	if _hud != null:
@@ -1135,9 +1149,9 @@ func _create_camera() -> void:
 	_camera.top_level = true
 	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_camera.near = 0.12
-	# RichTown's playable diagonal is about 1.4 km; 1.5 km still covers
-	# corner-to-corner views while tightening depth precision and culling.
-	_camera.far = 1500.0
+	# RichTown geometry keeps its streamed detail budget; the extra far
+	# plane is reserved for the two distant unshaded skyline rings.
+	_camera.far = 2100.0
 	_camera.fov = 58.0
 	add_child(_camera)
 	_camera.make_current()
@@ -1323,6 +1337,9 @@ func _apply_time_mode() -> void:
 		return
 	var mode := TIME_MODES[_time_index]
 	_world.set_time_of_day(mode)
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_time_mode(mode)
+		_atmosphere_fx.set_headlights_enabled(mode != "day")
 	if _vehicle != null:
 		_vehicle.set_headlights_enabled(mode != "day")
 	_refresh_menu_settings()
@@ -1354,6 +1371,8 @@ func _process(delta: float) -> void:
 		var aspect := viewport_size.x / maxf(viewport_size.y, 1.0)
 		var horizontal_half_fov := atan(tan(deg_to_rad(_camera.fov * 0.5)) * maxf(aspect, 0.1))
 		_world.update_streaming(_camera.global_position, -_camera.global_transform.basis.z, _vehicle.global_position, _vehicle.linear_velocity, delta, horizontal_half_fov)
+	if _world != null and _vehicle != null:
+		_world.set_skyline_origin(_vehicle.global_position)
 	if _in_menu:
 		if _camera != null and not _camera.is_current():
 			_camera.make_current()
@@ -1552,8 +1571,12 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic node must be completely removed in 0.2.5")
 	if _camera == null:
 		failures.append("camera node is missing")
+	elif _camera.far < 2099.0:
+		failures.append("camera far plane no longer reaches the 2.1 km skyline: %.1f m" % _camera.far)
 	if _speed_post == null:
 		failures.append("speed post node is missing")
+	if _atmosphere_fx == null:
+		failures.append("near-car atmosphere node is missing")
 	if _hud == null:
 		failures.append("HUD node is missing")
 	if _world_map == null:
@@ -1576,6 +1599,16 @@ func _run_smoke_checks() -> void:
 		failures.append("landmark stats are incomplete")
 
 	var enhancement_stats := _world.get_enhancement_stats()
+	if int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)) or not bool(enhancement_stats.get("skyline_panorama_textures_0243", false)) or int(enhancement_stats.get("skyline_panorama_width", 0)) != 4096 or int(enhancement_stats.get("skyline_panorama_height", 0)) != 512:
+		failures.append("0.2.43 two-layer textured skyline is incomplete: %s" % str(enhancement_stats))
+	if not bool(enhancement_stats.get("near_field_lod_0243", false)) or String(enhancement_stats.get("range_fade_mode", "")) != "dithered_self" or float(enhancement_stats.get("tree_detail_end_m", 9999.0)) > 110.0 or float(enhancement_stats.get("palm_detail_end_m", 9999.0)) > 140.0 or float(enhancement_stats.get("shrub_detail_end_m", 9999.0)) > 100.0:
+		failures.append("0.2.43 near-field HLOD budget is incomplete: %s" % str(enhancement_stats))
+	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
+	if not bool(atmosphere_state.get("ready", false)) or not bool(atmosphere_state.get("light_shafts", false)) or not bool(atmosphere_state.get("headlight_bokeh", false)) or not bool(atmosphere_state.get("active", false)) or int(atmosphere_state.get("leaves", 0)) < 16 or int(atmosphere_state.get("petals", 0)) < 8 or float(atmosphere_state.get("foliage_density", 0.0)) <= 0.0:
+		failures.append("0.2.43 nearby atmosphere/foliage shaft gate is incomplete: %s" % str(atmosphere_state))
+	var vehicle_effect_state := _vehicle.get_effect_state()
+	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or int(vehicle_effect_state.get("tire_spark_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)) or not bool(vehicle_effect_state.get("speed_wind_audio", false)):
+		failures.append("tire smoke/sparks or recorded engine/wind audio is incomplete: %s" % str(vehicle_effect_state))
 	if int(enhancement_stats.get("reflection_probes", 0)) < 6 or not bool(enhancement_stats.get("reflection_probe_box_projection", false)) or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) < 0.5 or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) > 0.75:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:

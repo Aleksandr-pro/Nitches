@@ -16,6 +16,7 @@ const CurtainWallGlassShader: Shader = preload("res://shaders/curtain_wall_glass
 const CurtainWallFacadeShader: Shader = preload("res://shaders/curtain_wall_facade.gdshader")
 const ConcreteSurfaceShader: Shader = preload("res://shaders/concrete_surface.gdshader")
 const PremiumStonePavingShader: Shader = preload("res://shaders/premium_stone_paving.gdshader")
+const HorizonSkylineShader: Shader = preload("res://shaders/horizon_skyline.gdshader")
 const TEXTURE_DIR := "res://assets/textures/"
 const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1080.0))
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
@@ -165,6 +166,9 @@ var _pending_batched_models: Dictionary = {}
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
+var _skyline_root: Node3D
+var _skyline_materials: Array[ShaderMaterial] = []
+var _foliage_points: Array[Vector3] = []
 var _enhancement_stats: Dictionary = {}
 var _reflection_probe_refresh_sign := 1.0
 var _gable_mesh: ArrayMesh
@@ -203,6 +207,7 @@ func build_world() -> Dictionary:
 		_create_collision_root()
 		_build_environment()
 		_build_emergency_spawn_pad()
+		_build_skyline_backdrop()
 		set_time_of_day("day")
 		is_built = true
 		return {"error": build_error}
@@ -232,6 +237,16 @@ func build_world() -> Dictionary:
 	_flush_batched_models()
 	_build_reflection_probes()
 	_build_world_bounds()
+	_build_skyline_backdrop()
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	_enhancement_stats["wet_asphalt_streaks_0243"] = true
+	_enhancement_stats["rich_town_vertical_slice_0243"] = true
+	_enhancement_stats["vertical_slice_width_m"] = WORLD_AABB.size.x
+	_enhancement_stats["vertical_slice_depth_m"] = WORLD_AABB.size.z
 	set_time_of_day("day")
 	# 0.2.30: register streaming totals and sectorise colliders
 	# around the spawn point before the first frame; chunk hiding
@@ -261,6 +276,106 @@ func has_world_data() -> bool:
 
 func get_enhancement_stats() -> Dictionary:
 	return _enhancement_stats.duplicate(true)
+
+
+func get_foliage_density_at(world_position: Vector3, radius_m: float = 110.0) -> float:
+	var radius_squared := radius_m * radius_m
+	var nearby := 0
+	for foliage_position in _foliage_points:
+		var dx := foliage_position.x - world_position.x
+		var dz := foliage_position.z - world_position.z
+		if dx * dx + dz * dz <= radius_squared:
+			nearby += 1
+	return clampf(float(nearby) / 9.0, 0.0, 1.0)
+
+
+func set_skyline_origin(world_position: Vector3) -> void:
+	if _skyline_root != null:
+		_skyline_root.global_position = Vector3(world_position.x, 0.0, world_position.z)
+
+
+func _make_skyline_ring_mesh(radius: float, height: float) -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	const SEGMENTS := 512
+	for segment in SEGMENTS:
+		var u0 := float(segment) / float(SEGMENTS)
+		var u1 := float(segment + 1) / float(SEGMENTS)
+		var a0 := TAU * u0
+		var a1 := TAU * u1
+		var bottom0 := Vector3(sin(a0) * radius, -4.0, cos(a0) * radius)
+		var bottom1 := Vector3(sin(a1) * radius, -4.0, cos(a1) * radius)
+		var top0 := Vector3(sin(a0) * radius, height, cos(a0) * radius)
+		var top1 := Vector3(sin(a1) * radius, height, cos(a1) * radius)
+		var vertices: Array[Vector3] = [bottom0, bottom1, top1, bottom0, top1, top0]
+		var uvs: Array[Vector2] = [
+			Vector2(u0, 0.0), Vector2(u1, 0.0), Vector2(u1, 1.0),
+			Vector2(u0, 0.0), Vector2(u1, 1.0), Vector2(u0, 1.0),
+		]
+		for vertex_index in vertices.size():
+			surface.set_uv(uvs[vertex_index])
+			surface.add_vertex(vertices[vertex_index])
+	return surface.commit()
+
+
+func _build_skyline_backdrop() -> void:
+	if _skyline_root != null:
+		return
+	_skyline_root = Node3D.new()
+	_skyline_root.name = "HorizonSkyline"
+	add_child(_skyline_root)
+	var layers: Array[Dictionary] = [
+		{"radius": 1640.0, "height": 205.0, "file": "skyline_rich_town_near.png", "opacity": 0.82, "seed": 1.7, "density": 126.0},
+		{"radius": 1870.0, "height": 325.0, "file": "skyline_rich_town_far.png", "opacity": 0.70, "seed": 8.3, "density": 176.0},
+	]
+	var loaded_textures := 0
+	for index in layers.size():
+		var layer: Dictionary = layers[index]
+		var panorama := _texture(String(layer.get("file", "")))
+		if panorama == null:
+			continue
+		loaded_textures += 1
+		var material := ShaderMaterial.new()
+		material.shader = HorizonSkylineShader
+		material.set_shader_parameter("skyline_tex", panorama)
+		material.set_shader_parameter("skyline_tint", Color(0.92, 0.97, 1.0, 1.0) if index == 0 else Color(0.82, 0.91, 1.0, 1.0))
+		material.set_shader_parameter("layer_opacity", float(layer.get("opacity", 0.7)))
+		material.set_shader_parameter("layer_seed", float(layer.get("seed", 1.0)))
+		material.set_shader_parameter("skyline_density", float(layer.get("density", 144.0)))
+		material.set_shader_parameter("night_factor", 0.0)
+		var skyline := MeshInstance3D.new()
+		skyline.name = "SkylineLayer%d" % (index + 1)
+		skyline.mesh = _make_skyline_ring_mesh(float(layer.get("radius", 1600.0)), float(layer.get("height", 200.0)))
+		skyline.material_override = material
+		skyline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		skyline.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		skyline.custom_aabb = AABB(Vector3(-1900.0, -5.0, -1900.0), Vector3(3800.0, 340.0, 3800.0))
+		_skyline_root.add_child(skyline)
+		_skyline_materials.append(material)
+	_enhancement_stats["skyline_layers"] = _skyline_materials.size()
+	_enhancement_stats["skyline_follows_vehicle"] = true
+	_enhancement_stats["skyline_procedural_windows"] = true
+	_enhancement_stats["skyline_panorama_textures_0243"] = loaded_textures == layers.size()
+	_enhancement_stats["skyline_panorama_width"] = 4096
+	_enhancement_stats["skyline_panorama_height"] = 512
+	set_skyline_origin(spawn_transform.origin)
+	_set_skyline_time(time_of_day)
+
+
+func _set_skyline_time(mode: String) -> void:
+	var near_color := Color(0.20, 0.29, 0.38, 1.0)
+	var far_color := Color(0.46, 0.57, 0.69, 1.0)
+	var night_factor := 0.0
+	if mode == "sunset":
+		near_color = Color(0.34, 0.22, 0.25, 1.0)
+		far_color = Color(0.62, 0.38, 0.34, 1.0)
+	elif mode == "night":
+		near_color = Color(0.035, 0.065, 0.12, 1.0)
+		far_color = Color(0.055, 0.09, 0.17, 1.0)
+		night_factor = 1.0
+	for index in _skyline_materials.size():
+		_skyline_materials[index].set_shader_parameter("skyline_tint", near_color if index == 0 else far_color)
+		_skyline_materials[index].set_shader_parameter("night_factor", night_factor)
 
 
 func get_park_rects() -> Array:
@@ -847,6 +962,7 @@ func _apply_sky_mode(mode: String) -> void:
 
 func set_time_of_day(mode: String) -> void:
 	time_of_day = mode
+	_set_skyline_time(mode)
 	if _sun == null or _environment == null or _sky == null:
 		return
 	_apply_sky_mode(mode)
@@ -4979,33 +5095,33 @@ func _multimesh_visual_range(node_name: String) -> float:
 	if key.contains("main148mtower") or key.contains("richtownopera") or key.contains("richtownmosque"):
 		return 0.0
 	if key.contains("blendervillas") or key.contains("blendertownhouses"):
-		return 210.0
+		return 140.0
 	if key.contains("blenderherobuildings"):
-		return 260.0
+		return 200.0
 	if key.contains("blenderglasstowers"):
-		return 340.0
+		return 280.0
 	if key.contains("trafficsignal"):
-		return 220.0
+		return 170.0
 	if key.contains("busshelter"):
-		return 260.0
+		return 175.0
 	if key.contains("streetlamp") or key.contains("guardrail"):
-		return 240.0
-	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
 		return 180.0
+	if key.contains("bush") or key.contains("shrub") or key.contains("fan_foliage"):
+		return 90.0
 	if key.contains("crosswalk") or key.contains("roadedge") or key.contains("roadlane") or key.contains("roadcenter") or key.contains("lanearrow") or key.contains("parkingbay") or key.contains("bikelane"):
 		return 380.0
 	if key.contains("sidewalkslab") or key.contains("roadcurb") or key.contains("roadgutter") or key.contains("intersectionpad"):
-		return 360.0
+		return 250.0
 	if key.contains("manhole") or key.contains("drainage") or key.contains("roadstud") or key.contains("asphaltpatch") or key.contains("tarseam") or key.contains("oilstain") or key.contains("skidmark") or key.contains("tactile"):
-		return 220.0
+		return 120.0
 	if key.contains("pool"):
-		return 360.0
+		return 260.0
 	if key.contains("palm"):
-		return 620.0
+		return 145.0
 	if key.contains("tree"):
-		return 300.0
+		return 125.0
 	if key.contains("bollard") or key.contains("planter") or key.contains("hedge") or key.contains("trashbin") or key.contains("roadsign") or key.contains("storefront") or key.contains("awning") or key.contains("balcony"):
-		return 220.0
+		return 150.0
 	if key.contains("beach"):
 		return 360.0
 	if key.contains("marina"):
@@ -5098,7 +5214,8 @@ func _add_multimesh(
 		if visual_end > 0.0:
 			instance.visibility_range_end = visual_end
 		if visual_begin > 0.0 or visual_end > 0.0:
-			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+			# Dithered self-fades soften HLOD handoffs instead of hard pops.
+			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			instance.lod_bias = 0.45
 		else:
 			# Skyline geometry keeps generated/imported mesh LODs, but
@@ -5231,18 +5348,18 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 		return 220.0
 	if path.ends_with("street_lamp.glb"):
 		if key.contains("roofdark"):
-			return 160.0
-		return 180.0 if key.contains("glow") else 240.0
+			return 130.0
+		return 120.0 if key.contains("glow") else 180.0
 	if path.ends_with("bus_shelter.glb"):
 		if key.contains("solar"):
-			return 170.0
+			return 130.0
 		if key.contains("glow"):
-			return 180.0
-		return 200.0 if key.contains("glass") else 260.0
+			return 140.0
+		return 140.0 if key.contains("glass") else 175.0
 	if path.ends_with("park_bench.glb"):
-		return 150.0 if key.contains("roofdark") else 220.0
+		return 120.0 if key.contains("roofdark") else 165.0
 	if path.ends_with("park_pergola.glb"):
-		return 220.0 if key.contains("propsmetal") else 320.0
+		return 180.0 if key.contains("propsmetal") else 240.0
 
 	var base_range := _batched_model_base_range(path)
 	if base_range <= 0.0:
@@ -5255,24 +5372,33 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 		if key.contains("blind") or key.contains("core"):
 			return 210.0
 		return base_range
+	var architectural_limit := base_range
+	if path.ends_with("villa.glb") or path.ends_with("townhouse.glb"):
+		architectural_limit = 125.0
+	elif path.ends_with("hero_building.glb"):
+		architectural_limit = 180.0
+	elif path.ends_with("glass_tower.glb"):
+		architectural_limit = 240.0
+	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
+		return 130.0
 	if key.contains("fruit"):
-		return minf(base_range, 220.0)
+		return minf(architectural_limit, 220.0)
 	if key.contains("leafdry"):
-		return minf(base_range, 320.0)
+		return minf(architectural_limit, 320.0)
 	if key.contains("dry"):
-		return minf(base_range, 44.0)
+		return minf(architectural_limit, 44.0)
 	# Site dressing and emissive/solar accents are sub-pixel long before
 	# the architectural mass is. Retire them first, then curtains and
 	# window frames; wall/glass/spandrel cores keep the full HLOD range.
 	if key.contains("hedge") or key.contains("lawn") or key.contains("mulch") or key.contains("glow") or key.contains("solar"):
-		return minf(base_range, 150.0)
+		return minf(architectural_limit, 90.0)
 	if key.contains("pavement") or key.contains("deck"):
-		return minf(base_range, 180.0)
+		return minf(architectural_limit, 100.0)
 	if key.contains("curtain") or key.contains("interior"):
-		return base_range if path.ends_with("glass_tower.glb") else minf(base_range, 200.0)
+		return minf(architectural_limit, 200.0)
 	if key.contains("windowframe"):
-		return base_range if path.ends_with("glass_tower.glb") else minf(base_range, 230.0)
-	return base_range
+		return minf(architectural_limit, 230.0)
+	return minf(base_range, architectural_limit)
 
 
 func _batched_model_chunk_size(path: String) -> float:
@@ -5312,7 +5438,7 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 	var trunk_transforms: Array = []
 	for transform_variant in transforms:
 		trunk_transforms.append((transform_variant as Transform3D) * trunk_local)
-	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 370.0, 1100.0, 260.0)
+	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 105.0, 850.0, 260.0)
 
 	var crown := SphereMesh.new()
 	crown.radius = 0.5
@@ -5331,8 +5457,8 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 		crown_transforms,
 		"%sFarProxyCrown" % node_name,
 		false,
-		370.0,
-		1100.0,
+		105.0,
+		850.0,
 		260.0
 	)
 	_enhancement_stats["palm_far_proxy_0217"] = true
@@ -5348,6 +5474,12 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 	if base_range <= 0.0 or transforms.is_empty():
 		return
 	var proxy_begin := maxf(base_range - 20.0, 0.0)
+	if path.ends_with("villa.glb") or path.ends_with("townhouse.glb"):
+		proxy_begin = 95.0
+	elif path.ends_with("hero_building.glb"):
+		proxy_begin = 145.0
+	elif path.ends_with("glass_tower.glb"):
+		proxy_begin = 200.0
 	var proxy_end := 1050.0
 	var specs: Array[Dictionary] = []
 	if path.ends_with("villa.glb"):
@@ -7243,6 +7375,7 @@ func _add_foliage_far_proxy(parent: Node, source_mesh: Mesh, transforms: Array, 
 
 
 func _build_vegetation() -> void:
+	_foliage_points.clear()
 	var root := Node3D.new()
 	root.name = "Vegetation"
 	add_child(root)
@@ -7323,6 +7456,7 @@ func _build_vegetation() -> void:
 			if _road_clearance_xz(tree_base) < 0.65:
 				rejected_road_trees += 1
 				continue
+			_foliage_points.append(tree_base)
 			var scale_value := 2.85 * _f(tree, "s", 1.0)
 			tree_transforms.append(make_transform(tree_base, _f(tree, "rotY"), Vector3.ONE * scale_value))
 			_add_cylinder_collider(_item_position(tree, 1.4), 0.38, 3.2)
@@ -7334,7 +7468,7 @@ func _build_vegetation() -> void:
 				# The 199-triangle trunk can stay visible much farther
 				# than the 7.8k canopy. Trunks keep a grounding shadow;
 				# the canopy HLOD ellipsoid takes over after 220 m.
-				var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+				var detail_end := 150.0 if part_name == "tree2_bark" else 105.0
 				_add_multimesh(
 					root,
 					source_mesh,
@@ -7347,7 +7481,7 @@ func _build_vegetation() -> void:
 					180.0
 				)
 				if part_name == "tree2_foliage":
-					_add_foliage_far_proxy(root, source_mesh, tree_transforms, part_name, 220.0, 650.0)
+					_add_foliage_far_proxy(root, source_mesh, tree_transforms, part_name, 90.0, 650.0)
 
 		var bush_transforms: Dictionary = {
 			"bush_round_foliage": [],
@@ -7415,8 +7549,8 @@ func _build_vegetation() -> void:
 				var part: Dictionary = _plant_parts[part_name]
 				var source_mesh := part.get("mesh") as Mesh
 				var part_transforms: Array = bush_transforms[part_name]
-				# Detailed 3.0-3.5k shrubs are a near-field layer only;
-				# fitted ellipsoids preserve planting beds to 420 m.
+				# Detailed shrubs retire near the road; fitted low-poly
+				# ellipsoids preserve only larger planting masses beyond.
 				_add_multimesh(
 					root,
 					source_mesh,
@@ -7425,10 +7559,10 @@ func _build_vegetation() -> void:
 					String(part_name),
 					false,
 					0.0,
-					180.0,
+					90.0,
 					180.0
 				)
-				_add_foliage_far_proxy(root, source_mesh, part_transforms, String(part_name), 160.0, 420.0)
+				_add_foliage_far_proxy(root, source_mesh, part_transforms, String(part_name), 80.0, 260.0)
 
 	var palms: Array = data.get("palms", []).duplicate()
 	var extra_palm_count := 0
@@ -7470,6 +7604,7 @@ func _build_vegetation() -> void:
 		if _road_clearance_xz(base) < 0.65:
 			rejected_road_palms += 1
 			continue
+		_foliage_points.append(base)
 		var variation := _hash01(palm_index * 17 + 41, palm_index * 29 + 7)
 		var is_boulevard_row := minf(absf(base.x - 745.5), absf(base.x - 774.5)) < 0.75
 		var use_royal := false
@@ -8169,6 +8304,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 		var extra_base := Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y) - 0.03, extra_spec.y)
 		if not _is_position_clear(extra_base, 2.0, 3.0):
 			continue
+		_foliage_points.append(extra_base)
 		palm_bed_centers.append(Vector3(extra_spec.x, _boulevard_ground_y(extra_spec.x, extra_spec.y), extra_spec.y))
 		extra_date_palm_transforms.append(make_transform(
 			extra_base,
@@ -9928,10 +10064,10 @@ func _build_district_infrastructure() -> void:
 			if _plant_parts.has(part_name):
 				var part: Dictionary = _plant_parts[part_name]
 				var source_mesh := part.get("mesh") as Mesh
-				var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+				var detail_end := 150.0 if part_name == "tree2_bark" else 105.0
 				_add_multimesh(root, source_mesh, part.get("material") as Material, tree_transforms, "District_%s" % part_name, part_name == "tree2_bark", 0.0, detail_end, 180.0)
 				if part_name == "tree2_foliage":
-					_add_foliage_far_proxy(root, source_mesh, tree_transforms, "DistrictTree2Foliage", 220.0, 650.0)
+					_add_foliage_far_proxy(root, source_mesh, tree_transforms, "DistrictTree2Foliage", 90.0, 650.0)
 	# One shelter on the district's east-west spine.
 	var shelter_pos := Vector3(660.0, height_at(660.0, 376.0) + 0.02, 376.0)
 	var shelter_footprint_clear := _is_footprint_clear_of_roads(shelter_pos, Vector2(5.75, 2.35), 0.0, 0.45)
@@ -10170,10 +10306,10 @@ func _build_parks() -> void:
 				if _plant_parts.has(part_name):
 					var part: Dictionary = _plant_parts[part_name]
 					var source_mesh := part.get("mesh") as Mesh
-					var detail_end := 500.0 if part_name == "tree2_bark" else 240.0
+					var detail_end := 150.0 if part_name == "tree2_bark" else 105.0
 					oaks_built = _add_multimesh(park_root, source_mesh, part.get("material") as Material, oak_transforms, "ParkOaks_%s_%s" % [park_id, part_name], part_name == "tree2_bark", 0.0, detail_end, 180.0) or oaks_built
 					if part_name == "tree2_foliage":
-						_add_foliage_far_proxy(park_root, source_mesh, oak_transforms, "ParkOaks_%s_%s" % [park_id, part_name], 220.0, 650.0)
+						_add_foliage_far_proxy(park_root, source_mesh, oak_transforms, "ParkOaks_%s_%s" % [park_id, part_name], 90.0, 650.0)
 		total_trees += oak_transforms.size() if oaks_built else 0
 
 		var park_bush_count := 0
@@ -10183,9 +10319,9 @@ func _build_parks() -> void:
 				continue
 			var part: Dictionary = _plant_parts[part_name]
 			var source_mesh := part.get("mesh") as Mesh
-			if _add_multimesh(park_root, source_mesh, part.get("material") as Material, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], false, 0.0, 180.0, 180.0):
+			if _add_multimesh(park_root, source_mesh, part.get("material") as Material, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], false, 0.0, 90.0, 180.0):
 				park_bush_count += bush_transforms.size()
-				_add_foliage_far_proxy(park_root, source_mesh, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], 160.0, 420.0)
+				_add_foliage_far_proxy(park_root, source_mesh, bush_transforms, "ParkBushes_%s_%s" % [park_id, part_name], 80.0, 260.0)
 		total_bushes += park_bush_count
 
 		var date_transforms: Array = ctx["date_transforms"]

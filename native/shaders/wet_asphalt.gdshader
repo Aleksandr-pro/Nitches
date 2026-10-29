@@ -86,6 +86,13 @@ void fragment() {
 		1.0
 	);
 	float grain = mix(0.86, 1.14, vnoise(p * 4.2));
+	// Narrow road-aligned wet streaks modulate the PBR highlight instead
+	// of rendering a costly screen-space or planar reflection.
+	float streak_noise = fbm2(vec2(road_s * 0.10 + TIME * 0.018, lateral * 5.2));
+	float wet_streak = smoothstep(0.57, 0.79, streak_noise)
+		* (1.0 - smoothstep(0.88, 1.0, abs_lateral))
+		* clamp(damp * 0.82 + puddle * 0.55, 0.0, 1.0)
+		* mix(0.40, 1.0, detail_fade);
 
 	// Polished wheel paths follow the road itself. Four broad bands cover
 	// both two-lane streets and the four-lane Boulevard/Corniche without
@@ -223,6 +230,7 @@ void fragment() {
 		* smoothstep(-438.0, -428.0, world_pos.z)
 		* (1.0 - smoothstep(428.0, 438.0, world_pos.z));
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.43, 0.45, 0.49), boulevard_mask * 0.86);
+	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.86, 0.90, 0.96), wet_streak * 0.16);
 
 	float surface_roughness = dry_roughness;
 	surface_roughness += (wear_luma - 0.065) * 0.65;
@@ -233,7 +241,8 @@ void fragment() {
 
 	ROUGHNESS = mix(surface_roughness, wet_roughness, damp);
 	ROUGHNESS = mix(ROUGHNESS, puddle_roughness, puddle);
+	ROUGHNESS = mix(ROUGHNESS, max(wet_roughness - 0.08, 0.36), wet_streak * 0.24);
 	METALLIC = 0.0;
-	SPECULAR = mix(0.30, 0.56, max(damp, puddle));
+	SPECULAR = clamp(mix(0.30, 0.56, max(damp, puddle)) + wet_streak * 0.08, 0.0, 1.0);
 	AO = clamp(1.0 - crack * 0.18 - joint * 0.12 - tar_border * 0.15, 0.62, 1.0);
 }

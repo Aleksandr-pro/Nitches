@@ -159,6 +159,7 @@ const textureNames = [
   'foliage.jpg', 'foliage_normal.jpg',
   'user_palm_leaf.png',
   'user_sky_day.jpg', 'user_sky_sunset.jpg', 'user_sky_night.jpg',
+  'skyline_rich_town_near.png', 'skyline_rich_town_far.png',
   'cafe_linen.jpg', 'cafe_linen_normal.png',
   // 0.2.39 Sail cottage estates: seven authored PBR sets, each with a
   // real roughness map instead of one scalar for every surface.
