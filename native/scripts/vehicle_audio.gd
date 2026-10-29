@@ -411,8 +411,7 @@ func _ensure_buses() -> void:
 		lowpass.db = AudioEffectFilter.FILTER_18DB
 		AudioServer.add_bus_effect(engine_index, lowpass)
 		var enhance := AudioEffectStereoEnhance.new()
-		enhance.pan_strength = 0.35
-		enhance.surround = 0.0
+		enhance.surround = 0.35
 		AudioServer.add_bus_effect(engine_index, enhance)
 	for i in AudioServer.get_bus_effect_count(engine_index):
 		var effect := AudioServer.get_bus_effect(engine_index, i)
