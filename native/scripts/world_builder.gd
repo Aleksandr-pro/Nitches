@@ -140,6 +140,11 @@ var spawn_transform := Transform3D.IDENTITY
 var time_of_day := "day"
 var build_error := ""
 var is_built := false
+var _build_stages: Array[Dictionary] = []
+var _build_stage_index := 0
+var _build_completed_weight := 0.0
+var _build_total_weight := 1.0
+var _build_started := false
 
 var _terrain: Dictionary = {}
 var _textures: Dictionary = {}
@@ -219,50 +224,162 @@ func _process(delta: float) -> void:
 func build_world() -> Dictionary:
 	if is_built:
 		return get_stats() if build_error.is_empty() else {"error": build_error}
+	begin_build_world()
+	while not is_built:
+		build_world_step()
+	if data.is_empty():
+		return {"error": build_error}
+	return get_stats()
 
+
+## 0.2.52 staged build: prepare the ordered build steps without
+## running them.  Main can execute one step per rendered frame
+## behind the branded loading screen, while the synchronous
+## build_world() above keeps smoke/screenshot runs deterministic.
+func begin_build_world() -> void:
+	if is_built or _build_started:
+		return
+	_build_started = true
 	_is_desert = world_id == "desert"
 	_active_aabb = DESERT_AABB if _is_desert else WORLD_AABB
 	_load_data()
+	_build_stages.clear()
+	_build_stage_index = 0
+	_build_completed_weight = 0.0
+	_build_total_weight = 0.0
 	if data.is_empty():
 		if build_error.is_empty():
 			build_error = "Native world data could not be loaded"
 		spawn_transform = make_transform(FALLBACK_SPAWN_POSITION, 0.0, Vector3.ONE)
-		_create_collision_root()
-		_build_environment()
-		_build_emergency_spawn_pad()
-		_build_skyline_backdrop()
-		set_time_of_day("day")
-		is_built = true
-		return {"error": build_error}
+		_queue_emergency_build_stages()
+	else:
+		_terrain = data.get("terrain", {})
+		if _is_desert:
+			_queue_desert_build_stages()
+		else:
+			_queue_richtown_build_stages()
+	if _build_total_weight <= 0.0:
+		_build_total_weight = 1.0
 
-	_terrain = data.get("terrain", {})
-	if _is_desert:
-		return _build_desert_world()
-	_expand_sail_island_0237()
-	_compute_spawn_transform()
-	_build_road_surface_index()
-	_sanitize_canonical_buildings_0237()
-	_sanitize_canonical_pools_0237()
-	_create_collision_root()
-	_build_environment()
-	_build_terrain()
-	_build_water_and_pools()
-	_build_roads()
-	_build_buildings()
-	_build_landmarks()
-	_build_sail_island_resort_0237()
-	_build_vegetation()
-	_build_ground_cover()
-	_build_street_lamps()
-	_build_bus_shelters()
-	_build_benches()
-	_build_city_details()
-	_build_district_infrastructure()
-	_build_parks()
-	_flush_batched_models()
-	_build_reflection_probes()
-	_build_world_bounds()
-	_build_skyline_backdrop()
+
+func build_world_step() -> Dictionary:
+	if is_built:
+		return get_build_progress_state()
+	if not _build_started:
+		begin_build_world()
+	if _build_stage_index >= _build_stages.size():
+		is_built = true
+		return get_build_progress_state()
+	var stage: Dictionary = _build_stages[_build_stage_index]
+	var stage_label := String(stage.get("label", "Строим мир"))
+	var stage_weight := float(stage.get("weight", 1.0))
+	var callable_variant: Variant = stage.get("callable", Callable())
+	if callable_variant is Callable:
+		var stage_callable: Callable = callable_variant
+		if stage_callable.is_valid():
+			stage_callable.call()
+		elif build_error.is_empty():
+			build_error = "Native world build stage is missing: %s" % stage_label
+	elif build_error.is_empty():
+		build_error = "Native world build stage is invalid: %s" % stage_label
+	_build_stage_index += 1
+	_build_completed_weight += maxf(stage_weight, 0.01)
+	if _build_stage_index >= _build_stages.size() and not is_built:
+		is_built = true
+	var state := get_build_progress_state()
+	state["completed_stage"] = stage_label
+	return state
+
+
+func get_build_progress_state() -> Dictionary:
+	var stage_label := "Мир готов"
+	if _build_stage_index < _build_stages.size():
+		stage_label = String(_build_stages[_build_stage_index].get("label", stage_label))
+	elif _build_stage_index > 0:
+		stage_label = String(_build_stages[_build_stage_index - 1].get("label", stage_label))
+	var fraction: float = clampf(_build_completed_weight / maxf(_build_total_weight, 0.001), 0.0, 1.0)
+	if is_built:
+		fraction = 1.0
+	return {
+		"stage": stage_label,
+		"fraction": fraction,
+		"finished": is_built,
+		"stage_index": _build_stage_index,
+		"stage_count": _build_stages.size(),
+	}
+
+
+func is_build_finished() -> bool:
+	return is_built
+
+
+func _add_build_stage(label: String, stage_callable: Callable, weight: float = 1.0) -> void:
+	var safe_weight := maxf(weight, 0.01)
+	_build_stages.append({"label": label, "callable": stage_callable, "weight": safe_weight})
+	_build_total_weight += safe_weight
+
+
+func _queue_emergency_build_stages() -> void:
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.5)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Создаём аварийную площадку", Callable(self, "_build_emergency_spawn_pad"), 0.5)
+	_add_build_stage("Рисуем дальний горизонт", Callable(self, "_build_skyline_backdrop"), 0.5)
+	_add_build_stage("Завершаем аварийный мир", Callable(self, "_finish_emergency_build"), 0.5)
+
+
+func _queue_richtown_build_stages() -> void:
+	_add_build_stage("Подготавливаем остров Паруса", Callable(self, "_expand_sail_island_0237"), 1.0)
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Проверяем здания у дорог", Callable(self, "_sanitize_canonical_buildings_0237"), 1.5)
+	_add_build_stage("Проверяем бассейны и участки", Callable(self, "_sanitize_canonical_pools_0237"), 0.8)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Строим ландшафт RichTown", Callable(self, "_build_terrain"), 3.0)
+	_add_build_stage("Заполняем море и бассейны", Callable(self, "_build_water_and_pools"), 1.0)
+	_add_build_stage("Прокладываем дороги", Callable(self, "_build_roads"), 3.0)
+	_add_build_stage("Возводим здания", Callable(self, "_build_buildings"), 4.0)
+	_add_build_stage("Строим достопримечательности", Callable(self, "_build_landmarks"), 2.0)
+	_add_build_stage("Обустраиваем остров Паруса", Callable(self, "_build_sail_island_resort_0237"), 2.0)
+	_add_build_stage("Высаживаем деревья и пальмы", Callable(self, "_build_vegetation"), 3.0)
+	_add_build_stage("Добавляем газоны и клумбы", Callable(self, "_build_ground_cover"), 2.0)
+	_add_build_stage("Ставим уличные фонари", Callable(self, "_build_street_lamps"), 1.0)
+	_add_build_stage("Ставим остановки", Callable(self, "_build_bus_shelters"), 0.5)
+	_add_build_stage("Расставляем скамейки", Callable(self, "_build_benches"), 0.5)
+	_add_build_stage("Добавляем городские детали", Callable(self, "_build_city_details"), 2.0)
+	_add_build_stage("Строим инфраструктуру районов", Callable(self, "_build_district_infrastructure"), 2.0)
+	_add_build_stage("Обустраиваем парки", Callable(self, "_build_parks"), 2.0)
+	_add_build_stage("Собираем модели города", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы мира", Callable(self, "_build_world_bounds"), 0.5)
+	_add_build_stage("Рисуем дальний горизонт", Callable(self, "_build_skyline_backdrop"), 1.0)
+	_add_build_stage("Финализируем RichTown", Callable(self, "_finish_richtown_build"), 1.0)
+
+
+func _queue_desert_build_stages() -> void:
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги каньона", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Формируем дюны и каньоны", Callable(self, "_build_desert_terrain"), 4.0)
+	_add_build_stage("Заполняем озеро оазиса", Callable(self, "_build_desert_water"), 0.5)
+	_add_build_stage("Прокладываем трассы и тропы", Callable(self, "_build_desert_roads"), 4.0)
+	_add_build_stage("Строим городок и ранчо", Callable(self, "_build_desert_structures"), 3.0)
+	_add_build_stage("Наполняем пустыню деталями", Callable(self, "_build_desert_scatter"), 4.0)
+	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
+	_add_build_stage("Собираем модели пустыни", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_desert_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы котловины", Callable(self, "_build_desert_bounds"), 0.5)
+	_add_build_stage("Рисуем дальние месы", Callable(self, "_build_desert_skyline"), 1.0)
+	_add_build_stage("Финализируем Пустынный каньон", Callable(self, "_finish_desert_build"), 1.0)
+
+
+func _finish_emergency_build() -> void:
+	set_time_of_day("day")
+	is_built = true
+
+
+func _finish_richtown_build() -> void:
 	_enhancement_stats["near_field_lod_0243"] = true
 	_enhancement_stats["tree_detail_end_m"] = 105.0
 	_enhancement_stats["palm_detail_end_m"] = 130.0
@@ -286,7 +403,24 @@ func build_world() -> Dictionary:
 	_build_foliage_grid()
 	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
 	is_built = true
-	return get_stats()
+
+
+func _finish_desert_build() -> void:
+	_enhancement_stats["desert_world_0247"] = true
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	set_time_of_day("day")
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_build_foliage_grid()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
+	is_built = true
 
 
 func get_stats() -> Dictionary:
@@ -10639,36 +10773,10 @@ func _road_surface_kind_at(point: Vector3) -> String:
 
 
 func _build_desert_world() -> Dictionary:
-	_compute_spawn_transform()
-	_build_road_surface_index()
-	_create_collision_root()
-	_build_environment()
-	_build_desert_terrain()
-	_build_desert_water()
-	_build_desert_roads()
-	_build_desert_structures()
-	_build_desert_scatter()
-	_build_desert_game_markers()
-	_flush_batched_models()
-	_build_desert_reflection_probes()
-	_build_desert_bounds()
-	_build_desert_skyline()
-	_enhancement_stats["desert_world_0247"] = true
-	_enhancement_stats["near_field_lod_0243"] = true
-	_enhancement_stats["tree_detail_end_m"] = 105.0
-	_enhancement_stats["palm_detail_end_m"] = 130.0
-	_enhancement_stats["shrub_detail_end_m"] = 90.0
-	_enhancement_stats["range_fade_mode"] = "dithered_self"
-	set_time_of_day("day")
-	var collider_total := 0
-	for cell_variant in _collider_cells.keys():
-		collider_total += (_collider_cells[cell_variant] as Array).size()
-	_enhancement_stats["streaming_colliders_total"] = collider_total
-	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
-	_build_foliage_grid()
-	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
-	is_built = true
-	return get_stats()
+	# Synchronous compatibility wrapper; staged loading uses
+	# _queue_desert_build_stages through begin_build_world().
+	world_id = "desert"
+	return build_world()
 
 
 func _dz_data() -> Dictionary:
