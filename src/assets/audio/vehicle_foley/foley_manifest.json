@@ -1,6 +1,6 @@
 {
   "foley_0242": true,
-  "format": "WAV 32000 Hz 16-bit (wind stereo, rest mono)",
+  "format": "WAV 32000 Hz 16-bit (wind and foliage rustle stereo, rest mono)",
   "note": "Engine and tyre-squeal voices are field recordings in the per-car banks; this folder is supplemental foley only.",
   "files": [
     {
@@ -86,6 +86,13 @@
       "sample_rate": 32000,
       "channels": 1,
       "method": "Extracted from the recorded Mustang starter engagement (lmbubec, Freesound 119449, CC0), low-passed and enveloped; per-car character via runtime pitch/gain."
+    },
+    {
+      "file": "foliage_rustle.wav",
+      "seconds": 8.0,
+      "sample_rate": 32000,
+      "channels": 2,
+      "method": "Synthesized stereo foliage-rustle ambience (band-shaped noise bed + gust-gated leaf-tick bursts, seamless crossfade loop). Foley ambience only, runtime-gated by measured foliage density; added in 0.2.44."
     }
   ]
 }

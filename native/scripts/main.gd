@@ -39,6 +39,7 @@ var _map_open := false
 var _in_menu := false
 var _has_entered_game := false
 var _settings: Dictionary = {}
+var _graphics_quality_state: Dictionary = {}
 var _menu_orbit_angle := 0.0
 var _garage_stage: Node3D
 var _garage_active := false
@@ -203,6 +204,7 @@ func _default_settings() -> Dictionary:
 		"sound_enabled": true,
 		"developer_mode": false,
 		"map_hint_seen": false,
+		"graphics_quality": "balanced",
 	}
 
 
@@ -221,6 +223,10 @@ func _sanitize_settings(source: Dictionary) -> Dictionary:
 	result["sound_enabled"] = bool(result.get("sound_enabled", true))
 	result["developer_mode"] = bool(result.get("developer_mode", false))
 	result["map_hint_seen"] = bool(result.get("map_hint_seen", false))
+	var graphics_quality := String(result.get("graphics_quality", "balanced"))
+	if graphics_quality != "performance" and graphics_quality != "balanced" and graphics_quality != "beauty":
+		graphics_quality = "balanced"
+	result["graphics_quality"] = graphics_quality
 	return result
 
 
@@ -288,9 +294,60 @@ func _apply_settings(settings: Dictionary, save_settings: bool) -> void:
 		_hud.set_developer_mode(bool(_settings.get("developer_mode", false)))
 		_hud.set_sound_enabled(bool(_settings.get("sound_enabled", true)))
 	AudioServer.set_bus_mute(0, not bool(_settings.get("sound_enabled", true)))
+	_apply_graphics_quality()
 	_refresh_menu_settings()
 	if save_settings:
 		_save_settings()
+
+
+## 0.2.44: one user preset drives every scalable graphics cost —
+## detail draw distances, shadow range, camera far plane + skyline
+## scale, atmosphere particle budgets/effects and the 3D render
+## scale.  "balanced" is exactly the shipped 0.2.43 look; nothing is
+## silently downgraded for everyone any more.
+func _apply_graphics_quality() -> void:
+	var quality := String(_settings.get("graphics_quality", "balanced"))
+	var detail_scale := 1.0
+	var shadow_distance := 175.0
+	var camera_far := 2100.0
+	var particle_scale := 0.55 if OS.has_feature("android") else 1.0
+	var shafts := true
+	var bokeh := true
+	var render_scale := 1.0
+	match quality:
+		"performance":
+			detail_scale = 0.7
+			shadow_distance = 120.0
+			camera_far = 1650.0
+			particle_scale = 0.3
+			shafts = false
+			bokeh = false
+			render_scale = 0.8
+		"beauty":
+			detail_scale = 1.7
+			shadow_distance = 230.0
+			particle_scale = 1.0
+	if _world != null:
+		_world.set_quality_detail_scale(detail_scale)
+		_world.set_quality_shadow_distance(shadow_distance)
+		# Skyline rings keep identical angular size at any far plane.
+		_world.set_skyline_scale(camera_far / 2100.0)
+	if _camera != null:
+		_camera.far = camera_far
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_quality(particle_scale, shafts, bokeh)
+	get_viewport().scaling_3d_scale = render_scale
+	_graphics_quality_state = {
+		"graphics_quality_0244": true,
+		"preset": quality,
+		"detail_scale": detail_scale,
+		"shadow_distance": shadow_distance,
+		"camera_far": camera_far,
+		"particle_scale": particle_scale,
+		"shafts": shafts,
+		"bokeh": bokeh,
+		"render_scale": render_scale,
+	}
 
 
 func _on_settings_changed(settings: Dictionary) -> void:
@@ -1571,8 +1628,8 @@ func _run_smoke_checks() -> void:
 		failures.append("traffic node must be completely removed in 0.2.5")
 	if _camera == null:
 		failures.append("camera node is missing")
-	elif _camera.far < 2099.0:
-		failures.append("camera far plane no longer reaches the 2.1 km skyline: %.1f m" % _camera.far)
+	elif _camera.far < 1600.0 or absf(_camera.far - float(_graphics_quality_state.get("camera_far", 0.0))) > 0.5:
+		failures.append("camera far plane does not match the active graphics preset / skyline reach: %.1f m %s" % [_camera.far, str(_graphics_quality_state)])
 	if _speed_post == null:
 		failures.append("speed post node is missing")
 	if _atmosphere_fx == null:
@@ -1609,6 +1666,8 @@ func _run_smoke_checks() -> void:
 	var vehicle_effect_state := _vehicle.get_effect_state()
 	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or int(vehicle_effect_state.get("tire_spark_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)) or not bool(vehicle_effect_state.get("speed_wind_audio", false)):
 		failures.append("tire smoke/sparks or recorded engine/wind audio is incomplete: %s" % str(vehicle_effect_state))
+	if not bool(_graphics_quality_state.get("graphics_quality_0244", false)) or String(_graphics_quality_state.get("preset", "")) != String(_settings.get("graphics_quality", "")) or not bool(enhancement_stats.get("foliage_spatial_grid_0244", false)) or int(enhancement_stats.get("foliage_grid_cells", 0)) < 10 or int(enhancement_stats.get("foliage_points_total", 0)) < 50 or int(enhancement_stats.get("quality_ranged_instances", 0)) < 20 or absf(float(enhancement_stats.get("quality_detail_scale_0244", 0.0)) - float(_graphics_quality_state.get("detail_scale", -1.0))) > 0.01 or absf(float(enhancement_stats.get("quality_shadow_distance_0244", 0.0)) - float(_graphics_quality_state.get("shadow_distance", -1.0))) > 0.5 or not bool(atmosphere_state.get("graphics_quality_0244", false)) or float(atmosphere_state.get("quality_particle_scale", 0.0)) <= 0.0:
+		failures.append("0.2.44 user graphics quality / foliage spatial grid is incomplete: quality=%s world=%s atmosphere=%s" % [str(_graphics_quality_state), str(enhancement_stats), str(atmosphere_state)])
 	if int(enhancement_stats.get("reflection_probes", 0)) < 6 or not bool(enhancement_stats.get("reflection_probe_box_projection", false)) or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) < 0.5 or float(enhancement_stats.get("reflection_probe_intensity", 0.0)) > 0.75:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:
@@ -1737,6 +1796,8 @@ func _run_smoke_checks() -> void:
 	var audio_anchor_rpms: Array = vehicle_audio_state.get("anchor_rpms", [])
 	if not bool(vehicle_audio_state.get("audio_realism_0242", false)) or int(vehicle_audio_state.get("pops_count", 0)) != 10 or not bool(vehicle_audio_state.get("foley_ready", false)) or not bool(vehicle_audio_state.get("engine_lowpass_ready", false)) or not bool(vehicle_audio_state.get("tire_panner_ready", false)) or int(vehicle_audio_state.get("players_created", 0)) < 14 or audio_anchor_rpms.size() < 18 or int(audio_anchor_rpms[audio_anchor_rpms.size() - 1]) != 5600 or float(vehicle_audio_state.get("pitch_max", 9.0)) > 1.31:
 		failures.append("0.2.42 recorded-audio realism pass is incomplete (dense PSOLA ladder, crackle pops, foley buses): %s" % str(vehicle_audio_state))
+	if not bool(vehicle_audio_state.get("foliage_rustle_ready_0244", false)):
+		failures.append("0.2.44 foliage-rustle ambience is not ready: %s" % str(vehicle_audio_state))
 	var camera_control_state := get_camera_control_state()
 	if not bool(smoothing_state.get("physics_interpolation_vehicle", false)) or int(smoothing_state.get("contact_patch_samples", 0)) < 3 or not bool(smoothing_state.get("tyre_relaxation", false)) or not bool(smoothing_state.get("filtered_suspension_velocity", false)) or not bool(smoothing_state.get("precision_steering_0231", false)) or float(drive_base_state.get("steer_response", 0.0)) < 20.0 or float(drive_base_state.get("steer_actuator_rate_low", 0.0)) < 6.0 or float(drive_base_state.get("digital_steer_attack", 0.0)) < 5.0 or float(drive_base_state.get("digital_steer_initial_bite", 0.0)) < 0.15 or not bool(camera_control_state.get("free_orbit_0231", false)) or not bool(camera_control_state.get("camera_interpolation_off", false)) or not bool(camera_control_state.get("camera_top_level", false)) or not bool(camera_control_state.get("target_interpolated", false)) or not bool(camera_control_state.get("physics_interpolation_project", false)) or not bool(camera_control_state.get("touch_orbit", false)) or not bool(camera_control_state.get("mouse_orbit", false)) or not bool(camera_control_state.get("gamepad_orbit", false)) or not is_finite(float(camera_control_state.get("orbit_yaw", 0.0))) or not is_finite(float(camera_control_state.get("orbit_pitch", 0.0))):
 		failures.append("0.2.31 anti-jitter / precision steering / free-orbit camera pass is incomplete: smoothing=%s drive=%s camera=%s" % [str(smoothing_state), str(drive_base_state), str(camera_control_state)])
@@ -1836,7 +1897,7 @@ func _run_smoke_checks() -> void:
 	var steering_wheel_rect: Rect2 = steering_wheel_state.get("rect", Rect2())
 	if not bool(world_map_state.get("world_map_0232", false)) or not bool(world_map_state.get("created", false)) or not bool(world_map_state.get("data_bound", false)) or bool(world_map_state.get("visible_now", true)) or int(world_map_state.get("districts", 0)) < 5 or int(world_map_state.get("district_labels", 0)) < 5 or int(world_map_state.get("roads", 0)) < 50 or int(world_map_state.get("road_labels", 0)) < 6 or int(world_map_state.get("pois", 0)) < 20 or int(world_map_state.get("poi_labels", 0)) < 20 or int(world_map_state.get("parks", 0)) < 3 or not bool(steering_wheel_state.get("touch_steering_wheel_0232", false)) or not bool(steering_wheel_state.get("created", false)) or float(steering_wheel_state.get("max_lock_degrees", 0.0)) < 130.0 or float(steering_wheel_state.get("centering_rate", 0.0)) < 4.0 or not _rect_is_on_screen(steering_wheel_rect, viewport_size) or steering_wheel_rect.size.x < 230.0 or not bool(steering_wheel_state.get("configurable_size_0233", false)) or not bool(smoothing_state.get("touch_steering_wheel_0232", false)) or not bool(smoothing_state.get("analog_touch_pedals_0233", false)) or int(world_map_state.get("minimap_points", 0)) < 20 or not bool(world_map_state.get("world_map_0234", false)) or not bool(world_map_state.get("route_button_created", false)) or not bool(world_map_state.get("fast_travel_button_created", false)) or int(world_map_state.get("filter_buttons", 0)) < 5 or not bool(world_map_state.get("district_circles_removed", false)) or not bool(world_map_state.get("zoom_label_tiers_0234", false)):
 		failures.append("0.2.34 steering-wheel / filtered zoom-tier world-map pass is incomplete: map=%s wheel=%s smoothing=%s" % [str(world_map_state), str(steering_wheel_state), str(smoothing_state)])
-	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 6 or int(menu_state.get("tabs", 0)) < 6 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or not bool(menu_state.get("settings_panel_0233", false)) or int(menu_state.get("control_buttons", 0)) < 3 or not bool(menu_state.get("settings_bound", false)) or not bool(menu_state.get("version_button_created", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
+	if not bool(menu_state.get("created", false)) or int(menu_state.get("panels", 0)) < 6 or int(menu_state.get("tabs", 0)) < 6 or not bool(menu_state.get("specs_bound", false)) or not bool(menu_state.get("profile_bound", false)) or not bool(menu_state.get("world_map_button", false)) or not bool(menu_state.get("settings_panel_0233", false)) or not bool(menu_state.get("graphics_quality_0244", false)) or int(menu_state.get("control_buttons", 0)) < 3 or not bool(menu_state.get("settings_bound", false)) or not bool(menu_state.get("version_button_created", false)) or bool(menu_state.get("visible_now", true)) or int(spec_sheet.get("power_hp", 0)) != 365 or int(spec_sheet.get("torque_nm", 0)) != 569 or int(spec_sheet.get("top_speed_kmh", 0)) != 207 or int(spec_sheet.get("gears", 0)) != 4:
 		failures.append("0.2.34 main menu/settings / Shelby GT500 spec pass is incomplete: menu=%s spec=%s" % [str(menu_state), str(spec_sheet)])
 
 	var frontend_state := _get_frontend_smoke_state()

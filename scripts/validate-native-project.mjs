@@ -74,10 +74,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.43-native-alpha"'), 'Native project version metadata must match 0.2.43-native-alpha');
-assert(preset.includes('version/code=46'), 'Native 0.2.43 must bump Android versionCode to 46');
-assert(preset.includes('version/name="0.2.43-native-alpha"'), 'Native version name must be 0.2.43-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.43-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.44-native-alpha"'), 'Native project version metadata must match 0.2.44-native-alpha');
+assert(preset.includes('version/code=47'), 'Native 0.2.44 must bump Android versionCode to 47');
+assert(preset.includes('version/name="0.2.44-native-alpha"'), 'Native version name must be 0.2.44-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.44-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -94,9 +94,24 @@ const atmosphereFxScript = await readText('scripts/atmosphere_fx.gd');
 for (const marker of ['get_foliage_density_at', 'get_headlight_world_positions', 'leaves', 'petals', 'light_shafts', 'headlight_bokeh']) {
   assert(atmosphereFxScript.includes(marker), `0.2.43 near-car atmosphere effect marker is missing: ${marker}`);
 }
-for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate', 'camera far plane no longer reaches the 2.1 km skyline']) {
+for (const marker of ['0.2.43 two-layer textured skyline', '0.2.43 near-field HLOD budget', '0.2.43 nearby atmosphere/foliage shaft gate', 'camera far plane does not match the active graphics preset', '0.2.44 user graphics quality / foliage spatial grid', '0.2.44 foliage-rustle ambience']) {
   assert(mainScript.includes(marker), `Native smoke test is missing acceptance check: ${marker}`);
 }
+// 0.2.44: user graphics presets, build-time foliage spatial grid and
+// the foliage-rustle ambience gate must stay wired end to end.
+for (const marker of ['FOLIAGE_GRID_CELL_M', '_build_foliage_grid', 'foliage_spatial_grid_0244', 'set_quality_detail_scale', 'set_quality_shadow_distance', 'set_skyline_scale', '_quality_ranged_instances']) {
+  assert(worldScript.includes(marker), `0.2.44 world quality/grid marker is missing: ${marker}`);
+}
+for (const marker of ['graphics_quality', '_apply_graphics_quality', '"performance"', '"balanced"', '"beauty"', 'scaling_3d_scale']) {
+  assert(mainScript.includes(marker), `0.2.44 graphics-preset marker is missing: ${marker}`);
+}
+for (const marker of ['СКОРОСТЬ', 'БАЛАНС', 'КРАСОТА', 'graphics_quality']) {
+  assert(mainMenuScript.includes(marker), `0.2.44 settings UI marker is missing: ${marker}`);
+}
+for (const marker of ['set_quality', '_particle_budgets', 'quality_particle_scale']) {
+  assert(atmosphereFxScript.includes(marker), `0.2.44 atmosphere quality marker is missing: ${marker}`);
+}
+assert(vehicleAudioScript.includes('foliage_rustle.wav') && vehicleAudioScript.includes('foliage_rustle_ready_0244') && vehicleScript.includes('"foliage_density"'), '0.2.44 foliage rustle must be gated by the controller-sampled foliage density');
 for (const key of ['keystore/debug_password', 'keystore/release_password']) {
   const line = preset.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));
   assert(line === `${key}=""`, `${key} must stay empty in Git; CI supplies credentials by environment`);
@@ -107,7 +122,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.43"') && preset.includes('application/product_version="0.2.43"'), 'Desktop Windows version metadata must match native 0.2.43');
+assert(preset.includes('application/file_version="0.2.44"') && preset.includes('application/product_version="0.2.44"'), 'Desktop Windows version metadata must match native 0.2.44');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -753,6 +768,7 @@ const foleyAudioFiles = [
   'wind_loop.wav', 'road_asphalt.wav', 'road_sidewalk.wav', 'road_grass.wav',
   'road_sand.wav', 'whine_loop.wav', 'impact_soft.wav', 'impact_med.wav',
   'impact_hard.wav', 'suspension_thump.wav', 'shift_clunk.wav', 'scrape_loop.wav',
+  'foliage_rustle.wav',
 ];
 for (const name of foleyAudioFiles) {
   const source = `src/assets/audio/vehicle_foley/${name}`;
@@ -760,7 +776,7 @@ for (const name of foleyAudioFiles) {
   const bytes = await readFile(source);
   assert(info.size > 4_000, `${source} is unexpectedly small`);
   assert(bytes.subarray(0, 4).toString('utf8') === 'RIFF' && bytes.subarray(8, 12).toString('utf8') === 'WAVE', `${source} is not a real WAV`);
-  const expectedChannels = name === 'wind_loop.wav' ? 2 : 1;
+  const expectedChannels = (name === 'wind_loop.wav' || name === 'foliage_rustle.wav') ? 2 : 1;
   assert(bytes.readUInt16LE(22) === expectedChannels && bytes.readUInt32LE(24) === 32000 && bytes.readUInt16LE(34) === 16, `${source} must stay 32 kHz/16-bit (${expectedChannels}ch)`);
 }
 

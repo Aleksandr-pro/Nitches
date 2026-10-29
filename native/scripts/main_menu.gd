@@ -98,6 +98,7 @@ var _settings: Dictionary = {
     "wheel_size_multiplier": 1.0,
     "sound_enabled": true,
     "developer_mode": false,
+    "graphics_quality": "balanced",
     "camera_label": "ВИД СЗАДИ",
     "time_label": "ДЕНЬ",
 }
@@ -109,6 +110,8 @@ var _dead_zone_slider: HSlider
 var _wheel_size_slider: HSlider
 var _setting_value_labels: Dictionary = {}
 var _sound_toggle: Button
+var _graphics_buttons: Dictionary = {}
+var _graphics_note_label: Label
 var _camera_setting_button: Button
 var _time_setting_button: Button
 var _developer_status_label: Label
@@ -270,6 +273,7 @@ func get_smoke_state() -> Dictionary:
         "visible_now": is_menu_visible(),
         "world_map_button": _world_map_button != null,
         "settings_panel_0233": _sensitivity_slider != null and _dead_zone_slider != null and _wheel_size_slider != null,
+        "graphics_quality_0244": _graphics_buttons.size() == 3 and _graphics_note_label != null,
         "control_buttons": _control_buttons.size(),
         "settings_bound": _settings_bound,
         "version_button_created": _version_button != null,
@@ -1975,6 +1979,27 @@ func _build_settings_panel(parent: Node) -> Control:
         _emit_settings()
     )
     right.add_child(_sound_toggle)
+    _label(right, "Качество графики", 14, COL_MUTED)
+    var graphics_row := HBoxContainer.new()
+    graphics_row.add_theme_constant_override("separation", 8)
+    right.add_child(graphics_row)
+    var graphics_group := ButtonGroup.new()
+    for spec in [["performance", "СКОРОСТЬ"], ["balanced", "БАЛАНС"], ["beauty", "КРАСОТА"]]:
+        var quality_id := String(spec[0])
+        var quality_button := _button(String(spec[1]), COL_ACCENT, Vector2(0.0, 50.0), 15)
+        quality_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+        quality_button.toggle_mode = true
+        quality_button.button_group = graphics_group
+        quality_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        quality_button.pressed.connect(func() -> void:
+            _settings["graphics_quality"] = quality_id
+            _refresh_settings_controls()
+            _emit_settings()
+        )
+        graphics_row.add_child(quality_button)
+        _graphics_buttons[quality_id] = quality_button
+    _graphics_note_label = _label(right, "", MIN_FONT_SIZE, COL_MUTED)
+    _graphics_note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     var continue_button := _button("▶  ПРОДОЛЖИТЬ", COL_ACCENT, Vector2(0.0, 56.0), 18)
     continue_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     continue_button.pressed.connect(func() -> void: play_requested.emit())
@@ -1984,7 +2009,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.43-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.44-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2035,6 +2060,17 @@ func _refresh_settings_controls() -> void:
         _wheel_size_slider.value = float(_settings.get("wheel_size_multiplier", 1.0))
     if _sound_toggle != null:
         _sound_toggle.text = "ЗВУК: ВКЛ" if bool(_settings.get("sound_enabled", true)) else "ЗВУК: ВЫКЛ"
+    var graphics_quality := String(_settings.get("graphics_quality", "balanced"))
+    for key in _graphics_buttons.keys():
+        (_graphics_buttons[key] as Button).button_pressed = String(key) == graphics_quality
+    if _graphics_note_label != null:
+        match graphics_quality:
+            "performance":
+                _graphics_note_label.text = "СКОРОСТЬ: короче дальность детализации и теней, меньше частиц, масштаб рендера 80% — для слабых телефонов."
+            "beauty":
+                _graphics_note_label.text = "КРАСОТА: максимальная дальность детализации листвы и теней, полные атмосферные эффекты."
+            _:
+                _graphics_note_label.text = "БАЛАНС: стандартные дальность детализации, тени и атмосферные эффекты."
     if _camera_setting_button != null:
         _camera_setting_button.text = "КАМЕРА: %s" % String(_settings.get("camera_label", "ВИД СЗАДИ"))
     if _time_setting_button != null:

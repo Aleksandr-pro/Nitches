@@ -23,6 +23,12 @@ var _active := false
 var _headlights_enabled := false
 var _foliage_density := 0.0
 var _foliage_update_timer := 0.0
+# 0.2.44 user graphics quality: emitter budgets are recorded at
+# creation (full "beauty" counts) and rescaled by the active preset.
+var _particle_budgets: Array[Dictionary] = []
+var _quality_particle_scale := 1.0
+var _shafts_enabled := true
+var _bokeh_enabled := true
 
 
 func configure(vehicle: NativeVehicle, camera: Camera3D, world: NativeWorldBuilder) -> void:
@@ -36,7 +42,7 @@ func _ready() -> void:
 	var mobile := OS.has_feature("android")
 	_leaf_particles = _make_emitter(
 		"DriftingLeaves",
-		36 if mobile else 72,
+		72,
 		4.2,
 		Vector3(12.0, 2.7, 17.0),
 		Vector2(0.14, 0.42),
@@ -46,7 +52,7 @@ func _ready() -> void:
 	)
 	_petal_particles = _make_emitter(
 		"GoldenPetals",
-		16 if mobile else 28,
+		28,
 		3.4,
 		Vector3(10.0, 2.0, 15.0),
 		Vector2(0.10, 0.22),
@@ -56,7 +62,7 @@ func _ready() -> void:
 	)
 	_dust_particles = _make_emitter(
 		"RoadWakeDust",
-		28 if mobile else 48,
+		48,
 		1.55,
 		Vector3(3.6, 0.18, 4.8),
 		Vector2(0.12, 0.36),
@@ -68,6 +74,9 @@ func _ready() -> void:
 	_create_light_shafts()
 	_create_headlight_bokeh()
 	set_time_mode("day")
+	# Platform default ("balanced") until main applies the saved user
+	# preset: Android starts from the reduced mobile budgets.
+	set_quality(0.55 if mobile else 1.0, true, true)
 
 
 func _make_emitter(
@@ -132,6 +141,7 @@ func _make_emitter(
 	emitter.visibility_aabb = AABB(Vector3(-22.0, -5.0, -28.0), Vector3(44.0, 12.0, 56.0))
 	emitter.emitting = false
 	add_child(emitter)
+	_particle_budgets.append({"emitter": emitter, "full": particle_count})
 	return emitter
 
 
@@ -194,7 +204,7 @@ func set_time_mode(mode: String) -> void:
 		var tint := Color(1.0, 0.84, 0.62) if mode == "day" else Color(1.0, 0.56, 0.32)
 		_shaft_material.set_shader_parameter("shaft_tint", Vector3(tint.r, tint.g, tint.b))
 		var foliage_gate := smoothstep(0.04, 0.52, _foliage_density)
-		_shaft_material.set_shader_parameter("shaft_intensity", intensity * foliage_gate if _active else 0.0)
+		_shaft_material.set_shader_parameter("shaft_intensity", intensity * foliage_gate if _active and _shafts_enabled else 0.0)
 
 
 func set_headlights_enabled(enabled: bool) -> void:
@@ -218,6 +228,23 @@ func set_active(active: bool) -> void:
 				rect.modulate.a = 0.0
 
 
+## 0.2.44: apply the atmosphere side of the user's graphics preset.
+## Particle `amount` is the allocated budget; amount_ratio curves in
+## _process stay untouched, so presets change cost, not behaviour.
+func set_quality(particle_scale: float, shafts_enabled: bool, bokeh_enabled: bool) -> void:
+	_quality_particle_scale = clampf(particle_scale, 0.05, 1.5)
+	_shafts_enabled = shafts_enabled
+	_bokeh_enabled = bokeh_enabled
+	for budget in _particle_budgets:
+		var emitter := budget.get("emitter") as GPUParticles3D
+		if emitter != null and is_instance_valid(emitter):
+			emitter.amount = maxi(4, int(round(float(budget.get("full", 16)) * _quality_particle_scale)))
+	if _bokeh_layer != null:
+		_bokeh_layer.visible = bokeh_enabled
+	if not shafts_enabled and _shaft_material != null:
+		_shaft_material.set_shader_parameter("shaft_intensity", 0.0)
+
+
 func _update_foliage_shafts(delta: float) -> void:
 	_foliage_update_timer -= delta
 	if _foliage_update_timer <= 0.0 and _world != null and _vehicle != null:
@@ -227,11 +254,11 @@ func _update_foliage_shafts(delta: float) -> void:
 		return
 	var mode_intensity := 0.72 if _mode == "day" else (0.42 if _mode == "sunset" else 0.0)
 	var foliage_gate := smoothstep(0.04, 0.52, _foliage_density)
-	_shaft_material.set_shader_parameter("shaft_intensity", mode_intensity * foliage_gate)
+	_shaft_material.set_shader_parameter("shaft_intensity", mode_intensity * foliage_gate if _shafts_enabled else 0.0)
 
 
 func _update_headlight_bokeh() -> void:
-	if _camera == null or _vehicle == null or _bokeh_items.is_empty():
+	if not _bokeh_enabled or _camera == null or _vehicle == null or _bokeh_items.is_empty():
 		return
 	var viewport := _camera.get_viewport()
 	if viewport == null:
@@ -313,4 +340,8 @@ func get_state() -> Dictionary:
 		"headlight_bokeh": _bokeh_texture != null,
 		"headlight_glints_enabled": _headlights_enabled and _mode != "day",
 		"mobile_particle_budget": OS.has_feature("android"),
+		"graphics_quality_0244": true,
+		"quality_particle_scale": _quality_particle_scale,
+		"shafts_enabled": _shafts_enabled,
+		"bokeh_enabled": _bokeh_enabled,
 	}
