@@ -389,7 +389,7 @@ func _build_ui() -> void:
 	chip_box.add_child(_world_label)
 	_world_subtitle_label = _make_label("город • набережная • остров Паруса", 14, COL_MUTED, false)
 	chip_box.add_child(_world_subtitle_label)
-	var version_text := String(ProjectSettings.get_setting("application/config/version", "0.2.52-native-alpha"))
+	var version_text := String(ProjectSettings.get_setting("application/config/version", "0.2.53-native-alpha"))
 	_version_label = _make_label("v" + version_text.split("-")[0], 14, COL_MUTED, false)
 	chip_box.add_child(_version_label)
 

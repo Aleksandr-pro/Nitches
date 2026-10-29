@@ -407,6 +407,10 @@ func _finish_richtown_build() -> void:
 
 func _finish_desert_build() -> void:
 	_enhancement_stats["desert_world_0247"] = true
+	_enhancement_stats["desert_screenshot_audit_0253"] = true
+	_enhancement_stats["desert_rock_triplanar_0253"] = true
+	_enhancement_stats["desert_scatter_road_audit_0253"] = true
+	_enhancement_stats["desert_oasis_deck_0253"] = true
 	_enhancement_stats["near_field_lod_0243"] = true
 	_enhancement_stats["tree_detail_end_m"] = 105.0
 	_enhancement_stats["palm_detail_end_m"] = 130.0
@@ -1901,7 +1905,7 @@ func _terrain_material(kind: String) -> Material:
 				material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
 		"rock":
 			if _is_desert:
-				material = _material("terrain_red_rock_dz", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(1.0, 0.98, 0.95), 1.0, 0.0, Vector3.ONE, false, "dz_rock_red_roughness.jpg")
+				material = _material("terrain_red_rock_dz", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(0.96, 0.92, 0.86), 1.0, 0.0, Vector3(0.055, 0.055, 0.055), true, "dz_rock_red_roughness.jpg")
 			else:
 				material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
@@ -3566,11 +3570,11 @@ func _water_material() -> ShaderMaterial:
 	_sea_material.resource_name = "sea_surface_pbr"
 	_sea_material.shader = WaterSurfaceShader
 	_sea_material.set_shader_parameter("wave_time", _elapsed)
-	_sea_material.set_shader_parameter("wave_height", 0.62)
+	_sea_material.set_shader_parameter("wave_height", 0.16 if _is_desert else 0.62)
 	_sea_material.set_shader_parameter("wind_direction", Vector2(0.82, 0.57))
-	_sea_material.set_shader_parameter("foam_strength", 0.66)
-	_sea_material.set_shader_parameter("normal_strength", 0.78)
-	_sea_material.set_shader_parameter("reflection_strength", 0.82)
+	_sea_material.set_shader_parameter("foam_strength", 0.36 if _is_desert else 0.66)
+	_sea_material.set_shader_parameter("normal_strength", 0.50 if _is_desert else 0.78)
+	_sea_material.set_shader_parameter("reflection_strength", 0.88 if _is_desert else 0.82)
 	return _sea_material
 
 
@@ -10890,7 +10894,8 @@ func _build_desert_water() -> void:
 	lake_mesh.top_radius = lake_r + 12.0
 	lake_mesh.bottom_radius = lake_r + 12.0
 	lake_mesh.height = 0.24
-	lake_mesh.radial_segments = 40
+	lake_mesh.radial_segments = 72
+	lake_mesh.rings = 1
 	_mesh_instance(root, lake_mesh, _water_material(), make_transform(Vector3(lake_x, lake_y - 0.12, lake_z)), "OasisLake", false)
 	# Stream ribbon flowing into the lake from the west.
 	var stream: Array = _dz_data().get("stream", [])
@@ -10920,6 +10925,7 @@ func _build_desert_water() -> void:
 		if stream_mesh != null:
 			_mesh_instance(root, stream_mesh, _water_material(), Transform3D.IDENTITY, "OasisStream", false)
 	_enhancement_stats["desert_lake"] = true
+	_enhancement_stats["desert_lake_calm_0253"] = true
 
 
 # --- roads ------------------------------------------------------------------
@@ -11291,6 +11297,12 @@ func _dz_material(key: String) -> Material:
 			return _material("dz_rust", "rock.jpg", "", Color(0.50, 0.30, 0.20), 0.95)
 		"dz_rust_light":
 			return _material("dz_rust_light", "rock.jpg", "", Color(0.66, 0.47, 0.33), 0.95)
+		"dz_wreck_blue":
+			return _material("dz_wreck_blue", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.42, 0.55), 0.72, 0.25)
+		"dz_wreck_red":
+			return _material("dz_wreck_red", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.48, 0.22, 0.16), 0.72, 0.25)
+		"dz_wreck_cream":
+			return _material("dz_wreck_cream", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.55, 0.42), 0.75, 0.20)
 		"dz_concrete":
 			return _material("dz_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.70, 0.69, 0.66), 0.95)
 		"dz_tunnel_wall":
@@ -11507,7 +11519,7 @@ func _dz_flat_roof(mat_key: String, origin: Vector3, basis: Basis, y: float, w: 
 
 
 func _dz_building(origin: Vector3, basis: Basis, yaw: float, w: float, d: float, h: float, wall: String, roof: String, gable: bool, windows: bool = true) -> void:
-	_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.22, 0.0), Vector3(w + 0.5, 0.45, d + 0.5))
+	_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.02, 0.0), Vector3(w + 0.5, 0.85, d + 0.5))
 	_dz_lbox(wall, origin, basis, Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d))
 	if gable:
 		_dz_gable_roof(roof, origin, basis, h, w, d, maxf(1.1, d * 0.24))
@@ -11595,6 +11607,7 @@ func _build_desert_structures() -> void:
 	var structures: Array = dz.get("structures", [])
 	for s_variant in structures:
 		_dz_structure(anim_root, s_variant)
+	var pipe_road_gaps_0253 := 0
 	for pipe_variant in dz.get("pipes", []):
 		var pipe: Array = pipe_variant
 		if pipe.size() < 4:
@@ -11607,8 +11620,15 @@ func _build_desert_structures() -> void:
 			var t := float(si) / float(steps)
 			var p := a.lerp(b, t)
 			var top := Vector3(p.x, height_at(p.x, p.z) + 1.15, p.z)
+			var pipe_mid3 := (prev + top) * 0.5
+			var pipe_clear := minf(_road_clearance_xz(prev), minf(_road_clearance_xz(top), _road_clearance_xz(pipe_mid3)))
+			if pipe_clear < 0.25:
+				pipe_road_gaps_0253 += 1
+				prev = top
+				continue
 			_dz_pipe_beam("dz_rust_light", prev, top, 0.30)
-			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
+			if _road_clearance_xz(top) >= 0.45:
+				_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
 			var pipe_flat := Vector2(top.x - prev.x, top.z - prev.z)
 			var pipe_len := pipe_flat.length()
 			if pipe_len > 0.5:
@@ -11647,14 +11667,19 @@ func _build_desert_structures() -> void:
 			var top_off := 11.2 if absf(off) > 0.01 else 11.6
 			var a3 := Vector3(va.x + perp.x * off, height_at(va.x, va.y) + top_off, va.y + perp.y * off)
 			var b3 := Vector3(vb.x + perp.x * off, height_at(vb.x, vb.y) + top_off, vb.y + perp.y * off)
-			var mid3 := (a3 + b3) * 0.5
-			mid3.y -= dist * 0.03 + 0.5
-			_dz_beam("dz_metal_dark", a3, mid3, 0.05, 0.05)
-			_dz_beam("dz_metal_dark", mid3, b3, 0.05, 0.05)
+			var wire_prev := a3
+			for wi in range(1, 4):
+				var wt := float(wi) / 4.0
+				var wp := a3.lerp(b3, wt)
+				wp.y -= sin(wt * PI) * (dist * 0.03 + 0.5)
+				_dz_beam("dz_metal_dark", wire_prev, wp, 0.075, 0.075)
+				wire_prev = wp
+			_dz_beam("dz_metal_dark", wire_prev, b3, 0.075, 0.075)
 	var merged := _dz_flush_merge(root)
 	_enhancement_stats["desert_structures"] = structures.size()
 	_enhancement_stats["desert_merged_chunks"] = merged
 	_enhancement_stats["desert_poles"] = line.size()
+	_enhancement_stats["desert_pipe_road_gaps_0253"] = pipe_road_gaps_0253
 
 
 func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
@@ -11675,6 +11700,8 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 		var steps := int(Vector2(x2 - x, z2 - z).length() / 22.0)
 		for ci in range(1, maxi(steps, 1)):
 			var p := a.lerp(b, float(ci) / float(maxi(steps, 1)))
+			if _road_clearance_xz(p) < 1.0:
+				continue
 			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.3, p.z), p + Vector3(0, -0.3, 0), 0.35, 0.35)
 			var support_ground := height_at(p.x, p.z) - 0.3
 			var support_h := maxf(p.y - 0.3 - support_ground, 1.0)
@@ -12003,16 +12030,23 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			for sx in [-1.4, 1.4]:
 				_add_cylinder_collider(o + basis * Vector3(sx, 1.3, 0.0), 0.16, 2.6)
 		"car_wreck":
-			var wm: String = ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
+			var wm: String = ["dz_wreck_blue", "dz_wreck_cream", "dz_wreck_red"][hash_pick]
 			var roll := 0.10 if hash_pick == 1 else 0.0
-			_dz_lbox(wm, o, basis, Vector3(0.0, 0.62, 0.0), Vector3(1.85, 0.62, 4.5), 0.0, 0.0, roll)
-			_dz_lbox(wm, o, basis, Vector3(0.0, 1.22, 0.25), Vector3(1.65, 0.6, 2.2), 0.0, 0.0, roll)
-			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 1.24, 0.25), Vector3(1.7, 0.5, 2.0), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.58, 0.0), Vector3(1.82, 0.58, 4.35), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.78, -1.85), Vector3(1.70, 0.28, 1.05), 0.0, -0.16, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.80, 1.82), Vector3(1.72, 0.30, 1.00), 0.0, 0.12, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 1.06, 0.18), Vector3(1.58, 0.50, 2.05), 0.0, 0.0, roll)
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 1.10, 0.18), Vector3(1.62, 0.30, 1.82), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 1.34, 0.18), Vector3(1.48, 0.10, 1.75), 0.0, 0.0, roll)
+			_dz_lbox("dz_rust", o, basis, Vector3(0.45, 0.48, -0.9), Vector3(0.55, 0.18, 1.0), 0.0, 0.0, roll)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.42, -2.23), Vector3(1.86, 0.22, 0.16), 0.0, 0.0, roll)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.42, 2.23), Vector3(1.86, 0.22, 0.16), 0.0, 0.0, roll)
 			for sx in [-1.0, 1.0]:
 				for wz in [-1.45, 1.45]:
 					if hash_pick == 0 and wz > 0.0 and sx > 0.0:
 						continue
 					_dz_lcyl("dz_metal_dark", o, basis, Vector3(sx * 0.82, 0.34, wz), 0.34, 0.22, 0.0, 0.0, PI * 0.5, 1.0, 10)
+					_dz_lcyl("dz_metal", o, basis, Vector3(sx * 0.82, 0.34, wz), 0.16, 0.24, 0.0, 0.0, PI * 0.5, 1.0, 10)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 0.8, 0.0), Vector3(1.9, 1.6, 4.5))
 		"salt_gate":
 			for sx in [-1.0, 1.0]:
@@ -12034,22 +12068,24 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_dirt", o, basis, Vector3(0.0, 0.05, 0.0), Vector3(w + 0.6, 0.1, d + 0.6))
 			_dz_collider(o, basis, yaw, Vector3(0.0, h * 0.4, 0.0), Vector3(w * 0.8, h * 0.8, d * 0.85))
 		"pier":
-			var plen := maxf(d, 12.0)
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 1.15, -plen * 0.5), Vector3(2.6, 0.18, plen))
-			_dz_collider(o, basis, yaw, Vector3(0.0, 1.02, -plen * 0.5), Vector3(2.6, 0.4, plen))
+			var plen := maxf(maxf(w, d), 12.0)
+			var pier_lake: Dictionary = _dz_data().get("lake", {})
+			var pier_deck_y := maxf(1.15, _f(pier_lake, "y", gy + 1.15) - gy + 0.55)
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, pier_deck_y, -plen * 0.5), Vector3(2.6, 0.18, plen))
+			_dz_collider(o, basis, yaw, Vector3(0.0, pier_deck_y - 0.13, -plen * 0.5), Vector3(2.6, 0.4, plen))
 			var psteps := int(plen / 3.5)
 			for pi in range(psteps + 1):
 				for sx in [-1.1, 1.1]:
-					_dz_lcyl("dz_wood_dark", o, basis, Vector3(sx, 0.2, -1.0 - float(pi) * 3.5), 0.09, 2.0)
+					_dz_lcyl("dz_wood_dark", o, basis, Vector3(sx, pier_deck_y * 0.5 - 0.45, -1.0 - float(pi) * 3.5), 0.09, pier_deck_y + 1.3)
 		"billboard":
 			for sx in [-1.0, 1.0]:
-				_dz_lcyl("dz_pole", o, basis, Vector3(sx * w * 0.3, 3.0, 0.35), 0.14, 6.0)
+				_dz_lcyl("dz_pole", o, basis, Vector3(sx * w * 0.3, 2.85, 0.35), 0.14, 6.5)
 				_add_cylinder_collider(o + basis * Vector3(sx * w * 0.3, 1.4, 0.35), 0.2, 2.8)
 			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, h - 1.35, 0.12), Vector3(w + 0.25, 2.9, 0.14))
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, -0.02), Vector3(w, 2.6, 0.1))
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, 0.26), Vector3(w, 2.6, 0.1))
 		"sign", "sign_smash":
-			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.42, 0.0), 0.06, h * 0.85, 0.0, 0.0, 0.0, 1.0, 8)
+			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.38, 0.0), 0.06, h * 0.95, 0.0, 0.0, 0.0, 1.0, 8)
 			var sm := "dz_sign_red" if kind == "sign_smash" else ("dz_sign_blue" if hash_pick != 1 else "dz_sign_cream")
 			_dz_lbox(sm, o, basis, Vector3(0.0, h * 0.9, 0.0), Vector3(1.15, 0.85, 0.07))
 			_dz_lbox("dz_white", o, basis, Vector3(0.0, h * 0.9, -0.05), Vector3(0.85, 0.24, 0.03))
@@ -12163,10 +12199,13 @@ func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
 		var noise := 0.55 * sin(p.x * 3.1 + ph) * sin(p.y * 2.7 + ph * 1.3) * sin(p.z * 3.4 - ph)
 		noise += 0.30 * sin(p.x * 6.3 - ph * 0.7) * sin(p.y * 5.1 + ph) * sin(p.z * 5.7 + ph * 0.5)
 		noise += 0.15 * sin(p.x * 11.0 + ph * 2.1) * sin(p.y * 9.3 - ph * 0.4) * sin(p.z * 9.0 - ph)
-		var r := clampf(1.0 + noise * 0.30, 0.64, 1.30)
-		var y := p.y * 0.76 * r
-		if y < -0.30:
-			y = -0.30 + (y + 0.30) * 0.22
+		var ridge := 1.0 - absf(sin(p.x * 4.7 + ph * 0.8) * sin(p.z * 4.1 - ph))
+		noise -= ridge * 0.18
+		noise += (_hash01(int((p.x + 0.5) * 14.0) + seed_i * 23, int((p.y + 0.5) * 17.0) + int((p.z + 0.5) * 19.0)) - 0.5) * 0.16
+		var r := clampf(1.0 + noise * 0.36, 0.56, 1.38)
+		var y := p.y * 0.70 * r
+		if y < -0.34:
+			y = -0.34 + (y + 0.34) * 0.22
 		displaced[i] = Vector3(p.x * r * stretch_x, y, p.z * r * stretch_z)
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
@@ -12260,34 +12299,37 @@ func _build_desert_scatter() -> void:
 	var torus := _dz_unit_torus()
 	# 0.2.50: dedicated PBR materials for the hero scatter kinds.
 	# The shared vertex-colour material still serves shrubs/bones.
-	var cactus_mat := _material("dz_cactus_skin_mat", "dz_cactus_skin.jpg", "dz_cactus_skin_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3(1.0, 2.0, 1.0), false, "dz_cactus_skin_roughness.jpg")
-	var rock_mat := _material("dz_rock_red_mat", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3(0.22, 0.22, 0.22), true, "dz_rock_red_roughness.jpg")
+	var cactus_mat := _material("dz_cactus_skin_mat", "dz_cactus_skin.jpg", "dz_cactus_skin_normal.jpg", Color(0.86, 0.94, 0.84), 1.0, 0.0, Vector3(1.0, 2.0, 1.0), false, "dz_cactus_skin_roughness.jpg")
+	var rock_mat := _material("dz_rock_red_mat", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(0.90, 0.85, 0.78), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "dz_rock_red_roughness.jpg")
 	rock_mat.vertex_color_use_as_albedo = true
-	var pile_mat := _material("dz_gravel_pile_mat", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.97), 1.0, 0.0, Vector3(0.35, 0.35, 0.35), true, "dz_trail_gravel_roughness.jpg")
+	var pile_mat := _material("dz_gravel_pile_mat", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(0.84, 0.80, 0.74), 1.0, 0.0, Vector3(0.35, 0.35, 0.35), true, "dz_trail_gravel_roughness.jpg")
 	pile_mat.vertex_color_use_as_albedo = true
 	var saguaro_meshes: Array = [_dz_saguaro_mesh(0), _dz_saguaro_mesh(1), _dz_saguaro_mesh(2)]
 	var barrel_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.30, 0.46, 0.22)),
-		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.92, 0.52, 0.16)),
+		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.15, 0.27, 0.12)),
+		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.55, 0.27, 0.07)),
 	])
 	var prickly_parts: Array = []
 	for pi in range(5):
 		var ang := TAU * float(pi) / 5.0
-		prickly_parts.append(_dz_scatter_part(sph, Vector3(cos(ang) * 0.42, 0.34, sin(ang) * 0.42), Vector3(0.55, 0.72, 0.15), Color(0.27, 0.47, 0.23), -ang, 0.0, 0.24))
-	prickly_parts.append(_dz_scatter_part(sph, Vector3(0, 0.3, 0), Vector3(0.5, 0.62, 0.15), Color(0.27, 0.47, 0.23), 0.4))
+		prickly_parts.append(_dz_scatter_part(sph, Vector3(cos(ang) * 0.42, 0.34, sin(ang) * 0.42), Vector3(0.55, 0.72, 0.15), Color(0.14, 0.27, 0.12), -ang, 0.0, 0.24))
+	prickly_parts.append(_dz_scatter_part(sph, Vector3(0, 0.3, 0), Vector3(0.5, 0.62, 0.15), Color(0.14, 0.27, 0.12), 0.4))
 	var prickly_mesh := _dz_scatter_mesh(prickly_parts)
 	var shrub_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(1.25, 0.85, 1.25), Color(0.36, 0.40, 0.27)),
-		_dz_scatter_part(sph, Vector3(0.5, 0.62, 0.22), Vector3(0.8, 0.62, 0.8), Color(0.41, 0.44, 0.30)),
-		_dz_scatter_part(sph, Vector3(-0.48, 0.55, -0.3), Vector3(0.7, 0.55, 0.7), Color(0.33, 0.37, 0.25)),
+		_dz_scatter_part(cyl7, Vector3(0, 0.25, 0), Vector3(0.16, 0.5, 0.16), Color(0.16, 0.10, 0.05), 0.0, 0.0, 0.15),
+		_dz_scatter_part(sph, Vector3(0, 0.38, 0), Vector3(1.30, 0.70, 1.20), Color(0.075, 0.105, 0.045)),
+		_dz_scatter_part(sph, Vector3(0.52, 0.55, 0.22), Vector3(0.82, 0.52, 0.76), Color(0.10, 0.13, 0.055)),
+		_dz_scatter_part(sph, Vector3(-0.52, 0.48, -0.28), Vector3(0.74, 0.46, 0.70), Color(0.065, 0.095, 0.040)),
+		_dz_scatter_part(sph, Vector3(-0.18, 0.66, 0.40), Vector3(0.62, 0.40, 0.58), Color(0.16, 0.125, 0.065)),
+		_dz_scatter_part(sph, Vector3(0.30, 0.30, -0.52), Vector3(0.66, 0.42, 0.60), Color(0.085, 0.11, 0.048)),
 	])
 	var dead_tree_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.8, 0), Vector3(0.5, 3.6, 0.5), Color(0.45, 0.36, 0.27), 0.0, 0.0, 0.07),
-		_dz_scatter_part(cyl7, Vector3(0.75, 3.2, 0.1), Vector3(0.2, 1.9, 0.2), Color(0.45, 0.36, 0.27), 0.0, 0.0, -0.85),
-		_dz_scatter_part(cyl7, Vector3(-0.65, 2.8, -0.2), Vector3(0.17, 1.6, 0.17), Color(0.48, 0.39, 0.29), 0.0, 0.35, 0.9),
-		_dz_scatter_part(cyl7, Vector3(0.15, 3.9, -0.6), Vector3(0.14, 1.4, 0.14), Color(0.48, 0.39, 0.29), 0.0, 0.8, 0.2),
+		_dz_scatter_part(cyl7, Vector3(0, 1.8, 0), Vector3(0.5, 3.6, 0.5), Color(0.20, 0.14, 0.09), 0.0, 0.0, 0.07),
+		_dz_scatter_part(cyl7, Vector3(0.75, 3.2, 0.1), Vector3(0.2, 1.9, 0.2), Color(0.20, 0.14, 0.09), 0.0, 0.0, -0.85),
+		_dz_scatter_part(cyl7, Vector3(-0.65, 2.8, -0.2), Vector3(0.17, 1.6, 0.17), Color(0.23, 0.16, 0.10), 0.0, 0.35, 0.9),
+		_dz_scatter_part(cyl7, Vector3(0.15, 3.9, -0.6), Vector3(0.14, 1.4, 0.14), Color(0.23, 0.16, 0.10), 0.0, 0.8, 0.2),
 	])
-	var bone_color := Color(0.84, 0.79, 0.68)
+	var bone_color := Color(0.48, 0.42, 0.32)
 	var bones_mesh := _dz_scatter_mesh([
 		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0.28, 0), Vector3(0.22, 0.22, 2.2), bone_color),
 		_dz_scatter_part(torus, Vector3(0, 0.32, -0.55), Vector3(1.15, 1.3, 1.15), bone_color, 0.0, PI * 0.5, 0.0),
@@ -12296,35 +12338,37 @@ func _build_desert_scatter() -> void:
 		_dz_scatter_part(sph, Vector3(0.35, 0.22, -1.45), Vector3(0.55, 0.45, 0.8), bone_color, 0.4),
 	])
 	var tumble_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.9, 0.9, 0.9), Color(0.60, 0.49, 0.32)),
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.85, 0.85, 0.85), Color(0.56, 0.45, 0.30), 0.0, PI * 0.5, 0.0),
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.8, 0.8, 0.8), Color(0.64, 0.53, 0.35), 0.7, PI * 0.25, 0.5),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.9, 0.9, 0.9), Color(0.30, 0.22, 0.12)),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.85, 0.85, 0.85), Color(0.27, 0.20, 0.11), 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.8, 0.8, 0.8), Color(0.33, 0.24, 0.13), 0.7, PI * 0.25, 0.5),
 	])
 	var reed_parts: Array = []
 	for ri in range(6):
 		var rang := TAU * float(ri) / 6.0
-		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.8, sin(rang) * 0.3), Vector3(0.06, 1.7, 0.06), Color(0.34, 0.50, 0.24), 0.0, cos(rang) * 0.14, sin(rang) * 0.14))
+		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.72, sin(rang) * 0.3), Vector3(0.085, 1.5, 0.085), Color(0.14, 0.24, 0.09), 0.0, cos(rang) * 0.18, sin(rang) * 0.18))
+		if ri % 2 == 0:
+			reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.38, 1.48, sin(rang) * 0.38), Vector3(0.09, 0.34, 0.09), Color(0.24, 0.15, 0.07), 0.0, cos(rang) * 0.18, sin(rang) * 0.18))
 	var reed_mesh := _dz_scatter_mesh(reed_parts)
 	var pile_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl11, Vector3(0, 1.45, 0), Vector3(6.2, 2.9, 6.2), Color(0.95, 0.92, 0.88)),
-		_dz_scatter_part(cyl11, Vector3(3.4, 0.8, 1.6), Vector3(3.4, 1.6, 3.4), Color(0.87, 0.85, 0.81)),
+		_dz_scatter_part(cyl11, Vector3(0, 1.10, 0), Vector3(6.2, 2.2, 6.2), Color(0.72, 0.68, 0.62)),
+		_dz_scatter_part(cyl11, Vector3(3.4, 0.62, 1.6), Vector3(3.4, 1.25, 3.4), Color(0.64, 0.60, 0.55)),
 	])
-	var rock_small_meshes: Array = [_dz_rock_mesh(11, Color(0.93, 0.89, 0.83)), _dz_rock_mesh(12, Color(0.90, 0.86, 0.81)), _dz_rock_mesh(13, Color(0.95, 0.90, 0.84))]
-	var rock_medium_meshes: Array = [_dz_rock_mesh(21, Color(0.96, 0.90, 0.83)), _dz_rock_mesh(22, Color(0.93, 0.88, 0.82)), _dz_rock_mesh(23, Color(0.98, 0.92, 0.85))]
-	var rock_large_meshes: Array = [_dz_rock_mesh(31, Color(1.0, 0.94, 0.87)), _dz_rock_mesh(32, Color(0.97, 0.91, 0.84)), _dz_rock_mesh(33, Color(1.0, 0.96, 0.89))]
+	var rock_small_meshes: Array = [_dz_rock_mesh(11, Color(0.78, 0.72, 0.64)), _dz_rock_mesh(12, Color(0.74, 0.68, 0.60)), _dz_rock_mesh(13, Color(0.82, 0.75, 0.66))]
+	var rock_medium_meshes: Array = [_dz_rock_mesh(21, Color(0.84, 0.76, 0.66)), _dz_rock_mesh(22, Color(0.80, 0.73, 0.63)), _dz_rock_mesh(23, Color(0.86, 0.78, 0.68))]
+	var rock_large_meshes: Array = [_dz_rock_mesh(31, Color(0.88, 0.80, 0.69)), _dz_rock_mesh(32, Color(0.85, 0.77, 0.66)), _dz_rock_mesh(33, Color(0.90, 0.82, 0.71))]
 
 	var cfg := {
-		"cactus_saguaro": {"meshes": saguaro_meshes, "material": cactus_mat, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
+		"cactus_saguaro": {"meshes": saguaro_meshes, "material": cactus_mat, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.10, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
 		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.34, "collider_h": 0.8},
 		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.38, "collider_h": 0.6},
-		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.06, "foliage": true},
-		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
-		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
-		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.30, "collider_r": 1.35, "collider_h": 2.4},
+		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.14, "foliage": true},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.16},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
 		"dead_tree": {"mesh": dead_tree_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
 		"bones": {"mesh": bones_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.04},
 		"tumbleweed": {"mesh": tumble_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.03},
-		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.30},
+		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.18},
 		"gravel_pile": {"mesh": pile_mesh, "material": pile_mat, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
@@ -12408,10 +12452,10 @@ func _build_desert_scatter() -> void:
 func _dz_banner(root: Node3D, pos: Vector3, yaw: float, mat_key: String) -> void:
 	var basis := Basis(Vector3.UP, yaw)
 	for sx in [-1.0, 1.0]:
-		_dz_lcyl("dz_pole", pos, basis, Vector3(sx * 5.4, 3.1, 0.0), 0.13, 6.2)
+		_dz_lcyl("dz_pole", pos, basis, Vector3(sx * 5.4, 3.5, 0.0), 0.13, 7.0)
 		_add_cylinder_collider(pos + basis * Vector3(sx * 5.4, 1.5, 0.0), 0.2, 3.0)
-	_dz_lbox(mat_key, pos, basis, Vector3(0.0, 6.0, 0.0), Vector3(11.4, 1.15, 0.16))
-	_dz_lbox("dz_white", pos, basis, Vector3(0.0, 6.0, -0.1), Vector3(6.4, 0.5, 0.06))
+	_dz_lbox(mat_key, pos, basis, Vector3(0.0, 6.6, 0.0), Vector3(11.4, 0.95, 0.16))
+	_dz_lbox("dz_white", pos, basis, Vector3(0.0, 6.6, -0.1), Vector3(6.4, 0.5, 0.06))
 
 
 func _build_desert_game_markers() -> void:
@@ -12420,14 +12464,14 @@ func _build_desert_game_markers() -> void:
 	add_child(root)
 	var game: Dictionary = _dz_data().get("game", {})
 	var ring_mat := StandardMaterial3D.new()
-	ring_mat.albedo_color = Color(1.0, 0.55, 0.12, 0.38)
+	ring_mat.albedo_color = Color(1.0, 0.55, 0.12, 0.20)
 	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	ring_mat.no_depth_test = false
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 3.3
-	ring_mesh.outer_radius = 3.95
+	ring_mesh.inner_radius = 3.0
+	ring_mesh.outer_radius = 3.42
 	ring_mesh.rings = 26
 	ring_mesh.ring_segments = 8
 	var ring_count := 0
@@ -12459,9 +12503,14 @@ func _build_desert_game_markers() -> void:
 					if route_dir.length_squared() < 0.01:
 						route_dir = Vector2.RIGHT
 					var ring_yaw := atan2(-route_dir.x, -route_dir.y)
-					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 1.15)
-					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 5.6, v.y)), "RaceRing", false)
+					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 0.92)
+					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 3.35, v.y)), "RaceRing", false)
 					ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					ring.visibility_range_begin = 14.0
+					ring.visibility_range_begin_margin = 8.0
+					ring.visibility_range_end = 340.0
+					ring.visibility_range_end_margin = 60.0
+					ring.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 					ring_count += 1
 					acc = 0.0
 					if points.size() >= 2 and (is_first or is_last):
@@ -12523,6 +12572,7 @@ func _build_desert_game_markers() -> void:
 		_dz_lbox("dz_dirt", origin, basis, Vector3(1.3, 0.3, 0.8), Vector3(1.6, 0.5, 1.4))
 	var merged := _dz_flush_merge(root)
 	_enhancement_stats["desert_race_rings"] = ring_count
+	_enhancement_stats["desert_race_rings_subtle_0253"] = true
 	_enhancement_stats["desert_banners"] = banner_count
 	_enhancement_stats["desert_game_merged_chunks"] = merged
 
