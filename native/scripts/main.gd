@@ -112,7 +112,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args() + OS.get_cmdline_args():
 		if String(arg).begins_with("--native-world="):
 			var wanted := String(arg).trim_prefix("--native-world=")
-			if wanted == "richtown" or wanted == "desert":
+			if wanted == "richtown" or wanted == "desert" or wanted == "greenforest":
 				_selected_world_id = wanted
 	_ensure_loading_screen()
 	if _smoke_mode or _screenshot_mode:
@@ -364,7 +364,7 @@ func _sanitize_settings(source: Dictionary) -> Dictionary:
 		graphics_quality = "balanced"
 	result["graphics_quality"] = graphics_quality
 	var selected_world := String(result.get("selected_world", "richtown"))
-	if selected_world != "richtown" and selected_world != "desert":
+	if selected_world != "richtown" and selected_world != "desert" and selected_world != "greenforest":
 		selected_world = "richtown"
 	result["selected_world"] = selected_world
 	return result
@@ -1798,6 +1798,10 @@ func _run_smoke_checks() -> void:
 		_run_desert_smoke_checks(failures)
 		_finish_smoke(failures)
 		return
+	if _selected_world_id == "greenforest":
+		_run_forest_smoke_checks(failures)
+		_finish_smoke(failures)
+		return
 
 	var stats := _world.get_stats()
 	var world_data := _world.get_world_data()
@@ -2271,6 +2275,8 @@ func _run_screenshot_tour() -> void:
 	]
 	if _selected_world_id == "desert":
 		shots = _desert_screenshot_shots()
+	elif _selected_world_id == "greenforest":
+		shots = _forest_screenshot_shots()
 
 	# Warm-up: import/runtime LOD, reflection probes and visibility
 	# ranges all settle over the first rendered frames.
@@ -2389,7 +2395,7 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 ## first, rebinds every system that cached a world reference and only
 ## then frees the old one, so the car never points at a dead world.
 func switch_world(world_id: String) -> void:
-	if world_id != "richtown" and world_id != "desert":
+	if world_id != "richtown" and world_id != "desert" and world_id != "greenforest":
 		return
 	if world_id == _selected_world_id and _world != null:
 		return
@@ -2610,4 +2616,174 @@ func _desert_screenshot_shots() -> Array[Dictionary]:
 			"camera": Vector3(2000.0, 650.0, 150.0), "target": Vector3(2000.0, 0.0, 2300.0),
 		},
 		{"name": "d14_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
+	]
+
+
+## 0.2.54 GreenForest smoke gate: own strict checklist against the
+## forest spec (docs/GREENFOREST_MAP.md), mirroring the desert gate.
+func _run_forest_smoke_checks(failures: Array[String]) -> void:
+	if not _world.has_world_data() or _world.get_world_data().is_empty():
+		failures.append("forest world data is empty: %s" % _world.build_error)
+		return
+	var world_data := _world.get_world_data()
+	var terrain: Dictionary = world_data.get("terrain", {})
+	if (terrain.get("heights", []) as Array).size() != 251001:
+		failures.append("forest terrain heights are incomplete")
+	if (world_data.get("roads", []) as Array).size() < 35:
+		failures.append("forest road network is incomplete")
+	var data_stats: Dictionary = world_data.get("stats", {})
+	if float(data_stats.get("roadLengthKm", 0.0)) < 50.0:
+		failures.append("forest road length is below the 50 km floor: %s" % str(data_stats))
+	if int(data_stats.get("scatterInstances", 0)) < 90000:
+		failures.append("forest data scatter is below budget: %s" % str(data_stats))
+	var es := _world.get_enhancement_stats()
+	if not bool(es.get("greenforest_world_0254", false)):
+		failures.append("forest build flag is missing: %s" % str(es))
+	if int(es.get("forest_scatter", 0)) < 90000:
+		failures.append("forest built scatter is below budget: %s" % str(es))
+	if int(es.get("forest_trees", 0)) < 35000:
+		failures.append("forest tree count is below budget: %s" % str(es))
+	if int(es.get("desert_structures", 0)) < 380:
+		failures.append("forest structures are incomplete: %s" % str(es))
+	if int(es.get("forest_terrain_chunks", 0)) < 100:
+		failures.append("forest terrain chunks are missing: %s" % str(es))
+	if int(es.get("reflection_probes", 0)) < 6:
+		failures.append("forest reflection probes are incomplete: %s" % str(es))
+	if int(es.get("road_markings", 0)) < 800:
+		failures.append("forest road markings are incomplete: %s" % str(es))
+	if int(es.get("desert_bridges", 0)) < 8 or int(es.get("forest_tunnels_built", 0)) != 2 or not bool(es.get("forest_lake", false)):
+		failures.append("forest bridges/tunnels/lake are incomplete: %s" % str(es))
+	if int(es.get("forest_river_segments", 0)) < 100:
+		failures.append("forest river ribbons are incomplete: %s" % str(es))
+	if int(es.get("skyline_layers", 0)) < 1 or not bool(es.get("forest_skyline_0254", false)):
+		failures.append("forest far-ridge skyline is incomplete: %s" % str(es))
+	if int(es.get("desert_road_deck_colliders", 0)) < 2500:
+		failures.append("forest physical road deck is incomplete: %s" % str(es))
+	if int(es.get("forest_deer", 0)) < 25 or int(es.get("forest_bird_flocks", 0)) != 3 or int(es.get("forest_smoke_points", 0)) < 4:
+		failures.append("forest living details are incomplete: %s" % str(es))
+	if int(es.get("desert_race_rings", 0)) < 40:
+		failures.append("forest race rings are incomplete: %s" % str(es))
+	var forest_smoke: Dictionary = world_data.get("forest", {})
+	var game_smoke: Dictionary = forest_smoke.get("game", {})
+	if (game_smoke.get("circuits", []) as Array).size() != 4 or (game_smoke.get("sprints", []) as Array).size() != 3 or (game_smoke.get("drags", []) as Array).size() != 2 or (game_smoke.get("jumps", []) as Array).size() != 12:
+		failures.append("forest race content is incomplete: %s" % str(game_smoke.keys()))
+	if (world_data.get("landmarks", []) as Array).size() < 25:
+		failures.append("forest landmarks are incomplete")
+	# The dam deck must stay above lake level across the open water.
+	var lake_smoke: Dictionary = forest_smoke.get("lake", {})
+	var lake_y_smoke := float(lake_smoke.get("y", 14.0))
+	var dam_ok := false
+	for road_variant2 in world_data.get("roads", []):
+		var road2: Dictionary = road_variant2
+		if String(road2.get("id", "")) != "gf-dam_road":
+			continue
+		var min_deck_y := 1e9
+		for sample_variant2 in road2.get("samples", []):
+			var sample2: Array = sample_variant2
+			var ndx := (float(sample2[0]) - float(lake_smoke.get("x", 3050.0))) / float(lake_smoke.get("rx", 450.0))
+			var ndz := (float(sample2[2]) - float(lake_smoke.get("z", 2200.0))) / float(lake_smoke.get("rz", 400.0))
+			if Vector2(ndx, ndz).length() < 0.92:
+				min_deck_y = minf(min_deck_y, float(sample2[1]))
+		dam_ok = min_deck_y > lake_y_smoke + 0.4
+	if not dam_ok:
+		failures.append("forest dam deck is not above lake level")
+	var meadow_surface := _world.get_surface_at(Vector3(1900.0, _world.height_at(1900.0, 1900.0) + 0.5, 1900.0))
+	if String(meadow_surface.get("kind", "")) != "grass":
+		failures.append("meadow surface is misclassified: %s" % str(meadow_surface))
+	var floor_surface := _world.get_surface_at(Vector3(400.0, _world.height_at(400.0, 2400.0) + 0.5, 2400.0))
+	if String(floor_surface.get("kind", "")) != "forest_floor":
+		failures.append("dark-forest floor surface is misclassified: %s" % str(floor_surface))
+	var mud_surface := _world.get_surface_at(Vector3(1250.0, _world.height_at(1250.0, 2750.0) + 0.5, 2750.0))
+	if String(mud_surface.get("kind", "")) != "mud":
+		failures.append("swamp mud surface is misclassified: %s" % str(mud_surface))
+	var field_surface := _world.get_surface_at(Vector3(1900.0, _world.height_at(1900.0, 3480.0) + 0.5, 3480.0))
+	if String(field_surface.get("kind", "")) != "field":
+		failures.append("field surface is misclassified: %s" % str(field_surface))
+	var found_gravel := false
+	for road_variant in world_data.get("roads", []):
+		var road: Dictionary = road_variant
+		if String(road.get("surface", "asphalt")) != "gravel":
+			continue
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 3:
+			continue
+		var sample: Array = samples[samples.size() / 2]
+		var road_surface := _world.get_surface_at(Vector3(float(sample[0]), float(sample[1]) + 0.5, float(sample[2])))
+		if String(road_surface.get("kind", "")) == "gravel":
+			found_gravel = true
+			break
+	if not found_gravel:
+		failures.append("no forest dirt road classifies as gravel surface")
+	var spawn_surface := _world.get_surface_at(_world.spawn_transform.origin + Vector3(0.0, 0.5, 0.0))
+	if String(spawn_surface.get("kind", "")) != "asphalt":
+		failures.append("forest spawn is not on asphalt: %s" % str(spawn_surface))
+	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
+	if not bool(atmosphere_state.get("ready", false)):
+		failures.append("atmosphere is not ready in forest: %s" % str(atmosphere_state))
+	var vehicle_effect_state := _vehicle.get_effect_state()
+	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)):
+		failures.append("vehicle effects/audio incomplete in forest: %s" % str(vehicle_effect_state))
+
+
+func _forest_screenshot_shots() -> Array[Dictionary]:
+	return [
+		{
+			"name": "01_spawn_gameplay", "time": "day", "hud": true,
+			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
+		},
+		{
+			"name": "f02_village_main", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(3580.0, 0.0, 2150.0),
+			"camera": Vector3(3450.0, 26.0, 1980.0), "target": Vector3(3620.0, 18.0, 2150.0),
+		},
+		{
+			"name": "f03_lake_dam", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(3050.0, 0.0, 2350.0),
+			"camera": Vector3(2870.0, 30.0, 2050.0), "target": Vector3(3120.0, 15.0, 2380.0),
+		},
+		{
+			"name": "f04_dark_forest", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(520.0, 0.0, 2050.0),
+			"camera": Vector3(430.0, 28.0, 1900.0), "target": Vector3(560.0, 22.0, 2100.0),
+		},
+		{
+			"name": "f05_meadow_straight", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1900.0, 0.0, 2450.0),
+			"camera": Vector3(1750.0, 32.0, 2300.0), "target": Vector3(2000.0, 24.0, 2500.0),
+		},
+		{
+			"name": "f06_serpentine", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1250.0, 170.0, 1050.0), "target": Vector3(1650.0, 110.0, 650.0),
+		},
+		{
+			"name": "f07_summit_view_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(1760.0, 160.0, 420.0), "target": Vector3(2400.0, 40.0, 1400.0),
+		},
+		{
+			"name": "f08_waterfall", "time": "day", "vehicle": "hide",
+			"camera": Vector3(3300.0, 120.0, 560.0), "target": Vector3(3385.0, 128.0, 655.0),
+		},
+		{
+			"name": "f09_farm_fields", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(2000.0, 0.0, 3300.0),
+			"camera": Vector3(1820.0, 34.0, 3120.0), "target": Vector3(2150.0, 20.0, 3400.0),
+		},
+		{
+			"name": "f10_sawmill", "time": "day", "vehicle": "hide",
+			"camera": Vector3(760.0, 30.0, 3360.0), "target": Vector3(940.0, 20.0, 3520.0),
+		},
+		{
+			"name": "f11_swamp_causeway", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1000.0, 0.0, 2920.0),
+			"camera": Vector3(850.0, 24.0, 2750.0), "target": Vector3(1050.0, 10.0, 2980.0),
+		},
+		{
+			"name": "f12_cliff_gorge_bridge", "time": "day", "vehicle": "hide",
+			"camera": Vector3(3400.0, 150.0, 350.0), "target": Vector3(3550.0, 120.0, 560.0),
+		},
+		{
+			"name": "f13_forest_aerial", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2000.0, 700.0, 150.0), "target": Vector3(2000.0, 0.0, 2300.0),
+		},
+		{"name": "f14_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
 	]

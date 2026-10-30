@@ -31,6 +31,11 @@ const RICHTOWN_TIPS: Array[String] = [
 	"Совет: на закате набережная, стеклянные башни и остров Паруса выглядят особенно красиво.",
 	"Совет: бульвар RichTown удобен для длинных разгонов, а районные улицы — для точного дрифта.",
 ]
+const FOREST_TIPS: Array[String] = [
+	"Совет: в болоте и на грязных берегах держите скорость ниже — мокрый грунт почти не держит автомобиль.",
+	"Совет: на вершине северных холмов есть смотровая площадка, а у водопада — удобная фото-точка.",
+]
+
 const DESERT_TIPS: Array[String] = [
 	"Совет: на гравийных тропах дозируйте газ — автомобиль начинает скользить раньше, чем на асфальте.",
 	"Совет: у оазиса, каменной арки и серпантина есть удобные места для красивых кадров.",
@@ -115,11 +120,13 @@ func restart(world_id: String) -> void:
 	set_process(true)
 	_root.modulate = Color.WHITE
 	clear_error()
-	_world_label.text = "ПУСТЫННЫЙ КАНЬОН" if world_id == "desert" else "RICHTOWN"
-	_world_subtitle_label.text = "дюны • соляное плато • оазис" if world_id == "desert" else "город • набережная • остров Паруса"
+	_world_label.text = "ПУСТЫННЫЙ КАНЬОН" if world_id == "desert" else ("ЗЕЛЁНЫЙ ЛЕС" if world_id == "greenforest" else "RICHTOWN")
+	_world_subtitle_label.text = "дюны • соляное плато • оазис" if world_id == "desert" else ("озеро • холмы • фермерская долина" if world_id == "greenforest" else "город • набережная • остров Паруса")
 	_tips.clear()
 	if world_id == "desert":
 		_tips.append_array(DESERT_TIPS)
+	elif world_id == "greenforest":
+		_tips.append_array(FOREST_TIPS)
 	else:
 		_tips.append_array(RICHTOWN_TIPS)
 	_tips.append_array(GENERIC_TIPS)

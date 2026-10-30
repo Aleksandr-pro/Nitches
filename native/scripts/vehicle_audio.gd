@@ -617,8 +617,10 @@ func _road_audio_kind(surface_kind: String) -> String:
 			return "grass"
 		"salt":
 			return "sidewalk"
-		"sand", "water", "packed_sand":
+		"sand", "water", "packed_sand", "mud":
 			return "sand"
+		"dirt", "forest_floor", "field":
+			return "grass"
 		_:
 			return "sidewalk"
 

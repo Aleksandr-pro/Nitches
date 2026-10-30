@@ -41,7 +41,7 @@ function parseJpegDimensions(bytes) {
   throw new Error('JPEG dimensions are missing');
 }
 
-const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText] = await Promise.all([
+const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText, forestDataText] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
@@ -84,6 +84,7 @@ const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, wo
   readText('scripts/lock_icon.gd'),
   readText('scripts/car_catalog.gd'),
   readText('data/desert_native.json'),
+  readText('data/greenforest_native.json'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -96,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.53-native-alpha"'), 'Native project version metadata must match 0.2.53-native-alpha');
-assert(preset.includes('version/code=56'), 'Native 0.2.53 must bump Android versionCode to 56');
-assert(preset.includes('version/name="0.2.53-native-alpha"'), 'Native version name must be 0.2.53-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.53-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.54-native-alpha"'), 'Native project version metadata must match 0.2.54-native-alpha');
+assert(preset.includes('version/code=57'), 'Native 0.2.54 must bump Android versionCode to 57');
+assert(preset.includes('version/name="0.2.54-native-alpha"'), 'Native version name must be 0.2.54-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.54-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -158,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.53"') && preset.includes('application/product_version="0.2.53"'), 'Desktop Windows version metadata must match native 0.2.53');
+assert(preset.includes('application/file_version="0.2.54"') && preset.includes('application/product_version="0.2.54"'), 'Desktop Windows version metadata must match native 0.2.54');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1050,6 +1051,87 @@ for (const marker of ['_build_desert_pois', '_road_labels_data']) {
 }
 for (const name of ['user_dirt_cracked.jpg', 'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg', 'metal_pole.jpg', 'metal_pole_normal.jpg', 'dz_packed_earth.jpg', 'dz_packed_earth_normal.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel.jpg', 'dz_trail_gravel_normal.jpg', 'dz_trail_gravel_roughness.jpg', 'dz_sand_dune.jpg', 'dz_sand_dune_normal.jpg', 'dz_sand_dune_roughness.jpg', 'dz_salt_crust.jpg', 'dz_salt_crust_normal.jpg', 'dz_salt_crust_roughness.jpg', 'dz_rock_red.jpg', 'dz_rock_red_normal.jpg', 'dz_rock_red_roughness.jpg', 'dz_cactus_skin.jpg', 'dz_cactus_skin_normal.jpg', 'dz_cactus_skin_roughness.jpg']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the desert texture ${name}`);
+}
+
+
+// 0.2.54 third world: the generated GreenForest data set and its
+// runtime wiring (builder stages, smoke gate, menu card, world map).
+const forestData = JSON.parse(forestDataText);
+assert(forestData.bounds.maxX === 4000 && forestData.bounds.maxZ === 4000, 'GreenForest bounds must cover the full 4x4 km map');
+assert(forestData.terrain.heights.length === 251001, 'GreenForest terrain must ship the full 501x501 height grid');
+assert(forestData.terrain.heights.every((v) => v > 0), 'GreenForest heights must stay above the safety floor');
+assert(forestData.terrain.heights.reduce((m, v) => Math.max(m, v), 0) < 165, 'GreenForest northern hills must stay under the 160 m spec ceiling');
+assert(forestData.stats.roadLengthKm >= 50, 'GreenForest road network must meet the 50 km floor');
+assert(forestData.roads.length >= 35, 'GreenForest road list is incomplete');
+assert(forestData.forest.structures.length >= 380, 'GreenForest structures are incomplete');
+assert(forestData.forest.bridges.length >= 8, 'GreenForest must ship at least eight bridges');
+assert(forestData.forest.tunnels.length === 2, 'GreenForest must ship exactly two tunnels');
+assert(forestData.forest.game.circuits.length === 4 && forestData.forest.game.sprints.length === 3 && forestData.forest.game.drags.length === 2 && forestData.forest.game.jumps.length === 12 && forestData.forest.game.fastTravel.length === 8 && forestData.forest.game.photoSpots.length === 10, 'GreenForest game content is incomplete');
+assert(forestData.landmarks.length >= 25, 'GreenForest landmarks are incomplete');
+const forestScatterTotal = Object.values(forestData.forest.scatter).reduce((sum, items) => sum + items.length, 0);
+assert(forestScatterTotal >= 90000, 'GreenForest scatter is below the authored budget');
+const forestTreeKinds = ['spruce', 'pine', 'birch', 'leafy', 'oak', 'dead_tree'];
+const forestTreeTotal = forestTreeKinds.reduce((sum, kind) => sum + (forestData.forest.scatter[kind]?.length ?? 0), 0);
+assert(forestTreeTotal >= 35000, 'GreenForest tree count is below budget');
+// Exact on-road audit, same grid approach as the 0.2.53 desert gate.
+const forestSegs = [];
+for (const road of forestData.roads) {
+  const pts = road.samples.map((sm) => [sm[0], sm[2]]);
+  if (road.closed && pts.length) pts.push(pts[0]);
+  for (let i = 0; i + 1 < pts.length; i++) forestSegs.push([pts[i], pts[i + 1], road.widthM * 0.5]);
+}
+const forestSegGrid = new Map();
+forestSegs.forEach((seg, idx) => {
+  const [[ax, az], [bx, bz], hw] = seg;
+  const pad = hw + 40;
+  const x0 = Math.floor((Math.min(ax, bx) - pad) / 100);
+  const x1 = Math.floor((Math.max(ax, bx) + pad) / 100);
+  const z0 = Math.floor((Math.min(az, bz) - pad) / 100);
+  const z1 = Math.floor((Math.max(az, bz) + pad) / 100);
+  for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    const key = `${cx},${cz}`;
+    if (!forestSegGrid.has(key)) forestSegGrid.set(key, []);
+    forestSegGrid.get(key).push(idx);
+  }
+});
+function forestEdgeClearance(px, pz) {
+  const key = `${Math.floor(px / 100)},${Math.floor(pz / 100)}`;
+  const cand = forestSegGrid.get(key) ?? [];
+  let best = Infinity;
+  for (const idx of cand) {
+    const [[ax, az], [bx, bz], hw] = forestSegs[idx];
+    const abx = bx - ax, abz = bz - az;
+    const l2 = Math.max(abx * abx + abz * abz, 1e-9);
+    let t = ((px - ax) * abx + (pz - az) * abz) / l2;
+    t = Math.min(1, Math.max(0, t));
+    best = Math.min(best, Math.hypot(px - (ax + abx * t), pz - (az + abz * t)) - hw);
+  }
+  return best;
+}
+let forestScatterOnRoad = 0;
+for (const items of Object.values(forestData.forest.scatter)) {
+  for (const it of items) if (forestEdgeClearance(it[0], it[1]) < 0) forestScatterOnRoad += 1;
+}
+assert(forestScatterOnRoad === 0, `GreenForest scatter instances on carriageways: ${forestScatterOnRoad}`);
+const forestLake = forestData.forest.lake;
+const damRoad = forestData.roads.find((r) => r.id === 'gf-dam_road');
+assert(damRoad, 'GreenForest dam road is missing');
+const damOverWater = damRoad.samples.filter((sm) => Math.hypot((sm[0] - forestLake.x) / forestLake.rx, (sm[2] - forestLake.z) / forestLake.rz) < 0.92);
+assert(damOverWater.length >= 8 && Math.min(...damOverWater.map((sm) => sm[1])) > forestLake.y + 0.4, 'GreenForest dam deck must stay above lake level across the open water');
+assert(forestData.spawn.x > 0 && forestData.spawn.x < 4000 && forestData.spawn.z > 0 && forestData.spawn.z < 4000, 'GreenForest spawn must be inside the map');
+for (const marker of ['FOREST_DATA_PATH', 'greenforest_world_0254', '_queue_forest_build_stages', '_build_forest_terrain', '_build_forest_water', '_build_forest_scatter', '_gf_structure_kind', '_build_forest_extras', '_build_forest_skyline', 'forest_tunnels_built', 'gf_meadow.jpg', 'gf_forest_floor_roughness.jpg', 'gf_rock_gray_normal.jpg']) {
+  assert(worldScript.includes(marker), `0.2.54 forest builder marker is missing: ${marker}`);
+}
+for (const marker of ['_run_forest_smoke_checks', '_forest_screenshot_shots', 'greenforest']) {
+  assert(mainScript.includes(marker), `0.2.54 forest main marker is missing: ${marker}`);
+}
+for (const marker of ['_forest_card', 'ЗЕЛЁНЫЙ ЛЕС', 'forest_world_0254']) {
+  assert(mainMenuScript.includes(marker), `0.2.54 forest menu marker is missing: ${marker}`);
+}
+assert(worldMapScript.includes('forest_map_0254'), '0.2.54 forest world-map marker is missing');
+assert(loadingScreenScript.includes('ЗЕЛЁНЫЙ ЛЕС'), '0.2.54 forest loading label is missing');
+for (const name of ['gf_meadow.jpg', 'gf_meadow_normal.jpg', 'gf_meadow_roughness.jpg', 'gf_forest_floor.jpg', 'gf_forest_floor_normal.jpg', 'gf_forest_floor_roughness.jpg', 'gf_mud.jpg', 'gf_mud_normal.jpg', 'gf_mud_roughness.jpg', 'gf_rock_gray.jpg', 'gf_rock_gray_normal.jpg', 'gf_rock_gray_roughness.jpg', 'gf_field_soil.jpg', 'gf_field_soil_normal.jpg', 'gf_field_soil_roughness.jpg']) {
+  assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the forest texture ${name}`);
 }
 
 console.log('Native Godot project validation OK');
