@@ -1,0 +1,16 @@
+{
+  "name": "nitches-server",
+  "version": "0.2.61",
+  "private": true,
+  "description": "Nitches game server: accounts, daily quests, economy sync, multiplayer rooms (Cloudflare Workers + D1 + Durable Objects)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute nitches-db --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute nitches-db --remote --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

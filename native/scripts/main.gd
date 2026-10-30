@@ -15,6 +15,35 @@ const WorldMapScript := preload("res://scripts/world_map.gd")
 const RouteGuideScript := preload("res://scripts/route_guide.gd")
 const LoadingScreenScript := preload("res://scripts/loading_screen.gd")
 const PROFILE_PATH := "user://nitches_profile.cfg"
+const NET_CONFIG_PATH := "user://nitches_net.cfg"
+
+## 0.2.61 progression economy: the Shelbie GT500 and RichTown are
+## free; the other three cars and two worlds are bought with CR
+## earned by driving (200 CR/km), achievements and daily quests.
+const START_CREDITS := 15000
+const WORLD_PRICES := {"richtown": 0, "desert": 25000, "greenforest": 80000}
+
+## daily quest pool: 10 of these 14 are active each day.  IDs,
+## metrics, targets and rewards MUST mirror QUEST_POOL in
+## server/src/index.js.  A full day of quests pays roughly
+## 6 500-8 000 CR — about a week of quests per car tier, faster
+## with driving income and one-off achievements on top.
+const QUEST_POOL := [
+	{"id": "dist_5", "metric": "distance_km", "target": 5.0, "reward": 400, "title": "Разминка", "detail": "Проехать 5 км", "unit": "км"},
+	{"id": "dist_15", "metric": "distance_km", "target": 15.0, "reward": 900, "title": "Дальний круг", "detail": "Проехать 15 км", "unit": "км"},
+	{"id": "dist_30", "metric": "distance_km", "target": 30.0, "reward": 1600, "title": "Марафон", "detail": "Проехать 30 км", "unit": "км"},
+	{"id": "dist_50", "metric": "distance_km", "target": 50.0, "reward": 2500, "title": "Неутомимый", "detail": "Проехать 50 км", "unit": "км"},
+	{"id": "speed_160", "metric": "top_speed_kmh", "target": 160.0, "reward": 500, "title": "Быстрый старт", "detail": "Разогнаться до 160 км/ч", "unit": "км/ч"},
+	{"id": "speed_200", "metric": "top_speed_kmh", "target": 200.0, "reward": 900, "title": "Гонщик", "detail": "Разогнаться до 200 км/ч", "unit": "км/ч"},
+	{"id": "drift_time_30", "metric": "drift_seconds", "target": 30.0, "reward": 600, "title": "Первый занос", "detail": "Дрифтить суммарно 30 секунд", "unit": "с"},
+	{"id": "drift_time_90", "metric": "drift_seconds", "target": 90.0, "reward": 1100, "title": "Мастер заноса", "detail": "Дрифтить суммарно 90 секунд", "unit": "с"},
+	{"id": "drift_angle_30", "metric": "drift_angle_deg", "target": 30.0, "reward": 500, "title": "Угол атаки", "detail": "Держать угол дрифта 30°", "unit": "°"},
+	{"id": "drift_angle_40", "metric": "drift_angle_deg", "target": 40.0, "reward": 900, "title": "На грани", "detail": "Держать угол дрифта 40°", "unit": "°"},
+	{"id": "play_10", "metric": "play_minutes", "target": 10.0, "reward": 350, "title": "Заглянул погонять", "detail": "Играть 10 минут", "unit": "мин"},
+	{"id": "play_25", "metric": "play_minutes", "target": 25.0, "reward": 700, "title": "Вечер за рулём", "detail": "Играть 25 минут", "unit": "мин"},
+	{"id": "nitro_20", "metric": "nitro_seconds", "target": 20.0, "reward": 550, "title": "Азот!", "detail": "Использовать нитро 20 секунд", "unit": "с"},
+	{"id": "earn_2000", "metric": "credits_from_driving", "target": 2000.0, "reward": 600, "title": "Заработок", "detail": "Заработать 2000 CR ездой", "unit": "CR"},
+]
 const SETTINGS_PATH := "user://nitches_settings.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -60,6 +89,19 @@ var _session_top_speed_kmh := 0.0
 var _session_drift_deg := 0.0
 var _session_seconds := 0.0
 var _credit_distance_bank_m := 0.0
+
+## 0.2.61 online session state: account + multiplayer (main_menu
+## collects the input; NitchesNetClient / NitchesMpClient do IO).
+var _net: NitchesNetClient
+var _mp: NitchesMpClient
+var _server_url := ""
+var _auth_token := ""
+var _account_username := ""
+var _account_role := "player"
+var _logged_in := false
+var _online_quests: Array = []
+var _net_sync_timer := 0.0
+var _quest_progress_pushed: Dictionary = {}
 var _selected_car_id := NativeCarCatalog.DEFAULT_CAR_ID
 var _car_customizations: Dictionary = {}
 var _car_stats: Dictionary = {}
@@ -298,7 +340,19 @@ func _bootstrap_create_profile_and_menu() -> void:
 	_menu.profile_changed.connect(_on_profile_changed)
 	_menu.car_selection_requested.connect(_select_car)
 	_menu.world_selected.connect(switch_world)
+	_menu.car_purchase_requested.connect(_buy_car)
+	_menu.world_purchase_requested.connect(_buy_world)
+	_menu.daily_quest_claim_requested.connect(_claim_daily_quest)
+	_menu.account_register_requested.connect(_on_account_register_requested)
+	_menu.account_login_requested.connect(_on_account_login_requested)
+	_menu.account_logout_requested.connect(_on_account_logout_requested)
+	_menu.feedback_requested.connect(_on_feedback_requested)
+	_menu.leaderboard_requested.connect(_on_leaderboard_requested)
+	_menu.admin_requested.connect(_on_admin_requested)
+	_menu.multiplayer_join_requested.connect(_on_multiplayer_join_requested)
+	_menu.multiplayer_leave_requested.connect(_on_multiplayer_leave_requested)
 	_menu.set_current_world(_selected_world_id)
+	_setup_net()
 	_apply_settings(_settings, false)
 
 
@@ -668,6 +722,11 @@ func _select_car(car_id: String) -> void:
 	if _vehicle == null:
 		return
 	var next_id := NativeCarCatalog.normalize_id(car_id)
+	if not _is_car_owned(next_id) and not _smoke_mode and not _screenshot_mode:
+		if _menu != null:
+			_menu.set_garage_status("%s ещё не куплен — загляните в Магазин." % String(NativeCarCatalog.get_car(next_id).get("name", next_id)))
+		_refresh_menu_profile_and_customization()
+		return
 	if next_id == _vehicle.get_car_id():
 		_selected_car_id = next_id
 		_refresh_menu_profile_and_customization()
@@ -927,7 +986,7 @@ func _load_profile() -> void:
 	_profile = {
 		"name": "ИГРОК",
 		"avatar_id": "wheel",
-		"credits": 35000,
+		"credits": START_CREDITS,
 		"distance_m": 0.0,
 		"top_speed_kmh": 0.0,
 		"drift_record_deg": 0.0,
@@ -937,6 +996,10 @@ func _load_profile() -> void:
 		"selected_car_id": NativeCarCatalog.DEFAULT_CAR_ID,
 		"car_customizations": {},
 		"car_stats": {},
+		"owned_cars": [],
+		"owned_worlds": [],
+		"daily": {},
+		"economy_v": 0,
 		"paint_id": "red",
 		"paint_color": "7a0609ff",
 		"wheel_finish": "silver",
@@ -993,6 +1056,34 @@ func _load_profile() -> void:
 			_car_stats[car_id] = {"distance_km": 0.0, "top_speed_kmh": 0.0, "drift_deg": 0.0, "play_seconds": 0.0}
 	_profile["car_customizations"] = _car_customizations.duplicate(true)
 	_profile["car_stats"] = _car_stats.duplicate(true)
+	# 0.2.61 progression migration (runs once): pre-economy saves
+	# keep every car they actually drove (>=0.5 km) and the desert
+	# if the old 50 000 CR balance rule had already unlocked it.
+	# New profiles start with the Shelbie + RichTown and buy the
+	# rest with CR.  The Green Forest stays a purchase for all.
+	if int(_profile.get("economy_v", 0)) < 1:
+		var migrated_cars: Array = [NativeCarCatalog.DEFAULT_CAR_ID]
+		for car_id in NativeCarCatalog.car_ids():
+			var driven := _car_stats.get(car_id, {}) as Dictionary
+			if float(driven.get("distance_km", 0.0)) >= 0.5 and car_id not in migrated_cars:
+				migrated_cars.append(car_id)
+		var migrated_worlds: Array = ["richtown"]
+		if int(_profile.get("credits", START_CREDITS)) >= 50000:
+			migrated_worlds.append("desert")
+		# Worlds were free for everyone in 0.2.48-0.2.60, so an
+		# existing player also keeps the world they last played in.
+		if _selected_world_id != "richtown" and _selected_world_id not in migrated_worlds and float(_profile.get("distance_m", 0.0)) > 0.0:
+			migrated_worlds.append(_selected_world_id)
+		_profile["owned_cars"] = migrated_cars
+		_profile["owned_worlds"] = migrated_worlds
+		_profile["economy_v"] = 1
+	if not (_profile.get("owned_cars", []) is Array) or (_profile.get("owned_cars", []) as Array).is_empty():
+		_profile["owned_cars"] = [NativeCarCatalog.DEFAULT_CAR_ID]
+	if not (_profile.get("owned_worlds", []) is Array) or (_profile.get("owned_worlds", []) as Array).is_empty():
+		_profile["owned_worlds"] = ["richtown"]
+	if _selected_car_id not in (_profile.get("owned_cars", []) as Array):
+		_selected_car_id = NativeCarCatalog.DEFAULT_CAR_ID
+		_profile["selected_car_id"] = _selected_car_id
 	_store_active_customization(_active_customization())
 
 
@@ -1061,7 +1152,7 @@ func _claim_achievement_rewards() -> void:
 		var achievement_id := String(spec.get("id", ""))
 		if bool(spec.get("unlocked", false)) and not claimed.has(achievement_id):
 			claimed.append(achievement_id)
-			_profile["credits"] = int(_profile.get("credits", 35000)) + int(spec.get("reward", 0))
+			_profile["credits"] = _credits() + int(spec.get("reward", 0))
 			changed = true
 	if changed:
 		_profile["achievement_rewards_claimed"] = claimed
@@ -1100,6 +1191,11 @@ func _profile_view() -> Dictionary:
 		"xp_to_next_km": 50.0 - level_progress_km,
 		"achievements": achievements,
 		"history": history,
+		"owned_cars": (_profile.get("owned_cars", []) as Array).duplicate(),
+		"owned_worlds": (_profile.get("owned_worlds", []) as Array).duplicate(),
+		"world_prices": WORLD_PRICES.duplicate(),
+		"daily_quests": _daily_quests_view(),
+		"account": _account_view(),
 		"selected_car_id": _selected_car_id,
 		"car_stats": _car_stats_view(),
 	}
@@ -1228,6 +1324,487 @@ func _update_menu_camera(delta: float) -> void:
 	_camera.look_at(centre, Vector3.UP)
 
 
+## --- 0.2.61 progression: owned cars/worlds, purchases ---
+
+func _credits() -> int:
+	return int(_profile.get("credits", START_CREDITS))
+
+
+func _fmt_cr(value: int) -> String:
+	var digits := str(absi(value))
+	var out := ""
+	while digits.length() > 3:
+		out = " " + digits.right(3) + out
+		digits = digits.left(digits.length() - 3)
+	return ("-" if value < 0 else "") + digits + out
+
+
+func _is_car_owned(car_id: String) -> bool:
+	return NativeCarCatalog.normalize_id(car_id) in (_profile.get("owned_cars", []) as Array)
+
+
+func _is_world_owned(world_id: String) -> bool:
+	return world_id in (_profile.get("owned_worlds", []) as Array)
+
+
+func _buy_car(car_id: String) -> void:
+	var id := NativeCarCatalog.normalize_id(car_id)
+	if _is_car_owned(id):
+		_select_car(id)
+		return
+	var price := int(NativeCarCatalog.get_car(id).get("price_cr", 0))
+	if _credits() < price:
+		if _menu != null:
+			_menu.set_garage_status("Не хватает CR: нужно %s, у вас %s. Зарабатывайте ездой и ежедневными заданиями (вкладка «Онлайн»)." % [_fmt_cr(price), _fmt_cr(_credits())])
+		return
+	_profile["credits"] = _credits() - price
+	var owned: Array = (_profile.get("owned_cars", []) as Array).duplicate()
+	owned.append(id)
+	_profile["owned_cars"] = owned
+	_save_profile()
+	_sync_progress_online()
+	_select_car(id)
+
+
+func _buy_world(world_id: String) -> void:
+	if _is_world_owned(world_id):
+		switch_world(world_id)
+		return
+	var price := int(WORLD_PRICES.get(world_id, 0))
+	if _credits() < price:
+		_refresh_menu_profile_and_customization()
+		return
+	_profile["credits"] = _credits() - price
+	var owned: Array = (_profile.get("owned_worlds", []) as Array).duplicate()
+	owned.append(world_id)
+	_profile["owned_worlds"] = owned
+	_save_profile()
+	_sync_progress_online()
+	switch_world(world_id)
+
+
+## --- 0.2.61 daily quests ---
+
+func _daily_today() -> Dictionary:
+	var day := Time.get_date_string_from_system()
+	var daily := _profile.get("daily", {}) as Dictionary
+	if String(daily.get("day", "")) != day:
+		daily = {
+			"day": day,
+			"distance_m": 0.0,
+			"drift_seconds": 0.0,
+			"drift_angle_deg": 0.0,
+			"top_speed_kmh": 0.0,
+			"play_seconds": 0.0,
+			"nitro_seconds": 0.0,
+			"credits_from_driving": 0,
+			"claimed": [],
+		}
+		_profile["daily"] = daily
+		_quest_progress_pushed.clear()
+	return daily
+
+
+func _daily_metric(daily: Dictionary, metric: String) -> float:
+	match metric:
+		"distance_km":
+			return float(daily.get("distance_m", 0.0)) / 1000.0
+		"top_speed_kmh":
+			return float(daily.get("top_speed_kmh", 0.0))
+		"drift_seconds":
+			return float(daily.get("drift_seconds", 0.0))
+		"drift_angle_deg":
+			return float(daily.get("drift_angle_deg", 0.0))
+		"play_minutes":
+			return float(daily.get("play_seconds", 0.0)) / 60.0
+		"nitro_seconds":
+			return float(daily.get("nitro_seconds", 0.0))
+		"credits_from_driving":
+			return float(int(daily.get("credits_from_driving", 0)))
+		_:
+			return 0.0
+
+
+func _quest_spec(quest_id: String) -> Dictionary:
+	for spec_variant in QUEST_POOL:
+		var spec: Dictionary = spec_variant
+		if String(spec.get("id", "")) == quest_id:
+			return spec
+	return {}
+
+
+func _local_daily_quests() -> Array:
+	# Offline/guest daily set: deterministic by date + profile name.
+	# Logged-in players get the server set instead (authoritative).
+	var daily := _daily_today()
+	var key := String(daily.get("day", "")) + ":" + String(_profile.get("name", "ИГРОК"))
+	var seed_value := 2166136261
+	for i in key.length():
+		seed_value = int((seed_value ^ key.unicode_at(i)) * 16777619) & 0xFFFFFFFF
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var order: Array = []
+	for i in QUEST_POOL.size():
+		order.append(i)
+	for i in range(order.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp: Variant = order[i]
+		order[i] = order[j]
+		order[j] = tmp
+	var claimed: Array = daily.get("claimed", [])
+	var out: Array = []
+	for k in mini(10, order.size()):
+		var spec: Dictionary = (QUEST_POOL[int(order[k])] as Dictionary).duplicate()
+		var value := _daily_metric(daily, String(spec.get("metric", "")))
+		spec["progress"] = value
+		spec["claimed"] = String(spec.get("id", "")) in claimed
+		spec["completed"] = value >= float(spec.get("target", 0.0))
+		out.append(spec)
+	return out
+
+
+func _daily_quests_view() -> Array:
+	if _logged_in and not _online_quests.is_empty():
+		var daily := _daily_today()
+		var out: Array = []
+		for row_variant in _online_quests:
+			var row: Dictionary = row_variant
+			var spec := _quest_spec(String(row.get("id", "")))
+			if spec.is_empty():
+				continue
+			var merged := spec.duplicate()
+			merged["target"] = float(row.get("target", spec.get("target", 0.0)))
+			merged["reward"] = int(row.get("reward", spec.get("reward", 0)))
+			var value := maxf(_daily_metric(daily, String(spec.get("metric", ""))), float(row.get("progress", 0.0)))
+			merged["progress"] = value
+			merged["claimed"] = bool(row.get("claimed", false))
+			merged["completed"] = value >= float(merged["target"])
+			out.append(merged)
+		if not out.is_empty():
+			return out
+	return _local_daily_quests()
+
+
+func _claim_daily_quest(quest_id: String) -> void:
+	var spec := _quest_spec(quest_id)
+	if spec.is_empty():
+		return
+	var daily := _daily_today()
+	var value := _daily_metric(daily, String(spec.get("metric", "")))
+	if _logged_in and _net != null:
+		_net.claim_quest(quest_id, value)
+		return
+	var claimed: Array = (daily.get("claimed", []) as Array).duplicate()
+	if quest_id in claimed or value < float(spec.get("target", 0.0)):
+		return
+	claimed.append(quest_id)
+	daily["claimed"] = claimed
+	_profile["daily"] = daily
+	_profile["credits"] = _credits() + int(spec.get("reward", 0))
+	_save_profile()
+	_refresh_menu_profile_and_customization()
+	if _menu != null:
+		_menu.online_set_status("Награда +%s CR получена (офлайн-режим)!" % _fmt_cr(int(spec.get("reward", 0))))
+
+
+func _push_quest_progress_online() -> void:
+	if not _logged_in or _net == null:
+		return
+	var daily := _daily_today()
+	for row_variant in _daily_quests_view():
+		var row: Dictionary = row_variant
+		var quest_id := String(row.get("id", ""))
+		if quest_id.is_empty() or bool(row.get("claimed", false)):
+			continue
+		var value := _daily_metric(daily, String(row.get("metric", "")))
+		if value > float(_quest_progress_pushed.get(quest_id, -1.0)):
+			_quest_progress_pushed[quest_id] = value
+			_net.push_quest_progress(quest_id, value)
+
+
+## --- 0.2.61 online account / multiplayer glue ---
+
+func _account_view() -> Dictionary:
+	return {
+		"logged_in": _logged_in,
+		"username": _account_username,
+		"role": _account_role,
+		"is_admin": _account_role == "admin",
+		"server_url": _server_url,
+		"mp_connected": _mp != null and _mp.is_connected_to_room(),
+		"mp_peers": _mp.peer_count() if _mp != null else 0,
+	}
+
+
+func _net_config_load() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(NET_CONFIG_PATH) == OK:
+		_server_url = String(cfg.get_value("net", "server_url", ""))
+		_auth_token = String(cfg.get_value("net", "token", ""))
+		_account_username = String(cfg.get_value("net", "username", ""))
+
+
+func _net_config_save() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("net", "server_url", _server_url)
+	cfg.set_value("net", "token", _auth_token)
+	cfg.set_value("net", "username", _account_username)
+	cfg.save(NET_CONFIG_PATH)
+
+
+func _setup_net() -> void:
+	_net_config_load()
+	_net = NitchesNetClient.new()
+	add_child(_net)
+	_net.configure(_server_url, _auth_token)
+	_net.auth_succeeded.connect(_on_auth_succeeded)
+	_net.me_loaded.connect(_on_me_loaded)
+	_net.quests_loaded.connect(_on_quests_loaded)
+	_net.quest_claimed.connect(_on_quest_claimed_online)
+	_net.leaderboard_loaded.connect(_on_leaderboard_loaded)
+	_net.rooms_loaded.connect(_on_rooms_loaded)
+	_net.admin_data_loaded.connect(_on_admin_data_loaded)
+	_net.feedback_sent.connect(_on_feedback_sent)
+	_net.request_failed.connect(_on_net_request_failed)
+	_mp = NitchesMpClient.new()
+	add_child(_mp)
+	_mp.connection_changed.connect(_on_mp_connection_changed)
+	_mp.peers_changed.connect(_on_mp_peers_changed)
+	if not _server_url.is_empty() and not _auth_token.is_empty() and not _smoke_mode:
+		_net.fetch_me()
+
+
+func _apply_server_profile(profile: Dictionary) -> void:
+	# Server economy wins on login; lifetime records merge by max so
+	# offline driving before the first login is never lost.
+	if profile.is_empty():
+		return
+	_profile["credits"] = int(profile.get("credits", _credits()))
+	var cars: Array = profile.get("owned_cars", [])
+	if not cars.is_empty():
+		_profile["owned_cars"] = cars.duplicate()
+	var worlds: Array = profile.get("owned_worlds", [])
+	if not worlds.is_empty():
+		_profile["owned_worlds"] = worlds.duplicate()
+	var stats: Dictionary = profile.get("stats", {})
+	_profile["distance_m"] = maxf(float(_profile.get("distance_m", 0.0)), float(stats.get("distance_km", 0.0)) * 1000.0)
+	_profile["top_speed_kmh"] = maxf(float(_profile.get("top_speed_kmh", 0.0)), float(stats.get("top_speed_kmh", 0.0)))
+	_profile["drift_record_deg"] = maxf(float(_profile.get("drift_record_deg", 0.0)), float(stats.get("drift_deg", 0.0)))
+	_profile["play_seconds"] = maxf(float(_profile.get("play_seconds", 0.0)), float(stats.get("play_seconds", 0.0)))
+	if _selected_car_id not in (_profile.get("owned_cars", []) as Array):
+		_selected_car_id = NativeCarCatalog.DEFAULT_CAR_ID
+		_profile["selected_car_id"] = _selected_car_id
+	_save_profile()
+	if _vehicle != null and _vehicle.get_car_id() != _selected_car_id and not _smoke_mode:
+		_select_car(_selected_car_id)
+
+
+func _sync_progress_online() -> void:
+	if not _logged_in or _net == null:
+		return
+	_net.put_progress({
+		"credits": _credits(),
+		"owned_cars": (_profile.get("owned_cars", []) as Array).duplicate(),
+		"owned_worlds": (_profile.get("owned_worlds", []) as Array).duplicate(),
+		"stats": {
+			"distance_km": float(_profile.get("distance_m", 0.0)) / 1000.0,
+			"top_speed_kmh": float(_profile.get("top_speed_kmh", 0.0)),
+			"drift_deg": float(_profile.get("drift_record_deg", 0.0)),
+			"play_seconds": float(_profile.get("play_seconds", 0.0)),
+		},
+	})
+
+
+func _menu_online_status(text: String) -> void:
+	if _menu != null:
+		_menu.online_set_status(text)
+
+
+func _on_auth_succeeded(user: Dictionary, profile: Dictionary, token: String, is_new_account: bool, first_player: bool) -> void:
+	_auth_token = token
+	_account_username = String(user.get("username", _account_username))
+	_account_role = String(user.get("role", "player"))
+	_logged_in = true
+	_profile["name"] = _account_username
+	_net_config_save()
+	_apply_server_profile(profile)
+	_net.fetch_quests()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	if is_new_account:
+		_menu_online_status("Аккаунт создан. Добро пожаловать в тест Nitches, %s!" % _account_username)
+	else:
+		_menu_online_status("Вы вошли как %s. Прогресс синхронизируется с сервером." % _account_username)
+	if first_player:
+		_menu_online_status("Вы — ПЕРВЫЙ игрок этого сервера: вам выдана роль разработчика (admin). Админ-панель — внизу этой вкладки.")
+
+
+func _on_me_loaded(user: Dictionary, profile: Dictionary) -> void:
+	_logged_in = true
+	_account_username = String(user.get("username", _account_username))
+	_account_role = String(user.get("role", "player"))
+	_profile["name"] = _account_username
+	_apply_server_profile(profile)
+	_net.fetch_quests()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("С возвращением, %s!" % _account_username)
+
+
+func _on_quests_loaded(_day: String, quests: Array) -> void:
+	_online_quests = quests.duplicate(true)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_quest_claimed_online(quest_id: String, reward: int, credits: int) -> void:
+	_profile["credits"] = credits
+	for i in _online_quests.size():
+		var row: Dictionary = _online_quests[i]
+		if String(row.get("id", "")) == quest_id:
+			row["claimed"] = true
+			_online_quests[i] = row
+	_save_profile()
+	_net.fetch_quests()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("Награда +%s CR получена!" % _fmt_cr(reward))
+
+
+func _on_leaderboard_loaded(rows: Array, by: String) -> void:
+	if _menu != null:
+		_menu.show_leaderboard(rows, by)
+
+
+func _on_rooms_loaded(data: Dictionary) -> void:
+	if _menu != null:
+		_menu.show_online_rooms(data)
+
+
+func _on_admin_data_loaded(kind: String, data: Dictionary) -> void:
+	if _menu != null:
+		_menu.show_admin_data(kind, data)
+
+
+func _on_feedback_sent() -> void:
+	_menu_online_status("Спасибо! Отзыв отправлен разработчику.")
+
+
+func _on_net_request_failed(tag: String, message: String) -> void:
+	var text := message
+	match message:
+		"username taken":
+			text = "Этот ник уже занят — выберите другой."
+		"invalid username or password":
+			text = "Неверный логин или пароль."
+		"unauthorized":
+			text = "Сессия истекла — войдите снова."
+		"username: 3-16 chars, letters/digits/_":
+			text = "Ник: 3–16 символов, латиница, цифры и подчёркивание."
+		"password: 6-128 chars":
+			text = "Пароль: от 6 символов."
+		"quest not completed":
+			text = "Задание ещё не выполнено — прогресс синхронизируется каждые 30 секунд."
+		"already claimed":
+			text = "Награда за это задание уже получена."
+		"no connection":
+			text = "Нет соединения с сервером. Проверьте адрес сервера и интернет."
+		"admin only":
+			text = "Доступ только для разработчика (первый игрок сервера)."
+	if tag == "me" and message == "unauthorized":
+		_logged_in = false
+		_auth_token = ""
+		_net_config_save()
+	_menu_online_status(text)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_mp_connection_changed(_connected: bool, message: String) -> void:
+	_menu_online_status(message)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_mp_peers_changed(_count: int) -> void:
+	_refresh_menu_profile_and_customization()
+
+
+func _remember_server_url(server_url: String) -> void:
+	_server_url = server_url.strip_edges().trim_suffix("/")
+	_net_config_save()
+	if _net != null:
+		_net.configure(_server_url, _auth_token)
+
+
+func _on_account_register_requested(server_url: String, username: String, password: String) -> void:
+	_remember_server_url(server_url)
+	if _net != null:
+		_menu_online_status("Создаю аккаунт…")
+		_net.register_account(username.strip_edges(), password)
+
+
+func _on_account_login_requested(server_url: String, username: String, password: String) -> void:
+	_remember_server_url(server_url)
+	if _net != null:
+		_menu_online_status("Вхожу…")
+		_net.login_account(username.strip_edges(), password)
+
+
+func _on_account_logout_requested() -> void:
+	if _mp != null:
+		_mp.leave_room()
+	if _net != null:
+		_net.logout_account()
+	_logged_in = false
+	_auth_token = ""
+	_account_role = "player"
+	_online_quests = []
+	if _net != null:
+		_net.set_token("")
+	_net_config_save()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("Вы вышли. Локальная игра гостем продолжается.")
+
+
+func _on_feedback_requested(text: String, category: String) -> void:
+	if _logged_in and _net != null:
+		_net.send_feedback(text, category)
+	else:
+		_menu_online_status("Отзыв отправляется с аккаунта — войдите или зарегистрируйтесь выше.")
+
+
+func _on_leaderboard_requested(by: String) -> void:
+	if _net != null:
+		_net.fetch_leaderboard(by)
+		_net.fetch_rooms()
+
+
+func _on_admin_requested(action: String, payload: Dictionary) -> void:
+	if _net == null or not _logged_in:
+		return
+	match action:
+		"stats":
+			_net.admin_fetch("stats")
+		"users":
+			_net.admin_fetch("users")
+		"feedback":
+			_net.admin_fetch("feedback")
+		"grant":
+			_net.admin_grant(String(payload.get("username", "")), int(payload.get("amount", 0)))
+		"feedback_delete":
+			_net.admin_feedback_delete(int(payload.get("id", 0)))
+
+
+func _on_multiplayer_join_requested() -> void:
+	if not _logged_in:
+		_menu_online_status("Мультиплеер доступен после входа в аккаунт.")
+		return
+	if _mp != null:
+		_mp.join_room(_server_url, _auth_token, _selected_world_id, _account_username, _selected_car_id)
+
+
+func _on_multiplayer_leave_requested() -> void:
+	if _mp != null:
+		_mp.leave_room()
+
+
 func _accumulate_profile(delta: float) -> void:
 	if _vehicle == null or delta <= 0.0:
 		return
@@ -1248,10 +1825,24 @@ func _accumulate_profile(delta: float) -> void:
 	_session_top_speed_kmh = maxf(_session_top_speed_kmh, speed_kmh)
 	_session_drift_deg = maxf(_session_drift_deg, drift_deg)
 	_session_seconds += delta
+	# 0.2.61 daily quest counters (reset at local midnight).
+	var daily := _daily_today()
+	daily["distance_m"] = float(daily.get("distance_m", 0.0)) + speed_kmh / 3.6 * delta
+	daily["top_speed_kmh"] = maxf(float(daily.get("top_speed_kmh", 0.0)), speed_kmh)
+	daily["play_seconds"] = float(daily.get("play_seconds", 0.0)) + delta
+	if _vehicle.is_drifting():
+		daily["drift_seconds"] = float(daily.get("drift_seconds", 0.0)) + delta
+		daily["drift_angle_deg"] = maxf(float(daily.get("drift_angle_deg", 0.0)), drift_deg)
+	if _vehicle.is_boosting():
+		daily["nitro_seconds"] = float(daily.get("nitro_seconds", 0.0)) + delta
+	_profile["daily"] = daily
 	_credit_distance_bank_m += speed_kmh / 3.6 * delta
 	while _credit_distance_bank_m >= 100.0:
 		_credit_distance_bank_m -= 100.0
-		_profile["credits"] = int(_profile.get("credits", 35000)) + 20
+		_profile["credits"] = _credits() + 20
+		var daily_after := _profile.get("daily", {}) as Dictionary
+		daily_after["credits_from_driving"] = int(daily_after.get("credits_from_driving", 0)) + 20
+		_profile["daily"] = daily_after
 	_claim_achievement_rewards()
 	_profile_save_timer += delta
 	if _profile_save_timer >= 5.0:
@@ -1560,6 +2151,17 @@ func _reset_vehicle_to_road() -> void:
 
 
 func _process(delta: float) -> void:
+	# 0.2.61 multiplayer relay + periodic account sync (runs even
+	# while bootstrapping so logins resolve under the load screen).
+	if _mp != null and _mp.is_connected_to_room() and _vehicle != null:
+		_mp.update_local_state(_vehicle.get_global_transform_interpolated(), _vehicle.get_absolute_speed_kmh())
+	if _logged_in and _net != null and not _smoke_mode:
+		_net_sync_timer += delta
+		if _net_sync_timer >= 30.0:
+			_net_sync_timer = 0.0
+			_sync_progress_online()
+			_net.send_presence(_selected_world_id)
+			_push_quest_progress_online()
 	if _is_bootstrapping or _world_switch_in_progress:
 		return
 	_update_adaptive_render_quality(delta)
@@ -2405,6 +3007,10 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 func switch_world(world_id: String) -> void:
 	if world_id != "richtown" and world_id != "desert" and world_id != "greenforest":
 		return
+	if not _is_world_owned(world_id) and not _smoke_mode and not _screenshot_mode:
+		return
+	if _mp != null:
+		_mp.leave_room()
 	if world_id == _selected_world_id and _world != null:
 		return
 	if _is_bootstrapping or _world_switch_in_progress or not _bootstrap_completed:

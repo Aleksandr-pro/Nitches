@@ -1,0 +1,26 @@
+# Nitches game server — Cloudflare Worker + D1 + Durable Objects.
+# Deploy guide: server/README.md
+
+name = "nitches-server"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Player database (accounts, profiles, quests, feedback).
+# 1) wrangler d1 create nitches-db
+# 2) paste the printed database_id below
+# 3) wrangler d1 execute nitches-db --remote --file=schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "nitches-db"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+# Multiplayer free-roam rooms (WebSocket relay).  If your plan has no
+# Durable Objects, delete this block and the migrations block: the API
+# (accounts/quests/economy) still works, /mp answers 501.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO"]

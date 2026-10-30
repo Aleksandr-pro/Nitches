@@ -22,6 +22,17 @@ signal tuning_purchase_requested(level: int)
 signal profile_changed(player_name: String, avatar_id: String)
 signal car_selection_requested(car_id: String)
 signal world_selected(world_id: String)
+signal car_purchase_requested(car_id: String)
+signal world_purchase_requested(world_id: String)
+signal daily_quest_claim_requested(quest_id: String)
+signal account_register_requested(server_url: String, username: String, password: String)
+signal account_login_requested(server_url: String, username: String, password: String)
+signal account_logout_requested
+signal feedback_requested(text: String, category: String)
+signal leaderboard_requested(by: String)
+signal admin_requested(action: String, payload: Dictionary)
+signal multiplayer_join_requested
+signal multiplayer_leave_requested
 
 const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
 const AvatarIconScript := preload("res://scripts/avatar_icon.gd")
@@ -48,14 +59,16 @@ const PANEL_STORE := 2
 const PANEL_PROFILE := 3
 const PANEL_WORLDS := 4
 const PANEL_SETTINGS := 5
+const PANEL_ONLINE := 6
 const PANEL_TRANSITION_SECONDS := 0.18
 const MIN_TOUCH_HEIGHT := 48.0
 const MIN_FONT_SIZE := 14
 const WORLD_MOUNTAINS_REQUIRED_LEVEL := 5
-const WORLD_CANYON_REQUIRED_CREDITS := 50000
+const WORLD_CANYON_REQUIRED_CREDITS := 25000
+const WORLD_FOREST_REQUIRED_CREDITS := 80000
 # Temporary owner request (0.2.48): every finished world is free for
 # all players. Flip this one flag to restore the credit/level gates.
-const WORLDS_FREE_FOR_ALL := true
+const WORLDS_FREE_FOR_ALL := false
 const TUNING_COSTS: Array[int] = [0, 5000, 12000]
 const TUNING_MULTIPLIERS: Array[float] = [1.0, 1.08, 1.16]
 const TUNING_NAMES: Array[String] = ["СТОК", "SPORT", "TRACK"]
@@ -213,6 +226,38 @@ var _store_selected_id := "shelby_gt500"
 var _store_hint_label: Label
 var _store_drive_button: Button
 
+# 0.2.61 online tab state (account, daily quests, multiplayer,
+# leaderboard, feedback, developer admin panel).
+var _online_panel_root: Control
+var _online_status_label: Label
+var _online_status_text := ""
+var _online_account_label: Label
+var _online_server_edit: LineEdit
+var _online_user_edit: LineEdit
+var _online_pass_edit: LineEdit
+var _online_register_button: Button
+var _online_login_button: Button
+var _online_logout_button: Button
+var _online_quests_box: VBoxContainer
+var _online_mp_label: Label
+var _online_mp_join_button: Button
+var _online_mp_leave_button: Button
+var _online_board_label: Label
+var _online_rooms_label: Label
+var _online_feedback_edit: TextEdit
+var _online_feedback_category: OptionButton
+var _online_admin_box: PanelContainer
+var _online_admin_stats_label: Label
+var _online_admin_data_label: Label
+var _online_grant_user_edit: LineEdit
+var _online_grant_amount_edit: LineEdit
+var _online_feedback_id_edit: LineEdit
+var _online_overlay: PanelContainer
+var _online_overlay_title: Label
+var _online_overlay_text: Label
+var _online_overlay_primary: Button
+var _online_overlay_mode := ""
+
 var _world_progress_label: Label
 var _world_detail_label: Label
 var _current_world_id := "richtown"
@@ -298,11 +343,11 @@ func get_smoke_state() -> Dictionary:
         "selected_car_id": _selected_car_id,
         "garage_cars": _garage_car_buttons.size(),
         "store_cars": _store_car_count(),
-        "store_panel_0236": _panels.size() == 6 and _store_cards_box != null and _store_drag_surface != null,
+        "store_panel_0236": _panels.size() == 7 and _store_cards_box != null and _store_drag_surface != null,
         "store_items": _store_card_buttons.size(),
         "store_filter": _store_filter,
         "store_sort": _store_sort,
-        "labeled_tabs_0236": _tab_buttons.size() == 6 and _tab_text_labels.size() == 6 and _tab_icon_labels.size() == 6,
+        "labeled_tabs_0236": _tab_buttons.size() == 7 and _tab_text_labels.size() == 7 and _tab_icon_labels.size() == 7,
         "top_xp_bar_0236": _top_xp_bar != null and _top_xp_label != null,
         "avatar_icon_0236": _top_avatar_icon != null and _profile_avatar_icon != null,
         "clickable_home_cards_0236": _home_world_card != null and _home_car_card != null,
@@ -315,6 +360,10 @@ func get_smoke_state() -> Dictionary:
         "forest_world_0254": _forest_card != null,
         "current_world_id": _current_world_id,
         "desert_unlocked_0247": _desert_unlocked(),
+        "online_panel_0261": _online_panel_root != null and _online_quests_box != null and _panels.size() == 7,
+        "daily_quests_ui_0261": _online_quests_box != null,
+        "account_ui_0261": _online_register_button != null and _online_login_button != null,
+        "privacy_ui_0261": _online_overlay != null,
         "worlds_free_for_all_0248": WORLDS_FREE_FOR_ALL,
         "hover_sound_0236": _hover_player != null,
         "panel_transition_018_0236": is_equal_approx(PANEL_TRANSITION_SECONDS, 0.18),
@@ -629,6 +678,7 @@ func _build_ui() -> void:
     _panels.append(_build_profile_panel(panels_root))
     _panels.append(_build_worlds_panel(panels_root))
     _panels.append(_build_settings_panel(panels_root))
+    _panels.append(_build_online_panel(panels_root))
     _show_panel(PANEL_HOME)
 
 
@@ -649,7 +699,7 @@ func _build_top_bar(parent: Node) -> void:
     car_row.add_child(_top_car_icon)
     var car_text := VBoxContainer.new()
     car_row.add_child(car_text)
-    _top_car_label = _label(car_text, "Shelby GT500 '67", 16, COL_TEXT, true)
+    _top_car_label = _label(car_text, "Shelbie GT500 '67", 16, COL_TEXT, true)
     _top_car_summary_label = _label(car_text, "365 л.с. • 569 Нм • 207 км/ч", 12, COL_MUTED)
 
     var spacer := Control.new()
@@ -698,6 +748,7 @@ func _build_tabs(parent: Node) -> void:
         ["◉", "Профиль"],
         ["⌖", "Карты"],
         ["⚙", "Настройки"],
+        ["◈", "Онлайн"],
     ]
     for i in specs.size():
         var tab := _button("", COL_ACCENT, Vector2(104.0, 60.0), MIN_FONT_SIZE)
@@ -750,6 +801,8 @@ func _show_panel(index: int) -> void:
     _refresh_tab_labels()
     if index == PANEL_STORE:
         _refresh_store()
+    if index == PANEL_ONLINE:
+        _refresh_online_panel()
     panel_changed.emit(index)
     call_deferred("_animate_panel", _panels[index])
 
@@ -928,6 +981,11 @@ func _request_car_selection(car_id: String) -> void:
     var next_id := NativeCarCatalog.normalize_id(car_id)
     if next_id == _selected_car_id:
         return
+    if not _is_car_owned_menu(next_id):
+        _store_selected_id = next_id
+        _show_panel(PANEL_STORE)
+        _refresh_store()
+        return
     var entry := _catalog_car(next_id)
     set_garage_status("Загружаю %s: модель, физику и звук…" % _car_display_name(entry))
     car_selection_requested.emit(next_id)
@@ -1012,7 +1070,8 @@ func _refresh_garage_car_list() -> void:
         var level := int(customization.get("tuning_level", int(entry.get("tuning_level", 0))))
         var values := _tuning_values_for(entry, level)
         var selected := car_id == _selected_car_id
-        var status := "выбран • живой 3D" if selected else "игровой кадр • выбрать авто"
+        var owned := _is_car_owned_menu(car_id)
+        var status := "выбран • живой 3D" if selected else ("игровой кадр • выбрать авто" if owned else "не куплен • CR %s • в магазин" % _fmt_int(int(entry.get("price_cr", 0))))
         var button := _picture_button(
             _texture_for_car(car_id),
             _car_display_name(entry),
@@ -1021,10 +1080,14 @@ func _refresh_garage_car_list() -> void:
             18
         )
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        button.modulate = Color(1.0, 0.84, 0.58) if selected else Color.WHITE
+        button.modulate = Color(1.0, 0.84, 0.58) if selected else (Color.WHITE if owned else Color(0.52, 0.54, 0.58))
         button.pressed.connect(func() -> void:
             if car_id == _selected_car_id:
                 set_garage_status("%s уже выбран." % _car_display_name(entry))
+            elif not owned:
+                _store_selected_id = car_id
+                _show_panel(PANEL_STORE)
+                _refresh_store()
             else:
                 _request_car_selection(car_id)
         )
@@ -1051,7 +1114,7 @@ func _build_home_panel(parent: Node) -> Control:
     _label(left, "СВОБОДНЫЕ ДОРОГИ RICHTOWN", 16, Color(1.0, 0.78, 0.48), true)
     _home_goal_label = _label(left, "БЛИЖАЙШАЯ ЦЕЛЬ: до уровня 2 осталось 50.0 км", MIN_FONT_SIZE, Color(0.92, 0.96, 1.0))
     _home_goal_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _home_play_button = _picture_button(MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • Shelby GT500 • свободная езда", Vector2(0.0, 172.0), 46)
+    _home_play_button = _picture_button(MENU_PLAY_TEXTURE, "▶  ИГРАТЬ", "RichTown • Shelbie GT500 • свободная езда", Vector2(0.0, 172.0), 46)
     _home_play_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     _home_play_button.pressed.connect(func() -> void: play_requested.emit())
     left.add_child(_home_play_button)
@@ -1103,7 +1166,7 @@ func _build_garage_panel(parent: Node) -> Control:
     var left := VBoxContainer.new()
     left.add_theme_constant_override("separation", 7)
     left_panel.add_child(left)
-    _garage_title_label = _label(left, "Shelby GT500 (1967)", 25, Color.WHITE, true)
+    _garage_title_label = _label(left, "Shelbie GT500 (1967)", 25, Color.WHITE, true)
     _garage_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _garage_category_label = _label(left, "МАСЛКАР • ЗАДНИЙ ПРИВОД", MIN_FONT_SIZE, COL_MUTED, true)
     _garage_category_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1522,7 +1585,7 @@ func _build_store_panel(parent: Node) -> Control:
     details.add_theme_constant_override("separation", 8)
     detail_panel.add_child(details)
     _label(details, "ВЫБРАННЫЙ ТОВАР", MIN_FONT_SIZE, COL_MUTED, true)
-    _store_detail_title = _label(details, "Shelby GT500 '67", 24, Color.WHITE, true)
+    _store_detail_title = _label(details, "Shelbie GT500 '67", 24, Color.WHITE, true)
     _store_detail_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _store_detail_label = _label(details, "", MIN_FONT_SIZE, COL_TEXT)
     _store_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1557,7 +1620,8 @@ func _store_items() -> Array[Dictionary]:
             "car_id": car_id,
             "type": "cars",
             "name": _car_display_name(entry),
-            "price": 0,
+            "price": int(entry.get("price_cr", 0)),
+            "owned": _is_car_owned_menu(car_id),
             "power": int(values.get("power", entry.get("power_hp", 0))),
             "torque": int(values.get("torque", entry.get("torque_nm", 0))),
             "accel": float(values.get("accel", entry.get("accel_0_100_s", 6.0))),
@@ -1614,7 +1678,12 @@ func _cycle_store_sort() -> void:
 
 func _store_item_status(item: Dictionary) -> String:
     if String(item.get("type", "")) == "cars":
-        return "ВЫБРАН" if String(item.get("car_id", item.get("id", ""))) == _selected_car_id else "В ГАРАЖЕ"
+        var item_car := String(item.get("car_id", item.get("id", "")))
+        if item_car == _selected_car_id:
+            return "ВЫБРАН"
+        if bool(item.get("owned", false)):
+            return "В ГАРАЖЕ"
+        return "CR %s" % _fmt_int(int(item.get("price", 0)))
     var level := int(item.get("level", 0))
     var current_level := int(_customization.get("tuning_level", 0))
     var owned_max := int(_customization.get("tuning_owned_max", 0))
@@ -1692,7 +1761,7 @@ func _refresh_store_details() -> void:
         var is_selected_car := car_id == _selected_car_id
         var ratings := car_specs.get("ratings", {}) as Dictionary
         _store_detail_label.text = "СТАТУС: %s\n\n%s\nДвигатель: %s\nКласс %s • индекс %d\nМощность: %d л.с.\nМомент: %d Нм при %d\n0–100 км/ч: %.1f с\nМакс. скорость: %d км/ч\nКоробка: %s\nПривод: %s\nМасса: %s кг\nГабариты: %.2f × %.2f × %.2f м\n\nСкорость %.1f • Разгон %.1f\nУправление %.1f • Дрифт %.1f\n\nРеальная 3D-модель уже показана в студии по центру. Выбор меняет модель, физику, звук, камеру и отдельную кастомизацию этой машины." % [
-            "выбран сейчас" if is_selected_car else "уже в вашем гараже",
+            "выбран сейчас" if is_selected_car else ("уже в вашем гараже" if _is_car_owned_menu(car_id) else "не куплен • цена CR %s" % _fmt_int(int(selected.get("price", 0)))),
             String(car_specs.get("category", "АВТОМОБИЛЬ")),
             String(car_specs.get("engine", "—")),
             String(selected.get("class", "A")), int(selected.get("pi", 612)), int(selected.get("power", 0)), int(selected.get("torque", 0)), int(car_specs.get("torque_rpm", 0)), float(selected.get("accel", 6.0)),
@@ -1700,8 +1769,16 @@ func _refresh_store_details() -> void:
             _fmt_int(int(round(float(car_specs.get("mass_kg", 0.0))))), float(car_specs.get("length_m", 0.0)), float(car_specs.get("width_m", 0.0)), float(car_specs.get("height_m", 0.0)),
             float(ratings.get("speed", 0.0)), float(ratings.get("accel", 0.0)), float(ratings.get("handling", 0.0)), float(ratings.get("drift", 0.0)),
         ]
-        _store_action_button.text = "ОТКРЫТЬ В ГАРАЖЕ" if is_selected_car else "ВЫБРАТЬ АВТО"
-        _store_action_button.disabled = false
+        if is_selected_car:
+            _store_action_button.text = "ОТКРЫТЬ В ГАРАЖЕ"
+            _store_action_button.disabled = false
+        elif _is_car_owned_menu(car_id):
+            _store_action_button.text = "ВЫБРАТЬ АВТО"
+            _store_action_button.disabled = false
+        else:
+            var car_price := int(selected.get("price", 0))
+            _store_action_button.text = "КУПИТЬ ЗА CR %s" % _fmt_int(car_price)
+            _store_action_button.disabled = credits < car_price
         return
     var level := int(selected.get("level", 0))
     var current_level := int(_customization.get("tuning_level", 0))
@@ -1740,6 +1817,8 @@ func _on_store_action_pressed() -> void:
             var car_id := String(item.get("car_id", item.get("id", "")))
             if car_id == _selected_car_id:
                 _show_panel(PANEL_GARAGE)
+            elif not _is_car_owned_menu(car_id):
+                car_purchase_requested.emit(car_id)
             else:
                 _request_car_selection(car_id)
             return
@@ -2054,7 +2133,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.60-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.61-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2246,19 +2325,14 @@ func _update_world_progress() -> void:
         _world_progress_label.text = "ВСЕ ГОТОВЫЕ КАРТЫ БЕСПЛАТНЫ: RichTown и Пустынный каньон открыты сразу. Северные горы тоже будут бесплатны, но этот мир ещё в разработке."
         _refresh_world_cards()
         return
-    var level := int(_profile_view.get("level", 1))
-    var credits := int(_profile_view.get("credits", 35000))
-    var mountains_left := maxi(WORLD_MOUNTAINS_REQUIRED_LEVEL - level, 0)
-    var canyon_left := maxi(WORLD_CANYON_REQUIRED_CREDITS - credits, 0)
-    var canyon_line := ""
-    if canyon_left == 0:
-        canyon_line = "ПУСТЫННЫЙ КАНЬОН: ОТКРЫТ • выберите карточку мира выше, чтобы поехать в пустыню"
-    else:
-        canyon_line = "ПУСТЫННЫЙ КАНЬОН: CR %s / %s • не хватает CR %s" % [_fmt_int(credits), _fmt_int(WORLD_CANYON_REQUIRED_CREDITS), _fmt_int(canyon_left)]
-    _world_progress_label.text = "СЕВЕРНЫЕ ГОРЫ: уровень %d / %d%s • мир в разработке\n%s" % [
-        level, WORLD_MOUNTAINS_REQUIRED_LEVEL, " • условие выполнено" if mountains_left == 0 else " • осталось уровней: %d" % mountains_left,
-        canyon_line,
-    ]
+    var credits := int(_profile_view.get("credits", 0))
+    var lines: Array[String] = []
+    lines.append("RICHTOWN: ОТКРЫТ • бесплатный стартовый мир")
+    lines.append(_world_progress_line("desert", "ПУСТЫННЫЙ КАНЬОН", credits))
+    lines.append(_world_progress_line("greenforest", "ЗЕЛЁНЫЙ ЛЕС", credits))
+    lines.append("СЕВЕРНЫЕ ГОРЫ: мир в разработке • откроется на уровне %d" % WORLD_MOUNTAINS_REQUIRED_LEVEL)
+    lines.append("Зарабатывайте CR ездой (200 CR/км), достижениями и ежедневными заданиями во вкладке «Онлайн».")
+    _world_progress_label.text = "\n".join(lines)
     _refresh_world_cards()
 
 
@@ -2274,11 +2348,19 @@ func _world_display_name(world_id: String = "") -> String:
 func _desert_unlocked() -> bool:
     if WORLDS_FREE_FOR_ALL:
         return true
-    return int(_profile_view.get("credits", 35000)) >= WORLD_CANYON_REQUIRED_CREDITS
+    return _is_world_owned_menu("desert")
 
 
 func _on_world_card_pressed(world_id: String) -> void:
-    if world_id == "desert" and not _desert_unlocked():
+    if not _is_world_owned_menu(world_id):
+        var price := _world_price(world_id)
+        var credits_now := int(_profile_view.get("credits", 0))
+        if credits_now >= price:
+            world_purchase_requested.emit(world_id)
+        elif world_id == "desert" and _desert_card_subtitle != null:
+            _desert_card_subtitle.text = "НЕ ХВАТАЕТ CR %s • зарабатывайте ездой и заданиями" % _fmt_int(price - credits_now)
+        elif world_id == "greenforest" and _forest_card_subtitle != null:
+            _forest_card_subtitle.text = "НЕ ХВАТАЕТ CR %s • зарабатывайте ездой и заданиями" % _fmt_int(price - credits_now)
         return
     if world_id != _current_world_id:
         world_selected.emit(world_id)
@@ -2312,14 +2394,14 @@ func _refresh_world_cards() -> void:
         _set_picture_card(_richtown_card, MENU_WORLD_TEXTURE, "RICHTOWN" + ("" if (desert or forest) else " • ТЕКУЩИЙ МИР"), "игровой обзор города • побережье • Остров-Пальма")
     if _desert_card != null:
         var unlocked := _desert_unlocked()
-        _desert_card.disabled = not unlocked
+        _desert_card.disabled = false
         _desert_card.modulate = Color.WHITE if unlocked else Color(0.52, 0.54, 0.58)
         _desert_card.text = "ПУСТЫННЫЙ КАНЬОН" + ("" if not desert else " • ТЕКУЩИЙ")
         if _desert_lock_icon != null:
             _desert_lock_icon.visible = not unlocked
         if _desert_card_subtitle != null:
             if not unlocked:
-                _desert_card_subtitle.text = "нужно накопить CR %s" % _fmt_int(WORLD_CANYON_REQUIRED_CREDITS)
+                _desert_card_subtitle.text = "закрыто • купить за CR %s • степь, каньоны, солончак" % _fmt_int(_world_price("desert"))
             elif desert:
                 _desert_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • каньоны • солончак • оазис"
             else:
@@ -2327,9 +2409,17 @@ func _refresh_world_cards() -> void:
     if _world_title_label != null:
         _world_title_label.text = "%s — ТЕКУЩИЙ МИР" % _world_display_name()
     if _forest_card != null:
+        var forest_owned := _is_world_owned_menu("greenforest")
+        _forest_card.disabled = false
+        _forest_card.modulate = Color.WHITE if (forest_owned or forest) else Color(0.52, 0.54, 0.58)
         _forest_card.text = "ЗЕЛЁНЫЙ ЛЕС" + (" • ТЕКУЩИЙ" if forest else "")
         if _forest_card_subtitle != null:
-            _forest_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • озеро • холмы • ферма" if forest else "бесплатно • открыт • 4×4 км • озеро • холмы • ферма"
+            if forest:
+                _forest_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • озеро • холмы • ферма"
+            elif forest_owned:
+                _forest_card_subtitle.text = "открыт • 4×4 км • озеро • холмы • ферма"
+            else:
+                _forest_card_subtitle.text = "закрыто • купить за CR %s • 4×4 км • озеро • холмы • ферма" % _fmt_int(_world_price("greenforest"))
     if _world_detail_label != null:
         _world_detail_label.text = _forest_detail_text() if forest else (_desert_detail_text() if desert else _richtown_detail_text())
     if _world_map_button != null:
@@ -2387,6 +2477,7 @@ func refresh_profile(view: Dictionary) -> void:
                 int(round(float(item.get("drift_deg", 0.0)))),
             ])
         _car_stats_label.text = "\n".join(car_lines) if not car_lines.is_empty() else "Автомобили — 0.0 км"
+    _refresh_online_panel()
 
 
 func _fmt_int(value: int) -> String:
@@ -2399,3 +2490,581 @@ func _fmt_int(value: int) -> String:
         if count % 3 == 0 and i > 0:
             out = " " + out
     return ("-" if value < 0 else "") + out
+
+
+# --------------------------------------------------------------------- #
+# 0.2.61 online: accounts, daily quests, multiplayer, feedback, admin
+# --------------------------------------------------------------------- #
+
+const ONLINE_WELCOME_TEXT := """Nitches — тестовая игра в активной разработке (alpha).
+
+Регистрируясь, вы получаете ранний доступ: можно играть и тестировать новые миры и машины, выполнять 10 ежедневных заданий за внутриигровую валюту, ездить вместе с другими игроками в мультиплеере и — самое ценное для проекта — писать отзывы и предложения прямо из игры на этой вкладке.
+
+Проект будет развиваться: новые карты, машины, гонки и графика. Наша цель — открытая гоночная игра уровня Forza Horizon, которая живёт на телефоне.
+
+Честно о тестовой версии: возможны ошибки, вылеты и сбросы прогресса при крупных обновлениях. Аккаунт и прогресс хранятся на сервере разработчика (Cloudflare). Что именно мы храним и зачем — в политике конфиденциальности (кнопка ниже).
+
+Первый зарегистрированный игрок сервера автоматически становится его разработчиком (администратором) и получает админ-панель.
+
+Создавая аккаунт, вы соглашаетесь с политикой конфиденциальности."""
+
+const ONLINE_PRIVACY_TEXT := """Политика конфиденциальности игры Nitches (краткая версия; полная — на странице /privacy вашего игрового сервера и в файле docs/PRIVACY.md репозитория).
+
+1. Кто обрабатывает данные: разработчик игры Nitches (инди-проект). Сервер работает на инфраструктуре Cloudflare (Workers + база D1) — Cloudflare является техническим хостингом.
+
+2. Что мы собираем:
+• аккаунт: никнейм и пароль (пароль хранится только как криптографический хэш PBKDF2 с солью — мы его не знаем);
+• игровой прогресс: валюта CR, купленные машины и карты, статистика вождения (пробег, скорость, дрифт, время), прогресс ежедневных заданий;
+• мультиплеер: ваш никнейм, модель и позиция машины передаются другим игрокам комнаты в реальном времени и в базу не записываются;
+• отзывы, которые вы отправляете из игры, и ваш никнейм.
+Мы НЕ собираем: настоящее имя, e-mail (не запрашивается), телефон, геолокацию, контакты, фото и платёжные данные. Рекламы и сторонней аналитики в игре нет.
+
+3. Зачем: вход в аккаунт, сохранение прогресса между устройствами, экономика и задания, мультиплеер, таблица лидеров (никнейм и статистика), обработка отзывов, защита от накруток.
+
+4. Кому передаётся: никому, кроме Cloudflare (хостинг), игроков вашей мультиплеерной комнаты (никнейм, машина, позиция) и публичной таблицы лидеров (никнейм, пробег, уровень). Данные не продаются.
+
+5. Хранение: пока существует аккаунт; сессионные токены — до 30 дней, отзываются кнопкой «Выйти». Игра тестовая: при крупных обновлениях возможны сбросы прогресса.
+
+6. Ваши права: запросить экспорт или полное удаление аккаунта через форму отзыва (категория «Вопрос по аккаунту») — выполняем в течение 30 дней. Без аккаунта можно играть гостем полностью офлайн: тогда на сервер ничего не отправляется.
+
+7. Дети: игра не предназначена для детей младше 13 лет.
+
+8. Изменения политики публикуем на странице /privacy сервера с новой датой; о существенных изменениях сообщим в игре.
+
+9. Контакт: форма отзыва на этой вкладке или Issues репозитория Aleksandr-pro/Nitches на GitHub."""
+
+const ONLINE_FEEDBACK_CATEGORIES := ["general", "bug", "idea", "account"]
+
+
+func _is_car_owned_menu(car_id: String) -> bool:
+    var owned: Array = _profile_view.get("owned_cars", [])
+    if owned.is_empty():
+        return NativeCarCatalog.normalize_id(car_id) == NativeCarCatalog.DEFAULT_CAR_ID
+    return NativeCarCatalog.normalize_id(car_id) in owned
+
+
+func _is_world_owned_menu(world_id: String) -> bool:
+    if WORLDS_FREE_FOR_ALL:
+        return true
+    var owned: Array = _profile_view.get("owned_worlds", [])
+    if owned.is_empty():
+        return world_id == "richtown"
+    return world_id in owned
+
+
+func _world_price(world_id: String) -> int:
+    var prices: Dictionary = _profile_view.get("world_prices", {})
+    if prices.has(world_id):
+        return int(prices[world_id])
+    if world_id == "desert":
+        return WORLD_CANYON_REQUIRED_CREDITS
+    if world_id == "greenforest":
+        return WORLD_FOREST_REQUIRED_CREDITS
+    return 0
+
+
+func _world_progress_line(world_id: String, title: String, credits: int) -> String:
+    if _is_world_owned_menu(world_id):
+        return "%s: ОТКРЫТ • выберите карточку мира выше" % title
+    var price := _world_price(world_id)
+    if credits >= price:
+        return "%s: можно купить за CR %s • нажмите карточку мира" % [title, _fmt_int(price)]
+    return "%s: CR %s / %s • не хватает CR %s" % [title, _fmt_int(credits), _fmt_int(price), _fmt_int(price - credits)]
+
+
+func online_set_status(text: String) -> void:
+    _online_status_text = text
+    if _online_status_label != null:
+        _online_status_label.text = text
+
+
+func _online_box(parent: Node) -> VBoxContainer:
+    var panel := _panel_box(parent)
+    var margin := MarginContainer.new()
+    margin.add_theme_constant_override("margin_left", 12)
+    margin.add_theme_constant_override("margin_right", 12)
+    margin.add_theme_constant_override("margin_top", 10)
+    margin.add_theme_constant_override("margin_bottom", 10)
+    margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    panel.add_child(margin)
+    var box := VBoxContainer.new()
+    box.add_theme_constant_override("separation", 7)
+    margin.add_child(box)
+    return box
+
+
+func _build_online_panel(parent: Node) -> Control:
+    var vbox := _new_panel(parent, 0.52)
+    _label(vbox, "ОНЛАЙН • ТЕСТОВАЯ ВЕРСИЯ", 27, Color.WHITE, true)
+    _online_status_label = _label(vbox, "Гостевой режим: игра работает полностью офлайн. Аккаунт добавит серверные сохранения, задания, лидеров и мультиплеер.", 15, Color(1.0, 0.82, 0.55))
+    _online_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+    var scroll := ScrollContainer.new()
+    scroll.name = "OnlineScroll0261"
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(scroll)
+    var col := VBoxContainer.new()
+    col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    col.add_theme_constant_override("separation", 10)
+    scroll.add_child(col)
+
+    # --- account ---
+    var account_box := _online_box(col)
+    _label(account_box, "АККАУНТ ИГРОКА", 19, Color.WHITE, true)
+    _online_account_label = _label(account_box, "", 15, COL_MUTED)
+    _online_account_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _online_server_edit = _line_edit("", "Адрес сервера: https://…workers.dev")
+    account_box.add_child(_online_server_edit)
+    var creds_row := HBoxContainer.new()
+    creds_row.add_theme_constant_override("separation", 8)
+    account_box.add_child(creds_row)
+    _online_user_edit = _line_edit("", "Никнейм (3–16: латиница, цифры, _)")
+    _online_user_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creds_row.add_child(_online_user_edit)
+    _online_pass_edit = _line_edit("", "Пароль (от 6 символов)")
+    _online_pass_edit.secret = true
+    _online_pass_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creds_row.add_child(_online_pass_edit)
+    var auth_row := HBoxContainer.new()
+    auth_row.add_theme_constant_override("separation", 8)
+    account_box.add_child(auth_row)
+    _online_register_button = _button("РЕГИСТРАЦИЯ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 17)
+    _online_register_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_register_button.pressed.connect(_on_online_register_pressed)
+    auth_row.add_child(_online_register_button)
+    _online_login_button = _button("ВОЙТИ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 17)
+    _online_login_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_login_button.pressed.connect(_on_online_login_pressed)
+    auth_row.add_child(_online_login_button)
+    _online_logout_button = _button("ВЫЙТИ", COL_BORDER, Vector2(0.0, MIN_TOUCH_HEIGHT), 17)
+    _online_logout_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_logout_button.pressed.connect(func() -> void: account_logout_requested.emit())
+    auth_row.add_child(_online_logout_button)
+    var docs_row := HBoxContainer.new()
+    docs_row.add_theme_constant_override("separation", 8)
+    account_box.add_child(docs_row)
+    var about_button := _button("О ТЕСТОВОЙ ВЕРСИИ", COL_BORDER, Vector2(0.0, MIN_TOUCH_HEIGHT), 15)
+    about_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    about_button.pressed.connect(func() -> void: _show_online_overlay("welcome_info"))
+    docs_row.add_child(about_button)
+    var privacy_button := _button("ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ", COL_BORDER, Vector2(0.0, MIN_TOUCH_HEIGHT), 15)
+    privacy_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    privacy_button.pressed.connect(func() -> void: _show_online_overlay("privacy"))
+    docs_row.add_child(privacy_button)
+    _label(account_box, "Первый зарегистрированный игрок сервера становится разработчиком (admin). Сервер ставится на ваш Cloudflare за 5 минут — инструкция server/README.md в репозитории игры.", 14, COL_MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+    # --- daily quests ---
+    var quests_box := _online_box(col)
+    _label(quests_box, "ЕЖЕДНЕВНЫЕ ЗАДАНИЯ • 10 В ДЕНЬ", 19, Color.WHITE, true)
+    _label(quests_box, "Новые задания каждый день. Награды — валюта CR на машины и миры. С аккаунтом задания и награды подтверждает сервер.", 14, COL_MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _online_quests_box = VBoxContainer.new()
+    _online_quests_box.add_theme_constant_override("separation", 6)
+    quests_box.add_child(_online_quests_box)
+
+    # --- multiplayer ---
+    var mp_box := _online_box(col)
+    _label(mp_box, "МУЛЬТИПЛЕЕР • СВОБОДНАЯ ЕЗДА", 19, Color.WHITE, true)
+    _online_mp_label = _label(mp_box, "", 15, COL_MUTED)
+    _online_mp_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _online_rooms_label = _label(mp_box, "", 14, COL_MUTED)
+    _online_rooms_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var mp_row := HBoxContainer.new()
+    mp_row.add_theme_constant_override("separation", 8)
+    mp_box.add_child(mp_row)
+    _online_mp_join_button = _button("ВОЙТИ В КОМНАТУ ЭТОГО МИРА", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 16)
+    _online_mp_join_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_mp_join_button.pressed.connect(func() -> void: multiplayer_join_requested.emit())
+    mp_row.add_child(_online_mp_join_button)
+    _online_mp_leave_button = _button("ВЫЙТИ ИЗ КОМНАТЫ", COL_BORDER, Vector2(0.0, MIN_TOUCH_HEIGHT), 16)
+    _online_mp_leave_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_mp_leave_button.pressed.connect(func() -> void: multiplayer_leave_requested.emit())
+    mp_row.add_child(_online_mp_leave_button)
+
+    # --- leaderboard ---
+    var board_box := _online_box(col)
+    _label(board_box, "ТАБЛИЦА ЛИДЕРОВ", 19, Color.WHITE, true)
+    var board_row := HBoxContainer.new()
+    board_row.add_theme_constant_override("separation", 8)
+    board_box.add_child(board_row)
+    var board_dist := _button("ПО ПРОБЕГУ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 15)
+    board_dist.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    board_dist.pressed.connect(func() -> void: leaderboard_requested.emit("distance"))
+    board_row.add_child(board_dist)
+    var board_cr := _button("ПО CR", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 15)
+    board_cr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    board_cr.pressed.connect(func() -> void: leaderboard_requested.emit("credits"))
+    board_row.add_child(board_cr)
+    _online_board_label = _label(board_box, "Нажмите «По пробегу», чтобы загрузить таблицу (нужен адрес сервера выше).", 15, COL_TEXT)
+    _online_board_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+    # --- feedback ---
+    var feedback_box := _online_box(col)
+    _label(feedback_box, "ОТЗЫВ РАЗРАБОТЧИКУ", 19, Color.WHITE, true)
+    _label(feedback_box, "Игра в разработке, и ваши отзывы напрямую влияют на неё: что понравилось, что сломалось, какие машины и карты добавить?", 14, COL_MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _online_feedback_category = OptionButton.new()
+    _online_feedback_category.add_item("Отзыв")
+    _online_feedback_category.add_item("Сообщить о баге")
+    _online_feedback_category.add_item("Идея / предложение")
+    _online_feedback_category.add_item("Вопрос по аккаунту")
+    _online_feedback_category.custom_minimum_size = Vector2(0.0, MIN_TOUCH_HEIGHT)
+    _online_feedback_category.add_theme_font_override("font", _body_font)
+    _online_feedback_category.add_theme_font_size_override("font_size", 16)
+    _online_feedback_category.add_theme_color_override("font_color", COL_TEXT)
+    feedback_box.add_child(_online_feedback_category)
+    _online_feedback_edit = TextEdit.new()
+    _online_feedback_edit.custom_minimum_size = Vector2(0.0, 96.0)
+    _online_feedback_edit.placeholder_text = "Напишите отзыв, баг или идею…"
+    _online_feedback_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    _online_feedback_edit.add_theme_font_override("font", _body_font)
+    _online_feedback_edit.add_theme_font_size_override("font_size", 16)
+    _online_feedback_edit.add_theme_color_override("font_color", COL_TEXT)
+    _online_feedback_edit.add_theme_color_override("font_placeholder_color", COL_MUTED)
+    _online_feedback_edit.add_theme_color_override("caret_color", COL_ACCENT)
+    _online_feedback_edit.add_theme_stylebox_override("normal", _style(Color(0.0, 0.0, 0.0, 0.42), COL_BORDER, 6, 1))
+    _online_feedback_edit.add_theme_stylebox_override("focus", _style(Color(0.02, 0.03, 0.04, 0.58), COL_ACCENT, 6, 2))
+    feedback_box.add_child(_online_feedback_edit)
+    var feedback_send := _button("ОТПРАВИТЬ ОТЗЫВ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 16)
+    feedback_send.pressed.connect(_on_online_feedback_pressed)
+    feedback_box.add_child(feedback_send)
+
+    # --- developer admin (first registered player of the server) ---
+    var admin_box := _online_box(col)
+    _online_admin_box = admin_box.get_parent().get_parent() as PanelContainer
+    _label(admin_box, "АДМИН-ПАНЕЛЬ РАЗРАБОТЧИКА", 19, Color(1.0, 0.82, 0.55), true)
+    _online_admin_stats_label = _label(admin_box, "Статистика сервера загрузится по кнопке ниже.", 15, COL_TEXT)
+    _online_admin_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var admin_row := HBoxContainer.new()
+    admin_row.add_theme_constant_override("separation", 8)
+    admin_box.add_child(admin_row)
+    for spec in [["СТАТИСТИКА", "stats"], ["ИГРОКИ", "users"], ["ОТЗЫВЫ", "feedback"]]:
+        var admin_button := _button(String(spec[0]), COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 15)
+        admin_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var action := String(spec[1])
+        admin_button.pressed.connect(func() -> void: admin_requested.emit(action, {}))
+        admin_row.add_child(admin_button)
+    var grant_row := HBoxContainer.new()
+    grant_row.add_theme_constant_override("separation", 8)
+    admin_box.add_child(grant_row)
+    _online_grant_user_edit = _line_edit("", "Ник игрока")
+    _online_grant_user_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    grant_row.add_child(_online_grant_user_edit)
+    _online_grant_amount_edit = _line_edit("", "Сумма CR (±)")
+    _online_grant_amount_edit.custom_minimum_size = Vector2(150.0, MIN_TOUCH_HEIGHT)
+    grant_row.add_child(_online_grant_amount_edit)
+    var grant_button := _button("ВЫДАТЬ CR", COL_ACCENT, Vector2(170.0, MIN_TOUCH_HEIGHT), 15)
+    grant_button.pressed.connect(_on_admin_grant_pressed)
+    grant_row.add_child(grant_button)
+    var delete_row := HBoxContainer.new()
+    delete_row.add_theme_constant_override("separation", 8)
+    admin_box.add_child(delete_row)
+    _online_feedback_id_edit = _line_edit("", "Номер отзыва")
+    _online_feedback_id_edit.custom_minimum_size = Vector2(170.0, MIN_TOUCH_HEIGHT)
+    delete_row.add_child(_online_feedback_id_edit)
+    var delete_button := _button("УДАЛИТЬ ОТЗЫВ", COL_BORDER, Vector2(190.0, MIN_TOUCH_HEIGHT), 15)
+    delete_button.pressed.connect(_on_admin_feedback_delete_pressed)
+    delete_row.add_child(delete_button)
+    _online_admin_data_label = _label(admin_box, "", 14, COL_TEXT)
+    _online_admin_data_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    if _online_admin_box != null:
+        _online_admin_box.visible = false
+
+    _build_online_overlay()
+    _online_panel_root = vbox.get_parent().get_parent() as Control
+    return _online_panel_root
+
+
+func _build_online_overlay() -> void:
+    _online_overlay = PanelContainer.new()
+    _online_overlay.name = "OnlineOverlay0261"
+    _online_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _online_overlay.add_theme_stylebox_override("panel", _style(Color(0.002, 0.004, 0.008, 0.95), COL_ACCENT, 10, 2))
+    _online_overlay.visible = false
+    if _root != null:
+        _root.add_child(_online_overlay)
+    else:
+        add_child(_online_overlay)
+    var margin := MarginContainer.new()
+    margin.add_theme_constant_override("margin_left", 28)
+    margin.add_theme_constant_override("margin_right", 28)
+    margin.add_theme_constant_override("margin_top", 22)
+    margin.add_theme_constant_override("margin_bottom", 22)
+    _online_overlay.add_child(margin)
+    var vbox := VBoxContainer.new()
+    vbox.add_theme_constant_override("separation", 12)
+    margin.add_child(vbox)
+    _online_overlay_title = _label(vbox, "", 25, Color.WHITE, true)
+    var scroll := ScrollContainer.new()
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(scroll)
+    _online_overlay_text = _label(scroll, "", 16, COL_TEXT)
+    _online_overlay_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _online_overlay_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 10)
+    vbox.add_child(row)
+    _online_overlay_primary = _button("ПОНЯТНО", COL_ACCENT, Vector2(340.0, MIN_TOUCH_HEIGHT), 17)
+    _online_overlay_primary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _online_overlay_primary.pressed.connect(_on_online_overlay_primary)
+    row.add_child(_online_overlay_primary)
+    var close_button := _button("ЗАКРЫТЬ", COL_BORDER, Vector2(180.0, MIN_TOUCH_HEIGHT), 17)
+    close_button.pressed.connect(func() -> void: _online_overlay.visible = false)
+    row.add_child(close_button)
+
+
+func _show_online_overlay(mode: String) -> void:
+    if _online_overlay == null:
+        return
+    _online_overlay_mode = mode
+    match mode:
+        "welcome_register":
+            _online_overlay_title.text = "ДОБРО ПОЖАЛОВАТЬ В ТЕСТ Nitches"
+            _online_overlay_text.text = ONLINE_WELCOME_TEXT
+            _online_overlay_primary.text = "СОГЛАСЕН — СОЗДАТЬ АККАУНТ"
+        "welcome_info":
+            _online_overlay_title.text = "О ТЕСТОВОЙ ВЕРСИИ"
+            _online_overlay_text.text = ONLINE_WELCOME_TEXT
+            _online_overlay_primary.text = "ПОНЯТНО"
+        "privacy":
+            _online_overlay_title.text = "ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ"
+            _online_overlay_text.text = ONLINE_PRIVACY_TEXT
+            _online_overlay_primary.text = "ПОНЯТНО"
+    var overlay_parent := _online_overlay.get_parent()
+    if overlay_parent != null:
+        overlay_parent.move_child(_online_overlay, overlay_parent.get_child_count() - 1)
+    _online_overlay.visible = true
+
+
+func _on_online_overlay_primary() -> void:
+    _online_overlay.visible = false
+    if _online_overlay_mode == "welcome_register":
+        var form := _online_form_values()
+        account_register_requested.emit(String(form["server"]), String(form["username"]), String(form["password"]))
+    _online_overlay_mode = ""
+
+
+func _online_form_values() -> Dictionary:
+    return {
+        "server": _online_server_edit.text.strip_edges() if _online_server_edit != null else "",
+        "username": _online_user_edit.text.strip_edges() if _online_user_edit != null else "",
+        "password": _online_pass_edit.text if _online_pass_edit != null else "",
+    }
+
+
+func _online_validate_form(server: String, username: String, password: String) -> bool:
+    if server.is_empty():
+        online_set_status("Укажите адрес сервера: его покажет «wrangler deploy» при установке сервера на ваш Cloudflare (инструкция — server/README.md).")
+        return false
+    if username.length() < 3:
+        online_set_status("Ник: минимум 3 символа (латиница, цифры, подчёркивание).")
+        return false
+    if password.length() < 6:
+        online_set_status("Пароль: минимум 6 символов.")
+        return false
+    return true
+
+
+func _on_online_register_pressed() -> void:
+    var form := _online_form_values()
+    if not _online_validate_form(String(form["server"]), String(form["username"]), String(form["password"])):
+        return
+    _show_online_overlay("welcome_register")
+
+
+func _on_online_login_pressed() -> void:
+    var form := _online_form_values()
+    if not _online_validate_form(String(form["server"]), String(form["username"]), String(form["password"])):
+        return
+    account_login_requested.emit(String(form["server"]), String(form["username"]), String(form["password"]))
+
+
+func _on_online_feedback_pressed() -> void:
+    var text := _online_feedback_edit.text.strip_edges() if _online_feedback_edit != null else ""
+    if text.length() < 3:
+        online_set_status("Напишите хотя бы пару слов в отзыве.")
+        return
+    var category := "general"
+    if _online_feedback_category != null:
+        var idx := clampi(_online_feedback_category.selected, 0, ONLINE_FEEDBACK_CATEGORIES.size() - 1)
+        category = ONLINE_FEEDBACK_CATEGORIES[idx]
+    feedback_requested.emit(text, category)
+    _online_feedback_edit.text = ""
+
+
+func _on_admin_grant_pressed() -> void:
+    var username := _online_grant_user_edit.text.strip_edges() if _online_grant_user_edit != null else ""
+    var amount := int(_online_grant_amount_edit.text.strip_edges()) if _online_grant_amount_edit != null else 0
+    if username.is_empty() or amount == 0:
+        online_set_status("Админ: укажите ник игрока и ненулевую сумму CR.")
+        return
+    admin_requested.emit("grant", {"username": username, "amount": amount})
+
+
+func _on_admin_feedback_delete_pressed() -> void:
+    var feedback_id := int(_online_feedback_id_edit.text.strip_edges()) if _online_feedback_id_edit != null else 0
+    if feedback_id <= 0:
+        online_set_status("Админ: укажите номер отзыва из списка «ОТЗЫВЫ».")
+        return
+    admin_requested.emit("feedback_delete", {"id": feedback_id})
+
+
+func _on_quest_claim_pressed(quest_id: String) -> void:
+    if not quest_id.is_empty():
+        daily_quest_claim_requested.emit(quest_id)
+
+
+func _fmt_quest_value(value: float, unit: String) -> String:
+    if unit == "км":
+        return "%.1f" % value
+    return str(int(round(value)))
+
+
+func _refresh_online_panel() -> void:
+    if _online_status_label == null:
+        return
+    if not _online_status_text.is_empty():
+        _online_status_label.text = _online_status_text
+    var account: Dictionary = _profile_view.get("account", {})
+    var logged_in := bool(account.get("logged_in", false))
+    var is_admin := bool(account.get("is_admin", false))
+    if _online_server_edit != null and not _online_server_edit.has_focus() and _online_server_edit.text.is_empty():
+        var known_url := String(account.get("server_url", ""))
+        if not known_url.is_empty():
+            _online_server_edit.text = known_url
+    if _online_account_label != null:
+        if logged_in:
+            _online_account_label.text = "Вы вошли как %s • %s\nПрогресс, машины и миры синхронизируются с сервером; задания подтверждает сервер." % [String(account.get("username", "")), "разработчик (admin)" if is_admin else "игрок"]
+        else:
+            _online_account_label.text = "Гость (офлайн): прогресс хранится только на устройстве, задания считаются локально. Создайте аккаунт — появятся серверные сохранения, таблица лидеров и мультиплеер."
+    if _online_register_button != null:
+        _online_register_button.disabled = logged_in
+        _online_login_button.disabled = logged_in
+        _online_logout_button.disabled = not logged_in
+    if _online_admin_box != null:
+        _online_admin_box.visible = is_admin
+    if _online_mp_label != null:
+        var mp_connected := bool(account.get("mp_connected", false))
+        if mp_connected:
+            _online_mp_label.text = "Вы в комнате текущего мира • игроков рядом: %d. Другие игроки — машины с никнеймами без столкновений: катайтесь колонной!" % int(account.get("mp_peers", 0))
+        else:
+            _online_mp_label.text = "Комната свободной езды текущего мира: другие игроки появятся рядом как машины с никнеймами. Нужны аккаунт и сервер с включённым мультиплеером."
+        _online_mp_join_button.disabled = not logged_in or mp_connected
+        _online_mp_leave_button.disabled = not mp_connected
+    _refresh_online_quests()
+
+
+func _refresh_online_quests() -> void:
+    if _online_quests_box == null:
+        return
+    for child in _online_quests_box.get_children():
+        _online_quests_box.remove_child(child)
+        child.queue_free()
+    var quests: Array = _profile_view.get("daily_quests", [])
+    if quests.is_empty():
+        _label(_online_quests_box, "Задания появятся после загрузки профиля.", 15, COL_MUTED)
+        return
+    for quest_variant in quests:
+        var quest: Dictionary = quest_variant
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation", 10)
+        _online_quests_box.add_child(row)
+        var texts := VBoxContainer.new()
+        texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        row.add_child(texts)
+        _label(texts, "%s — %s" % [String(quest.get("title", "Задание")), String(quest.get("detail", ""))], 16, Color.WHITE, true)
+        var unit := String(quest.get("unit", ""))
+        _label(texts, "%s / %s %s • награда CR %s" % [
+            _fmt_quest_value(float(quest.get("progress", 0.0)), unit),
+            _fmt_quest_value(float(quest.get("target", 0.0)), unit),
+            unit,
+            _fmt_int(int(quest.get("reward", 0))),
+        ], 14, COL_MUTED)
+        var claim := _button("", COL_ACCENT, Vector2(176.0, MIN_TOUCH_HEIGHT), 15)
+        if bool(quest.get("claimed", false)):
+            claim.text = "ПОЛУЧЕНО"
+            claim.disabled = true
+        elif bool(quest.get("completed", false)):
+            claim.text = "ЗАБРАТЬ CR"
+            claim.disabled = false
+        else:
+            claim.text = "В ПРОЦЕССЕ"
+            claim.disabled = true
+        claim.pressed.connect(_on_quest_claim_pressed.bind(String(quest.get("id", ""))))
+        row.add_child(claim)
+
+
+func show_leaderboard(rows: Array, by: String) -> void:
+    if _online_board_label == null:
+        return
+    if rows.is_empty():
+        _online_board_label.text = "Пока пусто — станьте первым в таблице лидеров!"
+        return
+    var lines: Array[String] = []
+    lines.append("ЛИДЕРЫ ПО CR" if by == "credits" else "ЛИДЕРЫ ПО ПРОБЕГУ")
+    var place := 0
+    for row_variant in rows:
+        var row: Dictionary = row_variant
+        place += 1
+        lines.append("%d. %s • %.1f км • ур. %d • CR %s" % [
+            place,
+            String(row.get("username", "?")),
+            float(row.get("distance_km", 0.0)),
+            int(row.get("level", 1)),
+            _fmt_int(int(row.get("credits", 0))),
+        ])
+    _online_board_label.text = "\n".join(lines)
+
+
+func show_online_rooms(data: Dictionary) -> void:
+    if _online_rooms_label == null:
+        return
+    var worlds: Dictionary = data.get("worlds", {})
+    _online_rooms_label.text = "Сейчас онлайн: %d • RichTown: %d • Пустыня: %d • Лес: %d" % [
+        int(data.get("total", 0)),
+        int(worlds.get("richtown", 0)),
+        int(worlds.get("desert", 0)),
+        int(worlds.get("greenforest", 0)),
+    ]
+
+
+func show_admin_data(kind: String, data: Dictionary) -> void:
+    match kind:
+        "stats":
+            if _online_admin_stats_label != null:
+                _online_admin_stats_label.text = "Игроков зарегистрировано: %d • онлайн сейчас: %d • отзывов: %d • наград за задания сегодня: %d" % [
+                    int(data.get("users", 0)), int(data.get("online", 0)), int(data.get("feedback", 0)), int(data.get("claims_today", 0)),
+                ]
+        "users":
+            if _online_admin_data_label != null:
+                var lines: Array[String] = ["ИГРОКИ СЕРВЕРА:"]
+                for user_variant in data.get("users", []):
+                    var user: Dictionary = user_variant
+                    lines.append("#%d %s (%s) • CR %s" % [
+                        int(user.get("id", 0)), String(user.get("username", "?")),
+                        "admin" if String(user.get("role", "player")) == "admin" else "игрок",
+                        _fmt_int(int(user.get("credits", 0))),
+                    ])
+                _online_admin_data_label.text = "\n".join(lines)
+        "feedback":
+            if _online_admin_data_label != null:
+                var lines: Array[String] = ["ОТЗЫВЫ ИГРОКОВ (новые сверху):"]
+                var items: Array = data.get("feedback", [])
+                if items.is_empty():
+                    lines.append("Отзывов пока нет.")
+                for item_variant in items:
+                    var item: Dictionary = item_variant
+                    var text := String(item.get("text", ""))
+                    if text.length() > 140:
+                        text = text.left(140) + "…"
+                    lines.append("№%d [%s] %s: %s" % [
+                        int(item.get("id", 0)), String(item.get("category", "general")),
+                        String(item.get("username", "?")), text,
+                    ])
+                _online_admin_data_label.text = "\n".join(lines)
+        "grant":
+            online_set_status("Админ: баланс игрока %s теперь CR %s." % [String(data.get("username", "")), _fmt_int(int(data.get("credits", 0)))])
+            admin_requested.emit("users", {})
+        "feedback_delete":
+            online_set_status("Админ: отзыв удалён.")
+            admin_requested.emit("feedback", {})
