@@ -2696,7 +2696,7 @@ func _run_forest_smoke_checks(failures: Array[String]) -> void:
 	var mud_surface := _world.get_surface_at(Vector3(1250.0, _world.height_at(1250.0, 2750.0) + 0.5, 2750.0))
 	if String(mud_surface.get("kind", "")) != "mud":
 		failures.append("swamp mud surface is misclassified: %s" % str(mud_surface))
-	var field_surface := _world.get_surface_at(Vector3(1900.0, _world.height_at(1900.0, 3480.0) + 0.5, 3480.0))
+	var field_surface := _world.get_surface_at(Vector3(1580.0, _world.height_at(1580.0, 3120.0) + 0.5, 3120.0))
 	if String(field_surface.get("kind", "")) != "field":
 		failures.append("field surface is misclassified: %s" % str(field_surface))
 	var found_gravel := false

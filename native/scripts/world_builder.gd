@@ -275,6 +275,7 @@ func begin_build_world() -> void:
 
 func build_world_step() -> Dictionary:
 	if is_built:
+		_attach_collision_root()
 		return get_build_progress_state()
 	if not _build_started:
 		begin_build_world()
@@ -301,6 +302,8 @@ func build_world_step() -> Dictionary:
 	# the process is killed inside the next stage.
 	_build_profile_parts.append("%s=%dms" % [stage_label, Time.get_ticks_msec() - stage_started_msec])
 	print("[native-build] world=%s profile %s" % [world_id, "; ".join(PackedStringArray(_build_profile_parts))])
+	if is_built:
+		_attach_collision_root()
 	_build_stage_index += 1
 	_build_completed_weight += maxf(stage_weight, 0.01)
 	if _build_stage_index >= _build_stages.size() and not is_built:
@@ -1463,7 +1466,19 @@ func _create_collision_root() -> void:
 	_collision_root.name = "WorldColliders"
 	_collision_root.collision_layer = 1
 	_collision_root.collision_mask = 0
-	add_child(_collision_root)
+	# 0.2.55: the body deliberately stays OUT of the tree while the
+	# world builds.  Adding CollisionShape3D children to a live
+	# in-space StaticBody costs more per shape the more shapes the
+	# body already has (measured 2.3 ms -> 12 ms per add across a
+	# 19k-shape build), which made the GreenForest scatter stages
+	# take ~110 s and killed loading on Android.  Out of tree, shape
+	# adds are plain node operations; _attach_collision_root() puts
+	# the finished body into the space once, at build completion.
+
+
+func _attach_collision_root() -> void:
+	if _collision_root != null and _collision_root.get_parent() == null:
+		add_child(_collision_root)
 
 
 
@@ -1586,6 +1601,18 @@ func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 	)
 	if not _collider_cells.has(cell):
 		_collider_cells[cell] = []
+		# 0.2.55: seed the streaming state from the spawn focus so
+		# far shapes are created disabled (a free property write
+		# while the body is out of the tree) and the first
+		# _streaming_tick does not rewrite `disabled` on every
+		# shape of a huge body (that pass alone cost 55 s).
+		var cell_centre := Vector2(
+			_active_aabb.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
+			_active_aabb.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
+		)
+		var spawn_2d := Vector2(spawn_transform.origin.x, spawn_transform.origin.z)
+		_active_collider_cells[cell] = cell_centre.distance_to(spawn_2d) < COLLIDER_ACTIVE_RADIUS_M
+	collision.disabled = not bool(_active_collider_cells[cell])
 	(_collider_cells[cell] as Array).append(collision)
 
 
@@ -13372,14 +13399,18 @@ func _build_forest_extras() -> void:
 	# clearings (static poses, one collider each).
 	var deer_count := 0
 	for group_variant in _dz_data().get("deerGroups", []):
-		var group: Array = group_variant
-		for deer_variant in group:
-			var deer: Array = deer_variant
-			if deer.size() < 3:
-				continue
-			var dx := float(deer[0])
-			var dz := float(deer[1])
-			var dyaw := float(deer[2])
+		# Data ships herd centres {x, z, count}; expand them into
+		# individual deer deterministically around the centre.
+		var group: Dictionary = group_variant
+		var gx := _f(group, "x")
+		var gz := _f(group, "z")
+		var group_count := int(group.get("count", 3))
+		for di in range(group_count):
+			var ang := _hash01(int(gx) + di * 17, int(gz) + di * 29) * TAU
+			var rad := 4.0 + _hash01(int(gx) + di * 31, int(gz) + di * 13) * 16.0
+			var dx := gx + cos(ang) * rad
+			var dz := gz + sin(ang) * rad
+			var dyaw := _hash01(int(dx) * 3 + di * 7, int(dz) * 7 + di) * TAU
 			var o := Vector3(dx, height_at(dx, dz), dz)
 			var dbasis := Basis(Vector3.UP, dyaw)
 			var graze := int(absf(dx) * 3.0 + absf(dz) * 7.0) % 3 == 0
