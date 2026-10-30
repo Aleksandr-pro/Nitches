@@ -13488,6 +13488,263 @@ func _gf_cross_mesh(planes: int, half_w: float, height: float) -> ArrayMesh:
 	return mesh
 
 
+func _gf_vnoise3(lat: PackedFloat32Array, p: Vector3) -> float:
+	# Trilinear value noise on a wrapped 8^3 lattice — the coherent
+	# low-frequency field that shapes real-looking boulders.
+	const LS := 8
+	var xi := int(floor(p.x))
+	var yi := int(floor(p.y))
+	var zi := int(floor(p.z))
+	var xf := p.x - float(xi)
+	var yf := p.y - float(yi)
+	var zf := p.z - float(zi)
+	var xs := xf * xf * (3.0 - 2.0 * xf)
+	var ys := yf * yf * (3.0 - 2.0 * yf)
+	var zs := zf * zf * (3.0 - 2.0 * zf)
+	var x0 := posmod(xi, LS)
+	var x1 := posmod(xi + 1, LS)
+	var y0 := posmod(yi, LS) * LS
+	var y1 := posmod(yi + 1, LS) * LS
+	var z0 := posmod(zi, LS) * LS * LS
+	var z1 := posmod(zi + 1, LS) * LS * LS
+	var c000 := lat[x0 + y0 + z0]
+	var c100 := lat[x1 + y0 + z0]
+	var c010 := lat[x0 + y1 + z0]
+	var c110 := lat[x1 + y1 + z0]
+	var c001 := lat[x0 + y0 + z1]
+	var c101 := lat[x1 + y0 + z1]
+	var c011 := lat[x0 + y1 + z1]
+	var c111 := lat[x1 + y1 + z1]
+	return lerpf(lerpf(lerpf(c000, c100, xs), lerpf(c010, c110, xs), ys),
+		lerpf(lerpf(c001, c101, xs), lerpf(c011, c111, xs), ys), zs)
+
+
+func _gf_rock_mid(verts: Array, cache: Dictionary, a: int, b: int) -> int:
+	var key := mini(a, b) * 100000 + maxi(a, b)
+	if cache.has(key):
+		return int(cache[key])
+	var m: Vector3 = (verts[a] + verts[b]) * 0.5
+	verts.append(m.normalized())
+	var idx := verts.size() - 1
+	cache[key] = idx
+	return idx
+
+
+func _gf_rock_mesh(seed_i: int, sharpness: float) -> ArrayMesh:
+	# 0.2.59 ground-cover pass: icosphere displaced by 3-D value noise
+	# (broad shape + chip detail), three random planar joint cuts and
+	# a flattened seat. Flat-shaded facets; vertex colours carry moss
+	# on damp flat tops and a dark soil skirt at the base, while the
+	# triplanar gf_rock_gray PBR set does the micro-surface.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41000 + seed_i * 131
+	const LS := 8
+	var lat := PackedFloat32Array()
+	lat.resize(LS * LS * LS)
+	for li in range(lat.size()):
+		lat[li] = rng.randf()
+	var t := 1.6180339887
+	var src: Array = []
+	for v in [Vector3(-1, t, 0), Vector3(1, t, 0), Vector3(-1, -t, 0), Vector3(1, -t, 0),
+			Vector3(0, -1, t), Vector3(0, 1, t), Vector3(0, -1, -t), Vector3(0, 1, -t),
+			Vector3(t, 0, -1), Vector3(t, 0, 1), Vector3(-t, 0, -1), Vector3(-t, 0, 1)]:
+		src.append((v as Vector3).normalized())
+	var faces: Array = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+		[1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+		[3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+		[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]]
+	var cache: Dictionary = {}
+	for sub in range(2):
+		var nf: Array = []
+		for f in faces:
+			var a := int(f[0])
+			var b := int(f[1])
+			var c := int(f[2])
+			var ab := _gf_rock_mid(src, cache, a, b)
+			var bc := _gf_rock_mid(src, cache, b, c)
+			var ca := _gf_rock_mid(src, cache, c, a)
+			nf.append([a, ab, ca])
+			nf.append([b, bc, ab])
+			nf.append([c, ca, bc])
+			nf.append([ab, bc, ca])
+		faces = nf
+	var planes: Array = []
+	for pi in range(3):
+		var pn := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-0.5, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		planes.append(Vector4(pn.x, pn.y, pn.z, rng.randf_range(0.55, 0.85)))
+	var stretch := Vector3(rng.randf_range(0.85, 1.25), rng.randf_range(0.62, 0.90), rng.randf_range(0.85, 1.25))
+	var disp := PackedVector3Array()
+	disp.resize(src.size())
+	var broad := PackedFloat32Array()
+	broad.resize(src.size())
+	for vi in range(src.size()):
+		var p: Vector3 = src[vi]
+		var n1 := _gf_vnoise3(lat, p * 1.7 + Vector3(2.0, 2.0, 2.0))
+		var n2 := _gf_vnoise3(lat, p * 4.6 + Vector3(5.0, 1.0, 7.0))
+		var n3 := _gf_vnoise3(lat, p * 9.0 + Vector3(1.0, 6.0, 3.0))
+		broad[vi] = n1
+		var r := 1.0 + (n1 - 0.5) * 0.66 + (n2 - 0.5) * 0.26 * sharpness + (n3 - 0.5) * 0.10 * sharpness
+		var dp := p * clampf(r, 0.5, 1.45)
+		for plv in planes:
+			var pl: Vector4 = plv
+			var pn2 := Vector3(pl.x, pl.y, pl.z)
+			var dist := dp.dot(pn2)
+			if dist > pl.w:
+				dp -= pn2 * (dist - pl.w)
+		if dp.y < -0.32:
+			dp.y = -0.32 + (dp.y + 0.32) * 0.18
+		disp[vi] = Vector3(dp.x * stretch.x, dp.y * stretch.y, dp.z * stretch.z)
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var moss_col := Color(0.52, 0.72, 0.42)
+	var soil_col := Color(0.46, 0.39, 0.31)
+	for ti in range(faces.size()):
+		var f: Array = faces[ti]
+		var ia := int(f[0])
+		var ib := int(f[1])
+		var ic := int(f[2])
+		var a := disp[ia]
+		var b := disp[ib]
+		var c := disp[ic]
+		var n := (b - a).cross(c - a)
+		if n.length_squared() < 0.0000001:
+			continue
+		n = n.normalized()
+		var face_broad := (broad[ia] + broad[ib] + broad[ic]) / 3.0
+		var moss := smoothstep(0.35, 0.85, n.y) * smoothstep(0.45, 0.75, face_broad)
+		var shade := 0.86 + _hash01(ti * 7 + seed_i, seed_i * 13 + ti) * 0.24
+		var base_col := Color(0.94 * shade, 0.94 * shade, 0.93 * shade)
+		base_col = base_col.lerp(moss_col, moss * 0.55)
+		for v in [a, b, c]:
+			var soil := smoothstep(0.02, -0.28, v.y)
+			verts.append(v)
+			normals.append(n)
+			colors.append(base_col.lerp(soil_col, soil * 0.6))
+			uvs.append(Vector2.ZERO)
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _gf_rock_cluster_mesh(seed_i: int) -> ArrayMesh:
+	# Rock formation: one hero boulder plus two satellites leaning on
+	# it — reads as a natural outcrop instead of a lone ball.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.append_from(_gf_rock_mesh(seed_i * 3, 1.15), 0, Transform3D.IDENTITY)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 777 + seed_i * 17
+	for sat in range(2):
+		var ang := rng.randf_range(0.0, TAU)
+		var off := Vector3(cos(ang) * 0.85, -0.10, sin(ang) * 0.85)
+		var bs := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * rng.randf_range(0.45, 0.62))
+		st.append_from(_gf_rock_mesh(seed_i * 3 + 1 + sat, 1.2), 0, Transform3D(bs, off))
+	return st.commit()
+
+
+func _gf_grass_blades_mesh(seed_i: int) -> ArrayMesh:
+	# 0.2.59: real geometry grass — 30 curved, tapering blades per
+	# tuft instead of flat alpha cards. Two segments per blade so the
+	# wind shader height mask bends them smoothly; colour comes from
+	# the shader root-to-tip gradient, so no texture is needed.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9100 + seed_i * 37
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var wscales := [1.0, 0.62, 0.05]
+	for blade in range(30):
+		var ra := rng.randf_range(0.0, TAU)
+		var rr := sqrt(rng.randf()) * 0.5
+		var root := Vector3(cos(ra) * rr, 0.0, sin(ra) * rr)
+		var yaw := rng.randf_range(0.0, TAU)
+		var right := Vector3(cos(yaw), 0.0, sin(yaw))
+		var fwd := Vector3(-sin(yaw), 0.0, cos(yaw))
+		var lean := fwd.rotated(Vector3.UP, rng.randf_range(-0.8, 0.8))
+		var h := rng.randf_range(0.5, 0.95)
+		var w := rng.randf_range(0.045, 0.075)
+		var bend := rng.randf_range(0.10, 0.30)
+		var nrm := (fwd * 0.6 + Vector3.UP * 0.8).normalized()
+		var rows: Array = []
+		for row in range(3):
+			var tt := float(row) * 0.5
+			var centre := root + Vector3.UP * (tt * h) + lean * (bend * tt * tt)
+			rows.append([centre - right * w * 0.5 * float(wscales[row]), centre + right * w * 0.5 * float(wscales[row])])
+		for seg in range(2):
+			var a0: Vector3 = rows[seg][0]
+			var b0: Vector3 = rows[seg][1]
+			var a1: Vector3 = rows[seg + 1][0]
+			var b1: Vector3 = rows[seg + 1][1]
+			var vseq: Array = [a0, b0, b1, a0, b1, a1]
+			var useq: Array = [Vector2(0.0, float(seg) * 0.5), Vector2(1.0, float(seg) * 0.5),
+				Vector2(1.0, float(seg + 1) * 0.5), Vector2(0.0, float(seg) * 0.5),
+				Vector2(1.0, float(seg + 1) * 0.5), Vector2(0.0, float(seg + 1) * 0.5)]
+			for k in range(6):
+				verts.append(vseq[k])
+				normals.append(nrm)
+				colors.append(Color.WHITE)
+				uvs.append(useq[k])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _gf_roadside_grass(buckets: Dictionary, base: float, sink: float) -> int:
+	# 0.2.59: dense blade tufts hugging every road verge — the strip
+	# of ground the player actually looks at. Generated from road
+	# samples at build time, so the world data file stays untouched.
+	# Relative-height rejects keep tufts off bridges, tunnel roofs
+	# and lake beds.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261159
+	var added := 0
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		var half_w := _f(road, "widthM", 10.0) * 0.5
+		for si in range(0, samples.size() - 1, 2):
+			var a := _sample_point(samples[si])
+			var b := _sample_point(samples[si + 1])
+			var dir2 := Vector2(b.x - a.x, b.z - a.z)
+			if dir2.length_squared() < 0.01:
+				continue
+			dir2 = dir2.normalized()
+			var perp := Vector2(-dir2.y, dir2.x)
+			for side in [-1.0, 1.0]:
+				var off := half_w + rng.randf_range(0.7, 4.6)
+				var along := rng.randf_range(-3.0, 3.0)
+				var px := a.x + perp.x * off * side + dir2.x * along
+				var pz := a.z + perp.y * off * side + dir2.y * along
+				if _gf_in_field(px, pz):
+					continue
+				var gy := height_at(px, pz)
+				if gy < a.y - 2.2 or gy > a.y + 4.5:
+					continue
+				var sc := base * rng.randf_range(0.8, 1.45)
+				var pos := Vector3(px, gy - sink, pz)
+				var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+				if not buckets.has(key):
+					buckets[key] = []
+				(buckets[key] as Array).append(make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * sc))
+				added += 1
+	return added
+
+
 func _build_forest_scatter() -> void:
 	_gf_scatter_build([])
 
@@ -13581,11 +13838,15 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 		_dz_scatter_part(cyl7, Vector3(0.55, 0.75, 0.35), Vector3(0.07, 1.5, 0.07), Color(0.05, 0.12, 0.03)),
 		_dz_scatter_part(sph, Vector3(0.64, 1.56, 0.35), Vector3(0.46, 0.46, 0.14), Color(0.56, 0.37, 0.03), 0.0, 0.0, 0.3),
 	])
-	var rock_small_meshes: Array = [_dz_rock_mesh(51, Color(0.52, 0.53, 0.52)), _dz_rock_mesh(52, Color(0.47, 0.48, 0.47)), _dz_rock_mesh(53, Color(0.57, 0.57, 0.55))]
-	var rock_medium_meshes: Array = [_dz_rock_mesh(61, Color(0.50, 0.51, 0.50)), _dz_rock_mesh(62, Color(0.55, 0.56, 0.54)), _dz_rock_mesh(63, Color(0.46, 0.47, 0.46))]
-	var rock_large_meshes: Array = [_dz_rock_mesh(71, Color(0.54, 0.55, 0.53)), _dz_rock_mesh(72, Color(0.49, 0.50, 0.49)), _dz_rock_mesh(73, Color(0.58, 0.58, 0.56))]
-	var grass_card_mesh := _gf_cross_mesh(4, 0.52, 0.72)
-	var grass_mat := _create_foliage_wind_material(grass_card_mesh, "gf_grass_tuft.png", Color(1.06, 1.06, 1.0), 0.30, 0.055, false)
+	# 0.2.59: value-noise boulders with joint cuts, moss and soil
+	# skirts; large rocks are three-boulder outcrop clusters.
+	var rock_small_meshes: Array = [_gf_rock_mesh(1, 1.0), _gf_rock_mesh(2, 1.0), _gf_rock_mesh(3, 1.1), _gf_rock_mesh(4, 0.9)]
+	var rock_medium_meshes: Array = [_gf_rock_mesh(11, 1.1), _gf_rock_mesh(12, 1.0), _gf_rock_mesh(13, 1.25)]
+	var rock_large_meshes: Array = [_gf_rock_cluster_mesh(21), _gf_rock_cluster_mesh(22), _gf_rock_cluster_mesh(23)]
+	# 0.2.59: geometric grass blades, no alpha card — the wind shader
+	# runs in its no-texture root-to-tip gradient mode.
+	var grass_blade_meshes: Array = [_gf_grass_blades_mesh(1), _gf_grass_blades_mesh(2), _gf_grass_blades_mesh(3)]
+	var grass_mat := _create_foliage_wind_material(grass_blade_meshes[0], "", Color(1.18, 1.12, 0.78), 0.0, 0.06, false)
 	var cfg := {
 		"spruce": {"meshes": [spruce_a, spruce_b], "material": null, "base": 1.45, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
 		"pine": {"meshes": pine_meshes, "material": null, "base": 1.5, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
@@ -13604,10 +13865,10 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
 		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
 		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
-		"grass_tuft": {"mesh": grass_card_mesh, "material": grass_mat, "base": 1.0, "range": 85.0, "shadow": false, "sink": 0.03},
+		"grass_tuft": {"meshes": grass_blade_meshes, "material": grass_mat, "base": 1.25, "range": 95.0, "shadow": false, "sink": 0.02},
 		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 210.0, "shadow": false, "sink": 0.16},
-		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 370.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
-		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 900.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 370.0, "shadow": true, "sink": 0.22, "collider_r": 0.72, "collider_h": 1.2},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 900.0, "shadow": true, "sink": 0.45, "collider_r": 1.10, "collider_h": 1.05},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
 	var total := 0
@@ -13652,9 +13913,11 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 				# collider-free so the streaming grid stays light.
 				_add_cylinder_collider(Vector3(px, pos.y + 1.5 * sc, pz), 0.34 * sc, 3.0 * sc)
 			elif kind == "rock_small" and sc > 0.70:
-				_add_cylinder_collider(Vector3(px, pos.y + 0.35 * sc, pz), 0.30 * sc, 0.7 * sc)
+				_add_cylinder_collider(Vector3(px, pos.y + 0.30 * sc, pz), 0.60 * sc, 1.1 * sc)
 			if foliage_every > 0 and item_index % foliage_every == 0:
 				_foliage_points.append(pos)
+		if kind == "grass_tuft":
+			total += _gf_roadside_grass(buckets, base, sink)
 		var kind_meshes: Array = conf.get("meshes", [])
 		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
 		for key_variant in buckets.keys():
@@ -13674,6 +13937,7 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	_enhancement_stats["forest_trees"] = _gf_scatter_trees_acc
 	_enhancement_stats["forest_scatter_0254"] = true
 	_enhancement_stats["forest_photoreal_trees_0257"] = true
+	_enhancement_stats["forest_ground_cover_0259"] = true
 
 
 func _build_forest_extras() -> void:
