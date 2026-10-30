@@ -211,6 +211,31 @@ jobs:
                           print(f"::notice title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
           PY
 
+      - name: Publish build stage profiles
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          log_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "native-logs"
+
+          def esc(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          for log_name in ("source-smoke-forest.log", "source-smoke.log"):
+              log_path = log_dir / log_name
+              if not log_path.exists():
+                  continue
+              lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+              profile = [line for line in lines if "[native-build]" in line]
+              if profile:
+                  print(f"::error title=Build profile {log_name}::{esc(profile[-1][:1400])}")
+              else:
+                  tail = " | ".join(lines[-3:])[:600]
+                  print(f"::error title=Build profile {log_name}::no profile lines; tail={esc(tail)}")
+          PY
+
       - name: Package desktop ZIPs (install-and-play)
         run: |
           set -euo pipefail

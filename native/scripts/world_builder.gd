@@ -146,6 +146,7 @@ var build_error := ""
 var is_built := false
 var _build_stages: Array[Dictionary] = []
 var _build_stage_index := 0
+var _build_profile_parts: Array[String] = []
 var _build_completed_weight := 0.0
 var _build_total_weight := 1.0
 var _build_started := false
@@ -250,6 +251,7 @@ func begin_build_world() -> void:
 	_load_data()
 	_build_stages.clear()
 	_build_stage_index = 0
+	_build_profile_parts.clear()
 	_build_completed_weight = 0.0
 	_build_total_weight = 0.0
 	if data.is_empty():
@@ -290,11 +292,13 @@ func build_world_step() -> Dictionary:
 			build_error = "Native world build stage is missing: %s" % stage_label
 	elif build_error.is_empty():
 		build_error = "Native world build stage is invalid: %s" % stage_label
-	# 0.2.54 diagnostics: one timing line per completed build stage.
+	# 0.2.54 diagnostics: cumulative build profile after every stage.
 	# The GreenForest smoke timed out at 600 s in CI and the same wall
-	# looked like a mid-loading crash on a phone; these lines land in
-	# CI annotations/logcat and keep stage costs visible forever.
-	print("[native-build] world=%s stage \"%s\" %d ms" % [world_id, stage_label, Time.get_ticks_msec() - stage_started_msec])
+	# looked like a mid-loading crash on a phone.  The last flushed
+	# line always lists every completed stage with its cost, even if
+	# the process is killed inside the next stage.
+	_build_profile_parts.append("%s=%dms" % [stage_label, Time.get_ticks_msec() - stage_started_msec])
+	print("[native-build] world=%s profile %s" % [world_id, "; ".join(PackedStringArray(_build_profile_parts))])
 	_build_stage_index += 1
 	_build_completed_weight += maxf(stage_weight, 0.01)
 	if _build_stage_index >= _build_stages.size() and not is_built:
