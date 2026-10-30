@@ -5224,66 +5224,88 @@ func _build_road_details(parent: Node) -> void:
 	var signal_long_transforms: Array[Transform3D] = []
 	var signal_count := 0
 	var rejected_signal_approaches := 0
-	var signal_verticals := [
-		{"x": 560.0, "width": 11.0},
-		{"x": 760.0, "width": 22.0},
-		{"x": 930.0, "width": 24.0},
-	]
-	var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
-	for vertical_variant in signal_verticals:
-		var vertical: Dictionary = vertical_variant
-		var center_x := float(vertical.get("x", 760.0))
-		var vertical_width := float(vertical.get("width", 12.0))
+	var signal_candidates: Array[Dictionary] = []
+	if _is_rt7:
+		# 0.3.0: signalised junctions come from the exported network:
+		# an arterial (24 m+) meeting at least a 12 m street.  Bridge
+		# approaches qualify through the 12 m canal-bank roads, which
+		# also keeps the short mast-arm models in use there.
+		for cand_variant in _rt7_junction_candidates():
+			var cand: Dictionary = cand_variant
+			var w_v := float(cand.get("width", 0.0))
+			var w_h := float(cand.get("cross_width", 0.0))
+			if minf(w_v, w_h) >= 12.0 and maxf(w_v, w_h) >= 24.0:
+				signal_candidates.append(cand)
+	else:
+		var signal_verticals := [
+			{"x": 560.0, "width": 11.0},
+			{"x": 760.0, "width": 22.0},
+			{"x": 930.0, "width": 24.0},
+		]
+		var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+		for vertical_variant in signal_verticals:
+			var vertical: Dictionary = vertical_variant
+			for z_variant in signal_cross_z:
+				var legacy_z := float(z_variant)
+				signal_candidates.append({
+					"x": float(vertical.get("x", 760.0)),
+					"z": legacy_z,
+					"width": float(vertical.get("width", 12.0)),
+					"cross_width": 16.0 if absf(legacy_z - 225.0) < 0.1 else 13.0,
+				})
+	for cand_variant in signal_candidates:
+		var cand: Dictionary = cand_variant
+		var center_x := float(cand.get("x", 0.0))
+		var center_z := float(cand.get("z", 0.0))
+		var vertical_width := float(cand.get("width", 12.0))
 		var vertical_half := vertical_width * 0.5
-		for z_variant in signal_cross_z:
-			var center_z := float(z_variant)
-			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
-			var cross_half := cross_width * 0.5
-			var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
-			if not _junction_has_both_axes(arms):
-				rejected_signal_approaches += 4
+		var cross_width := float(cand.get("cross_width", 13.0))
+		var cross_half := cross_width * 0.5
+		var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
+		if not _junction_has_both_axes(arms):
+			rejected_signal_approaches += 4
+			continue
+		var approaches := [
+			{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
+			{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
+			{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
+			{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
+		]
+		for approach_variant in approaches:
+			var approach: Dictionary = approach_variant
+			var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
+			var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
+			var is_long := bool(approach.get("long", false))
+			if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
+				rejected_signal_approaches += 1
 				continue
-			var approaches := [
-				{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
-				{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
-				{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
-				{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
-			]
-			for approach_variant in approaches:
-				var approach: Dictionary = approach_variant
-				var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
-				var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
-				var is_long := bool(approach.get("long", false))
-				if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
-					rejected_signal_approaches += 1
-					continue
-				# The far/only Blender signal head is 4.18 m from the
-				# short pole and 6.68 m from the long pole.
-				var head_reach := 6.68 if is_long else 4.18
-				var pole_offset: Vector2 = head_offset - arm_dir * head_reach
-				var pole_x := center_x + pole_offset.x
-				var pole_z := center_z + pole_offset.y
-				var pole_point := Vector3(pole_x, 0.0, pole_z)
-				var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
-				# The pole belongs on the corner footway; the suspended
-				# head belongs over the approach it serves.  This also
-				# rejects any stale hard-coded corner swallowed by a
-				# widened side street or diagonal link road.
-				if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
-					rejected_signal_approaches += 1
-					continue
-				var ground_y := height_at(pole_x, pole_z) + 0.14
-				var signal_transform := make_transform(
-					Vector3(pole_x, ground_y, pole_z),
-					float(approach.get("yaw", 0.0)),
-					Vector3.ONE
-				)
-				if is_long:
-					signal_long_transforms.append(signal_transform)
-				else:
-					signal_short_transforms.append(signal_transform)
-				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
-				signal_count += 1
+			# The far/only Blender signal head is 4.18 m from the
+			# short pole and 6.68 m from the long pole.
+			var head_reach := 6.68 if is_long else 4.18
+			var pole_offset: Vector2 = head_offset - arm_dir * head_reach
+			var pole_x := center_x + pole_offset.x
+			var pole_z := center_z + pole_offset.y
+			var pole_point := Vector3(pole_x, 0.0, pole_z)
+			var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
+			# The pole belongs on the corner footway; the suspended
+			# head belongs over the approach it serves.  This also
+			# rejects any stale hard-coded corner swallowed by a
+			# widened side street or diagonal link road.
+			if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
+				rejected_signal_approaches += 1
+				continue
+			var ground_y := height_at(pole_x, pole_z) + 0.14
+			var signal_transform := make_transform(
+				Vector3(pole_x, ground_y, pole_z),
+				float(approach.get("yaw", 0.0)),
+				Vector3.ONE
+			)
+			if is_long:
+				signal_long_transforms.append(signal_transform)
+			else:
+				signal_short_transforms.append(signal_transform)
+			_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
+			signal_count += 1
 
 
 	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
@@ -9801,7 +9823,7 @@ func _build_reflection_probes() -> void:
 	if _is_rt7:
 		probe_specs = [
 			{"centre": Vector3(0.0, 0.0, -120.0), "height": 90.0, "size": Vector3(760.0, 220.0, 760.0), "capture": 30.0, "tall": true},
-			{"centre": Vector3(-2450.0, 0.0, 0.0), "height": 52.0, "size": Vector3(640.0, 140.0, 900.0), "capture": 22.0, "tall": false},
+			{"centre": Vector3(-2450.0, 0.0, 0.0), "height": 62.0, "size": Vector3(640.0, 170.0, 900.0), "capture": 24.0, "tall": true},
 			{"centre": Vector3(-1200.0, 0.0, 0.0), "height": 44.0, "size": Vector3(560.0, 120.0, 560.0), "capture": 20.0, "tall": false},
 			{"centre": Vector3(1650.0, 0.0, -1600.0), "height": 48.0, "size": Vector3(760.0, 130.0, 900.0), "capture": 22.0, "tall": false},
 			{"centre": Vector3(300.0, 0.0, 1300.0), "height": 46.0, "size": Vector3(760.0, 130.0, 520.0), "capture": 20.0, "tall": false},

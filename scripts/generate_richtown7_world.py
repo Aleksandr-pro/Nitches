@@ -495,8 +495,8 @@ for bi in range(10):
 # Hotel rule (kind rt-hotel, h>38, w 33..36, d 25..28); two use the hero
 # podium model (15<=h<=38); one is a tall generic slab.
 hotels = [
-    (-2450, -1150, 34, 26, 46), (-2450, -700, 44, 32, 74), (-2450, -250, 34, 26, 52),
-    (-2450, 250, 40, 30, 28), (-2450, 700, 34, 26, 42), (-2450, 1150, 40, 30, 24),
+    (-2450, -1150, 34, 26, 46), (-2450, -470, 44, 32, 74), (-2450, -240, 34, 26, 52),
+    (-2450, 240, 40, 30, 28), (-2450, 470, 34, 26, 42), (-2450, 1150, 40, 30, 24),
 ]
 for hx, hz, w, d, h in hotels:
     add_building(hx, hz, w, d, h, "rt-hotel", "hotelTower", rot_y=math.pi / 2.0)
@@ -590,6 +590,60 @@ for cz in range(-2800, 2900, 380):
         add_building(px, cz, 30, 20, RNG.choice([11, 14]), "warehouse", "userMarble", rot_y=math.pi / 2.0)
 
 print(f"Buildings: {len(buildings)} (villas glb/townhouse/generic: {villa_count})")
+
+# --- Footprint repair: no building may sit on a carriageway.  Mirrors the
+# builder's canonical-footprint sanitizer so the exported data is already
+# clean (the builder pass then finds nothing to relocate).
+def _footprint(b):
+    m = b.get("model", "generic")
+    k = b.get("kind", "")
+    w, dd, h = b["w"], b["d"], b["h"]
+    if m == "villa":
+        return 19.2, 15.24
+    if m == "glass_tower":
+        return 34.0, 34.0
+    if k == "rt-villa" and w <= 29 and dd <= 22 and h + b.get("roofH", 0) <= 13:
+        return 18.87, 16.37
+    if k == "rt-hotel" and h > 38 and 33 <= w <= 36 and 25 <= dd <= 28:
+        return 33.6, 26.0
+    if k == "rt-hotel" and 15 <= h <= 38 and w <= 55 and dd <= 38:
+        return 32.4, 24.6
+    return w, dd
+
+
+def _footprint_clearance(b, x, z):
+    w, dd = _footprint(b)
+    yaw = b.get("rotY", 0.0)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    worst = 1e9
+    for lx in (-w / 2, 0.0, w / 2):
+        for lz in (-dd / 2, 0.0, dd / 2):
+            worst = min(worst, road_clearance(x + lx * cy - lz * sy, z + lx * sy + lz * cy))
+    return worst
+
+
+_repaired = 0
+_unresolved = []
+for _b in buildings:
+    if _footprint_clearance(_b, _b["x"], _b["z"]) >= 1.8:
+        continue
+    _fixed = False
+    for _dist in (4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0):
+        for _dx, _dz in ((_dist, 0), (-_dist, 0), (0, _dist), (0, -_dist),
+                         (_dist, _dist), (-_dist, _dist), (_dist, -_dist), (-_dist, -_dist)):
+            _nx, _nz = _b["x"] + _dx, _b["z"] + _dz
+            if _footprint_clearance(_b, _nx, _nz) >= 1.8:
+                _b["x"], _b["z"] = round(_nx, 2), round(_nz, 2)
+                _b["y"] = round(ground(_nx, _nz), 3)
+                _fixed = True
+                break
+        if _fixed:
+            break
+    if _fixed:
+        _repaired += 1
+    else:
+        _unresolved.append((_b["kind"], _b["x"], _b["z"]))
+print(f"Footprint repair: moved {_repaired}, unresolved {_unresolved}")
 
 # --------------------------------------------------------------------------
 # Landmarks
