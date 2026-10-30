@@ -2960,6 +2960,26 @@ func _run_screenshot_tour() -> void:
 			"name": "26_city_aerial_7km", "time": "day", "vehicle": "hide",
 			"camera": Vector3(-1600.0, 380.0, -1150.0), "target": Vector3(0.0, 40.0, 0.0),
 		},
+		{
+			"name": "27_airport_aerial", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-1500.0, 190.0, -2750.0), "target": Vector3(-1500.0, 5.0, -2050.0),
+		},
+		{
+			"name": "28_terminal_planes", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-1980.0, 14.0, -2150.0), "target": Vector3(-1720.0, 12.0, -1980.0),
+		},
+		{
+			"name": "29_nuclear_plant", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-2450.0, 60.0, 2250.0), "target": Vector3(-2100.0, 30.0, 2600.0),
+		},
+		{
+			"name": "30_military_base", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2650.0, 45.0, -1330.0), "target": Vector3(2950.0, 8.0, -1050.0),
+		},
+		{
+			"name": "31_hills_school", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1735.0, 26.0, -1660.0), "target": Vector3(1735.0, 8.0, -1540.0),
+		},
 		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
 		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},
 		{"name": "11_menu_store", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_STORE, "frames": 5},
@@ -3195,6 +3215,10 @@ func _run_rt7_world_smoke_checks(failures: Array[String], stats: Dictionary) -> 
 		failures.append("0.3.0 detailed palm species mix is incomplete: date=%d royal=%d total=%d" % [int(enh.get("date_palms", 0)), int(enh.get("royal_palms", 0)), int(enh.get("detailed_palms", 0))])
 	if int(enh.get("traffic_signals", 0)) < 48 or int(enh.get("traffic_signal_models", 0)) < 48 or not bool(enh.get("traffic_signal_static_red", false)):
 		failures.append("0.3.0 data-driven traffic signals are incomplete: signals=%d models=%d static_red=%s lane_arrows=%d" % [int(enh.get("traffic_signals", 0)), int(enh.get("traffic_signal_models", 0)), str(bool(enh.get("traffic_signal_static_red", false))), int(enh.get("lane_arrows", 0))])
+	if int(stats.get("buildings", 0)) < 1400 or int(stats.get("landmarks", 0)) < 70 or int(stats.get("roadEdges", 0)) < 450:
+		failures.append("0.3.1 densification stats are too small: %s" % str(stats))
+	if not bool(enh.get("rt7_airport_0310", false)) or not bool(enh.get("rt7_npp_0310", false)) or not bool(enh.get("rt7_milbase_0310", false)) or int(enh.get("rt7_schools_0310", 0)) < 10 or int(enh.get("rt7_planes_0310", 0)) < 5 or int(enh.get("rt7_cooling_towers_0310", 0)) < 2 or int(enh.get("rt7_reactors_0310", 0)) < 2 or int(enh.get("rt7_hangars_0310", 0)) < 6:
+		failures.append("0.3.1 mega-structures are incomplete: airport=%s npp=%s base=%s schools=%d planes=%d cooling=%d reactors=%d hangars=%d" % [str(bool(enh.get("rt7_airport_0310", false))), str(bool(enh.get("rt7_npp_0310", false))), str(bool(enh.get("rt7_milbase_0310", false))), int(enh.get("rt7_schools_0310", 0)), int(enh.get("rt7_planes_0310", 0)), int(enh.get("rt7_cooling_towers_0310", 0)), int(enh.get("rt7_reactors_0310", 0)), int(enh.get("rt7_hangars_0310", 0))])
 	if int(enh.get("palm_far_proxies", 0)) < 500:
 		failures.append("0.3.0 palm far proxies are incomplete: %s" % str(enh))
 	var avenue_surface := _world.get_surface_at(Vector3(0.0, 4.0, 640.0))

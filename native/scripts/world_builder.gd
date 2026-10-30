@@ -7547,20 +7547,20 @@ func _build_landmarks() -> void:
 				stadium_wall.bottom_radius = 0.5
 				stadium_wall.height = 1.0
 				stadium_wall.radial_segments = 48
-				_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(260.0, h, 220.0)), "StadiumWall")
+				_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(r * 2.0, h, r * 1.6923)), "StadiumWall")
 				var stadium_roof := CylinderMesh.new()
 				stadium_roof.top_radius = 0.5
 				stadium_roof.bottom_radius = 0.5
 				stadium_roof.height = 1.0
 				stadium_roof.radial_segments = 48
-				_mesh_instance(root, stadium_roof, metal, make_transform(pos + Vector3(0.0, h + 1.2, 0.0), 0.0, Vector3(268.0, 2.4, 228.0)), "StadiumRoof")
-				_add_box(root, Vector3(150.0, 0.3, 100.0), pos + Vector3(0.0, 0.35, 0.0), _terrain_material("grass"), 0.0, "StadiumPitch")
+				_mesh_instance(root, stadium_roof, metal, make_transform(pos + Vector3(0.0, h + 1.2, 0.0), 0.0, Vector3(r * 2.0 + 8.0, 2.4, r * 1.6923 + 8.0)), "StadiumRoof")
+				_add_box(root, Vector3(r * 1.154, 0.3, r * 0.769), pos + Vector3(0.0, 0.35, 0.0), _terrain_material("grass"), 0.0, "StadiumPitch")
 				for sx in [-1.0, 1.0]:
 					for sz in [-1.0, 1.0]:
-						var pylon_pos := pos + Vector3(118.0 * sx, 0.0, 96.0 * sz)
+						var pylon_pos := pos + Vector3(r * 0.908 * sx, 0.0, r * 0.738 * sz)
 						_add_cylinder(root, 0.8, h + 14.0, pylon_pos + Vector3(0.0, (h + 14.0) * 0.5, 0.0), metal, 0.0, 10)
 						_add_box(root, Vector3(7.0, 3.0, 1.2), pylon_pos + Vector3(0.0, h + 14.5, 0.0), metal, 0.0, "FloodlightBank")
-				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(252.0, h, 212.0))
+				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(r * 2.0 - 8.0, h, r * 1.6923 - 8.0))
 				_enhancement_stats["rt7_stadium_0300"] = true
 			"rt7-cable-bridge":
 				# Twin pylons just outside the deck edges with stay cables
@@ -7592,6 +7592,196 @@ func _build_landmarks() -> void:
 				_add_box(root, Vector3(3.4, 2.4, 3.2), pos + Vector3(0.0, 4.4, 0.0), wood)
 				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, 5.55, 0.0), 0.0, Vector3(4.2, 1.2, 4.0)), "LifeguardRoof")
 				_add_box_collider(pos + Vector3(0.0, 3.0, 0.0), Vector3(3.6, 6.0, 3.6))
+			"rt7-school":
+				# 0.3.1 district school: main block, two wings, gym,
+				# entrance canopy, flag pole and a grass sports field.
+				var school_yaw := _f(item, "rotY")
+				var school := Node3D.new()
+				school.position = pos
+				school.rotation.y = school_yaw
+				root.add_child(school)
+				_add_box(school, Vector3(64.0, 12.0, 18.0), Vector3(0.0, 6.0, -16.0), sand, 0.0, "SchoolMain")
+				_add_box(school, Vector3(66.0, 1.0, 20.0), Vector3(0.0, 12.5, -16.0), metal, 0.0, "SchoolRoof")
+				for wx in [-29.0, 29.0]:
+					_add_box(school, Vector3(18.0, 9.0, 26.0), Vector3(wx, 4.5, -3.0), hotel, 0.0, "SchoolWing")
+					_add_box(school, Vector3(20.0, 0.8, 28.0), Vector3(wx, 9.4, -3.0), metal, 0.0, "SchoolWingRoof")
+				_add_box(school, Vector3(34.0, 9.0, 20.0), Vector3(0.0, 4.5, -34.0), hotel, 0.0, "SchoolGym")
+				_add_box(school, Vector3(16.0, 0.7, 6.0), Vector3(0.0, 4.4, -4.0), metal, 0.0, "SchoolCanopy")
+				_add_box(school, Vector3(76.0, 0.3, 40.0), Vector3(0.0, 0.16, 24.0), _terrain_material("grass"), 0.0, "SchoolField")
+				_add_box(school, Vector3(76.0, 0.34, 0.9), Vector3(0.0, 0.18, 24.0), marble, 0.0, "SchoolFieldLine")
+				for gx in [-34.0, 34.0]:
+					_add_box(school, Vector3(1.2, 3.0, 8.0), Vector3(gx, 1.5, 24.0), marble, 0.0, "SchoolGoal")
+				_add_cylinder(school, 0.14, 11.0, Vector3(16.0, 5.5, 0.0), metal, 0.0, 8, "SchoolFlagPole")
+				_add_box(school, Vector3(2.8, 1.7, 0.1), Vector3(17.5, 10.0, 0.0), gold, 0.0, "SchoolFlag")
+				var school_basis := Basis(Vector3.UP, school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 6.0, 0.0) + school_basis * Vector3(0.0, 0.0, -16.0), Vector3(64.0, 12.0, 18.0), school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 4.5, 0.0) + school_basis * Vector3(0.0, 0.0, -34.0), Vector3(34.0, 9.0, 20.0), school_yaw)
+				_enhancement_stats["rt7_schools_0310"] = int(_enhancement_stats.get("rt7_schools_0310", 0)) + 1
+			"rt7-terminal":
+				# 0.3.1 airport terminal: 380 m glass hall, roof slab,
+				# four gate fingers toward the apron, landside canopy.
+				var term_yaw := _f(item, "rotY")
+				var term := Node3D.new()
+				term.position = pos
+				term.rotation.y = term_yaw
+				root.add_child(term)
+				_add_box(term, Vector3(380.0, 24.0, 64.0), Vector3(0.0, 12.0, 0.0), glass, 0.0, "TerminalHall")
+				_add_box(term, Vector3(392.0, 2.2, 76.0), Vector3(0.0, 25.1, 0.0), metal, 0.0, "TerminalRoof")
+				for fx in [-150.0, -50.0, 50.0, 150.0]:
+					_add_box(term, Vector3(24.0, 13.0, 48.0), Vector3(fx, 6.5, -56.0), hotel, 0.0, "TerminalFinger")
+					_add_box(term, Vector3(26.0, 1.0, 50.0), Vector3(fx, 13.5, -56.0), metal, 0.0, "TerminalFingerRoof")
+				_add_box(term, Vector3(380.0, 1.2, 12.0), Vector3(0.0, 8.0, 38.0), metal, 0.0, "TerminalCanopy")
+				_add_box(term, Vector3(120.0, 5.0, 10.0), Vector3(0.0, 2.5, 36.0), marble, 0.0, "TerminalEntrance")
+				_add_box_collider(pos + Vector3(0.0, 12.0, 0.0), Vector3(380.0, 24.0, 64.0), term_yaw)
+				_enhancement_stats["rt7_airport_0310"] = true
+			"rt7-atc":
+				var atc_h := maxf(h, 22.0)
+				_add_box(root, Vector3(15.0, 5.0, 15.0), pos + Vector3(0.0, 2.5, 0.0), sand, 0.0, "AtcBase")
+				_add_cylinder(root, 3.1, atc_h - 7.0, pos + Vector3(0.0, (atc_h - 7.0) * 0.5 + 2.0, 0.0), concrete, 0.0, 16, "AtcShaft")
+				_add_cylinder(root, 6.2, 4.6, pos + Vector3(0.0, atc_h - 2.3, 0.0), glass, 0.0, 20, "AtcCab")
+				_add_cylinder(root, 7.0, 0.8, pos + Vector3(0.0, atc_h + 0.4, 0.0), metal, 0.0, 20, "AtcRoof")
+				_add_cylinder(root, 0.18, 7.0, pos + Vector3(0.0, atc_h + 3.5, 0.0), metal, 0.0, 8, "AtcAntenna")
+				_add_cylinder_collider(pos + Vector3(0.0, atc_h * 0.5, 0.0), 3.4, atc_h)
+			"rt7-hangar":
+				# 0.3.1 aircraft hangar: walls + gable roof, wide door
+				# facing +Z (the apron/strip side at yaw 0).
+				var hang_yaw := _f(item, "rotY")
+				var hang_r := maxf(r, 8.0)
+				var hang_h := maxf(h, 8.0)
+				var hang_len := hang_r * 2.6
+				var hang := Node3D.new()
+				hang.position = pos
+				hang.rotation.y = hang_yaw
+				root.add_child(hang)
+				_add_box(hang, Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), Vector3(0.0, hang_h * 0.31, 0.0), sand, 0.0, "HangarWalls")
+				_mesh_instance(hang, _get_gable_mesh(), metal, make_transform(Vector3(0.0, hang_h * 0.62, 0.0), PI * 0.5, Vector3(hang_len * 1.04, hang_h * 0.38, hang_r * 2.1)), "HangarRoof")
+				_add_box(hang, Vector3(hang_r * 1.5, hang_h * 0.5, 0.5), Vector3(0.0, hang_h * 0.25, hang_len * 0.5 + 0.1), metal, 0.0, "HangarDoor")
+				_add_box_collider(pos + Vector3(0.0, hang_h * 0.31, 0.0), Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), hang_yaw)
+				_enhancement_stats["rt7_hangars_0310"] = int(_enhancement_stats.get("rt7_hangars_0310", 0)) + 1
+			"rt7-plane":
+				# 0.3.1 parked airliner: capsule fuselage, swept wings,
+				# gold tail fin, twin engines.  Nose faces +Z at yaw 0.
+				var plane_yaw := _f(item, "rotY")
+				var plane := Node3D.new()
+				plane.position = pos
+				plane.rotation.y = plane_yaw
+				root.add_child(plane)
+				var fuselage := CapsuleMesh.new()
+				fuselage.radius = 2.1
+				fuselage.height = 42.0
+				fuselage.radial_segments = 18
+				fuselage.rings = 8
+				var fuselage_basis := Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))
+				_mesh_instance(plane, fuselage, marble, Transform3D(fuselage_basis, Vector3(0.0, 4.4, 0.0)), "PlaneFuselage")
+				_add_box(plane, Vector3(3.6, 1.0, 4.2), Vector3(0.0, 5.3, 16.2), glass, 0.0, "PlaneCockpit")
+				for wx in [-9.4, 9.4]:
+					_add_box(plane, Vector3(19.0, 0.45, 4.4), Vector3(wx, 3.9, -2.6), metal, -0.38 * signf(wx), "PlaneWing")
+				_add_box(plane, Vector3(12.0, 0.4, 3.0), Vector3(0.0, 5.8, -19.0), metal, 0.0, "PlaneTailplane")
+				_add_box(plane, Vector3(0.5, 7.6, 5.6), Vector3(0.0, 9.2, -18.4), gold, 0.0, "PlaneFin")
+				var engine := CylinderMesh.new()
+				engine.top_radius = 1.05
+				engine.bottom_radius = 1.05
+				engine.height = 4.6
+				engine.radial_segments = 14
+				for ex in [-6.8, 6.8]:
+					_mesh_instance(plane, engine, metal, Transform3D(fuselage_basis, Vector3(ex, 2.9, -0.4)), "PlaneEngine")
+				_add_cylinder(plane, 0.32, 2.4, Vector3(0.0, 1.2, 13.0), metal, 0.0, 8, "PlaneGearNose")
+				for gx2 in [-2.2, 2.2]:
+					_add_cylinder(plane, 0.38, 2.4, Vector3(gx2, 1.2, -2.0), metal, 0.0, 8, "PlaneGearMain")
+				_add_box_collider(pos + Vector3(0.0, 3.5, 0.0), Vector3(6.0, 7.0, 40.0), plane_yaw)
+				_enhancement_stats["rt7_planes_0310"] = int(_enhancement_stats.get("rt7_planes_0310", 0)) + 1
+			"rt7-cooling":
+				# 0.3.1 hyperboloid cooling tower (two stacked frustums).
+				var cool_r := maxf(r, 18.0)
+				var cool_h := maxf(h, 40.0)
+				var cool_lower := CylinderMesh.new()
+				cool_lower.top_radius = 0.34
+				cool_lower.bottom_radius = 0.5
+				cool_lower.height = 1.0
+				cool_lower.radial_segments = 36
+				_mesh_instance(root, cool_lower, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.325, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.65, cool_r * 2.0)), "CoolingTowerLower")
+				var cool_upper := CylinderMesh.new()
+				cool_upper.top_radius = 0.40
+				cool_upper.bottom_radius = 0.34
+				cool_upper.height = 1.0
+				cool_upper.radial_segments = 36
+				_mesh_instance(root, cool_upper, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.825, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.35, cool_r * 2.0)), "CoolingTowerUpper")
+				_add_cylinder(root, cool_r * 0.82, 1.6, pos + Vector3(0.0, cool_h - 0.4, 0.0), metal, 0.0, 36, "CoolingTowerRim")
+				_add_cylinder_collider(pos + Vector3(0.0, cool_h * 0.5, 0.0), cool_r * 0.92, cool_h)
+				_enhancement_stats["rt7_cooling_towers_0310"] = int(_enhancement_stats.get("rt7_cooling_towers_0310", 0)) + 1
+				_enhancement_stats["rt7_npp_0310"] = true
+			"rt7-reactor":
+				var reac_r := maxf(r, 12.0) * 0.85
+				var reac_h := maxf(h, 24.0)
+				_add_cylinder(root, reac_r, reac_h * 0.62, pos + Vector3(0.0, reac_h * 0.31, 0.0), concrete, 0.0, 28, "ReactorBlock")
+				_add_sphere(root, reac_r, reac_r * 1.05, pos + Vector3(0.0, reac_h * 0.62, 0.0), marble, "ReactorDome")
+				_add_box(root, Vector3(reac_r * 1.5, reac_h * 0.3, reac_r * 0.9), pos + Vector3(reac_r * 1.35, reac_h * 0.15, 0.0), sand, 0.0, "ReactorAux")
+				_add_cylinder_collider(pos + Vector3(0.0, reac_h * 0.35, 0.0), reac_r, reac_h * 0.7)
+				_enhancement_stats["rt7_reactors_0310"] = int(_enhancement_stats.get("rt7_reactors_0310", 0)) + 1
+			"rt7-chimney":
+				var chim_h := maxf(h, 60.0)
+				var chim_r := maxf(r, 4.0)
+				var chim := CylinderMesh.new()
+				chim.top_radius = 0.30
+				chim.bottom_radius = 0.5
+				chim.height = 1.0
+				chim.radial_segments = 24
+				_mesh_instance(root, chim, concrete, make_transform(pos + Vector3(0.0, chim_h * 0.5, 0.0), 0.0, Vector3(chim_r * 2.0, chim_h, chim_r * 2.0)), "Chimney")
+				for band in [0.60, 0.76, 0.92]:
+					_add_cylinder(root, chim_r * (1.04 - band * 0.40), chim_h * 0.07, pos + Vector3(0.0, chim_h * band, 0.0), metal, 0.0, 24, "ChimneyBand")
+				_add_cylinder_collider(pos + Vector3(0.0, chim_h * 0.5, 0.0), chim_r, chim_h)
+			"rt7-tank":
+				var tank_r := maxf(r, 3.0)
+				var tank_h := maxf(h, 4.0)
+				_add_cylinder(root, tank_r, tank_h, pos + Vector3(0.0, tank_h * 0.5, 0.0), marble, 0.0, 24, "StorageTank")
+				_add_sphere(root, tank_r, tank_r * 0.55, pos + Vector3(0.0, tank_h, 0.0), metal, "StorageTankCap")
+				_add_cylinder(root, tank_r * 1.04, 0.7, pos + Vector3(0.0, 0.35, 0.0), concrete, 0.0, 24, "StorageTankBase")
+				_add_cylinder_collider(pos + Vector3(0.0, tank_h * 0.5, 0.0), tank_r, tank_h)
+			"rt7-radar":
+				var rad_r := maxf(r, 5.0)
+				var rad_h := maxf(h, 10.0)
+				_add_cylinder(root, rad_r * 0.55, rad_h * 0.55, pos + Vector3(0.0, rad_h * 0.275, 0.0), concrete, 0.0, 16, "RadarBase")
+				_add_sphere(root, rad_r, rad_r * 1.5, pos + Vector3(0.0, rad_h * 0.55 + rad_r * 0.35, 0.0), marble, "RadarDome")
+				_add_box(root, Vector3(9.0, 3.5, 6.0), pos + Vector3(rad_r + 4.0, 1.75, 0.0), sand, 0.0, "RadarHut")
+				_add_cylinder_collider(pos + Vector3(0.0, rad_h * 0.3, 0.0), rad_r * 0.6, rad_h * 0.6)
+				_enhancement_stats["rt7_milbase_0310"] = true
+			"rt7-watchtower":
+				var wt_h := maxf(h, 9.0)
+				for sx in [-1.6, 1.6]:
+					for sz in [-1.6, 1.6]:
+						_add_cylinder(root, 0.22, wt_h * 0.72, pos + Vector3(sx, wt_h * 0.36, sz), wood, 0.0, 8, "WatchtowerLeg")
+				_add_box(root, Vector3(4.8, 2.7, 4.8), pos + Vector3(0.0, wt_h * 0.72 + 1.35, 0.0), wood, 0.0, "WatchtowerCab")
+				_add_box(root, Vector3(5.0, 0.9, 5.0), pos + Vector3(0.0, wt_h * 0.72 + 2.1, 0.0), glass, 0.0, "WatchtowerGlass")
+				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, wt_h * 0.72 + 2.7, 0.0), 0.0, Vector3(5.8, 1.5, 5.8)), "WatchtowerRoof")
+				_add_box_collider(pos + Vector3(0.0, wt_h * 0.4, 0.0), Vector3(4.4, wt_h * 0.8, 4.4))
+				_enhancement_stats["rt7_watchtowers_0310"] = int(_enhancement_stats.get("rt7_watchtowers_0310", 0)) + 1
+			"rt7-helipad":
+				var pad_r := maxf(r, 8.0)
+				_add_cylinder(root, pad_r, 0.22, pos + Vector3(0.0, 0.11, 0.0), concrete, 0.0, 28, "Helipad")
+				_add_cylinder(root, pad_r * 0.8, 0.26, pos + Vector3(0.0, 0.13, 0.0), metal, 0.0, 28, "HelipadInner")
+				for hpx in [-1.7, 1.7]:
+					_add_box(root, Vector3(0.85, 0.1, 5.2), pos + Vector3(hpx, 0.3, 0.0), marble, 0.0, "HelipadH")
+				_add_box(root, Vector3(2.6, 0.1, 0.85), pos + Vector3(0.0, 0.3, 0.0), marble, 0.0, "HelipadHBar")
+			"rt7-afv":
+				# 0.3.1 parked armoured vehicle (hull, turret, barrel).
+				var afv_yaw := _f(item, "rotY")
+				var afv := Node3D.new()
+				afv.position = pos
+				afv.rotation.y = afv_yaw
+				root.add_child(afv)
+				for tz in [-1.18, 1.18]:
+					_add_box(afv, Vector3(7.4, 1.05, 1.05), Vector3(0.0, 0.55, tz), metal, 0.0, "AfvTrack")
+				_add_box(afv, Vector3(7.0, 1.15, 3.1), Vector3(0.0, 1.55, 0.0), metal, 0.0, "AfvHull")
+				_add_box(afv, Vector3(3.1, 0.95, 2.3), Vector3(-0.5, 2.55, 0.0), metal, 0.0, "AfvTurret")
+				var barrel := CylinderMesh.new()
+				barrel.top_radius = 0.5
+				barrel.bottom_radius = 0.5
+				barrel.height = 1.0
+				barrel.radial_segments = 10
+				var barrel_basis := Basis.from_euler(Vector3(0.0, 0.0, -PI * 0.5)).scaled(Vector3(0.34, 4.4, 0.34))
+				_mesh_instance(afv, barrel, metal, Transform3D(barrel_basis, Vector3(3.2, 2.65, 0.0)), "AfvBarrel")
+				_add_box_collider(pos + Vector3(0.0, 1.6, 0.0), Vector3(7.6, 3.2, 3.5), afv_yaw)
+				_enhancement_stats["rt7_afv_0310"] = int(_enhancement_stats.get("rt7_afv_0310", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)

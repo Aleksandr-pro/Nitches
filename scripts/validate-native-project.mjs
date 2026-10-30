@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.0-native-alpha"'), 'Native project version metadata must match 0.3.0-native-alpha');
-assert(preset.includes('version/code=66'), 'Native 0.3.0 must bump Android versionCode to 66');
-assert(preset.includes('version/name="0.3.0-native-alpha"'), 'Native version name must be 0.3.0-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.0-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.1-native-alpha"'), 'Native project version metadata must match 0.3.1-native-alpha');
+assert(preset.includes('version/code=67'), 'Native 0.3.1 must bump Android versionCode to 67');
+assert(preset.includes('version/name="0.3.1-native-alpha"'), 'Native version name must be 0.3.1-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.1-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.0"') && preset.includes('application/product_version="0.3.0"'), 'Desktop Windows version metadata must match native 0.3.0');
+assert(preset.includes('application/file_version="0.3.1"') && preset.includes('application/product_version="0.3.1"'), 'Desktop Windows version metadata must match native 0.3.1');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -695,6 +695,13 @@ const richTower = data.landmarks.find((landmark) => landmark.kind === 'rt-tower'
 assert(richTower && richTower.x === 0 && richTower.z === 0 && richTower.h === 148, 'Rich Tower must anchor the 7x7 centre at 148 m');
 assert(data.landmarks.some((l) => l.kind === 'rt7-stadium') && data.landmarks.some((l) => l.kind === 'rt7-cable-bridge'), 'RichTown 7x7 stadium/cable-bridge landmarks are missing');
 assert(data.palms.length >= 900, 'Expected at least 900 RichTown 7x7 palms');
+assert(data.buildings.length >= 1400, 'RichTown 0.3.1 densification must export at least 1400 buildings');
+assert(data.landmarks.length >= 70, 'RichTown 0.3.1 must export at least 70 landmarks');
+for (const kind of ['rt7-terminal', 'rt7-atc', 'rt7-plane', 'rt7-cooling', 'rt7-reactor', 'rt7-chimney', 'rt7-radar', 'rt7-watchtower', 'rt7-helipad', 'rt7-afv', 'rt7-hangar', 'rt7-tank']) {
+  assert(data.landmarks.some((l) => l.kind === kind), `RichTown 0.3.1 landmark kind is missing: ${kind}`);
+}
+assert(data.landmarks.filter((l) => l.kind === 'rt7-school').length >= 10, 'RichTown 0.3.1 needs one school per residential district (10)');
+assert(data.roads.some((r) => r.id.startsWith('rt7-runway')), 'RichTown 0.3.1 airport runway roads are missing');
 assert(data.spawn.x === 5 && data.spawn.z === 640, 'Unexpected RichTown 7x7 spawn point');
 
 const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
@@ -1181,6 +1188,11 @@ for (const marker of ['_run_rt7_world_smoke_checks', 'richtown7_0300']) {
 }
 assert(worldMapScript.includes('rt7-stadium') && worldMapScript.includes('richtown7'), '0.3.0 world map must know the 7x7 POIs/labels');
 assert(wetAsphaltShader.includes('hero_avenue_x') && wetAsphaltShader.includes('boulevard_mask'), '0.3.0 wet-asphalt hero-avenue mask must be parameterised, not removed');
+// 0.3.1: airport + NPP + military base + district schools + densification.
+for (const marker of ['rt7_airport_0310', 'rt7_npp_0310', 'rt7_milbase_0310', 'rt7_schools_0310', 'rt7_cooling_towers_0310', 'rt7_planes_0310', 'rt7_hangars_0310']) {
+  assert(worldScript.includes(marker), `0.3.1 world builder marker is missing: ${marker}`);
+}
+assert(worldMapScript.includes('rt7-terminal') && worldMapScript.includes('rt7-school'), '0.3.1 world map must know the airport/school POIs');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

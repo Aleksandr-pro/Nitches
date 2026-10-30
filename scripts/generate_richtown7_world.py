@@ -116,6 +116,16 @@ def base_height(x: float, z: float) -> float:
     drift = rect_mask(x, z, 2500.0, 2840.0, -420.0, -80.0, 110.0)
     if drift > 0.0:
         h = lerp(h, 4.6, drift)
+    # 0.3.1 mega-structure aprons: airport (SW), NPP (NW coast), army base.
+    airport = rect_mask(x, z, -2620.0, -180.0, -2520.0, -1620.0, 120.0)
+    if airport > 0.0:
+        h = lerp(h, 3.4, airport)
+    npp = rect_mask(x, z, -2500.0, -1550.0, 2280.0, 2920.0, 100.0)
+    if npp > 0.0:
+        h = lerp(h, 3.6, npp)
+    milbase = rect_mask(x, z, 2560.0, 3260.0, -1320.0, -700.0, 120.0)
+    if milbase > 0.0:
+        h = lerp(h, 6.2, milbase)
     d_centre = math.hypot(x, z)
     plaza = 1.0 - smoothstep(130.0, 240.0, d_centre)
     if plaza > 0.0:
@@ -244,24 +254,24 @@ print("Defining road skeleton...")
 # --- Big ring (spec section 3.1) ---
 h_street(-3200, [-2650, -1500, -400, 0, 700, 1200, 1800, 2400], 40, 8, 130, "rt7-hwya", "Трасса A (южная)")
 h_street(3200, [-2650, -1500, -400, 0, 700, 1200, 1800, 2300, 2400], 40, 8, 130, "rt7-hwyb", "Трасса B (северная)")
-v_street(2400, [-3200, -2900, -1000, -200, 0, 1000, 3200], 40, 8, 130, "rt7-hwy1", "Трасса 1 (восточная)")
-v_street(-2650, [-3200, -1400, -700, 0, 700, 1400, 1480], 32, 6, 90, "rt7-corniche", "Корниш")
-v_street(-2650, [1720, 2000, 3200], 32, 6, 90, "rt7-corniche-n", "Корниш")
+v_street(2400, [-3200, -2900, -1000, -200, 0, 350, 700, 1000, 3200], 40, 8, 130, "rt7-hwy1", "Трасса 1 (восточная)")
+v_street(-2650, [-3200, -1850, -1400, -1250, -700, 0, 700, 1400, 1480], 32, 6, 90, "rt7-corniche", "Корниш")
+v_street(-2650, [1720, 2000, 2600, 3200], 32, 6, 90, "rt7-corniche-n", "Корниш")
 
 # --- Downtown ring ---
 v_street(-1000, DT, 32, 6, 70, "rt7-ring-w", "Кольцо даунтауна (запад)")
-v_street(1000, [-1000, -800, -600, -500, -400, -200, 0, 200, 400, 600, 800, 1000], 32, 6, 70, "rt7-ring-e", "Кольцо даунтауна (восток)")
+v_street(1000, [-1000, -800, -600, -500, -400, -200, 0, 200, 350, 400, 600, 700, 800, 1000], 32, 6, 70, "rt7-ring-e", "Кольцо даунтауна (восток)")
 h_street(-1000, DT, 32, 6, 70, "rt7-ring-s", "Кольцо даунтауна (юг)")
 h_street(1000, [-1000, -800, -600, -400, -200, 0, 200, 400, 600, 800, 1000], 32, 6, 70, "rt7-ring-n", "Кольцо даунтауна (север)")
 
 # --- Central axes with the plaza gap around Rich Tower ---
-central_south = [-3200, -1000, -800, -600, -400, -200, -95]
+central_south = [-3200, -1850, -1250, -1000, -800, -600, -400, -200, -95]
 v_street(0, central_south, 32, 6, 70, "rt7-central-s", "Центральный проспект")
 central_north = [95, 200, 400, 600, 800, 1000, 1250, 1480]
 v_street(0, central_north, 32, 6, 70, "rt7-central-n", "Центральный проспект")
 roses_west = [-2650, -1900, -1500, -1000, -800, -600, -400, -200, -95]
 h_street(0, roses_west, 32, 6, 70, "rt7-roses-w", "Проспект Роз")
-roses_east = [95, 200, 400, 600, 800, 1000, 2400]
+roses_east = [95, 200, 400, 600, 800, 1000, 1475, 1825, 2150, 2400]
 h_street(0, roses_east, 32, 6, 70, "rt7-roses-e", "Проспект Роз")
 
 # Plaza ring road around Rich Tower (radius 95 m, cardinal samples exact).
@@ -285,18 +295,18 @@ v_street(-1900, [-1400, -700, 0, 700, 1400], 17, 2, 50, "rt7-marina-v", "Мар�
 v_street(-1500, [-1000, -700, 0, 700, 1000, 1480], 24, 4, 60, "rt7-mall-w", "Молл — порт")
 
 # --- Rich Hills villa grid ---
-hills_h = [-2900, -2300, -1700, -1100, -500, -200]
+hills_h = [-2900, -2600, -2300, -2000, -1700, -1400, -1100, -800, -500, -200]
 for z in hills_h:
     w = 17 if z in (-2900, -200) else 12
     east = 2400 if z == -2900 else 2300
-    h_street(z, [1000, 1300, 1650, 2000, east], w, 2, 40, f"rt7-hills-h{z}", "Rich Hills")
-for x in [1300, 1650, 2000]:
-    v_street(x, [-2900, -2300, -1700, -1100, -500, -200], 12, 2, 40, f"rt7-hills-v{x}", "Rich Hills")
+    h_street(z, [1000, 1300, 1475, 1650, 1825, 2000, east], w, 2, 40, f"rt7-hills-h{z}", "Rich Hills")
+for x in [1300, 1475, 1650, 1825, 2000]:
+    v_street(x, hills_h, 12, 2, 40, f"rt7-hills-v{x}", "Rich Hills")
 # Hills-to-highway connector along z=-300 already ends at 2300; extend to Hwy1.
 add_road("rt7-hills-link", "Rich Hills — Трасса 1", [(2300, -200), (2400, -200)], 17, 2, 60)
 
 # --- Sunset district ---
-h_street(1000, [1000, 1200, 1800, 2300, 2400], 24, 4, 60, "rt7-sunset-blvd", "Бульвар Сансет")
+h_street(1000, [1000, 1200, 1475, 1800, 1825, 2300, 2400], 24, 4, 60, "rt7-sunset-blvd", "Бульвар Сансет")
 v_street(-400, [1000, 1250, 1480], 17, 2, 50, "rt7-sunset-v-400", "Сансет")
 v_street(700, [1000, 1250, 1480], 17, 2, 50, "rt7-sunset-v700", "Сансет")
 v_street(1200, [1000, 1250, 1480], 17, 2, 50, "rt7-sunset-v1200", "Сансет")
@@ -328,6 +338,50 @@ h_street(2600, [-1500, -400, 0, 700, 1200, 1800, 2300], 17, 2, 50, "rt7-port-h26
 
 # --- Drift arena access ---
 add_road("rt7-drift-access", "Дрифт-арена", [(2400, -200), (2510, -200)], 12, 2, 40)
+
+# --- 0.3.1 airport (SW quadrant): 2.22 km runway, taxiways, apron ---
+add_road("rt7-runway-w", "ВПП 09/27", [(-2520, -2300), (-1500, -2300)], 45, 2, 200)
+add_road("rt7-runway-e", "ВПП 09/27", [(-1500, -2300), (-300, -2300)], 45, 2, 200)
+add_road("rt7-taxi-w", "Рулёжная дорожка", [(-2520, -2300), (-2520, -2050)], 11, 1, 30)
+add_road("rt7-taxi-e", "Рулёжная дорожка", [(-300, -2300), (-300, -2050)], 11, 1, 30)
+add_road("rt7-taxi-m", "Рулёжная дорожка", [(-1500, -2300), (-1500, -2050)], 11, 1, 30)
+add_road("rt7-apron-w", "Перрон", [(-2520, -2050), (-1500, -2050)], 14, 1, 30)
+add_road("rt7-apron-e", "Перрон", [(-1500, -2050), (-300, -2050)], 14, 1, 30)
+add_road("rt7-airport-svc", "Служебный проезд", [(-1500, -2050), (-1500, -1850)], 11, 1, 40)
+h_street(-1850, [-2650, -2300, -1900, -1500, -800, 0], 24, 4, 60, "rt7-airport-rd", "Дорога в аэропорт")
+add_road("rt7-airport-south", "Аэропорт — Трасса A", [(-1500, -3200), (-1500, -2300)], 11, 2, 60)
+
+# --- 0.3.1 south villa suburb between downtown and the airport ---
+h_street(-1250, [-2650, -2300, -1900, -1500, -800, 0], 17, 2, 50, "rt7-suburb-h", "Южная долина")
+v_street(-2300, [-1850, -1250], 12, 2, 40, "rt7-suburb-v2300", "Южная долина")
+v_street(-1900, [-1850, -1400, -1250], 12, 2, 40, "rt7-suburb-v1900", "Южная долина")
+v_street(-1500, [-1850, -1250, -1000], 17, 2, 50, "rt7-suburb-v1500", "Южная долина")
+v_street(-800, [-1850, -1250, -1000], 12, 2, 40, "rt7-suburb-v800", "Южная долина")
+
+# --- 0.3.1 NPP access (NW coast) ---
+h_street(2600, [-2650, -2100, -1500], 17, 2, 50, "rt7-npp-rd", "АЭС «RichTown»")
+v_street(-2100, [2380, 2600, 2820], 12, 2, 30, "rt7-npp-site", "АЭС «RichTown»")
+
+# --- 0.3.1 east suburb between Roses avenue and Sunset ---
+h_street(350, [1000, 1475, 1825, 2150, 2400], 17, 2, 50, "rt7-eastsub-h350", "Восточный пригород")
+h_street(700, [1000, 1475, 1825, 2150, 2400], 17, 2, 50, "rt7-eastsub-h700", "Восточный пригород")
+v_street(1475, [-200, 0, 350, 700, 1000], 12, 2, 40, "rt7-eastsub-v1475", "Восточный пригород")
+v_street(1825, [-200, 0, 350, 700, 1000], 12, 2, 40, "rt7-eastsub-v1825", "Восточный пригород")
+v_street(2150, [0, 350, 700], 12, 2, 40, "rt7-eastsub-v2150", "Восточный пригород")
+
+# --- 0.3.1 military base in the east desert ---
+add_road("rt7-mil-access", "Военная база «Восточная»", [(2400, -1000), (2620, -1000)], 11, 2, 50)
+add_road("rt7-mil-perim-w1", "Периметр базы", [(2620, -1250), (2620, -1000)], 8, 1, 30)
+add_road("rt7-mil-perim-w2", "Периметр базы", [(2620, -1000), (2620, -750)], 8, 1, 30)
+add_road("rt7-mil-perim-e1", "Периметр базы", [(3180, -1250), (3180, -1000)], 8, 1, 30)
+add_road("rt7-mil-perim-e2", "Периметр базы", [(3180, -1000), (3180, -750)], 8, 1, 30)
+add_road("rt7-mil-perim-s", "Периметр базы", [(2620, -1250), (3180, -1250)], 8, 1, 30)
+add_road("rt7-mil-perim-n", "Периметр базы", [(2620, -750), (3180, -750)], 8, 1, 30)
+add_road("rt7-mil-main-w", "Главная улица базы", [(2620, -1000), (2910, -1000)], 11, 1, 30)
+add_road("rt7-mil-main-e", "Главная улица базы", [(2910, -1000), (3180, -1000)], 11, 1, 30)
+add_road("rt7-mil-strip-w", "Полоса базы", [(2700, -1150), (2910, -1150)], 22, 1, 120)
+add_road("rt7-mil-strip-e", "Полоса базы", [(2910, -1150), (3120, -1150)], 22, 1, 120)
+add_road("rt7-mil-taxi", "Рулёжная дорожка", [(2910, -1150), (2910, -1000)], 9, 1, 30)
 
 # Fix resample drift on shared endpoints: snap first/last samples back to the
 # authored control endpoints so junction detection sees exact coincidences.
@@ -446,9 +500,86 @@ def add_building(x, z, w, d, h, kind, facade, model="generic", rot_y=0.0, roof_h
         "rotY": rot_y, "w": w, "d": d, "h": h, "roofH": roof_h,
         "kind": kind, "facade": facade, "tint": tint, "model": model,
     })
+    _occ_register(x, z, max(w, d) * 0.5 + 3.0)
 
 
-PARK_RECTS = [(210, 390, -790, -610), (-390, -210, 1010, 1240), (1320, 1620, -1980, -1720)]
+# 0.3.1 occupancy grid: the densification passes and the footprint
+# repair use it so two buildings (or a building and a landmark parcel)
+# can never stack on one spot.
+OCC_CELL = 60.0
+_occ = {}
+
+
+def _occ_register(x, z, r):
+    key = (int(math.floor(x / OCC_CELL)), int(math.floor(z / OCC_CELL)))
+    _occ.setdefault(key, []).append((x, z, r))
+
+
+def _occ_move(x0, z0, x1, z1, r):
+    key = (int(math.floor(x0 / OCC_CELL)), int(math.floor(z0 / OCC_CELL)))
+    entries = _occ.get(key, [])
+    for i, (ex, ez, er) in enumerate(entries):
+        if abs(ex - x0) < 0.01 and abs(ez - z0) < 0.01 and abs(er - r) < 0.01:
+            entries.pop(i)
+            break
+    _occ_register(x1, z1, r)
+
+
+def spot_free(x, z, r, skip_x=None, skip_z=None):
+    cx = int(math.floor(x / OCC_CELL))
+    cz = int(math.floor(z / OCC_CELL))
+    for gx in (cx - 1, cx, cx + 1):
+        for gz in (cz - 1, cz, cz + 1):
+            for ox, oz, orad in _occ.get((gx, gz), ()):
+                if skip_x is not None and abs(ox - skip_x) < 0.01 and abs(oz - skip_z) < 0.01:
+                    continue
+                if math.hypot(x - ox, z - oz) < r + orad:
+                    return False
+    return True
+
+
+# 0.3.1 mega-structure parcels stay free of cafes/scatter.
+MEGA_RECTS = [(-2640, -160, -2540, -1600), (-2520, -1530, 2260, 2940), (2540, 3280, -1340, -680)]
+
+
+def in_mega(x, z, pad=8.0):
+    return any(a - pad <= x <= b + pad and c - pad <= z <= d + pad for a, b, c, d in MEGA_RECTS)
+
+
+# 0.3.1: one large school per residential district, reserved before
+# any building scatter runs.
+SCHOOL_SPOTS = [
+    (700, 300), (-2050, -320), (-2050, 330), (1735, -1550), (1450, 1365),
+    (-2450, -2850), (350, 2900), (1500, 1850), (-1150, -1420), (1650, 520),
+]
+for _sx, _sz in SCHOOL_SPOTS:
+    _occ_register(_sx, _sz, 52.0)
+for _ox, _oz, _orad in ((-1750, -1955, 140.0), (-1850, -1760, 42.0), (-1280, -1975, 20.0),
+                        (1400, 1950, 16.0), (1416, 1950, 16.0), (2000, 2300, 16.0),
+                        (2016, 2300, 16.0), (1650, 2750, 16.0)):
+    _occ_register(_ox, _oz, _orad)
+
+villa_count = {"glb": 0, "town": 0, "gen": 0}
+GLB_VILLA_CAP = 46
+
+
+def add_house(x, z, yaw):
+    """One suburb house: premium GLB villa (capped), townhouse pair
+    or generic villa massing."""
+    r = RNG.random()
+    if r < 0.07 and villa_count["glb"] < GLB_VILLA_CAP:
+        add_building(x, z, 20, 16, 9, "rt-villa", "userPlaster", model="villa", rot_y=yaw)
+        villa_count["glb"] += 1
+    elif r < 0.60:
+        add_building(x, z, 24, 18, 9, "rt-villa", "userPlaster", rot_y=yaw, roof_h=2.0)
+        villa_count["town"] += 1
+    else:
+        add_building(x, z, 32, 24, 10.5, "rt-villa", RNG.choice(["userPlaster", "userStone", "userWood"]),
+                     rot_y=yaw, roof_h=3.2)
+        villa_count["gen"] += 1
+
+
+PARK_RECTS = [(210, 390, -790, -610), (-390, -210, 1010, 1240), (2040, 2270, -1960, -1740)]
 
 
 def in_park(x, z, pad=14.0):
@@ -470,7 +601,7 @@ for bi in range(10):
         if (bi, bj) == park_block:
             continue
         if any(abs(cx - lx) < 30.0 and abs(cz - lz) < 30.0
-               for lx, lz in ((300, -300), (-300, 300), (-300, -300), (500, -700), (-700, 500))):
+               for lx, lz in ((300, -300), (-300, 300), (-300, -300), (500, -700), (-700, 500), (700, 300))):
             continue  # authored landmark parcel (twist/hole/lean/museum/opera)
         h_base = 30.0 + 62.0 * math.exp(-((dist_c / 680.0) ** 2)) + RNG.uniform(0.0, 16.0)
         if (bi, bj) in glass_parcels:
@@ -490,6 +621,15 @@ for bi in range(10):
                 cx, cz, w, w, round(max(26.0, h_base), 1),
                 "rt-tower", RNG.choice(FACADES_TOWER), tint=round(RNG.uniform(0.9, 1.1), 3),
             )
+        # 0.3.1 downtown infill: a mid-rise on a free block corner.
+        if RNG.random() < 0.55:
+            ox, oz = (-56.0, 56.0) if (bi + bj) % 2 == 0 else (56.0, -56.0)
+            if spot_free(cx + ox, cz + oz, 23.0):
+                iw = RNG.choice([26, 30, 34])
+                add_building(
+                    cx + ox, cz + oz, iw, iw, round(RNG.uniform(14.0, 30.0), 1),
+                    "rt-tower", RNG.choice(FACADES_TOWER), tint=round(RNG.uniform(0.9, 1.1), 3),
+                )
 
 # Corniche hotels (x ~ -2450). Three parcels match the fixed-scale Grand
 # Hotel rule (kind rt-hotel, h>38, w 33..36, d 25..28); two use the hero
@@ -516,36 +656,48 @@ for mz in range(-1300, -499, 110):
 for mz in range(520, 1320, 110):
     add_building(-2260, mz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi / 2.0, roof_h=2.0)
 
-# Rich Hills villas along the residential streets.
-villa_count = {"glb": 0, "town": 0, "gen": 0}
+# 0.3.1: Marina street frontage along the N-S avenue + Corniche
+# residential rows beyond the hotel strip.
+for side_x in (-1946.0, -1854.0):
+    mz = -1360.0
+    while mz < 1360.0:
+        if abs(mz) > 420.0 and clear_of_roads(side_x, mz, 13.0) and spot_free(side_x, mz, 17.0) and RNG.random() > 0.15:
+            add_house(side_x, mz, math.pi / 2.0 if side_x < -1900.0 else -math.pi / 2.0)
+        mz += RNG.uniform(54.0, 66.0)
+for z0, z1 in ((-3150.0, -2620.0), (-1520.0, 1520.0), (1560.0, 2140.0)):
+    pz = z0
+    while pz < z1:
+        if clear_of_roads(-2380.0, pz, 13.0) and spot_free(-2380.0, pz, 17.0) and ground(-2380.0, pz) > 0.8 and RNG.random() > 0.18:
+            add_house(-2380.0, pz, -math.pi / 2.0)
+        pz += RNG.uniform(54.0, 68.0)
+
+# Rich Hills villas along every residential street (0.3.1: the full
+# 300 m grid, E-W streets and N-S connectors alike).
 for z in hills_h:
-    if z == -2900:
-        continue  # southern connector stays scenic/empty
-    x = 1060.0
+    x = 1040.0
     while x < 2260.0:
         for side in (-1.0, 1.0):
-            px = x + RNG.uniform(-6.0, 6.0)
+            px = x + RNG.uniform(-5.0, 5.0)
             pz = z + side * RNG.uniform(20.0, 26.0)
-            if clear_of_roads(px, pz, 13.0) and not in_park(px, pz) and RNG.random() > 0.18:
-                r = RNG.random()
-                yaw = 0.0 if side < 0 else math.pi
-                if r < 0.14:
-                    add_building(px, pz, 20, 16, 9, "rt-villa", "userPlaster", model="villa", rot_y=yaw)
-                    villa_count["glb"] += 1
-                elif r < 0.58:
-                    add_building(px, pz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=yaw, roof_h=2.0)
-                    villa_count["town"] += 1
-                else:
-                    add_building(px, pz, 32, 24, 10.5, "rt-villa", RNG.choice(["userPlaster", "userStone", "userWood"]),
-                                 rot_y=yaw, roof_h=3.2)
-                    villa_count["gen"] += 1
-        x += RNG.uniform(52.0, 68.0)
+            if clear_of_roads(px, pz, 13.0) and not in_park(px, pz) and spot_free(px, pz, 17.0) and RNG.random() > 0.14:
+                add_house(px, pz, 0.0 if side < 0 else math.pi)
+        x += RNG.uniform(50.0, 62.0)
+for vx in (1300, 1475, 1650, 1825, 2000):
+    pz = -2860.0
+    while pz < -240.0:
+        for side in (-1.0, 1.0):
+            px = vx + side * RNG.uniform(20.0, 26.0)
+            qz = pz + RNG.uniform(-5.0, 5.0)
+            if clear_of_roads(px, qz, 13.0) and not in_park(px, qz) and spot_free(px, qz, 17.0) and RNG.random() > 0.16:
+                add_house(px, qz, math.pi / 2.0 if side > 0 else -math.pi / 2.0)
+        pz += RNG.uniform(52.0, 64.0)
 
-# Sunset mid-rise blocks (two rows between ring/canal).
+# Sunset mid-rise blocks (0.3.1: denser double rows ring<->canal).
 for row_z in (1125, 1365):
     x = -900.0
     while x < 2250.0:
-        if clear_of_roads(x, row_z, 24.0) and not in_park(x, row_z) and not (row_z == 1365 and abs(x - 950.0) < 85.0):
+        mosque_clear = not (row_z == 1365 and abs(x - 950.0) < 95.0)
+        if clear_of_roads(x, row_z, 24.0) and not in_park(x, row_z) and mosque_clear and spot_free(x, row_z, 26.0):
             r = RNG.random()
             if r < 0.30:
                 add_building(x, row_z, 40, 30, RNG.choice([19, 25, 31, 36]), "rt-hotel", "hotelTower")
@@ -554,40 +706,132 @@ for row_z in (1125, 1365):
                              "rt-tower", RNG.choice(FACADES_TOWER))
             else:
                 add_building(x, row_z, 24, 18, 9, "rt-villa", "userPlaster", roof_h=2.0)
-        x += RNG.uniform(95.0, 130.0)
+            back_z = row_z - 44.0 if row_z == 1125 else row_z + 44.0
+            if RNG.random() < 0.42 and clear_of_roads(x, back_z, 22.0) and spot_free(x, back_z, 24.0) and not in_park(x, back_z):
+                add_building(x, back_z, RNG.choice([30, 34]), 28, round(RNG.uniform(13.0, 30.0), 1),
+                             "rt-tower", RNG.choice(FACADES_TOWER))
+        x += RNG.uniform(80.0, 105.0)
 
 # Port warehouses + container stacks.
-for row_z in (2150, 2450):
+for row_z in (1865, 2150, 2450, 2750, 2900):
     x = -1380.0
     while x < 920.0:
-        if clear_of_roads(x, row_z, 30.0):
+        if clear_of_roads(x, row_z, 30.0) and spot_free(x, row_z, 40.0):
             add_building(x, row_z, RNG.choice([64, 76, 88]), 32, RNG.choice([11, 13, 15]),
                          "warehouse", RNG.choice(["userStone", "userPlaster"]))
         x += RNG.uniform(120.0, 165.0)
-for _ in range(64):
+for _ in range(150):
     px = RNG.uniform(-1450.0, 950.0)
     pz = RNG.uniform(2050.0, 2550.0)
-    if clear_of_roads(px, pz, 8.0):
+    if clear_of_roads(px, pz, 8.0) and spot_free(px, pz, 9.0):
         add_building(px, pz, 12, 4, RNG.choice([2.8, 5.6]), "rt-container", "userStone",
                      rot_y=RNG.choice([0.0, math.pi / 2.0]), tint=round(RNG.uniform(0.55, 1.25), 3))
 
 # Farm barns and farmhouses.
-for _ in range(10):
+for _ in range(26):
     px = RNG.uniform(1280.0, 2220.0)
     pz = RNG.uniform(2080.0, 2520.0)
-    if clear_of_roads(px, pz, 22.0):
+    if clear_of_roads(px, pz, 22.0) and spot_free(px, pz, 20.0):
         add_building(px, pz, 30, 14, 7, "barn", "userWood", rot_y=RNG.choice([0.0, math.pi / 2.0]), roof_h=3.4)
-for _ in range(7):
+for _ in range(16):
     px = RNG.uniform(1280.0, 2220.0)
     pz = RNG.uniform(1800.0, 3050.0)
-    if clear_of_roads(px, pz, 16.0):
+    if clear_of_roads(px, pz, 16.0) and spot_free(px, pz, 16.0):
         add_building(px, pz, 24, 18, 9, "rt-villa", "userPlaster", roof_h=2.0)
+for _ in range(12):
+    px = RNG.uniform(1300.0, 2200.0)
+    pz = RNG.uniform(1850.0, 2450.0)
+    if clear_of_roads(px, pz, 20.0) and spot_free(px, pz, 26.0):
+        add_building(px, pz, 44, 14, 6, "warehouse", "glassTower", rot_y=RNG.choice([0.0, math.pi / 2.0]))
 
 # Beach cafes / low seaside blocks along the Corniche east side.
 for cz in range(-2800, 2900, 380):
     px = -2555.0 + RNG.uniform(-8.0, 8.0)
-    if clear_of_roads(px, cz, 20.0) and abs(cz) > 1450:
+    if clear_of_roads(px, cz, 20.0) and abs(cz) > 1450 and not in_mega(px, cz) and spot_free(px, cz, 20.0):
         add_building(px, cz, 30, 20, RNG.choice([11, 14]), "warehouse", "userMarble", rot_y=math.pi / 2.0)
+
+# --- 0.3.1 South villa suburb houses ---
+x = -2580.0
+while x < -60.0:
+    for side in (-1.0, 1.0):
+        px = x + RNG.uniform(-5.0, 5.0)
+        pz = -1250.0 + side * RNG.uniform(20.0, 26.0)
+        if clear_of_roads(px, pz, 13.0) and spot_free(px, pz, 17.0) and RNG.random() > 0.14:
+            add_house(px, pz, 0.0 if side < 0 else math.pi)
+    x += RNG.uniform(50.0, 62.0)
+for vx in (-2300, -1900, -1500, -800):
+    z_end = -1290.0 if vx in (-2300, -1900) else -1060.0
+    pz = -1810.0
+    while pz < z_end:
+        for side in (-1.0, 1.0):
+            px = vx + side * RNG.uniform(20.0, 26.0)
+            qz = pz + RNG.uniform(-5.0, 5.0)
+            if clear_of_roads(px, qz, 13.0) and spot_free(px, qz, 17.0) and RNG.random() > 0.15:
+                add_house(px, qz, math.pi / 2.0 if side > 0 else -math.pi / 2.0)
+        pz += RNG.uniform(52.0, 64.0)
+
+# --- 0.3.1 East suburb houses ---
+for hz in (350, 700):
+    x = 1050.0
+    while x < 2350.0:
+        for side in (-1.0, 1.0):
+            px = x + RNG.uniform(-5.0, 5.0)
+            pz = hz + side * RNG.uniform(20.0, 26.0)
+            if clear_of_roads(px, pz, 13.0) and spot_free(px, pz, 17.0) and RNG.random() > 0.14:
+                add_house(px, pz, 0.0 if side < 0 else math.pi)
+        x += RNG.uniform(50.0, 62.0)
+for vx in (1475, 1825, 2150):
+    z_end = 680.0 if vx == 2150 else 960.0
+    pz = 40.0
+    while pz < z_end:
+        for side in (-1.0, 1.0):
+            px = vx + side * RNG.uniform(20.0, 26.0)
+            qz = pz + RNG.uniform(-5.0, 5.0)
+            if clear_of_roads(px, qz, 13.0) and spot_free(px, qz, 17.0) and RNG.random() > 0.15:
+                add_house(px, qz, math.pi / 2.0 if side > 0 else -math.pi / 2.0)
+        pz += RNG.uniform(52.0, 64.0)
+x = 1060.0
+while x < 2340.0:
+    if clear_of_roads(x, -48.0, 14.0) and spot_free(x, -48.0, 17.0) and RNG.random() > 0.2:
+        add_house(x, -48.0, math.pi)
+    x += RNG.uniform(54.0, 66.0)
+
+# --- 0.3.1 south-east logistics along Highway A ---
+x = 1080.0
+while x < 2320.0:
+    if clear_of_roads(x, -3060.0, 30.0) and spot_free(x, -3060.0, 42.0):
+        add_building(x, -3060.0, RNG.choice([64, 76, 88]), 32, RNG.choice([11, 13]),
+                     "warehouse", RNG.choice(["userStone", "userPlaster"]))
+    x += RNG.uniform(125.0, 165.0)
+
+# --- 0.3.1 airport service buildings (terminal/hangars are landmarks) ---
+add_building(-2360, -1780, 76, 32, 12, "warehouse", "userStone")
+add_building(-2140, -1780, 64, 32, 12, "warehouse", "userPlaster")
+add_building(-980, -1780, 44, 26, 11, "warehouse", "userPlaster")
+add_building(-620, -1780, 58, 30, 13, "warehouse", "userStone")
+add_building(-420, -1930, 40, 26, 10, "warehouse", "userPlaster")
+
+# --- 0.3.1 NPP halls/offices/switchyard (towers are landmarks) ---
+add_building(-1960, 2470, 42, 170, 26, "warehouse", "userStone")
+add_building(-1960, 2730, 42, 110, 20, "warehouse", "userPlaster")
+add_building(-2140, 2885, 60, 24, 14, "rt-tower", "sandTower")
+add_building(-1800, 2400, 64, 30, 11, "warehouse", "userStone")
+add_building(-1800, 2800, 64, 30, 11, "warehouse", "userPlaster")
+for gx in range(-1870, -1739, 26):
+    for gz in (2500, 2540, 2660, 2700):
+        if spot_free(gx, gz, 8.0):
+            add_building(gx, gz, 12, 5, 3.2, "rt-container", "userStone", tint=round(RNG.uniform(0.7, 1.1), 3))
+
+# --- 0.3.1 military base buildings (hangars/radar are landmarks) ---
+add_building(2910, -845, 56, 24, 13, "warehouse", "userStone")
+bx = 2720.0
+while bx < 3130.0:
+    if spot_free(bx, -880.0, 16.0):
+        add_building(bx, -880.0, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi, roof_h=2.0)
+    bx += 57.0
+add_building(2750, -1200, 54, 22, 9, "warehouse", "userStone")
+add_building(3050, -1200, 54, 22, 9, "warehouse", "userPlaster")
+add_building(2670, -940, 30, 18, 8, "warehouse", "userWood", roof_h=2.6)
 
 print(f"Buildings: {len(buildings)} (villas glb/townhouse/generic: {villa_count})")
 
@@ -632,7 +876,9 @@ for _b in buildings:
         for _dx, _dz in ((_dist, 0), (-_dist, 0), (0, _dist), (0, -_dist),
                          (_dist, _dist), (-_dist, _dist), (_dist, -_dist), (-_dist, -_dist)):
             _nx, _nz = _b["x"] + _dx, _b["z"] + _dz
-            if _footprint_clearance(_b, _nx, _nz) >= 1.8:
+            _orad = max(_b["w"], _b["d"]) * 0.5 + 3.0
+            if _footprint_clearance(_b, _nx, _nz) >= 1.8 and spot_free(_nx, _nz, _orad, _b["x"], _b["z"]):
+                _occ_move(_b["x"], _b["z"], _nx, _nz, _orad)
                 _b["x"], _b["z"] = round(_nx, 2), round(_nz, 2)
                 _b["y"] = round(ground(_nx, _nz), 3)
                 _fixed = True
@@ -663,13 +909,48 @@ landmarks = [
     {"kind": "rt-sail", "x": -2560, "z": -1750, "h": 95, "r": 0, "rotY": 0.0},
     {"kind": "rt-parking", "x": -1045, "z": 230, "h": 15, "r": 0, "rotY": 0.0},
     {"kind": "rt-parking", "x": 450, "z": -1250, "h": 15, "r": 0, "rotY": 0.0},
-    {"kind": "rt7-stadium", "x": 190, "z": -1400, "h": 34, "r": 130, "rotY": 0.0},
+    {"kind": "rt7-stadium", "x": 190, "z": -1400, "h": 42, "r": 150, "rotY": 0.0},
     {"kind": "rt7-cable-bridge", "x": 0, "z": 1600, "h": 60, "r": 0, "rotY": 0.0},
 ]
 for bx in (-1500, -400, 700, 1800):
     landmarks.append({"kind": "rt7-bridge-pier", "x": bx, "z": 1600, "h": 7, "r": 0, "rotY": 0.0})
 for lz in (-2400, -1200, -400, 400, 1200, 2400):
     landmarks.append({"kind": "rt-lifeguard", "x": -2810, "z": lz, "h": 6, "r": 0, "rotY": 0.0})
+# --- 0.3.1 schools: one per residential district ---
+for sx, sz in SCHOOL_SPOTS:
+    landmarks.append({"kind": "rt7-school", "x": sx, "z": sz, "h": 13, "r": 44, "rotY": 0.0})
+# --- 0.3.1 airport landmarks ---
+landmarks.append({"kind": "rt7-terminal", "x": -1750, "z": -1955, "h": 26, "r": 120, "rotY": 0.0})
+landmarks.append({"kind": "rt7-atc", "x": -1280, "z": -1975, "h": 48, "r": 9, "rotY": 0.0})
+for hx in (-2350, -2150, -700, -500):
+    landmarks.append({"kind": "rt7-hangar", "x": hx, "z": -2170, "h": 16, "r": 22, "rotY": 0.0})
+for px, pz, pyaw in ((-1850, -2018, 0.0), (-1750, -2018, 0.0), (-1650, -2018, 0.0),
+                     (-1250, -2018, 0.0), (-2250, -2100, math.pi / 2.0), (-2050, -2100, math.pi / 2.0)):
+    landmarks.append({"kind": "rt7-plane", "x": px, "z": pz, "h": 12, "r": 24, "rotY": pyaw})
+for tz in (-2200, -2140, -2080):
+    landmarks.append({"kind": "rt7-tank", "x": -380, "z": tz, "h": 12, "r": 11, "rotY": 0.0})
+landmarks.append({"kind": "rt-parking", "x": -1850, "z": -1760, "h": 15, "r": 0, "rotY": 0.0})
+# --- 0.3.1 nuclear power plant landmarks ---
+for cz in (2430, 2770):
+    landmarks.append({"kind": "rt7-cooling", "x": -2280, "z": cz, "h": 95, "r": 40, "rotY": 0.0})
+for rz in (2490, 2710):
+    landmarks.append({"kind": "rt7-reactor", "x": -2060, "z": rz, "h": 52, "r": 26, "rotY": 0.0})
+landmarks.append({"kind": "rt7-chimney", "x": -2190, "z": 2545, "h": 130, "r": 7, "rotY": 0.0})
+# --- 0.3.1 military base landmarks ---
+for hx in (2760, 2840, 3010):
+    landmarks.append({"kind": "rt7-hangar", "x": hx, "z": -1085, "h": 11, "r": 15, "rotY": 0.0})
+landmarks.append({"kind": "rt7-radar", "x": 3100, "z": -830, "h": 17, "r": 9, "rotY": 0.0})
+for wx, wz in ((2660, -1210), (3140, -1210), (3140, -790), (2660, -790)):
+    landmarks.append({"kind": "rt7-watchtower", "x": wx, "z": wz, "h": 14, "r": 5, "rotY": 0.0})
+for hpx in (2720, 2815):
+    landmarks.append({"kind": "rt7-helipad", "x": hpx, "z": -815, "h": 0, "r": 12, "rotY": 0.0})
+for ax in range(2840, 3041, 40):
+    landmarks.append({"kind": "rt7-afv", "x": ax, "z": -1185, "h": 3, "r": 5, "rotY": round(RNG.uniform(-0.12, 0.12), 3)})
+for tx in (2680, 2715):
+    landmarks.append({"kind": "rt7-tank", "x": tx, "z": -1205, "h": 8, "r": 9, "rotY": 0.0})
+# Farm silos reuse the storage-tank landmark.
+for sx, sz in ((1400, 1950), (1416, 1950), (2000, 2300), (2016, 2300), (1650, 2750)):
+    landmarks.append({"kind": "rt7-tank", "x": sx, "z": sz, "h": 17, "r": 6, "rotY": 0.0})
 for lm in landmarks:
     lm["y"] = round(ground(lm["x"], lm["z"]), 3)
 
@@ -687,7 +968,7 @@ for b in buildings:
         if clear_of_roads(px, pz, 5.5):
             pools.append({"x": round(px, 2), "y": round(ground(px, pz), 3), "z": round(pz, 2),
                           "rotY": 0.0, "w": 10.0, "d": 5.0})
-pools = pools[:130]
+pools = pools[:200]
 
 palms = []
 
@@ -737,6 +1018,14 @@ for bz in range(-3000, 3100, 130):
 for hx, hz, w, d, h in hotels:
     for k in range(-2, 3):
         add_palm(hx - 30.0, hz + k * 14.0)
+# 0.3.1: airport approach + suburb avenues + terminal front palms.
+palm_line(-2620, -1872, -30, -1872, 46)
+palm_line(-2620, -1238, -30, -1238, 48)
+palm_line(-2620, -1262, -30, -1262, 48)
+palm_line(1030, 338, 2370, 338, 52)
+palm_line(1030, 712, 2370, 712, 52)
+for k in range(-3, 4):
+    add_palm(-1750 + k * 46.0, -1895)
 
 trees = []
 bushes = []
@@ -762,12 +1051,28 @@ for _ in range(30):
     add_tree(RNG.uniform(-380.0, -220.0), RNG.uniform(1020.0, 1230.0))
 # Hills park.
 for _ in range(30):
-    add_tree(RNG.uniform(1330.0, 1610.0), RNG.uniform(-1970.0, -1730.0))
+    add_tree(RNG.uniform(2050.0, 2260.0), RNG.uniform(-1950.0, -1750.0))
 # Farm orchard rows.
 for ox in range(1260, 2260, 34):
     for oz in range(2680, 3020, 34):
         if RNG.random() > 0.22:
             add_tree(ox + RNG.uniform(-3.0, 3.0), oz + RNG.uniform(-3.0, 3.0), scale=RNG.uniform(0.55, 0.8))
+# 0.3.1: garden trees scattered through the villa districts.
+for _ in range(420):
+    tx = RNG.uniform(1040.0, 2280.0)
+    tz = RNG.uniform(-2880.0, -220.0)
+    if spot_free(tx, tz, 5.0) and not in_park(tx, tz, 0.0):
+        add_tree(tx, tz)
+for _ in range(160):
+    tx = RNG.uniform(-2600.0, -80.0)
+    tz = RNG.uniform(-1830.0, -1020.0)
+    if spot_free(tx, tz, 5.0) and not in_mega(tx, tz):
+        add_tree(tx, tz)
+for _ in range(180):
+    tx = RNG.uniform(1040.0, 2360.0)
+    tz = RNG.uniform(-180.0, 980.0)
+    if spot_free(tx, tz, 5.0):
+        add_tree(tx, tz)
 # Plaza garden oaks.
 for gx, gz in ((120, 120), (-120, 120), (120, -120), (-120, -120), (150, 0), (-150, 0), (0, 150), (0, -150)):
     add_tree(gx + RNG.uniform(-12.0, 12.0), gz + RNG.uniform(-12.0, 12.0), scale=1.05)
@@ -828,6 +1133,16 @@ for gx in (-800, -600, -400, -200, 200, 400, 600, 800):
     lamp_line(gx + 10.5, -980, gx + 10.5, 980, 75, 0, -math.pi / 2.0, 1)
 for gz in (-800, -600, -400, -200, 200, 400, 600, 800):
     lamp_line(-980, gz - 10.5, 980, gz - 10.5, 75, 0, 0.0, -1)
+# 0.3.1: airport road, suburbs, Rich Hills grid, Highway 1 west side.
+lamp_line(-2620, -1864.5, -30, -1864.5, 58, 0, 0.0, -1)
+lamp_line(-2620, -1835.5, -30, -1835.5, 58, 0, math.pi, 1)
+lamp_line(-2620, -1239.0, -30, -1239.0, 62, 0, math.pi, 1)
+lamp_line(1030, 339.0, 2370, 339.0, 62, 0, 0.0, -1)
+lamp_line(1030, 711.0, 2370, 711.0, 62, 0, math.pi, 1)
+for hz in hills_h:
+    off = 11.0 if hz in (-2900, -200) else 8.5
+    lamp_line(1030, hz + off, 2280, hz + off, 88, 0, math.pi, 1)
+lamp_line(2378, -3180, 2378, 3180, 95, 0, math.pi / 2.0, -1)
 
 benches = []
 for i in range(18):
@@ -860,7 +1175,10 @@ zones = {
     "mallParking": {"minX": -1430, "maxX": -970, "minZ": 50, "maxZ": 350},
     "parkCentral": {"minX": 210, "maxX": 390, "minZ": -790, "maxZ": -610},
     "parkSunset": {"minX": -390, "maxX": -210, "minZ": 1010, "maxZ": 1240},
-    "parkHills": {"minX": 1320, "maxX": 1620, "minZ": -1980, "maxZ": -1720},
+    "parkHills": {"minX": 2040, "maxX": 2270, "minZ": -1960, "maxZ": -1740},
+    "airport": {"minX": -2620, "maxX": -180, "minZ": -2520, "maxZ": -1620},
+    "npp": {"minX": -2500, "maxX": -1550, "minZ": 2280, "maxZ": 2920},
+    "milbase": {"minX": 2560, "maxX": 3260, "minZ": -1320, "maxZ": -700},
 }
 
 districts = [
@@ -876,6 +1194,11 @@ districts = [
     {"id": "desert-east", "name": "Восточная пустыня", "x": 3000, "z": 0, "radiusM": 1000, "biome": "desert"},
     {"id": "stadium", "name": "Стадион RichTown", "x": 190, "z": -1400, "radiusM": 320, "biome": "urban"},
     {"id": "beach", "name": "Пляж", "x": -2800, "z": 0, "radiusM": 700, "biome": "park"},
+    {"id": "airport", "name": "Аэропорт RichTown Intl", "x": -1500, "z": -2100, "radiusM": 1050, "biome": "urban"},
+    {"id": "npp", "name": "АЭС «RichTown»", "x": -2050, "z": 2600, "radiusM": 620, "biome": "urban"},
+    {"id": "milbase", "name": "Военная база «Восточная»", "x": 2900, "z": -1000, "radiusM": 520, "biome": "desert"},
+    {"id": "south-suburb", "name": "Южная долина", "x": -1500, "z": -1450, "radiusM": 750, "biome": "urban"},
+    {"id": "east-suburb", "name": "Восточный пригород", "x": 1700, "z": 520, "radiusM": 800, "biome": "urban"},
 ]
 
 spawn = {"x": 5.0, "y": round(ground(5.0, 640.0) + 0.4, 3), "z": 640.0, "yaw": 0.0}
