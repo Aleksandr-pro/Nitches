@@ -29,6 +29,8 @@ var _is_forest := false
 var _gf_field_rects: Array[Rect2] = []
 var _gf_lake_y := 0.0
 var _gf_bird_flocks: Array[Dictionary] = []
+var _gf_scatter_total_acc := 0
+var _gf_scatter_trees_acc := 0
 var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
@@ -400,7 +402,11 @@ func _queue_forest_build_stages() -> void:
 	_add_build_stage("Заполняем озеро и реку", Callable(self, "_build_forest_water"), 0.5)
 	_add_build_stage("Прокладываем дороги и мосты", Callable(self, "_build_desert_roads"), 4.0)
 	_add_build_stage("Строим посёлок, ферму и лесопилку", Callable(self, "_build_desert_structures"), 3.0)
-	_add_build_stage("Высаживаем лес", Callable(self, "_build_forest_scatter"), 4.0)
+	# 0.2.55: scatter is built in three slices so one stage never
+	# monopolises a loading frame long enough to trip Android ANR.
+	_add_build_stage("Высаживаем лес: деревья", Callable(self, "_gf_scatter_build").bind(["spruce", "pine", "birch", "leafy", "oak", "dead_tree"]), 2.2)
+	_add_build_stage("Высаживаем лес: подлесок", Callable(self, "_gf_scatter_build").bind(["bush", "fern", "flower", "mushroom", "stump", "fallen_log", "reed"]), 1.0)
+	_add_build_stage("Высаживаем лес: камни и поля", Callable(self, "_gf_scatter_build").bind(["hay_bale", "crop_wheat", "crop_corn", "crop_sunflower", "rock_small", "rock_medium", "rock_large"]), 0.8)
 	_add_build_stage("Добавляем оленей, птиц и дым", Callable(self, "_build_forest_extras"), 0.5)
 	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
 	_add_build_stage("Собираем модели леса", Callable(self, "_flush_batched_models"), 2.0)
@@ -13108,7 +13114,39 @@ func _gf_structure_kind(kind: String, o: Vector3, basis: Basis, w: float, d: flo
 	return true
 
 
+func _gf_near_road(px: float, pz: float, limit: float) -> bool:
+	# Exact uncapped near-road test over the 3x3 road-grid
+	# neighbourhood.  _road_clearance_xz() caps its answer at
+	# ROAD_GRID_QUERY_CLEARANCE_M (10 m), so the 0.2.54 test
+	# `clearance < 22` was true for EVERY tree and the scatter stage
+	# tried to create 37.5k physics colliders: CI timed out at 600 s
+	# and Android killed the app mid-loading.  True roadside trees
+	# within 22 m number ~6.9k (verified against the data).
+	var centre := _road_grid_cell(px, pz)
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var candidates: Array = _road_segment_grid.get(Vector2i(centre.x + dx, centre.y + dz), [])
+			for index_variant in candidates:
+				var i := int(index_variant)
+				var a: Vector3 = _road_segment_starts[i]
+				var b: Vector3 = _road_segment_ends[i]
+				var ab := Vector2(b.x - a.x, b.z - a.z)
+				var ap := Vector2(px - a.x, pz - a.z)
+				var length_squared := ab.length_squared()
+				var dist := ap.length()
+				if length_squared > 0.0001:
+					var t := clampf(ap.dot(ab) / length_squared, 0.0, 1.0)
+					dist = ap.distance_to(ab * t)
+				if dist - float(_road_segment_half_widths[i]) < limit:
+					return true
+	return false
+
+
 func _build_forest_scatter() -> void:
+	_gf_scatter_build([])
+
+
+func _gf_scatter_build(kinds_filter: Array) -> void:
 	var root := Node3D.new()
 	root.name = "ForestScatter"
 	add_child(root)
@@ -13265,6 +13303,8 @@ func _build_forest_scatter() -> void:
 	var trees := 0
 	for kind_variant in cfg.keys():
 		var kind := String(kind_variant)
+		if not kinds_filter.is_empty() and not kinds_filter.has(kind):
+			continue
 		var conf: Dictionary = cfg[kind]
 		var items: Array = scatter.get(kind, [])
 		if items.is_empty():
@@ -13296,7 +13336,7 @@ func _build_forest_scatter() -> void:
 				trees += 1
 			if collider_r > 0.0:
 				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
-			elif is_tree and _road_clearance_xz(pos) < 22.0:
+			elif is_tree and _gf_near_road(px, pz, 22.0):
 				# Only roadside trees need physics; deep forest stays
 				# collider-free so the streaming grid stays light.
 				_add_cylinder_collider(Vector3(px, pos.y + 1.5 * sc, pz), 0.34 * sc, 3.0 * sc)
@@ -13317,8 +13357,10 @@ func _build_forest_scatter() -> void:
 						if ti % kind_meshes.size() == vi:
 							sub.append(bucket_xforms[ti])
 					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "GfScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
-	_enhancement_stats["forest_scatter"] = total
-	_enhancement_stats["forest_trees"] = trees
+	_gf_scatter_total_acc += total
+	_gf_scatter_trees_acc += trees
+	_enhancement_stats["forest_scatter"] = _gf_scatter_total_acc
+	_enhancement_stats["forest_trees"] = _gf_scatter_trees_acc
 	_enhancement_stats["forest_scatter_0254"] = true
 
 

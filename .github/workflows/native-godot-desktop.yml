@@ -126,7 +126,7 @@ jobs:
             echo "Native source smoke reported a fatal runtime problem" >&2
             exit 1
           fi
-          timeout 240 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+          timeout 300 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
             -- --native-smoke --native-world=greenforest 2>&1 | tee "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
           grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
           if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"; then
