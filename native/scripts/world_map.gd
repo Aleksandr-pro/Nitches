@@ -47,6 +47,8 @@ const LANDMARK_POIS := {
     "rt-hole": ["Башня Hole", "Башня", 2],
     "rt-parking": ["Многоуровневый паркинг", "Инфраструктура", 3],
     "rt-aquapark": ["Аквапарк", "Развлечения", 2],
+    "rt7-stadium": ["Стадион RichTown", "Спорт", 1],
+    "rt7-cable-bridge": ["Вантовый мост", "Достопримечательность", 1],
 }
 const ROAD_LABELS := [
     {"name": "ГЛАВНЫЙ БУЛЬВАР", "x": 760.0, "z": -135.0, "priority": 1},
@@ -561,15 +563,23 @@ func _build_desert_pois() -> void:
 
 
 func _road_labels_data() -> Array:
-    if not (_is_desert() or _is_forest()):
+    var is_rt7 := String(_data.get("layout", "")) == "richtown7"
+    if not (_is_desert() or _is_forest()) and not is_rt7:
         return ROAD_LABELS
     var labels: Array = []
+    var seen_names := {}
     for road_variant in _data.get("roads", []):
         var road: Dictionary = road_variant
         var rname := String(road.get("name", ""))
         var samples: Array = road.get("samples", [])
         if rname.is_empty() or samples.size() < 6:
             continue
+        if is_rt7:
+            # 0.3.0: the 7x7 network is built from block-length segments;
+            # one label per unique street name keeps the map readable.
+            if seen_names.has(rname):
+                continue
+            seen_names[rname] = true
         var prio := 1 if String(road.get("surface", "asphalt")) == "asphalt" else 3
         var spots: Array = [samples.size() / 2]
         if String(road.get("id", "")) == "dz-ring" or String(road.get("id", "")) == "gf-ring":
@@ -609,6 +619,8 @@ func _build_pois() -> void:
         var z := float(building.get("z", 0.0))
         if kind == "rt-mall":
             _add_poi("mall", "Торговый центр", "Инфраструктура", x, z, 2)
+        elif kind == "rt-hotel" and String(_data.get("layout", "")) == "richtown7" and float(building.get("h", 0.0)) > 38.0 and float(building.get("w", 0.0)) >= 33.0 and float(building.get("w", 0.0)) <= 36.0:
+            _add_poi("grand_hotel_%d" % int(z), "Гранд-отель", "Отель", x, z, 1)
         elif kind == "rt-hotel" and x > 880.0:
             # Only the three X892 plots use the integrated Grand Hotel
             # model.  The other exported rt-hotel entries are generic
@@ -623,7 +635,7 @@ func _build_pois() -> void:
 
     var spawn: Dictionary = _data.get("spawn", {"x": 760.0, "z": 330.0})
     _add_poi("spawn", "Старт • Shelbie GT500", "Старт", float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)), 1, Vector2(10.0, 8.0))
-    _add_poi("boulevard_cafe", "Бульварные кафе", "Кафе", 738.0, 23.0, 2, Vector2(-112.0, -10.0))
+    _add_poi("boulevard_cafe", "Кафе у площади", "Кафе", 170.0, 24.0, 2, Vector2(-112.0, -10.0))
 
     if _world != null:
         for park_variant in _world.get_park_map_entries():
@@ -639,11 +651,22 @@ func _build_pois() -> void:
                 park_name = "Пальметум Корниш"
             _add_poi("park_" + park_id, park_name, "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 2)
 
-    _add_poi("race_boulevard", "Старт гонки: Бульвар", "Гонка", 760.0, 318.0, 2)
-    _add_poi("race_corniche", "Старт гонки: Корниш", "Гонка", 930.0, -318.0, 2)
-    _add_poi("race_palm_bridge", "Старт гонки: Мост Пальмы", "Гонка", 1085.0, -250.0, 2)
+    _add_poi("race_boulevard", "Старт гонки: Центральный проспект", "Гонка", 0.0, 300.0, 2)
+    _add_poi("race_corniche", "Старт гонки: Корниш", "Гонка", -2650.0, -300.0, 2)
+    _add_poi("race_palm_bridge", "Старт гонки: Вантовый мост", "Гонка", 0.0, 1480.0, 2)
     var home_targets := [Vector2(710.0, -344.0), Vector2(662.0, 306.0), Vector2(1348.0, -352.0)]
     var home_names := ["Дом у музея", "Дом в Южном районе вилл", "Дом на Острове-Пальме"]
+    if String(_data.get("layout", "")) == "richtown7":
+        home_targets.clear()
+        home_names.clear()
+        var rt7_home_names := ["Вилла у парка", "Дом в Rich Hills", "Вилла с бассейном"]
+        for building_variant in _data.get("buildings", []):
+            if home_targets.size() >= 3:
+                break
+            var home_building: Dictionary = building_variant
+            if String(home_building.get("model", "")) == "villa":
+                home_targets.append(Vector2(float(home_building.get("x", 0.0)), float(home_building.get("z", 0.0))))
+                home_names.append(rt7_home_names[home_targets.size() - 1])
     for home_index in home_targets.size():
         var target: Vector2 = home_targets[home_index]
         var best: Dictionary = {}

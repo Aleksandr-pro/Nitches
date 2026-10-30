@@ -2498,17 +2498,20 @@ func _run_smoke_checks() -> void:
 	var world_data := _world.get_world_data()
 	if not _world.has_world_data() or world_data.is_empty():
 		failures.append("exported world data is empty: %s" % _world.build_error)
+	var is_rt7 := String(world_data.get("layout", "")) == "richtown7"
+	if is_rt7:
+		_run_rt7_world_smoke_checks(failures, stats)
 	if int(stats.get("terrainVertices", 0)) < 9000:
 		failures.append("terrain stats are missing or too small")
 	if int(stats.get("roadEdges", 0)) < 50:
 		failures.append("road stats are missing or too small")
 	if int(stats.get("buildings", 0)) < 45:
 		failures.append("building stats are missing or too small")
-	if int(stats.get("landmarks", 0)) != 15:
+	if (is_rt7 and int(stats.get("landmarks", 0)) < 20) or (not is_rt7 and int(stats.get("landmarks", 0)) != 15):
 		failures.append("landmark stats are incomplete")
 
 	var enhancement_stats := _world.get_enhancement_stats()
-	if int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)) or not bool(enhancement_stats.get("skyline_panorama_textures_0243", false)) or int(enhancement_stats.get("skyline_panorama_width", 0)) != 4096 or int(enhancement_stats.get("skyline_panorama_height", 0)) != 512:
+	if not is_rt7 and (int(enhancement_stats.get("skyline_layers", 0)) < 2 or not bool(enhancement_stats.get("skyline_follows_vehicle", false)) or not bool(enhancement_stats.get("skyline_procedural_windows", false)) or not bool(enhancement_stats.get("skyline_panorama_textures_0243", false)) or int(enhancement_stats.get("skyline_panorama_width", 0)) != 4096 or int(enhancement_stats.get("skyline_panorama_height", 0)) != 512):
 		failures.append("0.2.43 two-layer textured skyline is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("near_field_lod_0243", false)) or String(enhancement_stats.get("range_fade_mode", "")) != "dithered_self" or float(enhancement_stats.get("tree_detail_end_m", 9999.0)) > 110.0 or float(enhancement_stats.get("palm_detail_end_m", 9999.0)) > 140.0 or float(enhancement_stats.get("shrub_detail_end_m", 9999.0)) > 100.0:
 		failures.append("0.2.43 near-field HLOD budget is incomplete: %s" % str(enhancement_stats))
@@ -2524,21 +2527,21 @@ func _run_smoke_checks() -> void:
 		failures.append("local environment reflection cubemaps are incomplete: %s" % str(enhancement_stats))
 	if int(enhancement_stats.get("road_markings", 0)) < 700:
 		failures.append("road markings are incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("premium_boulevard_paving", false)) or not bool(enhancement_stats.get("premium_stone_paving_shader_0218", false)) or not bool(enhancement_stats.get("boulevard_rebuild_0218", false)) or not bool(enhancement_stats.get("boulevard_reference_0219", false)) or not bool(enhancement_stats.get("boulevard_dark_asphalt_0219", false)) or not bool(enhancement_stats.get("dubai_premium_cafe_model", false)) or not bool(enhancement_stats.get("dubai_premium_cafe_pbr_0219", false)) or int(enhancement_stats.get("dubai_premium_cafe_model_parts", 0)) < 12 or int(enhancement_stats.get("dubai_premium_cafe_triangles", 0)) < 10000 or int(enhancement_stats.get("boulevard_granite_curbs", 0)) < 180 or int(enhancement_stats.get("boulevard_premium_sidewalk_slabs", 0)) < 180 or int(enhancement_stats.get("boulevard_fresh_markings", 0)) < 450 or int(enhancement_stats.get("boulevard_yellow_edge_lines", 0)) < 240 or int(enhancement_stats.get("boulevard_cafes", 0)) < 8 or int(enhancement_stats.get("boulevard_spawn_cafes", 0)) < 1 or int(enhancement_stats.get("boulevard_arcades", 0)) < 9 or int(enhancement_stats.get("boulevard_cafe_tables", 0)) < 55 or int(enhancement_stats.get("boulevard_cafe_umbrellas", 0)) < 24 or int(enhancement_stats.get("boulevard_palm_planters", 0)) < 60 or int(enhancement_stats.get("boulevard_drip_emitters", 0)) < 80 or int(enhancement_stats.get("boulevard_date_palms", 0)) < 60 or int(enhancement_stats.get("boulevard_lawn_islands", 0)) < 45 or float(enhancement_stats.get("boulevard_lawn_area_m2", 0.0)) < 4000.0 or int(enhancement_stats.get("boulevard_topiary", 0)) < 220 or int(enhancement_stats.get("boulevard_continuous_hedges", 0)) < 45 or int(enhancement_stats.get("boulevard_ground_cover", 0)) < 350 or int(enhancement_stats.get("boulevard_extra_date_palms", 0)) < 6 or int(enhancement_stats.get("boulevard_modern_lamps", 0)) < 55 or int(enhancement_stats.get("boulevard_stone_benches", 0)) < 25 or int(enhancement_stats.get("boulevard_pool_decks", 0)) < 3 or int(enhancement_stats.get("boulevard_marina_deck_segments", 0)) < 20 or int(enhancement_stats.get("boulevard_frontage_infill", 0)) < 8:
+	if not is_rt7 and (not bool(enhancement_stats.get("premium_boulevard_paving", false)) or not bool(enhancement_stats.get("premium_stone_paving_shader_0218", false)) or not bool(enhancement_stats.get("boulevard_rebuild_0218", false)) or not bool(enhancement_stats.get("boulevard_reference_0219", false)) or not bool(enhancement_stats.get("boulevard_dark_asphalt_0219", false)) or not bool(enhancement_stats.get("dubai_premium_cafe_model", false)) or not bool(enhancement_stats.get("dubai_premium_cafe_pbr_0219", false)) or int(enhancement_stats.get("dubai_premium_cafe_model_parts", 0)) < 12 or int(enhancement_stats.get("dubai_premium_cafe_triangles", 0)) < 10000 or int(enhancement_stats.get("boulevard_granite_curbs", 0)) < 180 or int(enhancement_stats.get("boulevard_premium_sidewalk_slabs", 0)) < 180 or int(enhancement_stats.get("boulevard_fresh_markings", 0)) < 450 or int(enhancement_stats.get("boulevard_yellow_edge_lines", 0)) < 240 or int(enhancement_stats.get("boulevard_cafes", 0)) < 8 or int(enhancement_stats.get("boulevard_spawn_cafes", 0)) < 1 or int(enhancement_stats.get("boulevard_arcades", 0)) < 9 or int(enhancement_stats.get("boulevard_cafe_tables", 0)) < 55 or int(enhancement_stats.get("boulevard_cafe_umbrellas", 0)) < 24 or int(enhancement_stats.get("boulevard_palm_planters", 0)) < 60 or int(enhancement_stats.get("boulevard_drip_emitters", 0)) < 80 or int(enhancement_stats.get("boulevard_date_palms", 0)) < 60 or int(enhancement_stats.get("boulevard_lawn_islands", 0)) < 45 or float(enhancement_stats.get("boulevard_lawn_area_m2", 0.0)) < 4000.0 or int(enhancement_stats.get("boulevard_topiary", 0)) < 220 or int(enhancement_stats.get("boulevard_continuous_hedges", 0)) < 45 or int(enhancement_stats.get("boulevard_ground_cover", 0)) < 350 or int(enhancement_stats.get("boulevard_extra_date_palms", 0)) < 6 or int(enhancement_stats.get("boulevard_modern_lamps", 0)) < 55 or int(enhancement_stats.get("boulevard_stone_benches", 0)) < 25 or int(enhancement_stats.get("boulevard_pool_decks", 0)) < 3 or int(enhancement_stats.get("boulevard_marina_deck_segments", 0)) < 20 or int(enhancement_stats.get("boulevard_frontage_infill", 0)) < 8):
 		failures.append("0.2.19 RichTown Boulevard reference corridor/PR61 PBR cafe rebuild is incomplete: %s" % str(enhancement_stats))
 	var promenade_surface := _world.get_surface_at(Vector3(738.0, 4.0, 23.0))
-	if String(promenade_surface.get("kind", "")) != "plaza":
+	if not is_rt7 and (String(promenade_surface.get("kind", "")) != "plaza"):
 		failures.append("spawn-side RichTown promenade is not classified as premium stone: %s" % str(promenade_surface))
-	if not bool(enhancement_stats.get("parks_0222", false)) or int(enhancement_stats.get("parks", 0)) < 3 or float(enhancement_stats.get("park_area_m2", 0.0)) < 22000.0 or float(enhancement_stats.get("park_lawn_area_m2", 0.0)) < 9000.0 or int(enhancement_stats.get("park_trees", 0)) < 38 or int(enhancement_stats.get("park_palms", 0)) < 70 or int(enhancement_stats.get("park_bushes", 0)) < 55 or int(enhancement_stats.get("park_ground_cover", 0)) < 1600 or float(enhancement_stats.get("park_hedge_length_m", 0.0)) < 420.0 or int(enhancement_stats.get("park_benches", 0)) < 34 or int(enhancement_stats.get("park_lamps", 0)) < 18 or int(enhancement_stats.get("park_topiary", 0)) < 14 or not bool(enhancement_stats.get("central_park_fountain_garden", false)) or not bool(enhancement_stats.get("museum_garden_pergola", false)) or not bool(enhancement_stats.get("beach_palmetum_rondel", false)):
+	if not is_rt7 and (not bool(enhancement_stats.get("parks_0222", false)) or int(enhancement_stats.get("parks", 0)) < 3 or float(enhancement_stats.get("park_area_m2", 0.0)) < 22000.0 or float(enhancement_stats.get("park_lawn_area_m2", 0.0)) < 9000.0 or int(enhancement_stats.get("park_trees", 0)) < 38 or int(enhancement_stats.get("park_palms", 0)) < 70 or int(enhancement_stats.get("park_bushes", 0)) < 55 or int(enhancement_stats.get("park_ground_cover", 0)) < 1600 or float(enhancement_stats.get("park_hedge_length_m", 0.0)) < 420.0 or int(enhancement_stats.get("park_benches", 0)) < 34 or int(enhancement_stats.get("park_lamps", 0)) < 18 or int(enhancement_stats.get("park_topiary", 0)) < 14 or not bool(enhancement_stats.get("central_park_fountain_garden", false)) or not bool(enhancement_stats.get("museum_garden_pergola", false)) or not bool(enhancement_stats.get("beach_palmetum_rondel", false))):
 		failures.append("0.2.22 RichTown parks (Central Park/Museum Garden/Corniche Palmetum) pass is incomplete: %s" % str(enhancement_stats))
 	var park_surface := _world.get_surface_at(Vector3(610.0, 4.0, -60.0))
-	if String(park_surface.get("kind", "")) != "grass":
+	if not is_rt7 and (String(park_surface.get("kind", "")) != "grass"):
 		failures.append("Central Park lawn is not classified as grass: %s" % str(park_surface))
-	if int(enhancement_stats.get("bus_shelters", 0)) < 12:
+	if not is_rt7 and (int(enhancement_stats.get("bus_shelters", 0)) < 12):
 		failures.append("bus shelters are incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("photoreal_models_0223", false)) or not bool(enhancement_stats.get("photoreal_park_furniture_0223", false)) or int(enhancement_stats.get("palm_date_triangles", 0)) < 15000 or int(enhancement_stats.get("palm_royal_triangles", 0)) < 11000 or int(enhancement_stats.get("grass_tuft_triangles", 0)) < 900 or int(enhancement_stats.get("flower_clump_triangles", 0)) < 3500 or int(enhancement_stats.get("ornamental_shrub_triangles", 0)) < 4200 or int(enhancement_stats.get("street_lamp_triangles", 0)) < 4500 or int(enhancement_stats.get("bus_shelter_triangles", 0)) < 7500 or int(enhancement_stats.get("park_bench_triangles", 0)) < 3500 or int(enhancement_stats.get("park_pergola_triangles", 0)) < 7000 or int(enhancement_stats.get("park_bench_models", 0)) < 34:
+	if not is_rt7 and (not bool(enhancement_stats.get("photoreal_models_0223", false)) or not bool(enhancement_stats.get("photoreal_park_furniture_0223", false)) or int(enhancement_stats.get("palm_date_triangles", 0)) < 15000 or int(enhancement_stats.get("palm_royal_triangles", 0)) < 11000 or int(enhancement_stats.get("grass_tuft_triangles", 0)) < 900 or int(enhancement_stats.get("flower_clump_triangles", 0)) < 3500 or int(enhancement_stats.get("ornamental_shrub_triangles", 0)) < 4200 or int(enhancement_stats.get("street_lamp_triangles", 0)) < 4500 or int(enhancement_stats.get("bus_shelter_triangles", 0)) < 7500 or int(enhancement_stats.get("park_bench_triangles", 0)) < 3500 or int(enhancement_stats.get("park_pergola_triangles", 0)) < 7000 or int(enhancement_stats.get("park_bench_models", 0)) < 34):
 		failures.append("0.2.23 photoreal model detail pass (palms/ground cover/lamps/shelters/park furniture) is incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("district_infrastructure_0224", false)) or not bool(enhancement_stats.get("rounded_returns_0224", false)) or int(enhancement_stats.get("district_streets", 0)) < 6 or float(enhancement_stats.get("district_street_length_m", 0.0)) < 750.0 or int(enhancement_stats.get("palm_local_roads", 0)) < 3 or float(enhancement_stats.get("palm_local_length_m", 0.0)) < 90.0 or int(enhancement_stats.get("district_driveways", 0)) < 9 or int(enhancement_stats.get("district_hedges", 0)) < 14 or int(enhancement_stats.get("district_lamps", 0)) < 16 or int(enhancement_stats.get("district_street_trees", 0)) < 12 or int(enhancement_stats.get("district_palms", 0)) < 5 or int(enhancement_stats.get("district_benches", 0)) < 4 or int(enhancement_stats.get("district_roundabout", 0)) < 1 or int(enhancement_stats.get("district_mosque_plaza", 0)) < 1 or int(enhancement_stats.get("rounded_intersection_returns", 0)) < 80 or int(enhancement_stats.get("rounded_corner_curbs", 0)) < 400 or int(enhancement_stats.get("junctions_with_rounded_returns", 0)) < 25 or int(enhancement_stats.get("junction_edge_openings_0224", 0)) < 40 or int(enhancement_stats.get("junction_paint_breaks_0224", 0)) < 20 or int(enhancement_stats.get("guardrail_terminals", 0)) < 4 or int(enhancement_stats.get("guardrail_trimmed_subsegments", 0)) < 10 or float(enhancement_stats.get("guardrail_trim_start_m", 0.0)) < 13.0 or float(enhancement_stats.get("guardrail_min_alignment", 0.0)) < 0.99:
+	if not is_rt7 and (not bool(enhancement_stats.get("district_infrastructure_0224", false)) or not bool(enhancement_stats.get("rounded_returns_0224", false)) or int(enhancement_stats.get("district_streets", 0)) < 6 or float(enhancement_stats.get("district_street_length_m", 0.0)) < 750.0 or int(enhancement_stats.get("palm_local_roads", 0)) < 3 or float(enhancement_stats.get("palm_local_length_m", 0.0)) < 90.0 or int(enhancement_stats.get("district_driveways", 0)) < 9 or int(enhancement_stats.get("district_hedges", 0)) < 14 or int(enhancement_stats.get("district_lamps", 0)) < 16 or int(enhancement_stats.get("district_street_trees", 0)) < 12 or int(enhancement_stats.get("district_palms", 0)) < 5 or int(enhancement_stats.get("district_benches", 0)) < 4 or int(enhancement_stats.get("district_roundabout", 0)) < 1 or int(enhancement_stats.get("district_mosque_plaza", 0)) < 1 or int(enhancement_stats.get("rounded_intersection_returns", 0)) < 80 or int(enhancement_stats.get("rounded_corner_curbs", 0)) < 400 or int(enhancement_stats.get("junctions_with_rounded_returns", 0)) < 25 or int(enhancement_stats.get("junction_edge_openings_0224", 0)) < 40 or int(enhancement_stats.get("junction_paint_breaks_0224", 0)) < 20 or int(enhancement_stats.get("guardrail_terminals", 0)) < 4 or int(enhancement_stats.get("guardrail_trimmed_subsegments", 0)) < 10 or float(enhancement_stats.get("guardrail_trim_start_m", 0.0)) < 13.0 or float(enhancement_stats.get("guardrail_min_alignment", 0.0)) < 0.99):
 		failures.append("0.2.24 district streets/rounded junctions/guardrail alignment pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("curtain_wall_reflective_glass_0227", false)) or float(enhancement_stats.get("glass_smoke_luminance_min_0227", 0.0)) < 0.24 or not bool(enhancement_stats.get("guardrail_local_axis_0227", false)):
 		failures.append("0.2.27 reflective glass/guardrail local-axis pass is incomplete: %s" % str(enhancement_stats))
@@ -2546,26 +2549,26 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.28 paving variety pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("directional_streaming_0230", false)) or int(enhancement_stats.get("streaming_chunks_total", 0)) < 60 or int(enhancement_stats.get("streaming_colliders_total", 0)) < 300 or int(enhancement_stats.get("streaming_colliders_active", 0)) >= int(enhancement_stats.get("streaming_colliders_total", 0)):
 		failures.append("0.2.30 directional streaming pass is incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("road_infrastructure_repair_0236", false)) or not bool(enhancement_stats.get("real_junction_arms_0236", false)) or not bool(enhancement_stats.get("traffic_signals_on_real_arms_0236", false)) or not bool(enhancement_stats.get("continuous_arterial_curbs_0236", false)) or not bool(enhancement_stats.get("rounded_curb_edge_alignment_0236", false)) or not bool(enhancement_stats.get("bike_lane_junction_breaks_0236", false)) or not bool(enhancement_stats.get("bus_shelter_footprints_clear_0236", false)) or not bool(enhancement_stats.get("roadside_footprints_clear_0236", false)) or int(enhancement_stats.get("rejected_fake_junction_pads_0236", 0)) < 1 or int(enhancement_stats.get("real_crosswalk_groups_0236", 0)) < 50 or int(enhancement_stats.get("rejected_fake_crosswalks_0236", 0)) < 10 or int(enhancement_stats.get("rejected_fake_signal_approaches_0236", 0)) < 10 or int(enhancement_stats.get("road_junction_subsegments_0236", 0)) < 100 or int(enhancement_stats.get("rejected_road_palms_0236", 0)) < 1:
+	if not is_rt7 and (not bool(enhancement_stats.get("road_infrastructure_repair_0236", false)) or not bool(enhancement_stats.get("real_junction_arms_0236", false)) or not bool(enhancement_stats.get("traffic_signals_on_real_arms_0236", false)) or not bool(enhancement_stats.get("continuous_arterial_curbs_0236", false)) or not bool(enhancement_stats.get("rounded_curb_edge_alignment_0236", false)) or not bool(enhancement_stats.get("bike_lane_junction_breaks_0236", false)) or not bool(enhancement_stats.get("bus_shelter_footprints_clear_0236", false)) or not bool(enhancement_stats.get("roadside_footprints_clear_0236", false)) or int(enhancement_stats.get("rejected_fake_junction_pads_0236", 0)) < 1 or int(enhancement_stats.get("real_crosswalk_groups_0236", 0)) < 50 or int(enhancement_stats.get("rejected_fake_crosswalks_0236", 0)) < 10 or int(enhancement_stats.get("rejected_fake_signal_approaches_0236", 0)) < 10 or int(enhancement_stats.get("road_junction_subsegments_0236", 0)) < 100 or int(enhancement_stats.get("rejected_road_palms_0236", 0)) < 1):
 		failures.append("0.2.36 real-arm road infrastructure/footprint repair pass is incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("view_sector_streaming_0237", false)) or int(enhancement_stats.get("flat_shadow_casters_disabled_0237", 0)) < 500 or not bool(enhancement_stats.get("sail_island_expanded_0237", false)) or not bool(enhancement_stats.get("sail_island_loop_0237", false)) or not bool(enhancement_stats.get("sail_island_resort_0237", false)) or not bool(enhancement_stats.get("sail_island_infill_excluded_0237", false)) or float(enhancement_stats.get("sail_island_land_area_m2_0237", 0.0)) < 30000.0 or int(enhancement_stats.get("sail_resort_villas_0237", 0)) < 3 or int(enhancement_stats.get("sail_resort_pools_0237", 0)) < 3 or int(enhancement_stats.get("sail_island_palms_0237", 0)) < 12 or int(enhancement_stats.get("sail_island_promenade_segments_0237", 0)) < 48 or int(enhancement_stats.get("sail_island_lamps_0237", 0)) < 8 or not bool(enhancement_stats.get("canonical_building_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_buildings_relocated_0237", 0)) < 3 or float(enhancement_stats.get("canonical_building_min_clearance_0237", 0.0)) < 1.6 or not bool(enhancement_stats.get("canonical_pool_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_pools_relocated_0237", 0)) < 1 or float(enhancement_stats.get("canonical_pool_min_clearance_0237", 0.0)) < 1.2 or not bool(enhancement_stats.get("bridge_roadside_props_removed_0237", false)) or int(enhancement_stats.get("readable_road_signs_0237", 0)) < 20 or not bool(enhancement_stats.get("road_wear_scale_0237", false)):
+	if not is_rt7 and (not bool(enhancement_stats.get("view_sector_streaming_0237", false)) or int(enhancement_stats.get("flat_shadow_casters_disabled_0237", 0)) < 500 or not bool(enhancement_stats.get("sail_island_expanded_0237", false)) or not bool(enhancement_stats.get("sail_island_loop_0237", false)) or not bool(enhancement_stats.get("sail_island_resort_0237", false)) or not bool(enhancement_stats.get("sail_island_infill_excluded_0237", false)) or float(enhancement_stats.get("sail_island_land_area_m2_0237", 0.0)) < 30000.0 or int(enhancement_stats.get("sail_resort_villas_0237", 0)) < 3 or int(enhancement_stats.get("sail_resort_pools_0237", 0)) < 3 or int(enhancement_stats.get("sail_island_palms_0237", 0)) < 12 or int(enhancement_stats.get("sail_island_promenade_segments_0237", 0)) < 48 or int(enhancement_stats.get("sail_island_lamps_0237", 0)) < 8 or not bool(enhancement_stats.get("canonical_building_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_buildings_relocated_0237", 0)) < 3 or float(enhancement_stats.get("canonical_building_min_clearance_0237", 0.0)) < 1.6 or not bool(enhancement_stats.get("canonical_pool_road_clearance_0237", false)) or int(enhancement_stats.get("canonical_pools_relocated_0237", 0)) < 1 or float(enhancement_stats.get("canonical_pool_min_clearance_0237", 0.0)) < 1.2 or not bool(enhancement_stats.get("bridge_roadside_props_removed_0237", false)) or int(enhancement_stats.get("readable_road_signs_0237", 0)) < 20 or not bool(enhancement_stats.get("road_wear_scale_0237", false))):
 		failures.append("0.2.37 view-sector streaming / flat-shadow diet / Sail Island resort / canonical footprint repair pass is incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("sail_loop_road_repair_0238", false)) or not bool(enhancement_stats.get("sail_loop_closed_0238", false)) or not bool(enhancement_stats.get("sail_loop_entry_pad_0238", false)) or not bool(enhancement_stats.get("sail_loop_clean_markings_0238", false)) or int(enhancement_stats.get("sail_loop_center_dashes_0238", 0)) < 40 or not bool(enhancement_stats.get("sail_loop_pristine_asphalt_0238", false)) or float(enhancement_stats.get("sail_resort_min_road_clearance_0238", 0.0)) < 0.9 or int(enhancement_stats.get("sail_resort_rejected_road_overlaps_0238", 1)) != 0 or int(enhancement_stats.get("sail_island_paving_0237", 0)) < 4 or int(enhancement_stats.get("sail_island_hedges_0238", 0)) < 14 or int(enhancement_stats.get("sail_pools_final_0238", 0)) < 3 or float(enhancement_stats.get("sail_pool_min_road_clearance_0238", 0.0)) < 1.2 or not bool(enhancement_stats.get("canonical_pool_rim_clearance_0238", false)) or not bool(enhancement_stats.get("canonical_pool_self_excluded_0238", false)) or not bool(enhancement_stats.get("sail_loop_generic_props_removed_0238", false)) or int(enhancement_stats.get("sail_loop_segments_without_props_0238", 0)) < 56:
+	if not is_rt7 and (not bool(enhancement_stats.get("sail_loop_road_repair_0238", false)) or not bool(enhancement_stats.get("sail_loop_closed_0238", false)) or not bool(enhancement_stats.get("sail_loop_entry_pad_0238", false)) or not bool(enhancement_stats.get("sail_loop_clean_markings_0238", false)) or int(enhancement_stats.get("sail_loop_center_dashes_0238", 0)) < 40 or not bool(enhancement_stats.get("sail_loop_pristine_asphalt_0238", false)) or float(enhancement_stats.get("sail_resort_min_road_clearance_0238", 0.0)) < 0.9 or int(enhancement_stats.get("sail_resort_rejected_road_overlaps_0238", 1)) != 0 or int(enhancement_stats.get("sail_island_paving_0237", 0)) < 4 or int(enhancement_stats.get("sail_island_hedges_0238", 0)) < 14 or int(enhancement_stats.get("sail_pools_final_0238", 0)) < 3 or float(enhancement_stats.get("sail_pool_min_road_clearance_0238", 0.0)) < 1.2 or not bool(enhancement_stats.get("canonical_pool_rim_clearance_0238", false)) or not bool(enhancement_stats.get("canonical_pool_self_excluded_0238", false)) or not bool(enhancement_stats.get("sail_loop_generic_props_removed_0238", false)) or int(enhancement_stats.get("sail_loop_segments_without_props_0238", 0)) < 56):
 		failures.append("0.2.38 Sail Island loop road repair (entry pad/clean markings/pristine asphalt/resort footprints off the carriageway) is incomplete: %s" % str(enhancement_stats))
-	if not bool(enhancement_stats.get("sail_cottage_estates_0239", false)) or int(enhancement_stats.get("sail_cottage_estates_placed_0239", 0)) != 3 or int(enhancement_stats.get("sail_cottage_models_0239", 0)) != 3 or not bool(enhancement_stats.get("sail_cottage_fixed_scale_0239", false)) or not bool(enhancement_stats.get("sail_cottage_exterior_only_0239", false)) or not bool(enhancement_stats.get("sail_cottage_pbr_roughness_0239", false)) or int(enhancement_stats.get("sail_cottage_roughness_materials_0239", 0)) < 7 or not bool(enhancement_stats.get("sail_cottage_material_pass_0239", false)) or not bool(enhancement_stats.get("sail_cottage_multi_box_colliders_0239", false)) or int(enhancement_stats.get("sail_cottage_colliders_0239", 0)) < 39 or int(enhancement_stats.get("sail_cottage_podiums_0239", 0)) < 9 or int(enhancement_stats.get("sail_cottage_model_parts_0239", 0)) < 45 or int(enhancement_stats.get("sail_cottage_dune_triangles_0239", 0)) < 12000 or int(enhancement_stats.get("sail_cottage_courtyard_triangles_0239", 0)) < 14000 or int(enhancement_stats.get("sail_cottage_palm_triangles_0239", 0)) < 11000 or int(enhancement_stats.get("sail_cottage_garden_palms_0239", 0)) != 3 or not bool(enhancement_stats.get("sail_open_lookout_0239", false)) or not bool(enhancement_stats.get("sail_cottage_resort_fit_0239", false)):
+	if not is_rt7 and (not bool(enhancement_stats.get("sail_cottage_estates_0239", false)) or int(enhancement_stats.get("sail_cottage_estates_placed_0239", 0)) != 3 or int(enhancement_stats.get("sail_cottage_models_0239", 0)) != 3 or not bool(enhancement_stats.get("sail_cottage_fixed_scale_0239", false)) or not bool(enhancement_stats.get("sail_cottage_exterior_only_0239", false)) or not bool(enhancement_stats.get("sail_cottage_pbr_roughness_0239", false)) or int(enhancement_stats.get("sail_cottage_roughness_materials_0239", 0)) < 7 or not bool(enhancement_stats.get("sail_cottage_material_pass_0239", false)) or not bool(enhancement_stats.get("sail_cottage_multi_box_colliders_0239", false)) or int(enhancement_stats.get("sail_cottage_colliders_0239", 0)) < 39 or int(enhancement_stats.get("sail_cottage_podiums_0239", 0)) < 9 or int(enhancement_stats.get("sail_cottage_model_parts_0239", 0)) < 45 or int(enhancement_stats.get("sail_cottage_dune_triangles_0239", 0)) < 12000 or int(enhancement_stats.get("sail_cottage_courtyard_triangles_0239", 0)) < 14000 or int(enhancement_stats.get("sail_cottage_palm_triangles_0239", 0)) < 11000 or int(enhancement_stats.get("sail_cottage_garden_palms_0239", 0)) != 3 or not bool(enhancement_stats.get("sail_open_lookout_0239", false)) or not bool(enhancement_stats.get("sail_cottage_resort_fit_0239", false))):
 		failures.append("0.2.39 Sail Island cottage estates No.10-12 (three fixed-scale 36x27 m estates, PBR roughness maps, podiums, multi-box colliders, garden palms, open SW lookout) are incomplete: %s" % str(enhancement_stats))
 	var sail_loop_surface := _world.get_surface_at(Vector3(1188.0, 3.0, 34.0))
 	var sail_lawn_surface := _world.get_surface_at(Vector3(1185.0, 3.0, 8.0))
-	if String(sail_loop_surface.get("kind", "")) != "asphalt" or String(sail_lawn_surface.get("kind", "")) != "grass":
+	if not is_rt7 and (String(sail_loop_surface.get("kind", "")) != "asphalt" or String(sail_lawn_surface.get("kind", "")) != "grass"):
 		failures.append("0.2.37 Sail Island loop/lawn surfaces are not drivable/landscaped as designed: loop=%s lawn=%s" % [str(sail_loop_surface), str(sail_lawn_surface)])
 	var sail_entry_surface := _world.get_surface_at(Vector3(1140.0, 3.0, 80.0))
 	var sail_west_branch_surface := _world.get_surface_at(Vector3(1144.8, 3.0, 61.0))
 	var sail_east_branch_surface := _world.get_surface_at(Vector3(1236.0, 3.0, 80.0))
-	if String(sail_entry_surface.get("kind", "")) != "asphalt" or String(sail_west_branch_surface.get("kind", "")) != "asphalt" or String(sail_east_branch_surface.get("kind", "")) != "asphalt":
+	if not is_rt7 and (String(sail_entry_surface.get("kind", "")) != "asphalt" or String(sail_west_branch_surface.get("kind", "")) != "asphalt" or String(sail_east_branch_surface.get("kind", "")) != "asphalt"):
 		failures.append("0.2.38 Sail Island entry/west/east loop branches are not drivable asphalt: entry=%s west=%s east=%s" % [str(sail_entry_surface), str(sail_west_branch_surface), str(sail_east_branch_surface)])
 	var district_surface := _world.get_surface_at(Vector3(638.0, 4.0, 300.0))
 	var crescent_surface := _world.get_surface_at(Vector3(662.0, 4.0, 457.0))
-	if String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt":
+	if not is_rt7 and (String(district_surface.get("kind", "")) != "asphalt" or String(crescent_surface.get("kind", "")) != "asphalt"):
 		failures.append("0.2.24 South Villa District streets are not drivable asphalt: %s / %s" % [str(district_surface), str(crescent_surface)])
 	if int(enhancement_stats.get("townhouse_models", 0)) + int(enhancement_stats.get("hero_building_models", 0)) < 10:
 		failures.append("detailed Blender building models are incomplete: %s" % str(enhancement_stats))
@@ -2595,13 +2598,13 @@ func _run_smoke_checks() -> void:
 		failures.append("0.2.16 reflective-glass/HLOD/runtime-LOD pass is incomplete: %s" % str(enhancement_stats))
 	if not bool(enhancement_stats.get("detailed_palms_0217", false)) or int(enhancement_stats.get("date_palms", 0)) < 80 or int(enhancement_stats.get("royal_palms", 0)) < 10 or int(enhancement_stats.get("detailed_palms", 0)) < 110 or int(enhancement_stats.get("palm_date_triangles", 0)) < 9000 or int(enhancement_stats.get("palm_royal_triangles", 0)) < 6500 or not bool(enhancement_stats.get("geometric_ground_cover_0217", false)) or int(enhancement_stats.get("grass_tufts", 0)) < 1200 or int(enhancement_stats.get("flower_clumps", 0)) < 180 or int(enhancement_stats.get("ornamental_shrubs", 0)) < 80 or int(enhancement_stats.get("ground_cover_total", 0)) < 1500 or int(enhancement_stats.get("grass_tuft_triangles", 0)) < 300 or int(enhancement_stats.get("flower_clump_triangles", 0)) < 1000 or int(enhancement_stats.get("ornamental_shrub_triangles", 0)) < 1600 or not bool(enhancement_stats.get("palm_far_proxy_0217", false)) or int(enhancement_stats.get("palm_far_proxies", 0)) < 100 or not bool(enhancement_stats.get("concrete_stochastic_0217", false)) or int(enhancement_stats.get("concrete_shader_materials", 0)) < 5 or not bool(enhancement_stats.get("curtain_wall_environment_reflection_0217", false)) or int(enhancement_stats.get("sky_radiance_size", 0)) != 512 or not bool(enhancement_stats.get("reflection_probe_mobile_calibration_0217", false)):
 		failures.append("0.2.17 detailed palms/ground-cover/concrete/environment-glass pass is incomplete: %s" % str(enhancement_stats))
-	if int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20:
+	if not is_rt7 and (int(enhancement_stats.get("extra_trees", 0)) < 35 or int(enhancement_stats.get("extra_bushes", 0)) < 20):
 		failures.append("extra vegetation is incomplete: %s" % str(enhancement_stats))
-	if int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25:
+	if not is_rt7 and (int(enhancement_stats.get("infill_buildings", 0)) < 50 or int(enhancement_stats.get("infill_model_buildings", 0)) < 25):
 		failures.append("0.2.5 infill city density is incomplete: %s" % str(enhancement_stats))
-	if int(enhancement_stats.get("building_details", 0)) < 180 or int(enhancement_stats.get("city_detail_props", 0)) < 250:
+	if not is_rt7 and (int(enhancement_stats.get("building_details", 0)) < 180 or int(enhancement_stats.get("city_detail_props", 0)) < 250):
 		failures.append("0.2.5 architectural/street detail density is incomplete: %s" % str(enhancement_stats))
-	if int(enhancement_stats.get("beach_props", 0)) < 50 or int(enhancement_stats.get("marina_boats", 0)) < 8:
+	if not is_rt7 and (int(enhancement_stats.get("beach_props", 0)) < 50 or int(enhancement_stats.get("marina_boats", 0)) < 8):
 		failures.append("0.2.5 beach/marina detail is incomplete: %s" % str(enhancement_stats))
 
 	var dynamic_world_state := _world.get_dynamic_world_state()
@@ -2715,7 +2718,7 @@ func _run_smoke_checks() -> void:
 	if not _camera.is_position_in_frustum(vehicle_view_point):
 		failures.append("vehicle is outside the game camera frustum")
 
-	_on_world_map_destination_changed(Vector2(665.0, -170.0))
+	_on_world_map_destination_changed(Vector2(0.0, -160.0))
 	var hud_state := _hud.get_smoke_state()
 	var minimap_state: Dictionary = hud_state.get("minimap", {})
 	var gauge_state: Dictionary = hud_state.get("dashboard_gauge", {})
@@ -2864,33 +2867,33 @@ func _run_screenshot_tour() -> void:
 		},
 		{
 			"name": "02_mosque_east", "time": "day", "vehicle": "hide",
-			"camera": Vector3(678.0, 13.0, 366.0), "target": Vector3(622.0, 11.0, 335.0),
+			"camera": Vector3(1030.0, 16.0, 1420.0), "target": Vector3(950.0, 14.0, 1365.0),
 		},
 		{
 			"name": "03_mosque_street", "time": "day", "vehicle": "road",
-			"vehicle_at": Vector3(655.0, 0.0, 335.0),
-			"camera": Vector3(670.0, 2.4, 358.0), "target": Vector3(628.0, 9.0, 336.0),
+			"vehicle_at": Vector3(950.0, 0.0, 1480.0),
+			"camera": Vector3(988.0, 6.0, 1452.0), "target": Vector3(950.0, 10.0, 1365.0),
 		},
 		{
 			"name": "04_opera_boulevard", "time": "day", "vehicle": "hide",
-			"camera": Vector3(768.0, 9.0, 72.0), "target": Vector3(820.0, 9.0, 25.0),
+			"camera": Vector3(-768.0, 10.0, 572.0), "target": Vector3(-700.0, 10.0, 500.0),
 		},
 		{
-			"name": "05_boulevard_cafe", "time": "day", "vehicle": "road",
-			"vehicle_at": Vector3(740.0, 0.0, 30.0),
-			"camera": Vector3(724.0, 2.6, 68.0), "target": Vector3(758.0, 4.5, 6.0),
+			"name": "05_roses_plaza", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(170.0, 0.0, 0.0),
+			"camera": Vector3(208.0, 5.0, 42.0), "target": Vector3(60.0, 10.0, 0.0),
 		},
 		{
 			"name": "06_main_tower", "time": "day", "vehicle": "hide",
-			"camera": Vector3(552.0, 26.0, -64.0), "target": Vector3(665.0, 58.0, -170.0),
+			"camera": Vector3(-260.0, 30.0, 260.0), "target": Vector3(0.0, 70.0, 0.0),
 		},
 		{
 			"name": "07_central_park_sunset", "time": "sunset", "vehicle": "hide",
-			"camera": Vector3(548.0, 15.0, 2.0), "target": Vector3(622.0, 3.0, -68.0),
+			"camera": Vector3(212.0, 14.0, -612.0), "target": Vector3(300.0, 4.0, -700.0),
 		},
 		{
 			"name": "08_city_aerial_sunset", "time": "sunset", "vehicle": "hide",
-			"camera": Vector3(430.0, 165.0, 240.0), "target": Vector3(730.0, 8.0, -30.0),
+			"camera": Vector3(-1500.0, 260.0, 900.0), "target": Vector3(0.0, 20.0, 0.0),
 		},
 		{
 			"name": "08a_car_audi_r8", "time": "day", "hud": true, "vehicle": "spawn",
@@ -2910,52 +2913,52 @@ func _run_screenshot_tour() -> void:
 		},
 		{
 			"name": "15_corniche_t_junction", "time": "day", "vehicle": "hide",
-			"camera": Vector3(895.0, 18.0, -335.0), "target": Vector3(930.0, 1.0, -300.0),
+			"camera": Vector3(-2558.0, 20.0, 638.0), "target": Vector3(-2650.0, 4.0, 700.0),
 		},
 		{
 			"name": "16_corniche_l_corner", "time": "day", "vehicle": "hide",
-			"camera": Vector3(895.0, 18.0, -395.0), "target": Vector3(930.0, 1.0, -430.0),
+			"camera": Vector3(-2558.0, 22.0, -3128.0), "target": Vector3(-2650.0, 4.0, -3200.0),
 		},
 		{
-			"name": "17_boulevard_full_junction", "time": "day", "vehicle": "hide",
-			"camera": Vector3(725.0, 18.0, -145.0), "target": Vector3(760.0, 1.0, -110.0),
+			"name": "17_plaza_ring_junction", "time": "day", "vehicle": "hide",
+			"camera": Vector3(150.0, 20.0, 150.0), "target": Vector3(0.0, 10.0, 0.0),
 		},
 		{
 			"name": "18_west_t_junction", "time": "day", "vehicle": "hide",
-			"camera": Vector3(525.0, 16.0, -335.0), "target": Vector3(560.0, 1.0, -300.0),
+			"camera": Vector3(-1082.0, 18.0, -638.0), "target": Vector3(-1000.0, 4.0, -700.0),
 		},
 		{
-			"name": "19_sail_island_resort", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1015.0, 42.0, 205.0), "target": Vector3(1185.0, 24.0, 80.0),
+			"name": "19_corniche_hotels", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-2765.0, 30.0, 270.0), "target": Vector3(-2450.0, 25.0, 0.0),
 		},
 		{
-			"name": "20_sail_island_arrival", "time": "day", "vehicle": "road",
-			"vehicle_at": Vector3(1105.0, 0.0, 80.0),
-			"camera": Vector3(1086.0, 4.2, 104.0), "target": Vector3(1182.0, 30.0, 80.0),
+			"name": "20_cable_bridge_arrival", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(0.0, 0.0, 1415.0),
+			"camera": Vector3(-34.0, 9.0, 1372.0), "target": Vector3(0.0, 26.0, 1600.0),
 		},
 		{
-			"name": "21_sail_loop_entry", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1112.0, 10.0, 112.0), "target": Vector3(1148.0, 1.0, 78.0),
+			"name": "21_stadium", "time": "day", "vehicle": "hide",
+			"camera": Vector3(55.0, 26.0, -1235.0), "target": Vector3(190.0, 20.0, -1400.0),
 		},
 		{
-			"name": "22_sail_loop_east", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1204.0, 8.0, 122.0), "target": Vector3(1230.0, 1.0, 84.0),
+			"name": "22_downtown_aerial", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-720.0, 230.0, 720.0), "target": Vector3(0.0, 60.0, 0.0),
 		},
 		{
-			"name": "23_sail_cottage_dune", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1165.0, 6.5, 50.0), "target": Vector3(1157.0, 3.5, 20.0),
+			"name": "23_rich_hills_villas", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1395.0, 26.0, -975.0), "target": Vector3(1500.0, 10.0, -1100.0),
 		},
 		{
-			"name": "24_sail_cottage_courtyard", "time": "sunset", "vehicle": "hide",
-			"camera": Vector3(1209.0, 7.0, 50.0), "target": Vector3(1218.0, 4.5, 18.0),
+			"name": "24_beach_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(-2905.0, 12.0, 310.0), "target": Vector3(-2650.0, 8.0, 0.0),
 		},
 		{
-			"name": "25_sail_cottage_palm", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1197.0, 6.5, 116.0), "target": Vector3(1218.0, 3.5, 142.0),
+			"name": "25_mall", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-995.0, 26.0, 185.0), "target": Vector3(-1200.0, 10.0, -200.0),
 		},
 		{
-			"name": "26_sail_cottages_aerial", "time": "day", "vehicle": "hide",
-			"camera": Vector3(1188.0, 150.0, 185.0), "target": Vector3(1188.0, 2.0, 75.0),
+			"name": "26_city_aerial_7km", "time": "day", "vehicle": "hide",
+			"camera": Vector3(-1600.0, 380.0, -1150.0), "target": Vector3(0.0, 40.0, 0.0),
 		},
 		{"name": "09_menu_home", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_HOME, "frames": 5},
 		{"name": "10_menu_garage", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_GARAGE, "frames": 5},
@@ -3168,6 +3171,40 @@ func _switch_world_async(world_id: String) -> void:
 ## 0.2.47 desert smoke gate: the RichTown assert battery below is
 ## data-specific (boulevard/parks/Sail Island), so the desert build
 ## gets its own equally strict checklist against the spec numbers.
+## 0.3.0 RichTown 7x7 (rebuild stages 1-2): chunked terrain, the full
+## road skeleton (big ring / downtown ring / central axes / canal
+## bridges), ~480 buildings of district massing, MultiMesh-batched
+## generic buildings and the LOD model budgets.  The retired 1 km
+## town's authored-pass asserts are guarded off in the battery above;
+## generic road/water/vehicle/HUD checks still run for both layouts.
+func _run_rt7_world_smoke_checks(failures: Array[String], stats: Dictionary) -> void:
+	var enh := _world.get_enhancement_stats()
+	if not bool(enh.get("richtown7_0300", false)) or not bool(enh.get("model_lod_budget_0300", false)):
+		failures.append("0.3.0 RichTown 7x7 build flags are missing: %s" % str(enh))
+	if int(stats.get("terrainVertices", 0)) < 250000 or int(stats.get("roadEdges", 0)) < 300 or int(stats.get("buildings", 0)) < 400 or float(stats.get("roadLengthKm", 0.0)) < 110.0:
+		failures.append("0.3.0 RichTown 7x7 world stats are too small: %s" % str(stats))
+	if int(enh.get("richtown7_terrain_chunks", 0)) < 100:
+		failures.append("0.3.0 chunked terrain is incomplete: %s" % str(enh))
+	if int(enh.get("intersection_pads", 0)) < 150:
+		failures.append("0.3.0 data-driven junction pads are incomplete: %s" % str(enh))
+	if int(enh.get("generic_building_batches_0300", 0)) < 3 or int(enh.get("generic_building_batch_instances_0300", 0)) < 500:
+		failures.append("0.3.0 generic-building MultiMesh batching is incomplete: %s" % str(enh))
+	if not bool(enh.get("rt7_stadium_0300", false)) or not bool(enh.get("rt7_cable_bridge_0300", false)):
+		failures.append("0.3.0 stadium/cable-bridge landmarks are missing: %s" % str(enh))
+	if int(enh.get("palm_far_proxies", 0)) < 500:
+		failures.append("0.3.0 palm far proxies are incomplete: %s" % str(enh))
+	var avenue_surface := _world.get_surface_at(Vector3(0.0, 4.0, 640.0))
+	var sea_surface := _world.get_surface_at(Vector3(-3200.0, -2.0, 0.0))
+	var beach_surface := _world.get_surface_at(Vector3(-2760.0, 2.0, 300.0))
+	var bridge_surface := _world.get_surface_at(Vector3(0.0, 8.0, 1600.0))
+	var dune_surface := _world.get_surface_at(Vector3(3050.0, 12.0, 600.0))
+	var plaza_surface := _world.get_surface_at(Vector3(40.0, 4.0, 40.0))
+	if String(avenue_surface.get("kind", "")) != "asphalt" or String(sea_surface.get("kind", "")) != "water" or String(beach_surface.get("kind", "")) != "sand" or String(bridge_surface.get("kind", "")) != "asphalt" or String(dune_surface.get("kind", "")) != "sand" or String(plaza_surface.get("kind", "")) != "plaza":
+		failures.append("0.3.0 RichTown 7x7 surfaces are misclassified: avenue=%s sea=%s beach=%s bridge=%s dunes=%s plaza=%s" % [str(avenue_surface), str(sea_surface), str(beach_surface), str(bridge_surface), str(dune_surface), str(plaza_surface)])
+	if _world.get_district_name(Vector3(0.0, 4.0, 500.0)) != "Даунтаун" or _world.get_district_name(Vector3(-2450.0, 4.0, 0.0)) != "Отели Корниша":
+		failures.append("0.3.0 RichTown 7x7 district labels are wrong: centre=%s corniche=%s" % [_world.get_district_name(Vector3(0.0, 4.0, 500.0)), _world.get_district_name(Vector3(-2450.0, 4.0, 0.0))])
+
+
 func _run_desert_smoke_checks(failures: Array[String]) -> void:
 	if not _world.has_world_data() or _world.get_world_data().is_empty():
 		failures.append("desert world data is empty: %s" % _world.build_error)
