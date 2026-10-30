@@ -3207,8 +3207,8 @@ func _run_rt7_world_smoke_checks(failures: Array[String], stats: Dictionary) -> 
 		failures.append("0.3.0 chunked terrain is incomplete: %s" % str(enh))
 	if int(enh.get("intersection_pads", 0)) < 150:
 		failures.append("0.3.0 data-driven junction pads are incomplete: %s" % str(enh))
-	if int(enh.get("generic_building_batches_0300", 0)) < 3 or int(enh.get("generic_building_batch_instances_0300", 0)) < 500:
-		failures.append("0.3.0 generic-building MultiMesh batching is incomplete: %s" % str(enh))
+	if int(enh.get("city_blender_instances_0320", 0)) < 700 or int(enh.get("city_blender_models_0320", 0)) < 10 or int(enh.get("city_landmark_glb_0320", 0)) < 40 or int(enh.get("rt7_cranes_0320", 0)) < 3:
+		failures.append("0.3.2 Blender city pack is incomplete: city=%d models=%d landmark_glb=%d cranes=%d generic_left=%d" % [int(enh.get("city_blender_instances_0320", 0)), int(enh.get("city_blender_models_0320", 0)), int(enh.get("city_landmark_glb_0320", 0)), int(enh.get("rt7_cranes_0320", 0)), int(enh.get("generic_building_batch_instances_0300", 0))])
 	if not bool(enh.get("rt7_stadium_0300", false)) or not bool(enh.get("rt7_cable_bridge_0300", false)):
 		failures.append("0.3.0 stadium/cable-bridge landmarks are missing: %s" % str(enh))
 	if int(enh.get("date_palms", 0)) < 80 or int(enh.get("royal_palms", 0)) < 10 or int(enh.get("detailed_palms", 0)) < 110:

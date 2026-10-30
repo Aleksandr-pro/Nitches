@@ -556,7 +556,8 @@ for _sx, _sz in SCHOOL_SPOTS:
     _occ_register(_sx, _sz, 52.0)
 for _ox, _oz, _orad in ((-1750, -1955, 140.0), (-1850, -1760, 42.0), (-1280, -1975, 20.0),
                         (1400, 1950, 16.0), (1416, 1950, 16.0), (2000, 2300, 16.0),
-                        (2016, 2300, 16.0), (1650, 2750, 16.0)):
+                        (2016, 2300, 16.0), (1650, 2750, 16.0),
+                        (-1200, 1785, 26.0), (-400, 1785, 26.0), (400, 1785, 26.0)):
     _occ_register(_ox, _oz, _orad)
 
 villa_count = {"glb": 0, "town": 0, "gen": 0}
@@ -571,11 +572,13 @@ def add_house(x, z, yaw):
         add_building(x, z, 20, 16, 9, "rt-villa", "userPlaster", model="villa", rot_y=yaw)
         villa_count["glb"] += 1
     elif r < 0.60:
-        add_building(x, z, 24, 18, 9, "rt-villa", "userPlaster", rot_y=yaw, roof_h=2.0)
+        if RNG.random() < 0.5:
+            add_building(x, z, 19, 16.5, 11.7, "rt-villa", "userPlaster", model="townhouse_b", rot_y=yaw)
+        else:
+            add_building(x, z, 24, 18, 9, "rt-villa", "userPlaster", rot_y=yaw, roof_h=2.0)
         villa_count["town"] += 1
     else:
-        add_building(x, z, 32, 24, 10.5, "rt-villa", RNG.choice(["userPlaster", "userStone", "userWood"]),
-                     rot_y=yaw, roof_h=3.2)
+        add_building(x, z, 19.2, 15.2, 9.1, "rt-villa", "userPlaster", model="villa_b", rot_y=yaw)
         villa_count["gen"] += 1
 
 
@@ -587,6 +590,29 @@ def in_park(x, z, pad=14.0):
 
 
 print("Placing buildings...")
+
+# 0.3.2: fixed-scale Blender archetypes by target height.  The exported
+# w/d/h are the measured GLB envelopes; the builder never stretches them.
+def office_model(hgt):
+    if hgt >= 80.0:
+        return ("office_tower_high", 39, 43, 106)
+    if hgt >= 52.0:
+        return ("office_tower_mid", 37, 41, 68)
+    return ("office_tower_low", 37, 41, 42)
+
+
+def midrise_model(hgt):
+    if hgt >= 30.0:
+        return ("midrise_b", 31, 28, 35)
+    return ("midrise_a", 35, 28, 25.7)
+
+
+CITY_MODEL_SET = {
+    "office_tower_low", "office_tower_mid", "office_tower_high",
+    "midrise_a", "midrise_b", "warehouse_large", "warehouse_small",
+    "container_red", "container_blue", "villa_b", "townhouse_b",
+    "barn", "greenhouse",
+}
 
 # Downtown blocks: one or two towers per 200 m block.
 glass_parcels = [(2, 3), (4, 6), (6, 2), (7, 5), (3, 7), (5, 4), (1, 5), (8, 3), (2, 8), (6, 8), (8, 7), (4, 1)]
@@ -610,36 +636,44 @@ for bi in range(10):
         if RNG.random() < 0.45:
             # Two slimmer towers sharing the block.
             for sx, sz in ((-48.0, -48.0), (48.0, 48.0)):
-                w = RNG.choice([30, 34, 38])
+                om, ow, od, oh = office_model(max(24.0, h_base * RNG.uniform(0.75, 1.05)))
                 add_building(
-                    cx + sx, cz + sz, w, w, round(max(24.0, h_base * RNG.uniform(0.75, 1.05)), 1),
-                    "rt-tower", RNG.choice(FACADES_TOWER), tint=round(RNG.uniform(0.9, 1.1), 3),
+                    cx + sx, cz + sz, ow, od, oh,
+                    "rt-tower", RNG.choice(FACADES_TOWER), model=om,
+                    rot_y=RNG.choice([0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]),
+                    tint=round(RNG.uniform(0.9, 1.1), 3),
                 )
         else:
-            w = RNG.choice([38, 42, 46])
+            om, ow, od, oh = office_model(max(26.0, h_base))
             add_building(
-                cx, cz, w, w, round(max(26.0, h_base), 1),
-                "rt-tower", RNG.choice(FACADES_TOWER), tint=round(RNG.uniform(0.9, 1.1), 3),
+                cx, cz, ow, od, oh,
+                "rt-tower", RNG.choice(FACADES_TOWER), model=om,
+                rot_y=RNG.choice([0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]),
+                tint=round(RNG.uniform(0.9, 1.1), 3),
             )
         # 0.3.1 downtown infill: a mid-rise on a free block corner.
         if RNG.random() < 0.55:
             ox, oz = (-56.0, 56.0) if (bi + bj) % 2 == 0 else (56.0, -56.0)
             if spot_free(cx + ox, cz + oz, 23.0):
-                iw = RNG.choice([26, 30, 34])
+                mm, mw, md, mh = midrise_model(RNG.uniform(14.0, 30.0))
                 add_building(
-                    cx + ox, cz + oz, iw, iw, round(RNG.uniform(14.0, 30.0), 1),
-                    "rt-tower", RNG.choice(FACADES_TOWER), tint=round(RNG.uniform(0.9, 1.1), 3),
+                    cx + ox, cz + oz, mw, md, mh,
+                    "rt-tower", RNG.choice(FACADES_TOWER), model=mm,
+                    rot_y=RNG.choice([0.0, math.pi / 2.0]),
+                    tint=round(RNG.uniform(0.9, 1.1), 3),
                 )
 
 # Corniche hotels (x ~ -2450). Three parcels match the fixed-scale Grand
 # Hotel rule (kind rt-hotel, h>38, w 33..36, d 25..28); two use the hero
 # podium model (15<=h<=38); one is a tall generic slab.
 hotels = [
-    (-2450, -1150, 34, 26, 46), (-2450, -470, 44, 32, 74), (-2450, -240, 34, 26, 52),
+    (-2450, -1150, 34, 26, 46), (-2450, -240, 34, 26, 52),
     (-2450, 240, 40, 30, 28), (-2450, 470, 34, 26, 42), (-2450, 1150, 40, 30, 24),
 ]
 for hx, hz, w, d, h in hotels:
     add_building(hx, hz, w, d, h, "rt-hotel", "hotelTower", rot_y=math.pi / 2.0)
+# 0.3.2: the tall Corniche slab becomes a Blender office tower.
+add_building(-2450, -470, 37, 41, 68, "rt-hotel", "hotelTower", model="office_tower_mid", rot_y=math.pi / 2.0)
 
 # Mall + multi-storey parking handled as landmark; mall itself is a building.
 add_building(-1200, -200, 230, 130, 18, "rt-mall", "userMarble")
@@ -652,9 +686,15 @@ for i, mz in enumerate(range(500, 1300, 160)):
     add_building(-2080, mz, 40, 30, RNG.choice([20, 26, 32]), "rt-hotel", "hotelTower", rot_y=math.pi / 2.0)
     add_building(-1720, mz + 60, 40, 30, RNG.choice([18, 24, 30]), "rt-hotel", "sandTower", rot_y=math.pi / 2.0)
 for mz in range(-1300, -499, 110):
-    add_building(-2260, mz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi / 2.0, roof_h=2.0)
+    if (mz // 110) % 2 == 0:
+        add_building(-2260, mz, 19, 16.5, 11.7, "rt-villa", "userPlaster", model="townhouse_b", rot_y=math.pi / 2.0)
+    else:
+        add_building(-2260, mz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi / 2.0, roof_h=2.0)
 for mz in range(520, 1320, 110):
-    add_building(-2260, mz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi / 2.0, roof_h=2.0)
+    if (mz // 110) % 2 == 0:
+        add_building(-2260, mz, 19, 16.5, 11.7, "rt-villa", "userPlaster", model="townhouse_b", rot_y=math.pi / 2.0)
+    else:
+        add_building(-2260, mz, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi / 2.0, roof_h=2.0)
 
 # 0.3.1: Marina street frontage along the N-S avenue + Corniche
 # residential rows beyond the hotel strip.
@@ -702,29 +742,34 @@ for row_z in (1125, 1365):
             if r < 0.30:
                 add_building(x, row_z, 40, 30, RNG.choice([19, 25, 31, 36]), "rt-hotel", "hotelTower")
             elif r < 0.78:
-                add_building(x, row_z, RNG.choice([32, 36, 40]), 30, round(RNG.uniform(15.0, 40.0), 1),
-                             "rt-tower", RNG.choice(FACADES_TOWER))
+                mm, mw, md, mh = midrise_model(RNG.uniform(15.0, 40.0))
+                add_building(x, row_z, mw, md, mh, "rt-tower", RNG.choice(FACADES_TOWER), model=mm)
+            elif RNG.random() < 0.5:
+                add_building(x, row_z, 19, 16.5, 11.7, "rt-villa", "userPlaster", model="townhouse_b")
             else:
                 add_building(x, row_z, 24, 18, 9, "rt-villa", "userPlaster", roof_h=2.0)
             back_z = row_z - 44.0 if row_z == 1125 else row_z + 44.0
             if RNG.random() < 0.42 and clear_of_roads(x, back_z, 22.0) and spot_free(x, back_z, 24.0) and not in_park(x, back_z):
-                add_building(x, back_z, RNG.choice([30, 34]), 28, round(RNG.uniform(13.0, 30.0), 1),
-                             "rt-tower", RNG.choice(FACADES_TOWER))
+                mm, mw, md, mh = midrise_model(RNG.uniform(13.0, 30.0))
+                add_building(x, back_z, mw, md, mh, "rt-tower", RNG.choice(FACADES_TOWER), model=mm,
+                             rot_y=RNG.choice([0.0, math.pi / 2.0]))
         x += RNG.uniform(80.0, 105.0)
 
 # Port warehouses + container stacks.
-for row_z in (1865, 2150, 2450, 2750, 2900):
+for row_i, row_z in enumerate((1865, 2150, 2450, 2750, 2900)):
     x = -1380.0
     while x < 920.0:
         if clear_of_roads(x, row_z, 30.0) and spot_free(x, row_z, 40.0):
-            add_building(x, row_z, RNG.choice([64, 76, 88]), 32, RNG.choice([11, 13, 15]),
-                         "warehouse", RNG.choice(["userStone", "userPlaster"]))
+            add_building(x, row_z, 77, 34, 13.4,
+                         "warehouse", RNG.choice(["userStone", "userPlaster"]),
+                         model="warehouse_large", rot_y=0.0 if row_i % 2 == 0 else math.pi)
         x += RNG.uniform(120.0, 165.0)
 for _ in range(150):
     px = RNG.uniform(-1450.0, 950.0)
     pz = RNG.uniform(2050.0, 2550.0)
     if clear_of_roads(px, pz, 8.0) and spot_free(px, pz, 9.0):
-        add_building(px, pz, 12, 4, RNG.choice([2.8, 5.6]), "rt-container", "userStone",
+        add_building(px, pz, 12.5, 2.7, RNG.choice([2.8, 5.6]), "rt-container", "userStone",
+                     model=RNG.choice(["container_red", "container_blue"]),
                      rot_y=RNG.choice([0.0, math.pi / 2.0]), tint=round(RNG.uniform(0.55, 1.25), 3))
 
 # Farm barns and farmhouses.
@@ -732,23 +777,27 @@ for _ in range(26):
     px = RNG.uniform(1280.0, 2220.0)
     pz = RNG.uniform(2080.0, 2520.0)
     if clear_of_roads(px, pz, 22.0) and spot_free(px, pz, 20.0):
-        add_building(px, pz, 30, 14, 7, "barn", "userWood", rot_y=RNG.choice([0.0, math.pi / 2.0]), roof_h=3.4)
+        add_building(px, pz, 31, 19, 13.2, "barn", "userWood", model="barn", rot_y=RNG.choice([0.0, math.pi / 2.0]))
 for _ in range(16):
     px = RNG.uniform(1280.0, 2220.0)
     pz = RNG.uniform(1800.0, 3050.0)
     if clear_of_roads(px, pz, 16.0) and spot_free(px, pz, 16.0):
-        add_building(px, pz, 24, 18, 9, "rt-villa", "userPlaster", roof_h=2.0)
+        if RNG.random() < 0.6:
+            add_building(px, pz, 19.2, 15.2, 9.1, "rt-villa", "userPlaster", model="villa_b",
+                         rot_y=RNG.choice([0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]))
+        else:
+            add_building(px, pz, 24, 18, 9, "rt-villa", "userPlaster", roof_h=2.0)
 for _ in range(12):
     px = RNG.uniform(1300.0, 2200.0)
     pz = RNG.uniform(1850.0, 2450.0)
     if clear_of_roads(px, pz, 20.0) and spot_free(px, pz, 26.0):
-        add_building(px, pz, 44, 14, 6, "warehouse", "glassTower", rot_y=RNG.choice([0.0, math.pi / 2.0]))
+        add_building(px, pz, 44, 14, 6.6, "warehouse", "glassTower", model="greenhouse", rot_y=RNG.choice([0.0, math.pi / 2.0]))
 
 # Beach cafes / low seaside blocks along the Corniche east side.
 for cz in range(-2800, 2900, 380):
     px = -2555.0 + RNG.uniform(-8.0, 8.0)
     if clear_of_roads(px, cz, 20.0) and abs(cz) > 1450 and not in_mega(px, cz) and spot_free(px, cz, 20.0):
-        add_building(px, cz, 30, 20, RNG.choice([11, 14]), "warehouse", "userMarble", rot_y=math.pi / 2.0)
+        add_building(px, cz, 47, 28, 10.4, "warehouse", "userMarble", model="warehouse_small", rot_y=math.pi / 2.0)
 
 # --- 0.3.1 South villa suburb houses ---
 x = -2580.0
@@ -800,38 +849,42 @@ while x < 2340.0:
 x = 1080.0
 while x < 2320.0:
     if clear_of_roads(x, -3060.0, 30.0) and spot_free(x, -3060.0, 42.0):
-        add_building(x, -3060.0, RNG.choice([64, 76, 88]), 32, RNG.choice([11, 13]),
-                     "warehouse", RNG.choice(["userStone", "userPlaster"]))
+        add_building(x, -3060.0, 77, 34, 13.4,
+                     "warehouse", RNG.choice(["userStone", "userPlaster"]),
+                     model="warehouse_large", rot_y=math.pi)
     x += RNG.uniform(125.0, 165.0)
 
 # --- 0.3.1 airport service buildings (terminal/hangars are landmarks) ---
-add_building(-2360, -1780, 76, 32, 12, "warehouse", "userStone")
-add_building(-2140, -1780, 64, 32, 12, "warehouse", "userPlaster")
-add_building(-980, -1780, 44, 26, 11, "warehouse", "userPlaster")
-add_building(-620, -1780, 58, 30, 13, "warehouse", "userStone")
-add_building(-420, -1930, 40, 26, 10, "warehouse", "userPlaster")
+add_building(-2360, -1780, 77, 34, 13.4, "warehouse", "userStone", model="warehouse_large")
+add_building(-2140, -1780, 77, 34, 13.4, "warehouse", "userPlaster", model="warehouse_large", rot_y=math.pi)
+add_building(-980, -1780, 47, 28, 10.4, "warehouse", "userPlaster", model="warehouse_small")
+add_building(-620, -1780, 77, 34, 13.4, "warehouse", "userStone", model="warehouse_large")
+add_building(-420, -1930, 47, 28, 10.4, "warehouse", "userPlaster", model="warehouse_small")
 
 # --- 0.3.1 NPP halls/offices/switchyard (towers are landmarks) ---
 add_building(-1960, 2470, 42, 170, 26, "warehouse", "userStone")
 add_building(-1960, 2730, 42, 110, 20, "warehouse", "userPlaster")
-add_building(-2140, 2885, 60, 24, 14, "rt-tower", "sandTower")
-add_building(-1800, 2400, 64, 30, 11, "warehouse", "userStone")
-add_building(-1800, 2800, 64, 30, 11, "warehouse", "userPlaster")
+add_building(-2140, 2885, 35, 28, 25.7, "rt-tower", "sandTower", model="midrise_a")
+add_building(-1800, 2400, 77, 34, 13.4, "warehouse", "userStone", model="warehouse_large", rot_y=math.pi / 2.0)
+add_building(-1800, 2800, 77, 34, 13.4, "warehouse", "userPlaster", model="warehouse_large", rot_y=math.pi / 2.0)
 for gx in range(-1870, -1739, 26):
     for gz in (2500, 2540, 2660, 2700):
         if spot_free(gx, gz, 8.0):
-            add_building(gx, gz, 12, 5, 3.2, "rt-container", "userStone", tint=round(RNG.uniform(0.7, 1.1), 3))
+            add_building(gx, gz, 12.5, 2.7, 2.8, "rt-container", "userStone", model="container_blue", tint=round(RNG.uniform(0.7, 1.1), 3))
 
 # --- 0.3.1 military base buildings (hangars/radar are landmarks) ---
-add_building(2910, -845, 56, 24, 13, "warehouse", "userStone")
+add_building(2910, -845, 47, 28, 10.4, "warehouse", "userStone", model="warehouse_small")
 bx = 2720.0
 while bx < 3130.0:
     if spot_free(bx, -880.0, 16.0):
-        add_building(bx, -880.0, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi, roof_h=2.0)
+        if RNG.random() < 0.5:
+            add_building(bx, -880.0, 19, 16.5, 11.7, "rt-villa", "userPlaster", model="townhouse_b", rot_y=math.pi)
+        else:
+            add_building(bx, -880.0, 24, 18, 9, "rt-villa", "userPlaster", rot_y=math.pi, roof_h=2.0)
     bx += 57.0
-add_building(2750, -1200, 54, 22, 9, "warehouse", "userStone")
-add_building(3050, -1200, 54, 22, 9, "warehouse", "userPlaster")
-add_building(2670, -940, 30, 18, 8, "warehouse", "userWood", roof_h=2.6)
+add_building(2750, -1200, 47, 28, 10.4, "warehouse", "userStone", model="warehouse_small")
+add_building(3050, -1200, 47, 28, 10.4, "warehouse", "userPlaster", model="warehouse_small")
+add_building(2670, -940, 47, 28, 10.4, "warehouse", "userWood", model="warehouse_small", rot_y=math.pi / 2.0)
 
 print(f"Buildings: {len(buildings)} (villas glb/townhouse/generic: {villa_count})")
 
@@ -951,6 +1004,9 @@ for tx in (2680, 2715):
 # Farm silos reuse the storage-tank landmark.
 for sx, sz in ((1400, 1950), (1416, 1950), (2000, 2300), (2016, 2300), (1650, 2750)):
     landmarks.append({"kind": "rt7-tank", "x": sx, "z": sz, "h": 17, "r": 6, "rotY": 0.0})
+# --- 0.3.2 port cranes on the canal quay (jib toward the water) ---
+for cx in (-1200, -400, 400):
+    landmarks.append({"kind": "rt7-crane", "x": cx, "z": 1785, "h": 57, "r": 14, "rotY": math.pi})
 for lm in landmarks:
     lm["y"] = round(ground(lm["x"], lm["z"]), 3)
 
@@ -1250,6 +1306,7 @@ data = {
         "blenderVillas": sum(1 for b in buildings if b["model"] == "villa"),
         "blenderGlassTowers": sum(1 for b in buildings if b["model"] == "glass_tower"),
         "genericBuildings": sum(1 for b in buildings if b["model"] == "generic"),
+        "cityBlenderBuildings": sum(1 for b in buildings if b["model"] in CITY_MODEL_SET),
         "landmarks": len(landmarks),
         "pools": len(pools),
         "trees": len(trees),

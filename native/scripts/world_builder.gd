@@ -3176,6 +3176,20 @@ func _prop_material(material_name: String) -> Material:
 			return foliage
 		"nh_bark":
 			return _material("plant_bark", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.82, 0.72, 0.62), 1.0)
+		"CityWhitePaint":
+			return _material("city_white_paint", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.90, 0.91, 0.92), 0.58, 0.06)
+		"CityAccentRed":
+			return _material("city_accent_red", "", "", Color(0.58, 0.09, 0.07), 0.52, 0.18)
+		"CityAccentBlue":
+			return _material("city_accent_blue", "", "", Color(0.07, 0.26, 0.52), 0.52, 0.18)
+		"CityArmyGreen":
+			return _material("city_army_green", "", "", Color(0.17, 0.21, 0.11), 0.80, 0.06)
+		"CityBarnRed":
+			return _material("city_barn_red", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.16, 0.11), 0.84, 0.0)
+		"CitySignYellow":
+			return _material("city_sign_yellow", "", "", Color(0.82, 0.60, 0.06), 0.55, 0.10)
+		"CityFieldGreen":
+			return _material("city_field_green", "user_grass.jpg", "user_grass_normal.jpg", Color(0.50, 0.78, 0.40), 1.0, 0.0)
 		_:
 			return _create_concrete_material("prop_fallback_shader", Color(0.70, 0.70, 0.69), 0.93, 0.78, 0.55, 0.45)
 
@@ -3436,6 +3450,9 @@ func _canonical_building_footprint_0237(building: Dictionary) -> Vector2:
 		return Vector2(35.96, 27.01)
 	if model == "glass_tower":
 		return Vector2(34.00, 34.00)
+	if CITY_MODELS_0320.has(model):
+		# 0.3.2: exported w/d already equal the GLB envelope.
+		return Vector2(w, d)
 	if kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
 		return Vector2(18.87, 16.37)
 	if kind == "rt-hotel" and h > 38.0 and w >= 33.0 and w <= 36.0 and d >= 25.0 and d <= 28.0:
@@ -6020,6 +6037,36 @@ func _batched_model_base_range(path: String) -> float:
 		return 220.0
 	if path.ends_with("park_pergola.glb"):
 		return 320.0
+	# 0.3.2 low-poly Blender city pack: individually cheap meshes, but
+	# thousands of instances, so detail yields to far-proxy massing.
+	if path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb"):
+		return 340.0
+	if path.ends_with("midrise_a.glb") or path.ends_with("midrise_b.glb"):
+		return 280.0
+	if path.ends_with("warehouse_large.glb") or path.ends_with("warehouse_small.glb"):
+		return 320.0
+	if path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
+		return 170.0
+	if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb"):
+		return 210.0
+	if path.ends_with("barn.glb"):
+		return 260.0
+	if path.ends_with("greenhouse.glb"):
+		return 240.0
+	if path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb"):
+		return 420.0
+	if path.ends_with("airliner.glb"):
+		return 550.0
+	if path.ends_with("school.glb"):
+		return 650.0
+	if path.ends_with("storage_tank.glb") or path.ends_with("silo.glb"):
+		return 420.0
+	if path.ends_with("afv.glb"):
+		return 260.0
+	if path.ends_with("watchtower.glb"):
+		return 320.0
+	if path.ends_with("port_crane.glb"):
+		return 800.0
 	return 0.0
 
 
@@ -6229,6 +6276,130 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 			{"size": Vector3(49.20, 0.55, 33.20), "center": Vector3(0.0, 16.48, -1.0), "material": _prop_material("MuseumWhite"), "name": "Roof"},
 			{"size": Vector3(31.00, 2.30, 10.00), "center": Vector3(0.0, 17.90, -1.0), "material": _prop_material("MuseumTravertine"), "name": "Lantern"},
 		]
+	elif path.ends_with("office_tower_low.glb"):
+		specs = [
+			{"size": Vector3(36.00, 6.00, 36.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(26.00, 32.00, 26.00), "center": Vector3(0.0, 22.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(27.00, 4.00, 27.00), "center": Vector3(0.0, 40.00, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("office_tower_mid.glb"):
+		proxy_end = 1250.0
+		specs = [
+			{"size": Vector3(36.00, 6.00, 36.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(26.00, 40.00, 26.00), "center": Vector3(0.0, 26.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(22.00, 18.00, 22.00), "center": Vector3(0.0, 55.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Upper"},
+			{"size": Vector3(23.00, 4.00, 23.00), "center": Vector3(0.0, 66.00, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("office_tower_high.glb"):
+		proxy_end = 1500.0
+		specs = [
+			{"size": Vector3(38.00, 6.00, 38.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(28.00, 58.00, 28.00), "center": Vector3(0.0, 35.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(23.00, 28.00, 23.00), "center": Vector3(0.0, 78.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Upper"},
+			{"size": Vector3(24.00, 5.00, 24.00), "center": Vector3(0.0, 94.50, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("midrise_a.glb"):
+		specs = [
+			{"size": Vector3(32.00, 21.70, 24.00), "center": Vector3(0.0, 12.05, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(33.00, 0.80, 25.00), "center": Vector3(0.0, 23.30, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("midrise_b.glb"):
+		specs = [
+			{"size": Vector3(28.00, 31.00, 22.00), "center": Vector3(0.0, 16.70, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(29.00, 0.80, 23.00), "center": Vector3(0.0, 32.60, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("warehouse_large.glb"):
+		specs = [
+			{"size": Vector3(76.00, 9.50, 32.00), "center": Vector3(0.0, 4.75, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(77.00, 3.40, 33.00), "center": Vector3(0.0, 11.20, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("warehouse_small.glb"):
+		specs = [
+			{"size": Vector3(46.00, 7.00, 24.00), "center": Vector3(0.0, 3.50, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(47.00, 3.00, 25.00), "center": Vector3(0.0, 8.50, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("container_red.glb"):
+		specs = [
+			{"size": Vector3(12.20, 2.60, 2.45), "center": Vector3(0.0, 1.35, 0.0), "material": _prop_material("CityAccentRed"), "name": "Mass"},
+		]
+	elif path.ends_with("container_blue.glb"):
+		specs = [
+			{"size": Vector3(12.20, 2.60, 2.45), "center": Vector3(0.0, 1.35, 0.0), "material": _prop_material("CityAccentBlue"), "name": "Mass"},
+		]
+	elif path.ends_with("villa_b.glb"):
+		specs = [
+			{"size": Vector3(17.00, 7.40, 13.00), "center": Vector3(0.0, 3.70, 0.0), "material": _prop_material("VillaPlaster"), "name": "Mass"},
+			{"size": Vector3(17.60, 0.50, 13.60), "center": Vector3(0.0, 7.65, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("townhouse_b.glb"):
+		specs = [
+			{"size": Vector3(18.30, 6.90, 15.00), "center": Vector3(0.0, 3.45, 0.0), "material": _prop_material("TownPlaster"), "name": "Mass"},
+			{"size": Vector3(18.87, 2.40, 11.50), "center": Vector3(0.0, 8.10, 0.0), "material": _prop_material("TownRoof"), "name": "Roof"},
+		]
+	elif path.ends_with("barn.glb"):
+		specs = [
+			{"size": Vector3(30.00, 7.00, 14.00), "center": Vector3(0.0, 3.50, 0.0), "material": _prop_material("CityBarnRed"), "name": "Mass"},
+			{"size": Vector3(31.00, 3.20, 15.00), "center": Vector3(0.0, 8.60, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("greenhouse.glb"):
+		specs = [
+			{"size": Vector3(44.00, 0.80, 14.00), "center": Vector3(0.0, 0.40, 0.0), "material": _prop_material("ConcreteLight"), "name": "Base"},
+			{"size": Vector3(43.00, 4.60, 13.00), "center": Vector3(0.0, 3.10, 0.0), "material": _prop_material("PropsGlass"), "name": "Shell"},
+		]
+	elif path.ends_with("hangar_large.glb"):
+		proxy_end = 1300.0
+		specs = [
+			{"size": Vector3(44.00, 11.00, 57.00), "center": Vector3(0.0, 5.50, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(45.60, 4.50, 58.60), "center": Vector3(0.0, 13.25, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("hangar_small.glb"):
+		specs = [
+			{"size": Vector3(30.00, 7.50, 39.00), "center": Vector3(0.0, 3.75, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(31.60, 3.40, 40.60), "center": Vector3(0.0, 9.20, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("airliner.glb"):
+		proxy_end = 1400.0
+		specs = [
+			{"size": Vector3(4.20, 4.20, 44.00), "center": Vector3(0.0, 4.40, 0.0), "material": _prop_material("CityWhitePaint"), "name": "Fuselage"},
+			{"size": Vector3(36.00, 0.50, 5.50), "center": Vector3(0.0, 3.75, -2.40), "material": _prop_material("PropsMetal"), "name": "Wing"},
+			{"size": Vector3(0.50, 5.50, 5.00), "center": Vector3(0.0, 8.50, -18.00), "material": _prop_material("CityAccentBlue"), "name": "Fin"},
+		]
+	elif path.ends_with("school.glb"):
+		proxy_end = 1300.0
+		specs = [
+			{"size": Vector3(64.00, 12.00, 18.00), "center": Vector3(0.0, 6.35, -16.00), "material": _prop_material("FacadeAccent"), "name": "Main"},
+			{"size": Vector3(34.00, 9.00, 20.00), "center": Vector3(0.0, 4.85, -34.00), "material": _prop_material("FacadeAccent"), "name": "Gym"},
+			{"size": Vector3(76.00, 0.30, 40.00), "center": Vector3(0.0, 0.25, 24.00), "material": _prop_material("CityFieldGreen"), "name": "Field"},
+		]
+	elif path.ends_with("storage_tank.glb"):
+		specs = [
+			{"size": Vector3(22.00, 12.50, 22.00), "center": Vector3(0.0, 6.25, 0.0), "material": _prop_material("CityWhitePaint"), "name": "Mass"},
+			{"size": Vector3(21.00, 1.80, 21.00), "center": Vector3(0.0, 13.40, 0.0), "material": _prop_material("PropsMetal"), "name": "Roof"},
+		]
+	elif path.ends_with("silo.glb"):
+		specs = [
+			{"size": Vector3(12.00, 15.00, 12.00), "center": Vector3(0.0, 7.50, 0.0), "material": _prop_material("PropsMetal"), "name": "Mass"},
+			{"size": Vector3(12.40, 3.00, 12.40), "center": Vector3(0.0, 16.50, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("afv.glb"):
+		specs = [
+			{"size": Vector3(3.50, 2.20, 7.70), "center": Vector3(0.0, 1.10, 0.0), "material": _prop_material("CityArmyGreen"), "name": "Hull"},
+			{"size": Vector3(2.35, 0.95, 3.20), "center": Vector3(0.0, 2.60, -0.55), "material": _prop_material("CityArmyGreen"), "name": "Turret"},
+		]
+	elif path.ends_with("watchtower.glb"):
+		specs = [
+			{"size": Vector3(3.40, 10.30, 3.40), "center": Vector3(0.0, 5.15, 0.0), "material": _prop_material("PropsWood"), "name": "Post"},
+			{"size": Vector3(5.20, 2.90, 5.20), "center": Vector3(0.0, 11.75, 0.0), "material": _prop_material("PropsWood"), "name": "Cab"},
+			{"size": Vector3(5.90, 1.40, 5.90), "center": Vector3(0.0, 13.90, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("port_crane.glb"):
+		proxy_end = 1800.0
+		specs = [
+			{"size": Vector3(20.50, 30.00, 1.70), "center": Vector3(0.0, 15.00, -7.00), "material": _prop_material("CitySignYellow"), "name": "PortalA"},
+			{"size": Vector3(20.50, 30.00, 1.70), "center": Vector3(0.0, 15.00, 7.00), "material": _prop_material("CitySignYellow"), "name": "PortalB"},
+			{"size": Vector3(15.00, 1.60, 11.00), "center": Vector3(0.0, 32.20, 0.0), "material": _prop_material("PropsMetal"), "name": "Deck"},
+			{"size": Vector3(1.70, 24.00, 2.00), "center": Vector3(0.0, 44.00, 20.00), "material": _prop_material("CitySignYellow"), "name": "Jib"},
+		]
 	if specs.is_empty():
 		return
 	if _is_rt7:
@@ -6394,6 +6565,27 @@ func _hero_exported_position(position_value: Vector3, yaw: float) -> Vector3:
 	return position_value
 
 
+## 0.3.2 low-poly Blender city pack: district archetypes that replace the
+## procedural massing boxes.  Every entry is a fixed-scale GLB whose
+## exported w/d/h in the world JSON equal the measured model envelope,
+## so placements are never stretched and colliders stay exact.
+const CITY_MODELS_0320 := {
+	"office_tower_low": "office_tower_low.glb",
+	"office_tower_mid": "office_tower_mid.glb",
+	"office_tower_high": "office_tower_high.glb",
+	"midrise_a": "midrise_a.glb",
+	"midrise_b": "midrise_b.glb",
+	"warehouse_large": "warehouse_large.glb",
+	"warehouse_small": "warehouse_small.glb",
+	"container_red": "container_red.glb",
+	"container_blue": "container_blue.glb",
+	"villa_b": "villa_b.glb",
+	"townhouse_b": "townhouse_b.glb",
+	"barn": "barn.glb",
+	"greenhouse": "greenhouse.glb",
+}
+
+
 func _build_buildings() -> void:
 	var buildings_root := Node3D.new()
 	buildings_root.name = "Buildings"
@@ -6417,6 +6609,8 @@ func _build_buildings() -> void:
 	var cottage_palm_transforms: Array[Transform3D] = []
 	var cottage_podium_transforms: Array[Transform3D] = []
 	var cottage_collider_count := 0
+	var city_items: Dictionary = {}
+	var city_transforms: Dictionary = {}
 
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
@@ -6488,6 +6682,21 @@ func _build_buildings() -> void:
 				Vector3.ZERO
 			))
 			_add_box_collider(position_value + Vector3(0.0, 36.45, 0.0), Vector3(34.00, 72.90, 34.00), yaw)
+		elif CITY_MODELS_0320.has(model):
+			# 0.3.2 fixed-scale Blender archetype (see CITY_MODELS_0320).
+			# Containers stack a second box when the exported height
+			# describes a two-high stack.
+			var city_path := "res://assets/props/%s" % String(CITY_MODELS_0320[model])
+			if not city_transforms.has(city_path):
+				city_items[city_path] = []
+				city_transforms[city_path] = []
+			(city_items[city_path] as Array).append(building)
+			var city_transform := _centered_model_transform(position_value, yaw, Vector3.ONE, Vector3.ZERO)
+			(city_transforms[city_path] as Array).append(city_transform)
+			var city_height := h + roof_h
+			if model.begins_with("container") and city_height > 4.0:
+				(city_transforms[city_path] as Array).append(city_transform * Transform3D(Basis.IDENTITY, Vector3(0.0, 2.72, 0.0)))
+			_add_box_collider(position_value + Vector3(0.0, city_height * 0.5, 0.0), Vector3(w, city_height, d), yaw)
 		elif kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
 			# Building Model No.2 is likewise one finished architectural
 			# design: a semi-detached townhouse pair measuring exactly
@@ -6576,6 +6785,19 @@ func _build_buildings() -> void:
 	if not cottage_palm_built:
 		for item in cottage_palm_items:
 			_add_generic_building(buildings_root, item)
+	# 0.3.2: submit the Blender city archetypes (generic massing remains
+	# only as a missing-file fallback).
+	var city_blender_instances := 0
+	for city_path_variant in city_transforms.keys():
+		var city_path := String(city_path_variant)
+		var city_node := "City032_%s" % city_path.get_file().trim_suffix(".glb")
+		if _add_batched_model(buildings_root, city_path, city_transforms[city_path], city_node):
+			city_blender_instances += (city_items[city_path] as Array).size()
+		else:
+			for item in city_items[city_path]:
+				_add_generic_building(buildings_root, item)
+	_enhancement_stats["city_blender_instances_0320"] = city_blender_instances
+	_enhancement_stats["city_blender_models_0320"] = city_transforms.size()
 	var cottage_podium_box := BoxMesh.new()
 	cottage_podium_box.size = Vector3.ONE
 	var cottage_podiums_built := _add_multimesh(
@@ -7539,27 +7761,18 @@ func _build_landmarks() -> void:
 				_add_box(root, Vector3(7.0, 15.0, 7.0), pos + Vector3(-16.0, 7.5, 0.0), hotel)
 				_add_cylinder_collider(pos + Vector3(0.0, 1.0, 0.0), r, 2.0)
 			"rt7-stadium":
-				# 0.3.0 procedural bowl: elliptical wall + roof ring, green
-				# pitch and four floodlight pylons.  Seating tiers and facade
-				# ribs arrive in rebuild stage 3.
-				var stadium_wall := CylinderMesh.new()
-				stadium_wall.top_radius = 0.5
-				stadium_wall.bottom_radius = 0.5
-				stadium_wall.height = 1.0
-				stadium_wall.radial_segments = 48
-				_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(r * 2.0, h, r * 1.6923)), "StadiumWall")
-				var stadium_roof := CylinderMesh.new()
-				stadium_roof.top_radius = 0.5
-				stadium_roof.bottom_radius = 0.5
-				stadium_roof.height = 1.0
-				stadium_roof.radial_segments = 48
-				_mesh_instance(root, stadium_roof, metal, make_transform(pos + Vector3(0.0, h + 1.2, 0.0), 0.0, Vector3(r * 2.0 + 8.0, 2.4, r * 1.6923 + 8.0)), "StadiumRoof")
-				_add_box(root, Vector3(r * 1.154, 0.3, r * 0.769), pos + Vector3(0.0, 0.35, 0.0), _terrain_material("grass"), 0.0, "StadiumPitch")
-				for sx in [-1.0, 1.0]:
-					for sz in [-1.0, 1.0]:
-						var pylon_pos := pos + Vector3(r * 0.908 * sx, 0.0, r * 0.738 * sz)
-						_add_cylinder(root, 0.8, h + 14.0, pylon_pos + Vector3(0.0, (h + 14.0) * 0.5, 0.0), metal, 0.0, 10)
-						_add_box(root, Vector3(7.0, 3.0, 1.2), pylon_pos + Vector3(0.0, h + 14.5, 0.0), metal, 0.0, "FloodlightBank")
+				# 0.3.2: elliptical Blender bowl (lathe shell, red seat
+				# tiers, roof ring, ribs, four floodlight pylons).
+				var stadium_built := _add_batched_model(root, "res://assets/props/stadium.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032Stadium")
+				if not stadium_built:
+					var stadium_wall := CylinderMesh.new()
+					stadium_wall.top_radius = 0.5
+					stadium_wall.bottom_radius = 0.5
+					stadium_wall.height = 1.0
+					stadium_wall.radial_segments = 48
+					_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(r * 2.0, h, r * 1.6923)), "StadiumWall")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(r * 2.0 - 8.0, h, r * 1.6923 - 8.0))
 				_enhancement_stats["rt7_stadium_0300"] = true
 			"rt7-cable-bridge":
@@ -7593,166 +7806,136 @@ func _build_landmarks() -> void:
 				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, 5.55, 0.0), 0.0, Vector3(4.2, 1.2, 4.0)), "LifeguardRoof")
 				_add_box_collider(pos + Vector3(0.0, 3.0, 0.0), Vector3(3.6, 6.0, 3.6))
 			"rt7-school":
-				# 0.3.1 district school: main block, two wings, gym,
-				# entrance canopy, flag pole and a grass sports field.
+				# 0.3.2 district school as a fixed-scale Blender GLB:
+				# main block with clock tower, two wings, gym, entrance
+				# canopy, flag and fenced sports field.
 				var school_yaw := _f(item, "rotY")
-				var school := Node3D.new()
-				school.position = pos
-				school.rotation.y = school_yaw
-				root.add_child(school)
-				_add_box(school, Vector3(64.0, 12.0, 18.0), Vector3(0.0, 6.0, -16.0), sand, 0.0, "SchoolMain")
-				_add_box(school, Vector3(66.0, 1.0, 20.0), Vector3(0.0, 12.5, -16.0), metal, 0.0, "SchoolRoof")
-				for wx in [-29.0, 29.0]:
-					_add_box(school, Vector3(18.0, 9.0, 26.0), Vector3(wx, 4.5, -3.0), hotel, 0.0, "SchoolWing")
-					_add_box(school, Vector3(20.0, 0.8, 28.0), Vector3(wx, 9.4, -3.0), metal, 0.0, "SchoolWingRoof")
-				_add_box(school, Vector3(34.0, 9.0, 20.0), Vector3(0.0, 4.5, -34.0), hotel, 0.0, "SchoolGym")
-				_add_box(school, Vector3(16.0, 0.7, 6.0), Vector3(0.0, 4.4, -4.0), metal, 0.0, "SchoolCanopy")
-				_add_box(school, Vector3(76.0, 0.3, 40.0), Vector3(0.0, 0.16, 24.0), _terrain_material("grass"), 0.0, "SchoolField")
-				_add_box(school, Vector3(76.0, 0.34, 0.9), Vector3(0.0, 0.18, 24.0), marble, 0.0, "SchoolFieldLine")
-				for gx in [-34.0, 34.0]:
-					_add_box(school, Vector3(1.2, 3.0, 8.0), Vector3(gx, 1.5, 24.0), marble, 0.0, "SchoolGoal")
-				_add_cylinder(school, 0.14, 11.0, Vector3(16.0, 5.5, 0.0), metal, 0.0, 8, "SchoolFlagPole")
-				_add_box(school, Vector3(2.8, 1.7, 0.1), Vector3(17.5, 10.0, 0.0), gold, 0.0, "SchoolFlag")
+				var school_built := _add_batched_model(root, "res://assets/props/school.glb", [_centered_model_transform(pos, school_yaw, Vector3.ONE, Vector3.ZERO)], "City032School")
+				if not school_built:
+					_add_box(root, Vector3(64.0, 12.0, 50.0), pos + Vector3(0.0, 6.0, -12.0), sand, school_yaw, "SchoolFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				var school_basis := Basis(Vector3.UP, school_yaw)
 				_add_box_collider(pos + Vector3(0.0, 6.0, 0.0) + school_basis * Vector3(0.0, 0.0, -16.0), Vector3(64.0, 12.0, 18.0), school_yaw)
 				_add_box_collider(pos + Vector3(0.0, 4.5, 0.0) + school_basis * Vector3(0.0, 0.0, -34.0), Vector3(34.0, 9.0, 20.0), school_yaw)
 				_enhancement_stats["rt7_schools_0310"] = int(_enhancement_stats.get("rt7_schools_0310", 0)) + 1
 			"rt7-terminal":
-				# 0.3.1 airport terminal: 380 m glass hall, roof slab,
-				# four gate fingers toward the apron, landside canopy.
+				# 0.3.2 airport terminal GLB: 380 m hall, roof towers,
+				# four gate fingers with jet bridges, landside canopy.
 				var term_yaw := _f(item, "rotY")
-				var term := Node3D.new()
-				term.position = pos
-				term.rotation.y = term_yaw
-				root.add_child(term)
-				_add_box(term, Vector3(380.0, 24.0, 64.0), Vector3(0.0, 12.0, 0.0), glass, 0.0, "TerminalHall")
-				_add_box(term, Vector3(392.0, 2.2, 76.0), Vector3(0.0, 25.1, 0.0), metal, 0.0, "TerminalRoof")
-				for fx in [-150.0, -50.0, 50.0, 150.0]:
-					_add_box(term, Vector3(24.0, 13.0, 48.0), Vector3(fx, 6.5, -56.0), hotel, 0.0, "TerminalFinger")
-					_add_box(term, Vector3(26.0, 1.0, 50.0), Vector3(fx, 13.5, -56.0), metal, 0.0, "TerminalFingerRoof")
-				_add_box(term, Vector3(380.0, 1.2, 12.0), Vector3(0.0, 8.0, 38.0), metal, 0.0, "TerminalCanopy")
-				_add_box(term, Vector3(120.0, 5.0, 10.0), Vector3(0.0, 2.5, 36.0), marble, 0.0, "TerminalEntrance")
+				var term_built := _add_batched_model(root, "res://assets/props/airport_terminal.glb", [_centered_model_transform(pos, term_yaw, Vector3.ONE, Vector3.ZERO)], "City032Terminal")
+				if not term_built:
+					_add_box(root, Vector3(380.0, 24.0, 64.0), pos + Vector3(0.0, 12.0, 0.0), glass, term_yaw, "TerminalFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, 12.0, 0.0), Vector3(380.0, 24.0, 64.0), term_yaw)
 				_enhancement_stats["rt7_airport_0310"] = true
 			"rt7-atc":
+				# 0.3.2 control tower GLB (tapered shaft, glass cab).
 				var atc_h := maxf(h, 22.0)
-				_add_box(root, Vector3(15.0, 5.0, 15.0), pos + Vector3(0.0, 2.5, 0.0), sand, 0.0, "AtcBase")
-				_add_cylinder(root, 3.1, atc_h - 7.0, pos + Vector3(0.0, (atc_h - 7.0) * 0.5 + 2.0, 0.0), concrete, 0.0, 16, "AtcShaft")
-				_add_cylinder(root, 6.2, 4.6, pos + Vector3(0.0, atc_h - 2.3, 0.0), glass, 0.0, 20, "AtcCab")
-				_add_cylinder(root, 7.0, 0.8, pos + Vector3(0.0, atc_h + 0.4, 0.0), metal, 0.0, 20, "AtcRoof")
-				_add_cylinder(root, 0.18, 7.0, pos + Vector3(0.0, atc_h + 3.5, 0.0), metal, 0.0, 8, "AtcAntenna")
+				var atc_built := _add_batched_model(root, "res://assets/props/atc_tower.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Atc")
+				if not atc_built:
+					_add_cylinder(root, 3.1, atc_h - 7.0, pos + Vector3(0.0, (atc_h - 7.0) * 0.5 + 2.0, 0.0), concrete, 0.0, 16, "AtcShaft")
+					_add_cylinder(root, 6.2, 4.6, pos + Vector3(0.0, atc_h - 2.3, 0.0), glass, 0.0, 20, "AtcCab")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, atc_h * 0.5, 0.0), 3.4, atc_h)
 			"rt7-hangar":
-				# 0.3.1 aircraft hangar: walls + gable roof, wide door
-				# facing +Z (the apron/strip side at yaw 0).
+				# 0.3.2 aircraft hangar GLBs (large airfield / small
+				# maintenance), wide door facing +Z at yaw 0.
 				var hang_yaw := _f(item, "rotY")
 				var hang_r := maxf(r, 8.0)
 				var hang_h := maxf(h, 8.0)
 				var hang_len := hang_r * 2.6
-				var hang := Node3D.new()
-				hang.position = pos
-				hang.rotation.y = hang_yaw
-				root.add_child(hang)
-				_add_box(hang, Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), Vector3(0.0, hang_h * 0.31, 0.0), sand, 0.0, "HangarWalls")
-				_mesh_instance(hang, _get_gable_mesh(), metal, make_transform(Vector3(0.0, hang_h * 0.62, 0.0), PI * 0.5, Vector3(hang_len * 1.04, hang_h * 0.38, hang_r * 2.1)), "HangarRoof")
-				_add_box(hang, Vector3(hang_r * 1.5, hang_h * 0.5, 0.5), Vector3(0.0, hang_h * 0.25, hang_len * 0.5 + 0.1), metal, 0.0, "HangarDoor")
+				var hangar_path := "res://assets/props/hangar_large.glb" if hang_r >= 18.0 else "res://assets/props/hangar_small.glb"
+				var hangar_built := _add_batched_model(root, hangar_path, [_centered_model_transform(pos, hang_yaw, Vector3.ONE, Vector3.ZERO)], "City032Hangar")
+				if not hangar_built:
+					_add_box(root, Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), pos + Vector3(0.0, hang_h * 0.31, 0.0), sand, hang_yaw, "HangarFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, hang_h * 0.31, 0.0), Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), hang_yaw)
 				_enhancement_stats["rt7_hangars_0310"] = int(_enhancement_stats.get("rt7_hangars_0310", 0)) + 1
 			"rt7-plane":
-				# 0.3.1 parked airliner: capsule fuselage, swept wings,
-				# gold tail fin, twin engines.  Nose faces +Z at yaw 0.
+				# 0.3.2 parked airliner GLB (fuselage, swept wings,
+				# twin engines, gear).  Nose faces +Z at yaw 0.
 				var plane_yaw := _f(item, "rotY")
-				var plane := Node3D.new()
-				plane.position = pos
-				plane.rotation.y = plane_yaw
-				root.add_child(plane)
-				var fuselage := CapsuleMesh.new()
-				fuselage.radius = 2.1
-				fuselage.height = 42.0
-				fuselage.radial_segments = 18
-				fuselage.rings = 8
-				var fuselage_basis := Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))
-				_mesh_instance(plane, fuselage, marble, Transform3D(fuselage_basis, Vector3(0.0, 4.4, 0.0)), "PlaneFuselage")
-				_add_box(plane, Vector3(3.6, 1.0, 4.2), Vector3(0.0, 5.3, 16.2), glass, 0.0, "PlaneCockpit")
-				for wx in [-9.4, 9.4]:
-					_add_box(plane, Vector3(19.0, 0.45, 4.4), Vector3(wx, 3.9, -2.6), metal, -0.38 * signf(wx), "PlaneWing")
-				_add_box(plane, Vector3(12.0, 0.4, 3.0), Vector3(0.0, 5.8, -19.0), metal, 0.0, "PlaneTailplane")
-				_add_box(plane, Vector3(0.5, 7.6, 5.6), Vector3(0.0, 9.2, -18.4), gold, 0.0, "PlaneFin")
-				var engine := CylinderMesh.new()
-				engine.top_radius = 1.05
-				engine.bottom_radius = 1.05
-				engine.height = 4.6
-				engine.radial_segments = 14
-				for ex in [-6.8, 6.8]:
-					_mesh_instance(plane, engine, metal, Transform3D(fuselage_basis, Vector3(ex, 2.9, -0.4)), "PlaneEngine")
-				_add_cylinder(plane, 0.32, 2.4, Vector3(0.0, 1.2, 13.0), metal, 0.0, 8, "PlaneGearNose")
-				for gx2 in [-2.2, 2.2]:
-					_add_cylinder(plane, 0.38, 2.4, Vector3(gx2, 1.2, -2.0), metal, 0.0, 8, "PlaneGearMain")
+				var plane_built := _add_batched_model(root, "res://assets/props/airliner.glb", [_centered_model_transform(pos, plane_yaw, Vector3.ONE, Vector3.ZERO)], "City032Airliner")
+				if not plane_built:
+					_add_box(root, Vector3(4.2, 4.2, 42.0), pos + Vector3(0.0, 4.4, 0.0), marble, plane_yaw, "PlaneFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, 3.5, 0.0), Vector3(6.0, 7.0, 40.0), plane_yaw)
 				_enhancement_stats["rt7_planes_0310"] = int(_enhancement_stats.get("rt7_planes_0310", 0)) + 1
 			"rt7-cooling":
-				# 0.3.1 hyperboloid cooling tower (two stacked frustums).
+				# 0.3.2 hyperboloid cooling tower GLB (lathe shell,
+				# open inlet on V-columns, basin, rim walkway).
 				var cool_r := maxf(r, 18.0)
 				var cool_h := maxf(h, 40.0)
-				var cool_lower := CylinderMesh.new()
-				cool_lower.top_radius = 0.34
-				cool_lower.bottom_radius = 0.5
-				cool_lower.height = 1.0
-				cool_lower.radial_segments = 36
-				_mesh_instance(root, cool_lower, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.325, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.65, cool_r * 2.0)), "CoolingTowerLower")
-				var cool_upper := CylinderMesh.new()
-				cool_upper.top_radius = 0.40
-				cool_upper.bottom_radius = 0.34
-				cool_upper.height = 1.0
-				cool_upper.radial_segments = 36
-				_mesh_instance(root, cool_upper, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.825, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.35, cool_r * 2.0)), "CoolingTowerUpper")
-				_add_cylinder(root, cool_r * 0.82, 1.6, pos + Vector3(0.0, cool_h - 0.4, 0.0), metal, 0.0, 36, "CoolingTowerRim")
+				var cool_built := _add_batched_model(root, "res://assets/props/cooling_tower.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032CoolingTower")
+				if not cool_built:
+					_add_cylinder(root, cool_r, cool_h, pos + Vector3(0.0, cool_h * 0.5, 0.0), concrete, 0.0, 36, "CoolingFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, cool_h * 0.5, 0.0), cool_r * 0.92, cool_h)
 				_enhancement_stats["rt7_cooling_towers_0310"] = int(_enhancement_stats.get("rt7_cooling_towers_0310", 0)) + 1
 				_enhancement_stats["rt7_npp_0310"] = true
 			"rt7-reactor":
+				# 0.3.2 reactor containment GLB (cylinder + dome,
+				# polar crane ring, annex, pipes and vents).
 				var reac_r := maxf(r, 12.0) * 0.85
 				var reac_h := maxf(h, 24.0)
-				_add_cylinder(root, reac_r, reac_h * 0.62, pos + Vector3(0.0, reac_h * 0.31, 0.0), concrete, 0.0, 28, "ReactorBlock")
-				_add_sphere(root, reac_r, reac_r * 1.05, pos + Vector3(0.0, reac_h * 0.62, 0.0), marble, "ReactorDome")
-				_add_box(root, Vector3(reac_r * 1.5, reac_h * 0.3, reac_r * 0.9), pos + Vector3(reac_r * 1.35, reac_h * 0.15, 0.0), sand, 0.0, "ReactorAux")
+				var reac_built := _add_batched_model(root, "res://assets/props/reactor.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Reactor")
+				if not reac_built:
+					_add_cylinder(root, reac_r, reac_h * 0.62, pos + Vector3(0.0, reac_h * 0.31, 0.0), concrete, 0.0, 28, "ReactorFallback")
+					_add_sphere(root, reac_r, reac_r * 1.05, pos + Vector3(0.0, reac_h * 0.62, 0.0), marble, "ReactorDomeFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, reac_h * 0.35, 0.0), reac_r, reac_h * 0.7)
 				_enhancement_stats["rt7_reactors_0310"] = int(_enhancement_stats.get("rt7_reactors_0310", 0)) + 1
 			"rt7-chimney":
+				# 0.3.2 130 m stack GLB with red aviation bands.
 				var chim_h := maxf(h, 60.0)
 				var chim_r := maxf(r, 4.0)
-				var chim := CylinderMesh.new()
-				chim.top_radius = 0.30
-				chim.bottom_radius = 0.5
-				chim.height = 1.0
-				chim.radial_segments = 24
-				_mesh_instance(root, chim, concrete, make_transform(pos + Vector3(0.0, chim_h * 0.5, 0.0), 0.0, Vector3(chim_r * 2.0, chim_h, chim_r * 2.0)), "Chimney")
-				for band in [0.60, 0.76, 0.92]:
-					_add_cylinder(root, chim_r * (1.04 - band * 0.40), chim_h * 0.07, pos + Vector3(0.0, chim_h * band, 0.0), metal, 0.0, 24, "ChimneyBand")
+				var chim_built := _add_batched_model(root, "res://assets/props/chimney.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032Chimney")
+				if not chim_built:
+					_add_cylinder(root, chim_r, chim_h, pos + Vector3(0.0, chim_h * 0.5, 0.0), concrete, 0.0, 24, "ChimneyFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, chim_h * 0.5, 0.0), chim_r, chim_h)
 			"rt7-tank":
+				# 0.3.2 storage tank / farm silo GLBs, scaled to the
+				# exported radius/height so farm silos stay slender.
 				var tank_r := maxf(r, 3.0)
 				var tank_h := maxf(h, 4.0)
-				_add_cylinder(root, tank_r, tank_h, pos + Vector3(0.0, tank_h * 0.5, 0.0), marble, 0.0, 24, "StorageTank")
-				_add_sphere(root, tank_r, tank_r * 0.55, pos + Vector3(0.0, tank_h, 0.0), metal, "StorageTankCap")
-				_add_cylinder(root, tank_r * 1.04, 0.7, pos + Vector3(0.0, 0.35, 0.0), concrete, 0.0, 24, "StorageTankBase")
+				var tank_is_silo := tank_h >= tank_r * 2.2
+				var tank_path := "res://assets/props/silo.glb" if tank_is_silo else "res://assets/props/storage_tank.glb"
+				var tank_scale := Vector3(tank_r / 6.4, tank_h / 18.5, tank_r / 6.4) if tank_is_silo else Vector3(tank_r / 11.0, tank_h / 14.4, tank_r / 11.0)
+				var tank_built := _add_batched_model(root, tank_path, [_centered_model_transform(pos, _f(item, "rotY"), tank_scale, Vector3.ZERO)], "City032Tank")
+				if not tank_built:
+					_add_cylinder(root, tank_r, tank_h, pos + Vector3(0.0, tank_h * 0.5, 0.0), marble, 0.0, 24, "TankFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, tank_h * 0.5, 0.0), tank_r, tank_h)
 			"rt7-radar":
+				# 0.3.2 radar station GLB (radome, rotating bar array,
+				# equipment huts).
 				var rad_r := maxf(r, 5.0)
 				var rad_h := maxf(h, 10.0)
-				_add_cylinder(root, rad_r * 0.55, rad_h * 0.55, pos + Vector3(0.0, rad_h * 0.275, 0.0), concrete, 0.0, 16, "RadarBase")
-				_add_sphere(root, rad_r, rad_r * 1.5, pos + Vector3(0.0, rad_h * 0.55 + rad_r * 0.35, 0.0), marble, "RadarDome")
-				_add_box(root, Vector3(9.0, 3.5, 6.0), pos + Vector3(rad_r + 4.0, 1.75, 0.0), sand, 0.0, "RadarHut")
+				var radar_built := _add_batched_model(root, "res://assets/props/radar_station.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Radar")
+				if not radar_built:
+					_add_sphere(root, rad_r, rad_r * 1.5, pos + Vector3(0.0, rad_h * 0.55 + rad_r * 0.35, 0.0), marble, "RadarFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_cylinder_collider(pos + Vector3(0.0, rad_h * 0.3, 0.0), rad_r * 0.6, rad_h * 0.6)
 				_enhancement_stats["rt7_milbase_0310"] = true
 			"rt7-watchtower":
+				# 0.3.2 watchtower GLB (braced legs, cab, searchlight).
 				var wt_h := maxf(h, 9.0)
-				for sx in [-1.6, 1.6]:
-					for sz in [-1.6, 1.6]:
-						_add_cylinder(root, 0.22, wt_h * 0.72, pos + Vector3(sx, wt_h * 0.36, sz), wood, 0.0, 8, "WatchtowerLeg")
-				_add_box(root, Vector3(4.8, 2.7, 4.8), pos + Vector3(0.0, wt_h * 0.72 + 1.35, 0.0), wood, 0.0, "WatchtowerCab")
-				_add_box(root, Vector3(5.0, 0.9, 5.0), pos + Vector3(0.0, wt_h * 0.72 + 2.1, 0.0), glass, 0.0, "WatchtowerGlass")
-				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, wt_h * 0.72 + 2.7, 0.0), 0.0, Vector3(5.8, 1.5, 5.8)), "WatchtowerRoof")
+				var wt_built := _add_batched_model(root, "res://assets/props/watchtower.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Watchtower")
+				if not wt_built:
+					_add_box(root, Vector3(4.8, 2.7, 4.8), pos + Vector3(0.0, wt_h * 0.72 + 1.35, 0.0), wood, 0.0, "WatchtowerFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, wt_h * 0.4, 0.0), Vector3(4.4, wt_h * 0.8, 4.4))
 				_enhancement_stats["rt7_watchtowers_0310"] = int(_enhancement_stats.get("rt7_watchtowers_0310", 0)) + 1
 			"rt7-helipad":
@@ -7763,25 +7946,30 @@ func _build_landmarks() -> void:
 					_add_box(root, Vector3(0.85, 0.1, 5.2), pos + Vector3(hpx, 0.3, 0.0), marble, 0.0, "HelipadH")
 				_add_box(root, Vector3(2.6, 0.1, 0.85), pos + Vector3(0.0, 0.3, 0.0), marble, 0.0, "HelipadHBar")
 			"rt7-afv":
-				# 0.3.1 parked armoured vehicle (hull, turret, barrel).
+				# 0.3.2 parked armoured vehicle GLB.  The model nose
+				# faces +Z, the retired primitive faced +X, hence the
+				# quarter turn that preserves exported placements.
 				var afv_yaw := _f(item, "rotY")
-				var afv := Node3D.new()
-				afv.position = pos
-				afv.rotation.y = afv_yaw
-				root.add_child(afv)
-				for tz in [-1.18, 1.18]:
-					_add_box(afv, Vector3(7.4, 1.05, 1.05), Vector3(0.0, 0.55, tz), metal, 0.0, "AfvTrack")
-				_add_box(afv, Vector3(7.0, 1.15, 3.1), Vector3(0.0, 1.55, 0.0), metal, 0.0, "AfvHull")
-				_add_box(afv, Vector3(3.1, 0.95, 2.3), Vector3(-0.5, 2.55, 0.0), metal, 0.0, "AfvTurret")
-				var barrel := CylinderMesh.new()
-				barrel.top_radius = 0.5
-				barrel.bottom_radius = 0.5
-				barrel.height = 1.0
-				barrel.radial_segments = 10
-				var barrel_basis := Basis.from_euler(Vector3(0.0, 0.0, -PI * 0.5)).scaled(Vector3(0.34, 4.4, 0.34))
-				_mesh_instance(afv, barrel, metal, Transform3D(barrel_basis, Vector3(3.2, 2.65, 0.0)), "AfvBarrel")
+				var afv_built := _add_batched_model(root, "res://assets/props/afv.glb", [_centered_model_transform(pos, afv_yaw + PI * 0.5, Vector3.ONE, Vector3.ZERO)], "City032Afv")
+				if not afv_built:
+					_add_box(root, Vector3(7.4, 1.6, 3.2), pos + Vector3(0.0, 1.2, 0.0), metal, afv_yaw, "AfvFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, 1.6, 0.0), Vector3(7.6, 3.2, 3.5), afv_yaw)
 				_enhancement_stats["rt7_afv_0310"] = int(_enhancement_stats.get("rt7_afv_0310", 0)) + 1
+			"rt7-crane":
+				# 0.3.2 portainer crane GLB on the canal quay: portal
+				# legs on rails, A-frame, raised jib, hanging load.
+				var crane_yaw := _f(item, "rotY")
+				var crane_built := _add_batched_model(root, "res://assets/props/port_crane.glb", [_centered_model_transform(pos, crane_yaw, Vector3.ONE, Vector3.ZERO)], "City032PortCrane")
+				if not crane_built:
+					_add_box(root, Vector3(20.0, 30.0, 16.0), pos + Vector3(0.0, 15.0, 0.0), metal, crane_yaw, "CraneFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				var crane_basis := Basis(Vector3.UP, crane_yaw)
+				for leg_side in [-9.0, 9.0]:
+					_add_box_collider(pos + Vector3(0.0, 15.0, 0.0) + crane_basis * Vector3(leg_side, 0.0, 0.0), Vector3(2.2, 30.0, 15.7), crane_yaw)
+				_enhancement_stats["rt7_cranes_0320"] = int(_enhancement_stats.get("rt7_cranes_0320", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
