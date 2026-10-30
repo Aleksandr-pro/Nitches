@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
           grep -q '\[props\] done ->' blender-props.log
-          for file in bus_shelter.glb street_lamp.glb park_bench.glb park_pergola.glb traffic_signal_short.glb traffic_signal_long.glb hero_building.glb townhouse.glb villa.glb glass_tower.glb main_tower.glb opera_house.glb mosque.glb grand_hotel.glb museum.glb cottage_dune.glb cottage_courtyard.glb cottage_palm.glb palm_date.glb palm_royal.glb grass_tuft.glb flower_clump.glb ornamental_shrub.glb; do
+          for file in bus_shelter.glb street_lamp.glb park_bench.glb park_pergola.glb traffic_signal_short.glb traffic_signal_long.glb hero_building.glb townhouse.glb villa.glb glass_tower.glb main_tower.glb opera_house.glb mosque.glb grand_hotel.glb museum.glb cottage_dune.glb cottage_courtyard.glb cottage_palm.glb palm_date.glb palm_royal.glb grass_tuft.glb flower_clump.glb ornamental_shrub.glb school.glb airport_terminal.glb atc_tower.glb hangar_large.glb hangar_small.glb airliner.glb cooling_tower.glb reactor.glb chimney.glb radar_station.glb watchtower.glb storage_tank.glb silo.glb afv.glb stadium.glb office_tower_low.glb office_tower_mid.glb office_tower_high.glb midrise_a.glb midrise_b.glb warehouse_large.glb warehouse_small.glb container_red.glb container_blue.glb villa_b.glb townhouse_b.glb barn.glb greenhouse.glb port_crane.glb; do
             if [ ! -s "props_out/$file" ]; then
               echo "::error::Missing expected Blender output: $file"
               exit 1

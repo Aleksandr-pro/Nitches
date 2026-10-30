@@ -255,6 +255,16 @@ def standard_mats():
     mat("FlowerWhite", (0.90, 0.83, 0.69), roughness=0.76)
     mat("FlowerYellow", (0.87, 0.58, 0.07), roughness=0.70)
     mat("FlowerCentre", (0.56, 0.27, 0.03), roughness=0.80)
+    # 0.3.2 low-poly city set: a handful of flat accent paints so the
+    # mass-produced Blender buildings/props stay distinguishable at
+    # "slightly above low" geometry budgets (user direction 30.10).
+    mat("CityWhitePaint", (0.90, 0.91, 0.93), roughness=0.38, metallic=0.08)
+    mat("CityAccentRed", (0.55, 0.10, 0.07), roughness=0.62)
+    mat("CityAccentBlue", (0.07, 0.22, 0.48), roughness=0.55)
+    mat("CityArmyGreen", (0.15, 0.21, 0.10), roughness=0.90)
+    mat("CityBarnRed", (0.42, 0.10, 0.07), roughness=0.88)
+    mat("CitySignYellow", (0.80, 0.52, 0.05), roughness=0.60)
+    mat("CityFieldGreen", (0.16, 0.34, 0.10), roughness=1.0)
 
 
 def finish(obj, material, bevel=0.0, smooth=False):
@@ -5767,6 +5777,35 @@ def main():
         (build_grass_tuft, "grass_tuft.glb"),
         (build_flower_clump, "flower_clump.glb"),
         (build_ornamental_shrub, "ornamental_shrub.glb"),
+        (build_school, "school.glb"),
+        (build_airport_terminal, "airport_terminal.glb"),
+        (build_atc_tower, "atc_tower.glb"),
+        (build_hangar_large, "hangar_large.glb"),
+        (build_hangar_small, "hangar_small.glb"),
+        (build_airliner, "airliner.glb"),
+        (build_cooling_tower, "cooling_tower.glb"),
+        (build_reactor, "reactor.glb"),
+        (build_chimney, "chimney.glb"),
+        (build_radar_station, "radar_station.glb"),
+        (build_watchtower, "watchtower.glb"),
+        (build_storage_tank, "storage_tank.glb"),
+        (build_silo, "silo.glb"),
+        (build_afv, "afv.glb"),
+        (build_stadium, "stadium.glb"),
+        (build_office_tower_low, "office_tower_low.glb"),
+        (build_office_tower_mid, "office_tower_mid.glb"),
+        (build_office_tower_high, "office_tower_high.glb"),
+        (build_midrise_a, "midrise_a.glb"),
+        (build_midrise_b, "midrise_b.glb"),
+        (build_warehouse_large, "warehouse_large.glb"),
+        (build_warehouse_small, "warehouse_small.glb"),
+        (build_container_red, "container_red.glb"),
+        (build_container_blue, "container_blue.glb"),
+        (build_villa_b, "villa_b.glb"),
+        (build_townhouse_b, "townhouse_b.glb"),
+        (build_barn, "barn.glb"),
+        (build_greenhouse, "greenhouse.glb"),
+        (build_port_crane, "port_crane.glb"),
     ):
         # Local model reviews can build one asset without regenerating
         # the whole city set, e.g. NITCHES_PROPS_ONLY=cottage_dune.glb.
@@ -6449,6 +6488,625 @@ def build_cottage_palm():
     for log_index in range(4):
         cyl("palm_firewood", -12.35, 4.62, 0.55 + log_index * 0.16, 0.065, 0.78, teak, vertices=8, rotation=(0.0, math.radians(90.0), 0.0))
     _cottage_downspouts(((-13.2, -5.05), (0.35, -5.05), (-13.2, 7.05), (13.0, 5.05)), 5.65)
+
+
+
+
+# --------------------------------------------------------------------------- #
+# 0.3.2 low-poly Blender city set (user direction 30.10.2026).
+#
+# Every RichTown building/structure that used to be a stretched generic
+# box or a GDScript primitive assembly gets a real fixed-scale Blender
+# model at a "slightly above low" geometry budget: a few hundred to a
+# few thousand triangles, flat semantic materials, readable silhouettes
+# and signature details (balconies, dock doors, corrugation, jet
+# bridges, hyperboloid shells).  The premium Building Models No.1-12
+# above stay untouched; vegetation and ground tiles are out of scope.
+# Front is Blender -Y, origin at ground centre, real metres.
+# --------------------------------------------------------------------------- #
+
+
+def _ct_lathe(name, profile, material, segments=32, scale_x=1.0):
+    """Surface of revolution around Blender Z from [(radius, z), ...]."""
+    b = MeshBuilder()
+    rings = []
+    for radius, z in profile:
+        ring = []
+        for i in range(segments):
+            a = 2.0 * math.pi * i / segments
+            ring.append(b.add_vertex(Vector((math.cos(a) * radius * scale_x, math.sin(a) * radius, z))))
+        rings.append(ring)
+    for r in range(len(rings) - 1):
+        for i in range(segments):
+            j = (i + 1) % segments
+            b.quad(rings[r][i], rings[r][j], rings[r + 1][j], rings[r + 1][i])
+    return b.build(name, material, smooth=True)
+
+
+def build_school():
+    plaster = MATS["TownPlaster"]
+    stone = MATS["TownStone"]
+    trim = MATS["TownTrim"]
+    roof = MATS["TownRoof"]
+    dark_glass = MATS["WindowGlassDark"]
+    metal = MATS["PropsMetal"]
+    field = MATS["CityFieldGreen"]
+    white = MATS["CityWhitePaint"]
+    red = MATS["CityAccentRed"]
+
+    box("school_plinth", 0, 16, 0.25, 80, 60, 0.5, stone)
+    box("school_main", 0, 16, 6.35, 64, 18, 12, plaster)
+    box("school_main_roof", 0, 16, 12.85, 66, 20, 1.0, MATS["RoofDark"])
+    for floor_z in (3.4, 6.9, 10.2):
+        box("school_win_front", 0, 6.82, floor_z, 57, 0.3, 1.7, dark_glass)
+        box("school_win_back", 0, 25.18, floor_z, 57, 0.3, 1.7, dark_glass)
+    for wx in (-29.0, 29.0):
+        box("school_wing", wx, 3, 4.85, 18, 26, 9, plaster)
+        gable_roof("school_wing_roof", wx, 3, 11.1, 19.4, 27.4, 3.4, roof, ridge_axis="y")
+        box("school_wing_win", wx, -10.18, 5.4, 12, 0.3, 3.6, dark_glass)
+    box("school_gym", 0, 34, 4.85, 34, 20, 9, stone)
+    box("school_gym_roof", 0, 34, 9.8, 35.5, 21.5, 0.9, MATS["RoofDark"])
+    box("school_gym_glass", 0, 23.82, 7.6, 30, 0.3, 1.8, dark_glass)
+    box("school_portal", 0, 6.4, 3.1, 13, 1.6, 6.2, trim)
+    box("school_door", 0, 5.5, 2.2, 6.4, 0.4, 4.2, MATS["TownDoorAccent"])
+    box("school_canopy", 0, 2.8, 5.6, 17, 6.4, 0.55, metal)
+    for cx in (-7.2, 7.2):
+        cyl("school_column", cx, 0.4, 2.8, 0.32, 5.6, metal, vertices=10)
+    for si in range(3):
+        box("school_step", 0, 3.2 - si * 0.9, 0.18 + si * 0.17, 14 - si * 1.2, 0.9, 0.36, stone)
+    cyl("school_flagpole", 16, -2, 5.5, 0.14, 11, metal, vertices=8)
+    box("school_flag", 17.6, -2, 10.0, 3.0, 0.08, 1.8, red)
+    # Sports field on the front (-Y) side.
+    box("school_field", 0, -24, 0.16, 76, 40, 0.32, field)
+    box("school_line_mid", 0, -24, 0.36, 0.5, 38, 0.06, white)
+    box("school_line_lr", 0, -42.8, 0.36, 72, 0.5, 0.06, white)
+    box("school_line_lr", 0, -5.2, 0.36, 72, 0.5, 0.06, white)
+    for gx in (-34.0, 34.0):
+        box("school_goal", gx, -24, 1.4, 0.35, 7.4, 2.8, white)
+    for fx in range(-36, 37, 8):
+        cyl("school_fence", fx, -43.5, 0.9, 0.09, 1.8, metal, vertices=6)
+        cyl("school_fence", fx, -4.5, 0.9, 0.09, 1.8, metal, vertices=6)
+
+
+def build_airport_terminal():
+    glass = MATS["FacadeGlass"]
+    main = MATS["FacadeMain"]
+    metal = MATS["TowerMetal"]
+    dark = MATS["RoofDark"]
+    blue = MATS["CityAccentBlue"]
+
+    box("term_hall", 0, 0, 11, 380, 64, 22, main)
+    box("term_glass_upper", 0, -32.3, 14.5, 376, 0.8, 11, glass)
+    box("term_glass_lower", 0, -32.3, 3.4, 376, 0.8, 6.4, glass)
+    box("term_glass_airside", 0, 32.3, 12, 376, 0.8, 14, glass)
+    box("term_stripe", 0, -32.75, 20.6, 380, 0.7, 2.2, blue)
+    for i in range(21):
+        fx = -180.0 + i * 18.0
+        box("term_fin", fx, -32.8, 11, 1.1, 1.4, 21, metal)
+    for slab_i, (sy, sang) in enumerate(((-26.0, -0.34), (-13.0, -0.17), (0.0, 0.0), (13.0, 0.17), (26.0, 0.34))):
+        slab_z = 25.2 - abs(sy) * 0.115
+        rbox("term_roof_slab", 0, sy, slab_z, 386, 15.5, 1.1, metal, rotation=(sang, 0, 0))
+    box("term_skylight", 0, 0, 26.0, 300, 5, 0.5, glass)
+    box("term_entrance", 0, -34.5, 2.6, 130, 5, 5.2, glass)
+    box("term_canopy", 0, -39, 8.4, 210, 12, 0.9, metal)
+    for cx in range(-96, 97, 24):
+        cyl("term_column", cx, -43.5, 4.2, 0.45, 8.4, metal, vertices=10)
+    for fx in (-150.0, -50.0, 50.0, 150.0):
+        box("term_finger", fx, 56, 6.5, 24, 48, 13, main)
+        box("term_finger_glass", fx - 12.3, 56, 8, 0.7, 44, 5, glass)
+        box("term_finger_glass", fx + 12.3, 56, 8, 0.7, 44, 5, glass)
+        box("term_finger_roof", fx, 56, 13.6, 26, 50, 1.1, dark)
+        box("term_finger_hvac", fx + 5, 48, 14.9, 7, 9, 1.6, dark)
+        rbox("term_jetbridge", fx - 13.8, 66, 4.6, 3.2, 11, 3.4, metal, rotation=(0, 0, 0.5))
+        rbox("term_jetbridge", fx + 13.8, 66, 4.6, 3.2, 11, 3.4, metal, rotation=(0, 0, -0.5))
+
+
+def build_atc_tower():
+    concrete = MATS["ConcreteLight"]
+    glass = MATS["FacadeGlass"]
+    metal = MATS["PropsMetal"]
+    box("atc_base", 0, 0, 2.5, 15, 15, 5, MATS["FacadeAccent"])
+    box("atc_base_door", 0, -7.6, 1.8, 3.4, 0.3, 3.4, MATS["WindowFrame"])
+    cone("atc_shaft", 0, 0, 22, 4.4, 2.9, 34, concrete, vertices=16)
+    cyl("atc_collar", 0, 0, 39.4, 3.6, 1.6, metal, vertices=16)
+    cyl("atc_cab", 0, 0, 43.2, 6.2, 4.6, glass, vertices=18)
+    for i in range(10):
+        a = 2.0 * math.pi * i / 10.0
+        rbox("atc_mullion", math.cos(a) * 6.25, math.sin(a) * 6.25, 43.2, 0.35, 0.35, 4.6, metal, rotation=(0, 0, a))
+    cone("atc_roof", 0, 0, 46.2, 7.1, 6.2, 1.2, metal, vertices=18)
+    cyl("atc_antenna", 0, 0, 50.2, 0.16, 7, metal, vertices=8)
+    box("atc_beacon", 0, 0, 47.3, 0.7, 0.7, 0.7, MATS["CityAccentRed"])
+
+
+def _build_hangar(width, length, wall_h, roof_h):
+    clad = MATS["PropsMetal"]
+    concrete = MATS["ConcreteLight"]
+    dark = MATS["RoofDark"]
+    frame = MATS["WindowFrame"]
+    glass = MATS["FacadeGlass"]
+    box("hangar_base", 0, 0, 1.5, width, length, 3.0, concrete)
+    box("hangar_walls", 0, 0, 3.0 + (wall_h - 3.0) / 2.0, width, length, wall_h - 3.0, clad)
+    gable_roof("hangar_roof", 0, 0, wall_h + roof_h / 2.0, width + 1.6, length + 1.6, roof_h, dark, ridge_axis="y")
+    door_y = -length / 2.0 - 0.35
+    box("hangar_door", 0, door_y, wall_h * 0.42, width * 0.74, 0.6, wall_h * 0.8, frame)
+    for rail_z in (0.22, 0.48, 0.74):
+        box("hangar_door_rail", 0, door_y - 0.25, wall_h * rail_z, width * 0.74, 0.25, 0.35, clad)
+    box("hangar_door_seam", 0, door_y - 0.32, wall_h * 0.42, 0.4, 0.2, wall_h * 0.8, clad)
+    for sx in (-1.0, 1.0):
+        box("hangar_side_glass", sx * (width / 2.0 + 0.18), 0, wall_h * 0.72, 0.35, length * 0.66, 1.7, glass)
+        box("hangar_personnel", sx * (width / 2.0 + 0.2), -length * 0.3, 1.6, 0.35, 2.2, 3.2, frame)
+    for vy in (-length * 0.28, 0.0, length * 0.28):
+        cyl("hangar_vent", 0, vy, wall_h + roof_h - 0.4, 1.05, 1.6, clad, vertices=10)
+
+
+def build_hangar_large():
+    _build_hangar(44.0, 57.0, 9.9, 6.1)
+
+
+def build_hangar_small():
+    _build_hangar(30.0, 39.0, 6.8, 4.2)
+
+
+def build_airliner():
+    white = MATS["CityWhitePaint"]
+    blue = MATS["CityAccentBlue"]
+    metal = MATS["PropsMetal"]
+    frame = MATS["WindowFrame"]
+    dark = MATS["RoofDark"]
+
+    cyl("plane_fuselage", 0, 0.5, 4.4, 2.1, 33, white, vertices=16, rotation=(math.radians(90), 0, 0))
+    nose = cone("plane_nose", 0, -19.2, 4.4, 2.1, 0.4, 6.4, white, vertices=16)
+    nose.rotation_euler = (math.radians(90), 0, 0)
+    tail = cone("plane_tailcone", 0, 19.6, 5.1, 0.5, 2.05, 6.0, white, vertices=16)
+    tail.rotation_euler = (math.radians(90), 0, 0)
+    rbox("plane_cockpit", 0, -17.6, 5.75, 2.7, 2.4, 0.8, MATS["WindowGlassDark"], rotation=(math.radians(-32), 0, 0))
+    for sx in (-1.0, 1.0):
+        box("plane_stripe", sx * 1.98, 0.5, 5.15, 0.1, 28, 0.85, blue)
+        rbox("plane_wing", sx * 9.6, 2.4, 3.75, 19, 4.4, 0.42, metal, rotation=(0, 0, sx * 0.40))
+        rbox("plane_winglet", sx * 18.4, 6.1, 4.6, 0.35, 2.2, 1.9, blue, rotation=(0, 0, sx * 0.40))
+        cyl("plane_engine", sx * 6.8, -0.8, 2.65, 1.05, 4.6, white, vertices=12, rotation=(math.radians(90), 0, 0))
+        cyl("plane_intake", sx * 6.8, -3.15, 2.65, 0.88, 0.35, frame, vertices=12, rotation=(math.radians(90), 0, 0))
+        box("plane_pylon", sx * 6.8, -0.4, 3.6, 0.4, 2.6, 1.1, metal)
+        rbox("plane_tailplane", sx * 3.4, 19.8, 6.3, 7.5, 2.6, 0.35, metal, rotation=(0, 0, sx * 0.35))
+        cyl("plane_gear_leg", sx * 2.3, 2.5, 1.35, 0.3, 2.5, metal, vertices=8)
+        box("plane_gear_bogie", sx * 2.3, 2.5, 0.5, 0.65, 2.4, 0.9, dark)
+    box("plane_fin", 0, 18.2, 8.9, 0.45, 6.4, 6.6, blue)
+    rbox("plane_fin_sweep", 0, 15.6, 7.0, 0.45, 4.4, 3.4, blue, rotation=(math.radians(-38), 0, 0))
+    cyl("plane_gear_nose", 0, -13, 1.35, 0.26, 2.5, metal, vertices=8)
+    box("plane_gear_nosewheel", 0, -13, 0.45, 0.5, 1.1, 0.85, dark)
+    box("plane_apu", 0, 21.8, 5.4, 1.1, 1.6, 1.0, metal)
+
+
+def build_cooling_tower():
+    concrete = MATS["ConcreteLight"]
+    profile = [
+        (39.0, 8.0), (36.0, 18.0), (31.0, 36.0), (27.5, 55.0),
+        (26.2, 71.0), (26.8, 83.0), (28.5, 92.5), (29.6, 95.5), (30.4, 98.0),
+    ]
+    _ct_lathe("cooling_shell", profile, concrete, segments=36)
+    cyl("cooling_throat", 0, 0, 91.5, 26.5, 1.2, MATS["WindowFrame"], vertices=32)
+    cyl("cooling_basin", 0, 0, 0.6, 42.0, 1.2, concrete, vertices=36)
+    cyl("cooling_ring_beam", 0, 0, 8.6, 38.8, 1.6, concrete, vertices=36)
+    for i in range(16):
+        a = 2.0 * math.pi * i / 16.0
+        cx = math.cos(a) * 38.2
+        cy = math.sin(a) * 38.2
+        rbox("cooling_column", cx, cy, 4.6, 1.1, 1.1, 7.6, concrete, rotation=(0.42, 0, a))
+        rbox("cooling_column_b", cx, cy, 4.6, 1.1, 1.1, 7.6, concrete, rotation=(-0.42, 0, a))
+
+
+def build_reactor():
+    concrete = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    cyl("reactor_block", 0, 0, 15, 22, 30, concrete, vertices=26)
+    cyl("reactor_ring", 0, 0, 30.4, 23, 1.8, metal, vertices=26)
+    sphere("reactor_dome", 0, 0, 31.5, 44, 44, 19, MATS["CityWhitePaint"])
+    cyl("reactor_vent", -15, 9, 35, 1.6, 13, metal, vertices=10)
+    box("reactor_aux", 33.5, 0, 6.5, 19, 17, 13, MATS["FacadeAccent"])
+    box("reactor_aux_roof", 33.5, 0, 13.5, 20, 18, 0.9, MATS["RoofDark"])
+    box("reactor_aux_glass", 33.5, -8.7, 8.5, 15, 0.3, 3.4, MATS["WindowGlassDark"])
+    tube_between("reactor_pipe_a", (19, -3, 19), (26, -3, 12), 1.15, 1.15, metal, vertices=10)
+    tube_between("reactor_pipe_b", (19, 4, 15), (26, 4, 9), 0.9, 0.9, metal, vertices=10)
+    cyl("reactor_tank_small", 12, -19, 4, 4.5, 8, metal, vertices=14)
+
+
+def build_chimney():
+    concrete = MATS["ConcreteLight"]
+    cyl("chimney_plinth", 0, 0, 1, 9.5, 2, concrete, vertices=20)
+    cone("chimney_stack", 0, 0, 65, 7.2, 4.0, 130, concrete, vertices=20)
+    for band_z in (78.0, 99.0, 119.0):
+        band_r = 7.2 - 3.2 * (band_z / 130.0)
+        cyl("chimney_band", 0, 0, band_z, band_r * 1.04, 7.5, MATS["CityAccentRed"], vertices=20)
+    cyl("chimney_rim", 0, 0, 129.6, 4.35, 1.4, MATS["WindowFrame"], vertices=20)
+    box("chimney_beacon", 0, 0, 131.0, 0.8, 0.8, 0.8, MATS["CityAccentRed"])
+
+
+def build_radar_station():
+    cyl("radar_base", 0, 0, 4, 5, 8, MATS["ConcreteLight"], vertices=16)
+    sphere("radar_dome", 0, 0, 10.5, 18, 18, 15, MATS["CityWhitePaint"])
+    box("radar_hut", 11.5, 0, 1.75, 9, 6, 3.5, MATS["FacadeMain"])
+    box("radar_hut_roof", 11.5, 0, 3.8, 9.6, 6.6, 0.5, MATS["RoofDark"])
+    box("radar_hut_door", 11.5, -3.1, 1.5, 1.6, 0.25, 2.8, MATS["WindowFrame"])
+    cyl("radar_mast", 13.5, 1.5, 8, 0.14, 9, MATS["PropsMetal"], vertices=8)
+
+
+def build_watchtower():
+    wood = MATS["PropsWood"]
+    glass = MATS["FacadeGlass"]
+    for sx in (-1.6, 1.6):
+        for sy in (-1.6, 1.6):
+            rbox("watch_leg", sx, sy, 5.3, 0.38, 0.38, 10.4, wood,
+                 rotation=(0.10 * (1 if sy > 0 else -1), 0.10 * (1 if sx < 0 else -1), 0))
+    for brace_z, brace_ang in ((3.4, 0.78), (7.4, -0.78)):
+        rbox("watch_brace", 0, -1.85, brace_z, 0.22, 0.22, 5.4, wood, rotation=(0, brace_ang, 0))
+        rbox("watch_brace", 0, 1.85, brace_z, 0.22, 0.22, 5.4, wood, rotation=(0, -brace_ang, 0))
+    box("watch_platform", 0, 0, 10.3, 5.2, 5.2, 0.4, wood)
+    box("watch_cab", 0, 0, 11.9, 4.6, 4.6, 2.8, wood)
+    box("watch_glass", 0, 0, 12.55, 4.85, 4.85, 1.0, glass)
+    gable_roof("watch_roof", 0, 0, 14.1, 5.9, 5.9, 1.7, MATS["TownRoof"], ridge_axis="x")
+    for rx in (-0.55, 0.55):
+        box("watch_ladder_rail", rx, -2.05, 5.1, 0.14, 0.14, 10.2, MATS["PropsMetal"])
+    for rung in range(7):
+        box("watch_ladder_rung", 0, -2.05, 1.2 + rung * 1.35, 1.15, 0.12, 0.12, MATS["PropsMetal"])
+
+
+def build_storage_tank():
+    white = MATS["CityWhitePaint"]
+    metal = MATS["PropsMetal"]
+    cyl("tank_base", 0, 0, 0.4, 11.7, 0.8, MATS["ConcreteLight"], vertices=24)
+    cyl("tank_shell", 0, 0, 6.3, 11, 11, white, vertices=24)
+    sphere("tank_roof", 0, 0, 11.6, 22.4, 22.4, 5.2, metal)
+    cyl("tank_hatch", 0, 0, 14.0, 1.6, 0.9, metal, vertices=10)
+    cyl("tank_pipe", 11.3, 0, 5.5, 0.5, 11, metal, vertices=8)
+    box("tank_valve", 11.6, 0, 1.2, 1.1, 1.1, 1.4, MATS["CityAccentRed"])
+    box("tank_ladder", 0, -11.15, 5.8, 0.9, 0.25, 11, metal)
+
+
+def build_silo():
+    metal = MATS["PropsMetal"]
+    cyl("silo_body", 0, 0, 7, 6, 14, MATS["CityWhitePaint"], vertices=18)
+    cone("silo_roof", 0, 0, 15.7, 6.45, 0.7, 3.4, metal, vertices=18)
+    cyl("silo_pipe", 0, 0, 17.9, 0.55, 1.2, metal, vertices=8)
+    box("silo_chute", 0, -6.5, 5, 1.4, 1.2, 9, metal)
+    cyl("silo_base", 0, 0, 0.35, 6.5, 0.7, MATS["ConcreteLight"], vertices=18)
+
+
+def build_afv():
+    green = MATS["CityArmyGreen"]
+    dark = MATS["RoofDark"]
+    metal = MATS["PropsMetal"]
+    box("afv_hull", 0, 0, 1.55, 3.4, 7.2, 1.15, green)
+    rbox("afv_glacis", 0, -3.55, 1.45, 3.3, 2.0, 0.5, green, rotation=(math.radians(52), 0, 0))
+    rbox("afv_rear", 0, 3.6, 1.5, 3.3, 1.4, 0.45, green, rotation=(math.radians(-40), 0, 0))
+    for sx in (-1.35, 1.35):
+        box("afv_track", sx, 0, 0.62, 1.05, 7.7, 1.15, dark)
+        box("afv_skirt", sx * 1.68, 0, 1.25, 0.18, 7.3, 0.75, green)
+        for wy in (-2.9, -1.45, 0.0, 1.45, 2.9):
+            cyl("afv_wheel", sx * 1.62, wy, 0.56, 0.53, 0.3, green, vertices=10, rotation=(0, math.radians(90), 0))
+    box("afv_turret", 0, 0.55, 2.6, 2.35, 3.2, 0.95, green)
+    rbox("afv_turret_front", 0, -1.15, 2.55, 2.2, 1.2, 0.8, green, rotation=(math.radians(38), 0, 0))
+    cyl("afv_barrel", 0, -3.6, 2.72, 0.16, 4.8, metal, vertices=8, rotation=(math.radians(90), 0, 0))
+    cyl("afv_muzzle", 0, -5.6, 2.72, 0.25, 0.8, dark, vertices=8, rotation=(math.radians(90), 0, 0))
+    cyl("afv_hatch", -0.55, 0.6, 3.2, 0.55, 0.28, green, vertices=10)
+    cyl("afv_antenna", 0.85, 1.9, 4.4, 0.035, 2.8, dark, vertices=6)
+    box("afv_stowage", 0, 2.35, 2.45, 2.1, 0.9, 0.7, dark)
+    for hx in (-1.15, 1.15):
+        box("afv_headlight", hx, -4.15, 1.75, 0.42, 0.2, 0.3, MATS["LampGlow"])
+
+
+def build_stadium():
+    concrete = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    seats = MATS["CityAccentRed"]
+    pitch = MATS["CityFieldGreen"]
+    white = MATS["CityWhitePaint"]
+    sx = 150.0 / 127.0
+    profile = [
+        (127.0, 0.0), (127.0, 26.0), (125.0, 34.0), (120.0, 40.0), (114.0, 42.5),
+        (106.0, 41.0), (96.0, 35.0), (84.0, 29.0), (71.0, 23.0), (58.0, 17.0),
+        (47.0, 11.0), (40.0, 5.0),
+    ]
+    _ct_lathe("stadium_bowl", profile, concrete, segments=48, scale_x=sx)
+    seat_profile = [(103.0, 40.4), (93.0, 34.4), (81.0, 28.4), (68.0, 22.4), (55.0, 16.4), (44.0, 10.4)]
+    _ct_lathe("stadium_seats", seat_profile, seats, segments=48, scale_x=sx)
+    roof_profile = [(106.0, 43.6), (109.0, 45.6), (130.0, 43.6), (130.5, 41.2), (126.0, 40.6), (108.0, 42.2)]
+    _ct_lathe("stadium_roof", roof_profile, metal, segments=48, scale_x=sx)
+    for i in range(36):
+        a = 2.0 * math.pi * i / 36.0
+        rbox("stadium_rib", math.cos(a) * 150.2, math.sin(a) * 127.2, 17.5, 2.8, 2.4, 35.0, concrete, rotation=(0, 0, a))
+    box("stadium_pitch", 0, 0, 0.18, 112, 72, 0.36, pitch)
+    box("stadium_line_mid", 0, 0, 0.4, 0.5, 68, 0.06, white)
+    box("stadium_line_box", -44, 0, 0.4, 0.5, 40, 0.06, white)
+    box("stadium_line_box", 44, 0, 0.4, 0.5, 40, 0.06, white)
+    for fx, fy in ((-118.0, -98.0), (118.0, -98.0), (-118.0, 98.0), (118.0, 98.0)):
+        cyl("stadium_pylon", fx, fy, 28.5, 0.9, 57, metal, vertices=10)
+        head_a = math.atan2(-fy, -fx)
+        rbox("stadium_flood_head", fx, fy, 57.5, 8.5, 1.4, 3.6, metal, rotation=(0, 0, head_a))
+        rbox("stadium_flood_glow", fx * 0.985, fy * 0.985, 57.3, 7.8, 1.5, 3.0, MATS["LampGlow"], rotation=(0, 0, head_a))
+
+
+def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
+    stone = MATS["TowerStone"]
+    glass = MATS["TowerGlass"]
+    spandrel = MATS["TowerSpandrel"]
+    metal = MATS["TowerMetal"]
+    trim = MATS["TowerTrim"]
+    dark = MATS["RoofDark"]
+
+    box("office_podium", 0, 0, 3, podium_w, podium_w, 6, stone)
+    box("office_podium_roof", 0, 0, 6.3, podium_w + 0.8, podium_w + 0.8, 0.6, dark)
+    box("office_entrance", 0, -(podium_w / 2.0 + 0.4), 2.4, podium_w * 0.46, 0.9, 4.6, MATS["FacadeGlass"])
+    box("office_canopy", 0, -(podium_w / 2.0 + 2.2), 5.4, podium_w * 0.55, 4.6, 0.45, metal)
+    for cx in (-podium_w * 0.22, podium_w * 0.22):
+        cyl("office_column", cx, -(podium_w / 2.0 + 3.8), 2.7, 0.34, 5.4, metal, vertices=8)
+    lower_top = setback_at if setback_at > 0 else total_h - 4.0
+    box("office_shaft", 0, 0, 6 + (lower_top - 6) / 2.0, shaft_w, shaft_w, lower_top - 6, glass)
+    ring_z = 15.0
+    while ring_z < lower_top - 3.0:
+        box("office_spandrel", 0, 0, ring_z, shaft_w + 0.4, shaft_w + 0.4, 1.05, spandrel)
+        ring_z += 11.5
+    for cx in (-shaft_w / 2.0, shaft_w / 2.0):
+        for cy in (-shaft_w / 2.0, shaft_w / 2.0):
+            box("office_corner_fin", cx, cy, 6 + (lower_top - 6) / 2.0, 1.15, 1.15, lower_top - 6, metal)
+    top_w = shaft_w
+    if setback_at > 0:
+        top_w = shaft_w - 6.0
+        upper_h = total_h - 4.0 - lower_top
+        box("office_upper", 0, 0, lower_top + upper_h / 2.0, top_w, top_w, upper_h, glass)
+        ring_z = lower_top + 8.0
+        while ring_z < total_h - 6.0:
+            box("office_spandrel_up", 0, 0, ring_z, top_w + 0.4, top_w + 0.4, 1.05, spandrel)
+            ring_z += 11.5
+        box("office_setback_slab", 0, 0, lower_top + 0.35, shaft_w + 0.7, shaft_w + 0.7, 0.7, trim)
+    box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
+    box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
+    box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
+    if spire:
+        cone("office_spire", 0, 0, total_h + 4.6, 1.7, 0.12, 9.4, metal, vertices=10)
+        cyl("office_beacon", 0, 0, total_h + 9.6, 0.32, 0.6, MATS["CityAccentRed"], vertices=8)
+
+
+def build_office_tower_low():
+    _build_office_tower(36.0, 31.0, 42.0, 0.0, False)
+
+
+def build_office_tower_mid():
+    _build_office_tower(36.0, 31.0, 68.0, 46.0, False)
+
+
+def build_office_tower_high():
+    _build_office_tower(38.0, 33.0, 96.0, 58.0, True)
+
+
+def _build_midrise(width, depth, floors):
+    plaster = MATS["HeroPlaster"]
+    stone = MATS["HeroStone"]
+    glass = MATS["FacadeGlass"]
+    dark_glass = MATS["WindowGlassDark"]
+    metal = MATS["PropsMetal"]
+    floor_h = 3.1
+    body_h = floors * floor_h
+    box("mid_plinth", 0, 0, 0.6, width + 0.5, depth + 0.5, 1.2, stone)
+    box("mid_body", 0, 0, 1.2 + body_h / 2.0, width, depth, body_h, plaster)
+    box("mid_stair_glass", 0, -(depth / 2.0 + 0.25), 1.2 + body_h / 2.0, 4.6, 0.5, body_h - 1.5, glass)
+    box("mid_door", 0, -(depth / 2.0 + 0.3), 1.9, 2.6, 0.4, 3.4, MATS["WindowFrame"])
+    box("mid_canopy", 0, -(depth / 2.0 + 1.1), 3.9, 6.4, 2.4, 0.35, metal)
+    for f in range(floors):
+        fz = 1.2 + f * floor_h
+        for sy in (-1.0, 1.0):
+            face_y = sy * (depth / 2.0)
+            for bx in (-width * 0.29, width * 0.29):
+                box("mid_balcony_slab", bx, face_y + sy * 0.85, fz + 0.15, 5.4, 1.7, 0.22, MATS["HeroTrim"])
+                box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
+                box("mid_balcony_door", bx, face_y + sy * 0.12, fz + 1.45, 3.6, 0.2, 2.3, dark_glass)
+            for wx in (-width * 0.13, width * 0.13, -width * 0.44, width * 0.44):
+                box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
+    box("mid_parapet", 0, 0, 1.2 + body_h + 0.4, width + 0.6, depth + 0.6, 0.8, stone)
+    box("mid_bulkhead", -width * 0.2, 0, 1.2 + body_h + 1.6, 7, 6, 2.4, plaster)
+    box("mid_hvac", width * 0.24, depth * 0.15, 1.2 + body_h + 1.2, 4.2, 3.4, 1.1, metal)
+
+
+def build_midrise_a():
+    _build_midrise(34.0, 26.0, 7)
+
+
+def build_midrise_b():
+    _build_midrise(30.0, 24.0, 10)
+
+
+def _build_warehouse(length, width, wall_h, roof_h, doors):
+    clad = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    frame = MATS["WindowFrame"]
+    box("wh_walls", 0, 0, wall_h / 2.0, length, width, wall_h, clad)
+    rib_step = length / 9.0
+    for i in range(10):
+        rx = -length / 2.0 + i * rib_step
+        box("wh_rib", rx, -(width / 2.0 + 0.14), wall_h / 2.0, 0.55, 0.28, wall_h, metal)
+        box("wh_rib", rx, width / 2.0 + 0.14, wall_h / 2.0, 0.55, 0.28, wall_h, metal)
+    gable_roof("wh_roof", 0, 0, wall_h + roof_h / 2.0, length + 1.4, width + 1.8, roof_h, metal, ridge_axis="x")
+    door_span = length * (0.62 if length > 60.0 else 0.5)
+    for i in range(doors):
+        dx = -door_span / 2.0 + (i + 0.5) * (door_span / doors)
+        box("wh_dock_door", dx, -(width / 2.0 + 0.22), 2.4, 4.3, 0.4, 4.7, frame)
+        box("wh_dock_bump", dx, -(width / 2.0 + 0.5), 0.5, 4.6, 0.7, 0.9, MATS["RoofDark"])
+    rbox("wh_dock_canopy", 0, -(width / 2.0 + 1.5), 5.6, door_span + 6, 3.0, 0.3, metal, rotation=(math.radians(14), 0, 0))
+    box("wh_office", length / 2.0 - 6.0, -(width / 2.0 + 2.2), wall_h * 0.42, 12, 4.6, wall_h * 0.84, MATS["FacadeMain"])
+    box("wh_office_glass", length / 2.0 - 6.0, -(width / 2.0 + 4.65), wall_h * 0.5, 11, 0.35, wall_h * 0.5, MATS["FacadeGlass"])
+    box("wh_end_door", length / 2.0 + 0.22, 0, 2.7, 0.4, 6.4, 5.4, frame)
+    for vx in (-length * 0.3, 0.0, length * 0.3):
+        cyl("wh_vent", vx, 0, wall_h + roof_h - 0.3, 0.85, 1.5, metal, vertices=10)
+
+
+def build_warehouse_large():
+    _build_warehouse(76.0, 32.0, 8.0, 5.0, 6)
+
+
+def build_warehouse_small():
+    _build_warehouse(46.0, 24.0, 6.5, 3.5, 4)
+
+
+def _build_container(material):
+    dark = MATS["RoofDark"]
+    metal = MATS["PropsMetal"]
+    box("cont_body", 0, 0, 1.42, 12.2, 2.44, 2.59, material)
+    for sy in (-0.92, 0.92):
+        box("cont_rail", 0, sy, 0.12, 12.2, 0.32, 0.24, dark)
+    for i in range(16):
+        rx = -5.7 + i * 0.76
+        box("cont_rib", rx, -1.26, 1.42, 0.34, 0.13, 2.3, material)
+        box("cont_rib", rx, 1.26, 1.42, 0.34, 0.13, 2.3, material)
+    for i in range(8):
+        rx = -5.25 + i * 1.5
+        box("cont_roof_rib", rx, 0, 2.76, 0.36, 2.2, 0.12, material)
+    for cx in (-6.02, 6.02):
+        for cy in (-1.14, 1.14):
+            box("cont_corner", cx, cy, 1.42, 0.3, 0.3, 2.59, dark)
+    box("cont_door_a", 6.18, -0.6, 1.42, 0.16, 1.12, 2.3, material)
+    box("cont_door_b", 6.18, 0.6, 1.42, 0.16, 1.12, 2.3, material)
+    for lx in (-0.95, -0.25, 0.25, 0.95):
+        cyl("cont_lockrod", 6.3, lx, 1.42, 0.07, 2.2, metal, vertices=6)
+
+
+def build_container_red():
+    _build_container(MATS["CityAccentRed"])
+
+
+def build_container_blue():
+    _build_container(MATS["CityAccentBlue"])
+
+
+def build_villa_b():
+    plaster = MATS["VillaPlaster"]
+    stone = MATS["VillaStone"]
+    wood = MATS["VillaWood"]
+    glass = MATS["VillaGlass"]
+    granite = MATS["VillaGranite"]
+    dark = MATS["RoofDark"]
+
+    box("villab_plinth", 0, 0, 0.18, 19.2, 15.24, 0.36, granite)
+    box("villab_main", -2.4, -1.2, 3.55, 12.5, 9.5, 6.4, plaster)
+    box("villab_main_roof", -2.4, -1.2, 6.95, 13.1, 10.1, 0.45, dark)
+    box("villab_upper", -4.0, -2.3, 7.95, 9.5, 7.4, 1.9, stone)
+    box("villab_upper_roof", -4.0, -2.3, 8.95, 10.0, 7.9, 0.3, dark)
+    box("villab_glass", -2.4, -6.05, 2.9, 9.2, 0.28, 4.4, glass)
+    for i in range(6):
+        box("villab_screen", -6.6 + i * 1.7, -6.35, 3.1, 0.28, 0.28, 5.2, wood)
+    box("villab_side_win", -8.75, -1.2, 4.4, 0.28, 5.5, 2.0, glass)
+    box("villab_upper_win", -4.0, -6.05, 7.95, 7.6, 0.28, 1.3, glass)
+    box("villab_garage", 6.4, -2.6, 1.95, 5.6, 6.5, 3.2, stone)
+    box("villab_garage_roof", 6.4, -2.6, 3.7, 6.1, 7.0, 0.35, dark)
+    box("villab_garage_door", 6.4, -5.95, 1.55, 4.4, 0.25, 2.5, MATS["TownGarage"])
+    box("villab_door", 2.6, -6.05, 1.6, 1.5, 0.25, 2.9, wood)
+    for px in (3.4, 8.6):
+        for py in (1.2, 5.6):
+            cyl("villab_pergola_post", px, py, 1.6, 0.14, 3.2, wood, vertices=8)
+    for i in range(5):
+        box("villab_pergola_beam", 3.2 + i * 1.4, 3.4, 3.3, 0.24, 5.6, 0.28, wood)
+
+
+def build_townhouse_b():
+    plaster = MATS["TownPlaster"]
+    stone = MATS["TownStone"]
+    trim = MATS["TownTrim"]
+    roof = MATS["TownRoof"]
+    glass = MATS["WindowGlassDark"]
+
+    box("townb_slab", 0, 0, 0.15, 18.87, 16.37, 0.3, stone)
+    for ux in (-4.65, 4.65):
+        box("townb_ground", ux, -1.0, 1.95, 8.9, 10.6, 3.3, stone)
+        box("townb_upper", ux, -1.0, 5.25, 8.9, 10.6, 3.3, plaster)
+        box("townb_band", ux, -1.0, 3.7, 9.1, 10.8, 0.35, trim)
+        gable_roof("townb_roof", ux, -1.0, 9.05, 9.5, 11.4, 4.3, roof, ridge_axis="y")
+        box("townb_bay", ux - 1.9, -6.9, 2.7, 3.6, 1.3, 5.2, plaster)
+        box("townb_bay_glass", ux - 1.9, -7.6, 2.9, 3.0, 0.25, 4.2, glass)
+        box("townb_bay_roof", ux - 1.9, -6.9, 5.5, 4.0, 1.7, 0.3, roof)
+        box("townb_garage", ux + 2.2, -6.45, 1.45, 3.3, 0.3, 2.4, MATS["TownGarage"])
+        for wx in (-2.6, 0.2, 3.0):
+            box("townb_window", ux + wx, -6.42, 5.5, 1.5, 0.22, 1.7, glass)
+        box("townb_chimney", ux + 2.8, 1.8, 10.4, 1.1, 1.1, 2.6, stone)
+    box("townb_door_l", -1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"])
+    box("townb_door_r", 1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoorAccent"])
+    box("townb_porch_roof", 0, -7.0, 3.35, 5.4, 1.6, 0.28, roof)
+    for px in (-2.4, 2.4):
+        cyl("townb_porch_post", px, -7.6, 1.65, 0.13, 3.3, trim, vertices=8)
+
+
+def build_barn():
+    red = MATS["CityBarnRed"]
+    white = MATS["CityWhitePaint"]
+    dark = MATS["RoofDark"]
+    box("barn_walls", 0, 0, 3.5, 30, 14, 7, red)
+    gable_roof("barn_roof", 0, 0, 8.7, 31.4, 15.8, 3.4, dark, ridge_axis="x")
+    box("barn_door", -15.15, 0, 2.6, 0.35, 6.6, 5.2, white)
+    box("barn_door_in", -15.32, 0, 2.6, 0.2, 5.8, 4.5, red)
+    rbox("barn_brace_a", -15.45, 0, 2.6, 0.16, 6.4, 0.5, white, rotation=(math.radians(48), 0, 0))
+    rbox("barn_brace_b", -15.45, 0, 2.6, 0.16, 6.4, 0.5, white, rotation=(math.radians(-48), 0, 0))
+    box("barn_loft", -15.25, 0, 7.6, 0.3, 2.2, 2.0, white)
+    box("barn_loft_glass", -15.4, 0, 7.6, 0.2, 1.7, 1.5, MATS["WindowGlassDark"])
+    for wx in (-9.0, -3.0, 3.0, 9.0):
+        box("barn_win", wx, -7.12, 4.2, 1.5, 0.22, 1.6, white)
+        box("barn_win_glass", wx, -7.2, 4.2, 1.2, 0.15, 1.3, MATS["WindowGlassDark"])
+    box("barn_leanto", -2, 8.4, 1.7, 17, 3.4, 3.4, red)
+    rbox("barn_leanto_roof", -2, 8.6, 3.6, 17.6, 4.4, 0.3, dark, rotation=(math.radians(10), 0, 0))
+    box("barn_cupola", 0, 0, 11.1, 2.2, 2.2, 1.6, white)
+    cupola_roof = cone("barn_cupola_roof", 0, 0, 12.5, 1.9, 0.15, 1.4, dark, vertices=4)
+    cupola_roof.rotation_euler = (0, 0, math.radians(45))
+
+
+def build_greenhouse():
+    glass = MATS["PropsGlass"]
+    metal = MATS["PropsMetal"]
+    green = MATS["CityFieldGreen"]
+    box("gh_base", 0, 0, 0.4, 44, 14, 0.8, MATS["ConcreteLight"])
+    angles = (-1.02, -0.51, 0.0, 0.51, 1.02)
+    for a in angles:
+        gy = math.sin(a) * 6.9
+        gz = 0.8 + math.cos(a) * 5.1
+        rbox("gh_glass", 0, gy, gz, 43.6, 3.6, 0.1, glass, rotation=(a, 0, 0))
+    for rib_x in range(-21, 22, 6):
+        for a in angles:
+            gy = math.sin(a) * 7.0
+            gz = 0.8 + math.cos(a) * 5.2
+            rbox("gh_rib", rib_x, gy, gz, 0.32, 3.7, 0.22, metal, rotation=(a, 0, 0))
+    for sy in (-6.9, 6.9):
+        box("gh_side_wall", 0, sy, 1.8, 43.6, 0.12, 2.0, glass)
+    for ex in (-21.9, 21.9):
+        box("gh_end", ex, 0, 2.4, 0.3, 12.6, 3.4, glass)
+        box("gh_end_peak", ex, 0, 5.3, 0.3, 8.6, 2.6, glass)
+        box("gh_end_frame", ex, 0, 4.4, 0.35, 9.0, 0.5, metal)
+    box("gh_door", -22.1, 0, 1.7, 0.3, 2.4, 3.0, MATS["WindowFrame"])
+    for row_y in (-4.4, -1.5, 1.5, 4.4):
+        box("gh_crops", 0, row_y, 1.25, 40, 1.7, 0.95, green)
+
+
+def build_port_crane():
+    yellow = MATS["CitySignYellow"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+    for ry in (-7.0, 7.0):
+        box("crane_rail", 0, ry, 0.25, 26, 1.3, 0.5, dark)
+    for lx in (-9.0, 9.0):
+        for ly in (-7.0, 7.0):
+            box("crane_leg", lx, ly, 15, 1.7, 1.7, 30, yellow)
+    for ly in (-7.0, 7.0):
+        box("crane_beam", 0, ly, 30.6, 20.5, 1.5, 1.8, yellow)
+    for lx in (-9.0, 9.0):
+        box("crane_cross", lx, 0, 30.6, 1.5, 15.5, 1.8, yellow)
+    box("crane_deck", 0, 0, 32.2, 15, 11, 1.6, metal)
+    box("crane_machine", -3.5, 2.5, 34.4, 6.5, 5.5, 3.0, yellow)
+    for ax in (-2.6, 2.6):
+        rbox("crane_aframe", ax, 0, 40.5, 1.1, 1.1, 16.5, yellow, rotation=(0.30, 0, 0))
+        rbox("crane_aframe_b", ax, 0, 40.5, 1.1, 1.1, 16.5, yellow, rotation=(-0.30, 0, 0))
+    rbox("crane_jib", 0, -20.7, 45.0, 1.7, 44, 1.9, yellow, rotation=(math.radians(-30), 0, 0))
+    rbox("crane_counterjib", 0, 8.5, 35.2, 1.5, 17, 1.7, yellow, rotation=(math.radians(6), 0, 0))
+    box("crane_counterweight", 0, 15.5, 33.4, 4.2, 3.2, 4.6, dark)
+    tube_between("crane_tie_a", (0, 0, 48.6), (0, -38.5, 55.6), 0.22, 0.22, metal, vertices=6)
+    tube_between("crane_tie_b", (0, 0, 48.6), (0, 16.4, 36.2), 0.22, 0.22, metal, vertices=6)
+    box("crane_cab", 3.1, -4.5, 30.2, 3.0, 3.4, 3.0, MATS["FacadeGlass"])
+    tube_between("crane_cable", (0, -38.5, 55.2), (0, -38.5, 21.0), 0.09, 0.09, MATS["WindowFrame"], vertices=6)
+    box("crane_spreader", 0, -38.5, 20.4, 6.2, 2.4, 1.1, MATS["CityAccentRed"])
+    box("crane_load", 0, -38.5, 18.2, 12.0, 2.4, 2.5, MATS["CityAccentBlue"])
 
 
 main()

@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.1-native-alpha"'), 'Native project version metadata must match 0.3.1-native-alpha');
-assert(preset.includes('version/code=67'), 'Native 0.3.1 must bump Android versionCode to 67');
-assert(preset.includes('version/name="0.3.1-native-alpha"'), 'Native version name must be 0.3.1-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.1-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.2-native-alpha"'), 'Native project version metadata must match 0.3.2-native-alpha');
+assert(preset.includes('version/code=68'), 'Native 0.3.2 must bump Android versionCode to 68');
+assert(preset.includes('version/name="0.3.2-native-alpha"'), 'Native version name must be 0.3.2-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.2-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.1"') && preset.includes('application/product_version="0.3.1"'), 'Desktop Windows version metadata must match native 0.3.1');
+assert(preset.includes('application/file_version="0.3.2"') && preset.includes('application/product_version="0.3.2"'), 'Desktop Windows version metadata must match native 0.3.2');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -702,6 +702,10 @@ for (const kind of ['rt7-terminal', 'rt7-atc', 'rt7-plane', 'rt7-cooling', 'rt7-
 }
 assert(data.landmarks.filter((l) => l.kind === 'rt7-school').length >= 10, 'RichTown 0.3.1 needs one school per residential district (10)');
 assert(data.roads.some((r) => r.id.startsWith('rt7-runway')), 'RichTown 0.3.1 airport runway roads are missing');
+const cityModelSet032 = new Set(['office_tower_low', 'office_tower_mid', 'office_tower_high', 'midrise_a', 'midrise_b', 'warehouse_large', 'warehouse_small', 'container_red', 'container_blue', 'villa_b', 'townhouse_b', 'barn', 'greenhouse']);
+assert(data.buildings.filter((b) => cityModelSet032.has(b.model)).length >= 700, 'RichTown 0.3.2 must place at least 700 fixed-scale Blender city archetypes');
+assert(data.stats.cityBlenderBuildings >= 700, 'RichTown 0.3.2 stats must count the Blender city archetypes');
+assert(data.landmarks.filter((l) => l.kind === 'rt7-crane').length >= 3, 'RichTown 0.3.2 needs three port cranes on the canal quay');
 assert(data.spawn.x === 5 && data.spawn.z === 640, 'Unexpected RichTown 7x7 spawn point');
 
 const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
@@ -882,6 +886,35 @@ if (requireAssets) {
     'assets/props/traffic_signal_short.glb',
     'assets/props/traffic_signal_long.glb',
     'assets/props/dubai_premium_cafe.glb',
+    'assets/props/school.glb',
+    'assets/props/airport_terminal.glb',
+    'assets/props/atc_tower.glb',
+    'assets/props/hangar_large.glb',
+    'assets/props/hangar_small.glb',
+    'assets/props/airliner.glb',
+    'assets/props/cooling_tower.glb',
+    'assets/props/reactor.glb',
+    'assets/props/chimney.glb',
+    'assets/props/radar_station.glb',
+    'assets/props/watchtower.glb',
+    'assets/props/storage_tank.glb',
+    'assets/props/silo.glb',
+    'assets/props/afv.glb',
+    'assets/props/stadium.glb',
+    'assets/props/office_tower_low.glb',
+    'assets/props/office_tower_mid.glb',
+    'assets/props/office_tower_high.glb',
+    'assets/props/midrise_a.glb',
+    'assets/props/midrise_b.glb',
+    'assets/props/warehouse_large.glb',
+    'assets/props/warehouse_small.glb',
+    'assets/props/container_red.glb',
+    'assets/props/container_blue.glb',
+    'assets/props/villa_b.glb',
+    'assets/props/townhouse_b.glb',
+    'assets/props/barn.glb',
+    'assets/props/greenhouse.glb',
+    'assets/props/port_crane.glb',
     'assets/vegetation/plants.glb',
     'assets/vegetation/palm_date.glb',
     'assets/vegetation/palm_royal.glb',
@@ -1193,6 +1226,14 @@ for (const marker of ['rt7_airport_0310', 'rt7_npp_0310', 'rt7_milbase_0310', 'r
   assert(worldScript.includes(marker), `0.3.1 world builder marker is missing: ${marker}`);
 }
 assert(worldMapScript.includes('rt7-terminal') && worldMapScript.includes('rt7-school'), '0.3.1 world map must know the airport/school POIs');
+// 0.3.2: every building/mega-structure is a Blender GLB (city pack).
+for (const marker of ['CITY_MODELS_0320', 'city_blender_instances_0320', 'city_landmark_glb_0320', 'rt7_cranes_0320', 'CityWhitePaint', 'CityFieldGreen', 'res://assets/props/stadium.glb', 'res://assets/props/cooling_tower.glb', 'res://assets/props/airport_terminal.glb', 'res://assets/props/port_crane.glb']) {
+  assert(worldScript.includes(marker), `0.3.2 world builder marker is missing: ${marker}`);
+}
+assert(mainScript.includes('city_blender_instances_0320'), '0.3.2 main smoke must verify the Blender city pack');
+for (const cityGlb of ['school.glb', 'airport_terminal.glb', 'atc_tower.glb', 'hangar_large.glb', 'hangar_small.glb', 'airliner.glb', 'cooling_tower.glb', 'reactor.glb', 'chimney.glb', 'radar_station.glb', 'watchtower.glb', 'storage_tank.glb', 'silo.glb', 'afv.glb', 'stadium.glb', 'office_tower_low.glb', 'office_tower_mid.glb', 'office_tower_high.glb', 'midrise_a.glb', 'midrise_b.glb', 'warehouse_large.glb', 'warehouse_small.glb', 'container_red.glb', 'container_blue.glb', 'villa_b.glb', 'townhouse_b.glb', 'barn.glb', 'greenhouse.glb', 'port_crane.glb']) {
+  assert(syncScript.includes(cityGlb), `0.3.2 sync must stage ${cityGlb}`);
+}
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
