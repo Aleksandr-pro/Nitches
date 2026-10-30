@@ -120,13 +120,17 @@ func _is_desert() -> bool:
     return _world != null and _world.world_id == "desert"
 
 
+func _is_forest() -> bool:
+    return _world != null and _world.world_id == "greenforest"
+
+
 func bind(world: NativeWorldBuilder, vehicle: NativeVehicle) -> void:
     _world = world
     _vehicle = vehicle
     if _world != null:
         _data = _world.get_world_data().duplicate(true)
     if _title_label != null:
-        _title_label.text = "КАРТА: ПУСТЫННЫЙ КАНЬОН" if _is_desert() else "КАРТА RICHTOWN"
+        _title_label.text = "КАРТА: ПУСТЫННЫЙ КАНЬОН" if _is_desert() else ("КАРТА: ЗЕЛЁНЫЙ ЛЕС" if _is_forest() else "КАРТА RICHTOWN")
     _build_pois()
     _build_labels()
     _rebuild_poi_list()
@@ -192,6 +196,7 @@ func get_smoke_state() -> Dictionary:
         "zoom_label_tiers_0234": true,
     "world_id": _world.world_id if _world != null else "",
     "desert_map_0247": _is_desert(),
+    "forest_map_0254": _is_forest(),
     }
 
 
@@ -508,7 +513,7 @@ func _poi_sort(a: Dictionary, b: Dictionary) -> bool:
 ## unmarked on purpose: they are physical chests to discover.
 func _build_desert_pois() -> void:
     var spawn: Dictionary = _data.get("spawn", {"x": 612.0, "z": 2052.0})
-    _add_poi("spawn", "Старт • городок Дюны", "Старт", float(spawn.get("x", 612.0)), float(spawn.get("z", 2052.0)), 1, Vector2(10.0, 8.0))
+    _add_poi("spawn", "Старт • Лесная Слобода" if _is_forest() else "Старт • городок Дюны", "Старт", float(spawn.get("x", 612.0)), float(spawn.get("z", 2052.0)), 1, Vector2(10.0, 8.0))
     var index := 0
     for landmark_variant in _data.get("landmarks", []):
         var landmark: Dictionary = landmark_variant
@@ -517,7 +522,7 @@ func _build_desert_pois() -> void:
             continue
         index += 1
         _add_poi("lm_%d" % index, lname, "Достопримечательность", float(landmark.get("x", 0.0)), float(landmark.get("z", 0.0)), 2)
-    var dz: Dictionary = _data.get("desert", {})
+    var dz: Dictionary = _data.get("forest" if _is_forest() else "desert", {})
     var game: Dictionary = dz.get("game", {})
     index = 0
     for ft_variant in game.get("fastTravel", []):
@@ -552,11 +557,11 @@ func _build_desert_pois() -> void:
         for park_variant in _world.get_park_map_entries():
             var park: Dictionary = park_variant
             var rect: Rect2 = park.get("rect", Rect2())
-            _add_poi("oasis", "Оазис • озеро и пальмы", "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 1)
+            _add_poi(String(park.get("id", "park")), "Центральные луга" if _is_forest() else "Оазис • озеро и пальмы", "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 1)
 
 
 func _road_labels_data() -> Array:
-    if not _is_desert():
+    if not (_is_desert() or _is_forest()):
         return ROAD_LABELS
     var labels: Array = []
     for road_variant in _data.get("roads", []):
@@ -567,7 +572,7 @@ func _road_labels_data() -> Array:
             continue
         var prio := 1 if String(road.get("surface", "asphalt")) == "asphalt" else 3
         var spots: Array = [samples.size() / 2]
-        if String(road.get("id", "")) == "dz-ring":
+        if String(road.get("id", "")) == "dz-ring" or String(road.get("id", "")) == "gf-ring":
             spots = [samples.size() / 5, samples.size() * 2 / 5, samples.size() * 3 / 5, samples.size() * 4 / 5]
         for si in spots:
             var s: Array = samples[int(si)]
@@ -577,7 +582,7 @@ func _road_labels_data() -> Array:
 
 func _build_pois() -> void:
     _pois.clear()
-    if _is_desert():
+    if _is_desert() or _is_forest():
         _build_desert_pois()
         _pois.sort_custom(_poi_sort)
         if not _pois.is_empty():
@@ -617,7 +622,7 @@ func _build_pois() -> void:
                 _add_poi("coast_hotel_south", "Отель побережья — юг", "Отель", x, z, 2)
 
     var spawn: Dictionary = _data.get("spawn", {"x": 760.0, "z": 330.0})
-    _add_poi("spawn", "Старт • Shelby GT500", "Старт", float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)), 1, Vector2(10.0, 8.0))
+    _add_poi("spawn", "Старт • Shelbie GT500", "Старт", float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)), 1, Vector2(10.0, 8.0))
     _add_poi("boulevard_cafe", "Бульварные кафе", "Кафе", 738.0, 23.0, 2, Vector2(-112.0, -10.0))
 
     if _world != null:
@@ -874,7 +879,7 @@ func _emit_destination_changed() -> void:
 
 
 func _district_name_at(x: float, z: float) -> String:
-    var best_name := "Пустынный каньон" if _is_desert() else "RichTown"
+    var best_name := "Пустынный каньон" if _is_desert() else ("Зелёный лес" if _is_forest() else "RichTown")
     var best_score := INF
     var point := Vector2(x, z)
     for district_variant in _data.get("districts", []):
@@ -1061,12 +1066,20 @@ func _draw_map() -> void:
     if _canvas == null:
         return
     var rect := Rect2(Vector2.ZERO, _canvas.size)
-    _canvas.draw_rect(rect, Color(0.13, 0.10, 0.06, 1.0) if _is_desert() else Color(0.055, 0.11, 0.13, 1.0), true)
+    _canvas.draw_rect(rect, Color(0.13, 0.10, 0.06, 1.0) if _is_desert() else (Color(0.05, 0.10, 0.05, 1.0) if _is_forest() else Color(0.055, 0.11, 0.13, 1.0)), true)
     if _data.is_empty():
         _canvas.draw_line(Vector2(12.0, 12.0), _canvas.size - Vector2(12.0, 12.0), Color(1.0, 0.2, 0.1), 3.0, true)
         return
 
-    if _is_desert():
+    if _is_forest():
+        _draw_zone("darkForest", Color(0.10, 0.26, 0.12, 0.55))
+        _draw_zone("hills", Color(0.34, 0.40, 0.30, 0.45))
+        _draw_zone("meadows", Color(0.42, 0.60, 0.26, 0.42))
+        _draw_zone("farmValley", Color(0.62, 0.54, 0.30, 0.42))
+        _draw_zone("birchGrove", Color(0.30, 0.52, 0.24, 0.45))
+        _draw_zone("swamp", Color(0.24, 0.38, 0.34, 0.60))
+        _draw_zone("gfLake", Color(0.10, 0.48, 0.66, 0.90))
+    elif _is_desert():
         _draw_zone("salt", Color(0.92, 0.90, 0.82, 0.80))
         _draw_zone("dunes", Color(0.85, 0.66, 0.38, 0.50))
         _draw_zone("plateau", Color(0.62, 0.44, 0.32, 0.42))

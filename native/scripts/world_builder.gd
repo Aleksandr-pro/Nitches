@@ -25,6 +25,14 @@ const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1
 ## terrain culling) must use instead of the RichTown constant.
 var world_id := "richtown"
 var _is_desert := false
+var _is_forest := false
+var _gf_field_rects: Array[Rect2] = []
+var _gf_lake_y := 0.0
+var _gf_bird_flocks: Array[Dictionary] = []
+var _gf_leaf_emitter: GPUParticles3D
+var _stream_focus_pos := Vector3.ZERO
+var _gf_scatter_total_acc := 0
+var _gf_scatter_trees_acc := 0
 var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
@@ -140,6 +148,12 @@ var spawn_transform := Transform3D.IDENTITY
 var time_of_day := "day"
 var build_error := ""
 var is_built := false
+var _build_stages: Array[Dictionary] = []
+var _build_stage_index := 0
+var _build_profile_parts: Array[String] = []
+var _build_completed_weight := 0.0
+var _build_total_weight := 1.0
+var _build_started := false
 
 var _terrain: Dictionary = {}
 var _textures: Dictionary = {}
@@ -212,57 +226,209 @@ func _process(delta: float) -> void:
 			fmod(_elapsed * speed * 0.63, 1.0),
 			0.0
 		)
-	if _is_desert:
+	if _is_desert or _is_forest:
 		_dz_animate(delta)
+	if _gf_leaf_emitter != null and is_instance_valid(_gf_leaf_emitter):
+		_gf_leaf_emitter.global_position = Vector3(_stream_focus_pos.x, _stream_focus_pos.y + 10.0, _stream_focus_pos.z)
 
 
 func build_world() -> Dictionary:
 	if is_built:
 		return get_stats() if build_error.is_empty() else {"error": build_error}
+	begin_build_world()
+	while not is_built:
+		build_world_step()
+	if data.is_empty():
+		return {"error": build_error}
+	return get_stats()
 
+
+## 0.2.52 staged build: prepare the ordered build steps without
+## running them.  Main can execute one step per rendered frame
+## behind the branded loading screen, while the synchronous
+## build_world() above keeps smoke/screenshot runs deterministic.
+func begin_build_world() -> void:
+	if is_built or _build_started:
+		return
+	_build_started = true
 	_is_desert = world_id == "desert"
-	_active_aabb = DESERT_AABB if _is_desert else WORLD_AABB
+	_is_forest = world_id == "greenforest"
+	_active_aabb = DESERT_AABB if (_is_desert or _is_forest) else WORLD_AABB
 	_load_data()
+	_build_stages.clear()
+	_build_stage_index = 0
+	_build_profile_parts.clear()
+	_build_completed_weight = 0.0
+	_build_total_weight = 0.0
 	if data.is_empty():
 		if build_error.is_empty():
 			build_error = "Native world data could not be loaded"
 		spawn_transform = make_transform(FALLBACK_SPAWN_POSITION, 0.0, Vector3.ONE)
-		_create_collision_root()
-		_build_environment()
-		_build_emergency_spawn_pad()
-		_build_skyline_backdrop()
-		set_time_of_day("day")
-		is_built = true
-		return {"error": build_error}
+		_queue_emergency_build_stages()
+	else:
+		_terrain = data.get("terrain", {})
+		if _is_desert:
+			_queue_desert_build_stages()
+		elif _is_forest:
+			_queue_forest_build_stages()
+		else:
+			_queue_richtown_build_stages()
+	if _build_total_weight <= 0.0:
+		_build_total_weight = 1.0
 
-	_terrain = data.get("terrain", {})
-	if _is_desert:
-		return _build_desert_world()
-	_expand_sail_island_0237()
-	_compute_spawn_transform()
-	_build_road_surface_index()
-	_sanitize_canonical_buildings_0237()
-	_sanitize_canonical_pools_0237()
-	_create_collision_root()
-	_build_environment()
-	_build_terrain()
-	_build_water_and_pools()
-	_build_roads()
-	_build_buildings()
-	_build_landmarks()
-	_build_sail_island_resort_0237()
-	_build_vegetation()
-	_build_ground_cover()
-	_build_street_lamps()
-	_build_bus_shelters()
-	_build_benches()
-	_build_city_details()
-	_build_district_infrastructure()
-	_build_parks()
-	_flush_batched_models()
-	_build_reflection_probes()
-	_build_world_bounds()
-	_build_skyline_backdrop()
+
+func build_world_step() -> Dictionary:
+	if is_built:
+		_attach_collision_root()
+		return get_build_progress_state()
+	if not _build_started:
+		begin_build_world()
+	if _build_stage_index >= _build_stages.size():
+		is_built = true
+		return get_build_progress_state()
+	var stage: Dictionary = _build_stages[_build_stage_index]
+	var stage_label := String(stage.get("label", "Строим мир"))
+	var stage_weight := float(stage.get("weight", 1.0))
+	var callable_variant: Variant = stage.get("callable", Callable())
+	var stage_started_msec := Time.get_ticks_msec()
+	if callable_variant is Callable:
+		var stage_callable: Callable = callable_variant
+		if stage_callable.is_valid():
+			stage_callable.call()
+		elif build_error.is_empty():
+			build_error = "Native world build stage is missing: %s" % stage_label
+	elif build_error.is_empty():
+		build_error = "Native world build stage is invalid: %s" % stage_label
+	# 0.2.54 diagnostics: cumulative build profile after every stage.
+	# The GreenForest smoke timed out at 600 s in CI and the same wall
+	# looked like a mid-loading crash on a phone.  The last flushed
+	# line always lists every completed stage with its cost, even if
+	# the process is killed inside the next stage.
+	_build_profile_parts.append("%s=%dms" % [stage_label, Time.get_ticks_msec() - stage_started_msec])
+	print("[native-build] world=%s profile %s" % [world_id, "; ".join(PackedStringArray(_build_profile_parts))])
+	if is_built:
+		_attach_collision_root()
+	_build_stage_index += 1
+	_build_completed_weight += maxf(stage_weight, 0.01)
+	if _build_stage_index >= _build_stages.size() and not is_built:
+		is_built = true
+	var state := get_build_progress_state()
+	state["completed_stage"] = stage_label
+	return state
+
+
+func get_build_progress_state() -> Dictionary:
+	var stage_label := "Мир готов"
+	if _build_stage_index < _build_stages.size():
+		stage_label = String(_build_stages[_build_stage_index].get("label", stage_label))
+	elif _build_stage_index > 0:
+		stage_label = String(_build_stages[_build_stage_index - 1].get("label", stage_label))
+	var fraction: float = clampf(_build_completed_weight / maxf(_build_total_weight, 0.001), 0.0, 1.0)
+	if is_built:
+		fraction = 1.0
+	return {
+		"stage": stage_label,
+		"fraction": fraction,
+		"finished": is_built,
+		"stage_index": _build_stage_index,
+		"stage_count": _build_stages.size(),
+	}
+
+
+func is_build_finished() -> bool:
+	return is_built
+
+
+func _add_build_stage(label: String, stage_callable: Callable, weight: float = 1.0) -> void:
+	var safe_weight := maxf(weight, 0.01)
+	_build_stages.append({"label": label, "callable": stage_callable, "weight": safe_weight})
+	_build_total_weight += safe_weight
+
+
+func _queue_emergency_build_stages() -> void:
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.5)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Создаём аварийную площадку", Callable(self, "_build_emergency_spawn_pad"), 0.5)
+	_add_build_stage("Рисуем дальний горизонт", Callable(self, "_build_skyline_backdrop"), 0.5)
+	_add_build_stage("Завершаем аварийный мир", Callable(self, "_finish_emergency_build"), 0.5)
+
+
+func _queue_richtown_build_stages() -> void:
+	_add_build_stage("Подготавливаем остров Паруса", Callable(self, "_expand_sail_island_0237"), 1.0)
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Проверяем здания у дорог", Callable(self, "_sanitize_canonical_buildings_0237"), 1.5)
+	_add_build_stage("Проверяем бассейны и участки", Callable(self, "_sanitize_canonical_pools_0237"), 0.8)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Строим ландшафт RichTown", Callable(self, "_build_terrain"), 3.0)
+	_add_build_stage("Заполняем море и бассейны", Callable(self, "_build_water_and_pools"), 1.0)
+	_add_build_stage("Прокладываем дороги", Callable(self, "_build_roads"), 3.0)
+	_add_build_stage("Возводим здания", Callable(self, "_build_buildings"), 4.0)
+	_add_build_stage("Строим достопримечательности", Callable(self, "_build_landmarks"), 2.0)
+	_add_build_stage("Обустраиваем остров Паруса", Callable(self, "_build_sail_island_resort_0237"), 2.0)
+	_add_build_stage("Высаживаем деревья и пальмы", Callable(self, "_build_vegetation"), 3.0)
+	_add_build_stage("Добавляем газоны и клумбы", Callable(self, "_build_ground_cover"), 2.0)
+	_add_build_stage("Ставим уличные фонари", Callable(self, "_build_street_lamps"), 1.0)
+	_add_build_stage("Ставим остановки", Callable(self, "_build_bus_shelters"), 0.5)
+	_add_build_stage("Расставляем скамейки", Callable(self, "_build_benches"), 0.5)
+	_add_build_stage("Добавляем городские детали", Callable(self, "_build_city_details"), 2.0)
+	_add_build_stage("Строим инфраструктуру районов", Callable(self, "_build_district_infrastructure"), 2.0)
+	_add_build_stage("Обустраиваем парки", Callable(self, "_build_parks"), 2.0)
+	_add_build_stage("Собираем модели города", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы мира", Callable(self, "_build_world_bounds"), 0.5)
+	_add_build_stage("Рисуем дальний горизонт", Callable(self, "_build_skyline_backdrop"), 1.0)
+	_add_build_stage("Финализируем RichTown", Callable(self, "_finish_richtown_build"), 1.0)
+
+
+func _queue_desert_build_stages() -> void:
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги каньона", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Формируем дюны и каньоны", Callable(self, "_build_desert_terrain"), 4.0)
+	_add_build_stage("Заполняем озеро оазиса", Callable(self, "_build_desert_water"), 0.5)
+	_add_build_stage("Прокладываем трассы и тропы", Callable(self, "_build_desert_roads"), 4.0)
+	_add_build_stage("Строим городок и ранчо", Callable(self, "_build_desert_structures"), 3.0)
+	_add_build_stage("Наполняем пустыню деталями", Callable(self, "_build_desert_scatter"), 4.0)
+	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
+	_add_build_stage("Собираем модели пустыни", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_desert_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы котловины", Callable(self, "_build_desert_bounds"), 0.5)
+	_add_build_stage("Рисуем дальние месы", Callable(self, "_build_desert_skyline"), 1.0)
+	_add_build_stage("Финализируем Пустынный каньон", Callable(self, "_finish_desert_build"), 1.0)
+
+
+func _queue_forest_build_stages() -> void:
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем лесные дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Формируем холмы и долины", Callable(self, "_build_forest_terrain"), 4.0)
+	_add_build_stage("Заполняем озеро и реку", Callable(self, "_build_forest_water"), 0.5)
+	_add_build_stage("Прокладываем дороги и мосты", Callable(self, "_build_desert_roads"), 4.0)
+	_add_build_stage("Строим посёлок, ферму и лесопилку", Callable(self, "_build_desert_structures"), 3.0)
+	# 0.2.55: scatter is built in three slices so one stage never
+	# monopolises a loading frame long enough to trip Android ANR.
+	_add_build_stage("Высаживаем лес: деревья", Callable(self, "_gf_scatter_build").bind(["spruce", "pine", "birch", "leafy", "oak", "dead_tree"]), 2.2)
+	_add_build_stage("Высаживаем лес: подлесок", Callable(self, "_gf_scatter_build").bind(["bush", "fern", "flower", "mushroom", "stump", "fallen_log", "reed", "grass_tuft"]), 1.0)
+	_add_build_stage("Высаживаем лес: камни и поля", Callable(self, "_gf_scatter_build").bind(["hay_bale", "crop_wheat", "crop_corn", "crop_sunflower", "rock_small", "rock_medium", "rock_large"]), 0.8)
+	_add_build_stage("Добавляем оленей, птиц и дым", Callable(self, "_build_forest_extras"), 0.5)
+	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
+	_add_build_stage("Собираем модели леса", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_forest_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы леса", Callable(self, "_build_forest_bounds"), 0.5)
+	_add_build_stage("Рисуем дальние хребты", Callable(self, "_build_forest_skyline"), 1.0)
+	_add_build_stage("Финализируем Зелёный лес", Callable(self, "_finish_forest_build"), 1.0)
+
+
+func _finish_emergency_build() -> void:
+	set_time_of_day("day")
+	is_built = true
+
+
+func _finish_richtown_build() -> void:
 	_enhancement_stats["near_field_lod_0243"] = true
 	_enhancement_stats["tree_detail_end_m"] = 105.0
 	_enhancement_stats["palm_detail_end_m"] = 130.0
@@ -286,7 +452,28 @@ func build_world() -> Dictionary:
 	_build_foliage_grid()
 	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
 	is_built = true
-	return get_stats()
+
+
+func _finish_desert_build() -> void:
+	_enhancement_stats["desert_world_0247"] = true
+	_enhancement_stats["desert_screenshot_audit_0253"] = true
+	_enhancement_stats["desert_rock_triplanar_0253"] = true
+	_enhancement_stats["desert_scatter_road_audit_0253"] = true
+	_enhancement_stats["desert_oasis_deck_0253"] = true
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	set_time_of_day("day")
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_build_foliage_grid()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
+	is_built = true
 
 
 func get_stats() -> Dictionary:
@@ -499,6 +686,8 @@ func get_park_rects() -> Array:
 func get_park_map_entries() -> Array:
 	if _is_desert:
 		return [{"id": "oasis", "label": "Оазис", "rect": Rect2(3030.0, 3180.0, 640.0, 640.0)}]
+	if _is_forest:
+		return [{"id": "meadows", "label": "Центральные луга", "rect": Rect2(1150.0, 1250.0, 1400.0, 1300.0)}]
 	var entries: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -914,17 +1103,21 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 func get_surface_at(world_position: Vector3) -> Dictionary:
 	var clearance := _road_clearance_xz(world_position)
 	if clearance <= 0.0:
-		if _is_desert and _road_surface_kind_at(world_position) == "gravel":
+		if (_is_desert or _is_forest) and _road_surface_kind_at(world_position) == "gravel":
 			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
 		return {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 	if clearance <= 2.05:
+		if _is_forest:
+			return {"kind": "dirt", "label": "ГРУНТ", "mu": 0.68, "rolling_resistance": 0.060}
 		if _is_desert:
 			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		return {"kind": "sidewalk", "label": "БЕТОН", "mu": 0.93, "rolling_resistance": 0.021}
 
 	var h := height_at(world_position.x, world_position.z)
 	var is_water := false
-	if _is_desert:
+	if _is_forest:
+		is_water = _in_zone(world_position.x, world_position.z, "gfLake") and world_position.y < 15.3
+	elif _is_desert:
 		is_water = _in_zone(world_position.x, world_position.z, "oasisLake") and world_position.y < 27.4
 	else:
 		is_water = ((_in_zone(world_position.x, world_position.z, "sea") or _in_zone(world_position.x, world_position.z, "marina")) and h < 0.45) or world_position.y < 0.18
@@ -950,8 +1143,16 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		"gravel":
 			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
-		"rock":
+		"rock", "gf_rock":
 			return {"kind": "rock", "label": "КАМЕНЬ", "mu": 0.74, "rolling_resistance": 0.052}
+		"gf_meadow":
+			return {"kind": "grass", "label": "ТРАВА", "mu": 0.62, "rolling_resistance": 0.078}
+		"gf_forest_floor":
+			return {"kind": "forest_floor", "label": "ПОДСТИЛКА", "mu": 0.58, "rolling_resistance": 0.090}
+		"gf_mud":
+			return {"kind": "mud", "label": "ГРЯЗЬ", "mu": 0.42, "rolling_resistance": 0.140}
+		"gf_field":
+			return {"kind": "field", "label": "ПОЛЕ", "mu": 0.55, "rolling_resistance": 0.100}
 		"concrete":
 			return {"kind": "concrete", "label": "БЕТОН", "mu": 0.89, "rolling_resistance": 0.024}
 		"plaza":
@@ -1192,7 +1393,7 @@ func set_time_of_day(mode: String) -> void:
 
 func _load_data() -> void:
 	build_error = ""
-	var data_path := DESERT_DATA_PATH if world_id == "desert" else WORLD_DATA_PATH
+	var data_path := DESERT_DATA_PATH if world_id == "desert" else (FOREST_DATA_PATH if world_id == "greenforest" else WORLD_DATA_PATH)
 	if not FileAccess.file_exists(data_path):
 		build_error = "Native world data is missing from the exported game: %s" % data_path
 		push_error(build_error)
@@ -1269,7 +1470,19 @@ func _create_collision_root() -> void:
 	_collision_root.name = "WorldColliders"
 	_collision_root.collision_layer = 1
 	_collision_root.collision_mask = 0
-	add_child(_collision_root)
+	# 0.2.55: the body deliberately stays OUT of the tree while the
+	# world builds.  Adding CollisionShape3D children to a live
+	# in-space StaticBody costs more per shape the more shapes the
+	# body already has (measured 2.3 ms -> 12 ms per add across a
+	# 19k-shape build), which made the GreenForest scatter stages
+	# take ~110 s and killed loading on Android.  Out of tree, shape
+	# adds are plain node operations; _attach_collision_root() puts
+	# the finished body into the space once, at build completion.
+
+
+func _attach_collision_root() -> void:
+	if _collision_root != null and _collision_root.get_parent() == null:
+		add_child(_collision_root)
 
 
 
@@ -1285,6 +1498,7 @@ func _create_collision_root() -> void:
 func update_streaming(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3, focus_velocity: Vector3, delta: float, horizontal_half_fov_rad: float = 1.05) -> void:
 	if horizontal_half_fov_rad > 0.20:
 		_stream_horizontal_half_fov_rad = clampf(horizontal_half_fov_rad, 0.55, 1.45)
+	_stream_focus_pos = focus_pos
 	_streaming_timer += delta
 	if _streaming_initialized and _streaming_timer < 0.2:
 		return
@@ -1392,6 +1606,18 @@ func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 	)
 	if not _collider_cells.has(cell):
 		_collider_cells[cell] = []
+		# 0.2.55: seed the streaming state from the spawn focus so
+		# far shapes are created disabled (a free property write
+		# while the body is out of the tree) and the first
+		# _streaming_tick does not rewrite `disabled` on every
+		# shape of a huge body (that pass alone cost 55 s).
+		var cell_centre := Vector2(
+			_active_aabb.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
+			_active_aabb.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
+		)
+		var spawn_2d := Vector2(spawn_transform.origin.x, spawn_transform.origin.z)
+		_active_collider_cells[cell] = cell_centre.distance_to(spawn_2d) < COLLIDER_ACTIVE_RADIUS_M
+	collision.disabled = not bool(_active_collider_cells[cell])
 	(_collider_cells[cell] as Array).append(collision)
 
 
@@ -1604,6 +1830,16 @@ func _texture(file_name: String) -> Texture2D:
 	return texture
 
 
+func _apply_ao(material: StandardMaterial3D, file: String, strength: float) -> void:
+	# 0.2.60: baked cavity AO maps (crevices/furrows) — the cheap
+	# depth cue from the ground-cover spec on top of normal maps.
+	var tex := _texture(file)
+	if tex != null:
+		material.ao_enabled = true
+		material.ao_texture = tex
+		material.ao_light_affect = strength
+
+
 func _material(
 	key: String,
 	albedo_file: String = "",
@@ -1752,19 +1988,36 @@ func _terrain_material(kind: String) -> Material:
 		)
 	var material: StandardMaterial3D
 	match kind:
+		"gf_meadow":
+			material = _material("terrain_gf_meadow", "gf_meadow.jpg", "gf_meadow_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_meadow_roughness.jpg")
+			_apply_ao(material, "gf_meadow_ao.jpg", 0.45)
+		"gf_forest_floor":
+			material = _material("terrain_gf_floor", "gf_forest_floor.jpg", "gf_forest_floor_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_forest_floor_roughness.jpg")
+			_apply_ao(material, "gf_forest_floor_ao.jpg", 0.55)
+		"gf_mud":
+			material = _material("terrain_gf_mud", "gf_mud.jpg", "gf_mud_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3.ONE, false, "gf_mud_roughness.jpg")
+		"gf_field":
+			material = _material("terrain_gf_field", "gf_field_soil.jpg", "gf_field_soil_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_field_soil_roughness.jpg")
+		"gf_rock":
+			material = _material("terrain_gf_rock", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(1.0, 1.0, 0.99), 1.0, 0.0, Vector3(0.055, 0.055, 0.055), true, "gf_rock_gray_roughness.jpg")
+			_apply_ao(material, "gf_rock_gray_ao.jpg", 0.6)
+			material.normal_scale = 1.3
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"dune":
-			material = _material("terrain_dune_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.95, 0.81, 0.57), 0.98)
+			material = _material("terrain_dune_sand_dz", "dz_sand_dune.jpg", "dz_sand_dune_normal.jpg", Color(1.0, 0.98, 0.94), 1.0, 0.0, Vector3.ONE, false, "dz_sand_dune_roughness.jpg")
 		"salt":
-			material = _material("terrain_salt", "user_sand_beach_white.jpg", "", Color(0.96, 0.95, 0.91), 0.52)
+			material = _material("terrain_salt_dz", "dz_salt_crust.jpg", "dz_salt_crust_normal.jpg", Color(1.0, 1.0, 0.99), 1.0, 0.0, Vector3.ONE, false, "dz_salt_crust_roughness.jpg")
 		"packed":
-			material = _material("terrain_packed_dirt", "user_dirt_cracked.jpg", "", Color(0.82, 0.67, 0.48), 1.0)
+			material = _material("terrain_packed_dz", "dz_packed_earth.jpg", "dz_packed_earth_normal.jpg", Color(1.0, 0.98, 0.95), 1.0, 0.0, Vector3.ONE, false, "dz_packed_earth_roughness.jpg")
 		"gravel":
-			material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
+			if _is_desert:
+				material = _material("terrain_gravel_dz", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3.ONE, false, "dz_trail_gravel_roughness.jpg")
+			else:
+				material = _material("terrain_gravel_rubble", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.68, 0.61, 0.52), 1.0)
 		"rock":
 			if _is_desert:
-				material = _material("terrain_red_rock", "rock.jpg", "rock_normal.jpg", Color(0.70, 0.45, 0.34), 1.0)
+				material = _material("terrain_red_rock_dz", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(0.96, 0.92, 0.86), 1.0, 0.0, Vector3(0.055, 0.055, 0.055), true, "dz_rock_red_roughness.jpg")
 			else:
 				material = _material("terrain_rock", "rock.jpg", "rock_normal.jpg", Color(0.58, 0.56, 0.52), 1.0)
 		_:
@@ -3292,6 +3545,22 @@ func _hash01(ix: int, iz: int) -> float:
 
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
+	if _is_forest:
+		# GreenForest splat: grey rock on cliffs/summits, ploughed soil
+		# on the authored field rectangles, wet mud in the swamp and on
+		# lake shores, needle floor under the forest zones, meadow
+		# grass everywhere else.
+		if slope > 0.34 or h > 136.0:
+			return "gf_rock"
+		if _gf_in_field(x, z):
+			return "gf_field"
+		if _in_zone(x, z, "swamp"):
+			return "gf_mud"
+		if h < 15.6 and _in_zone(x, z, "gfLake"):
+			return "gf_mud"
+		if _in_zone(x, z, "darkForest") or _in_zone(x, z, "hills") or _in_zone(x, z, "birchGrove") or _in_zone(x, z, "sawmill") or _in_zone(x, z, "cliff"):
+			return "gf_forest_floor"
+		return "gf_meadow"
 	if _is_desert:
 		# Desert splat (spec: asphalt/gravel handled by roads, the other
 		# four layers live here): salt pan, red rock, soft dune sand and
@@ -3429,11 +3698,14 @@ func _water_material() -> ShaderMaterial:
 	_sea_material.resource_name = "sea_surface_pbr"
 	_sea_material.shader = WaterSurfaceShader
 	_sea_material.set_shader_parameter("wave_time", _elapsed)
-	_sea_material.set_shader_parameter("wave_height", 0.62)
+	_sea_material.set_shader_parameter("wave_height", 0.22 if _is_forest else (0.16 if _is_desert else 0.62))
 	_sea_material.set_shader_parameter("wind_direction", Vector2(0.82, 0.57))
-	_sea_material.set_shader_parameter("foam_strength", 0.66)
-	_sea_material.set_shader_parameter("normal_strength", 0.78)
-	_sea_material.set_shader_parameter("reflection_strength", 0.82)
+	_sea_material.set_shader_parameter("foam_strength", 0.28 if _is_forest else (0.36 if _is_desert else 0.66))
+	_sea_material.set_shader_parameter("normal_strength", 0.74 if _is_forest else (0.50 if _is_desert else 0.78))
+	# 0.2.56: the forest lake read as a milky sky mirror; lower the
+	# reflection mix and roughen the normals so the deep water colour
+	# carries the surface instead.
+	_sea_material.set_shader_parameter("reflection_strength", 0.58 if _is_forest else (0.88 if _is_desert else 0.82))
 	return _sea_material
 
 
@@ -10607,6 +10879,7 @@ func _build_world_bounds() -> void:
 # --------------------------------------------------------------------------- #
 
 const DESERT_DATA_PATH := "res://data/desert_native.json"
+const FOREST_DATA_PATH := "res://data/greenforest_native.json"
 const DESERT_AABB := AABB(Vector3(0.0, -20.0, 0.0), Vector3(4000.0, 500.0, 4000.0))
 const DZ_CHUNK_M := 256.0
 
@@ -10636,39 +10909,18 @@ func _road_surface_kind_at(point: Vector3) -> String:
 
 
 func _build_desert_world() -> Dictionary:
-	_compute_spawn_transform()
-	_build_road_surface_index()
-	_create_collision_root()
-	_build_environment()
-	_build_desert_terrain()
-	_build_desert_water()
-	_build_desert_roads()
-	_build_desert_structures()
-	_build_desert_scatter()
-	_build_desert_game_markers()
-	_flush_batched_models()
-	_build_desert_reflection_probes()
-	_build_desert_bounds()
-	_build_desert_skyline()
-	_enhancement_stats["desert_world_0247"] = true
-	_enhancement_stats["near_field_lod_0243"] = true
-	_enhancement_stats["tree_detail_end_m"] = 105.0
-	_enhancement_stats["palm_detail_end_m"] = 130.0
-	_enhancement_stats["shrub_detail_end_m"] = 90.0
-	_enhancement_stats["range_fade_mode"] = "dithered_self"
-	set_time_of_day("day")
-	var collider_total := 0
-	for cell_variant in _collider_cells.keys():
-		collider_total += (_collider_cells[cell_variant] as Array).size()
-	_enhancement_stats["streaming_colliders_total"] = collider_total
-	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
-	_build_foliage_grid()
-	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
-	is_built = true
-	return get_stats()
+	# Synchronous compatibility wrapper; staged loading uses
+	# _queue_desert_build_stages through begin_build_world().
+	world_id = "desert"
+	return build_world()
 
 
 func _dz_data() -> Dictionary:
+	# 0.2.54: the desert build path (roads, bridges, merged structures,
+	# game markers) is data-driven; GreenForest ships the same schema
+	# under its own key and reuses all of it.
+	if _is_forest:
+		return data.get("forest", {})
 	return data.get("desert", {})
 
 
@@ -10779,7 +11031,8 @@ func _build_desert_water() -> void:
 	lake_mesh.top_radius = lake_r + 12.0
 	lake_mesh.bottom_radius = lake_r + 12.0
 	lake_mesh.height = 0.24
-	lake_mesh.radial_segments = 40
+	lake_mesh.radial_segments = 72
+	lake_mesh.rings = 1
 	_mesh_instance(root, lake_mesh, _water_material(), make_transform(Vector3(lake_x, lake_y - 0.12, lake_z)), "OasisLake", false)
 	# Stream ribbon flowing into the lake from the west.
 	var stream: Array = _dz_data().get("stream", [])
@@ -10809,6 +11062,7 @@ func _build_desert_water() -> void:
 		if stream_mesh != null:
 			_mesh_instance(root, stream_mesh, _water_material(), Transform3D.IDENTITY, "OasisStream", false)
 	_enhancement_stats["desert_lake"] = true
+	_enhancement_stats["desert_lake_calm_0253"] = true
 
 
 # --- roads ------------------------------------------------------------------
@@ -10900,8 +11154,10 @@ func _build_desert_roads() -> void:
 	var deck_colliders := 0
 	var crown_offsets: Array = [-1.0, -0.42, 0.42, 1.0]
 	var crown_heights: Array = [0.0, 0.045, 0.045, 0.0]
+	var road_ordinal := 0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
+		road_ordinal += 1
 		var pts := _dz_road_points(road)
 		if pts.size() < 2:
 			continue
@@ -10910,7 +11166,11 @@ func _build_desert_roads() -> void:
 		var surf := String(road.get("surface", "asphalt"))
 		var closed := bool(road.get("closed", false))
 		var tool := asphalt_tool if surf == "asphalt" else gravel_tool
-		var y_off := 0.10 if surf == "asphalt" else 0.07
+		# 0.2.56 flush junctions: wider surface tiers plus a
+		# deterministic 4 mm per-road micro-lift, so overlapping deck
+		# ribbons at crossings always have one clear winner instead of
+		# z-fighting against each other.
+		var y_off := (0.12 if surf == "asphalt" else 0.06) + float(road_ordinal % 8) * 0.004
 		var perps := _dz_point_perps(pts, closed)
 		var cumlen: Array[float] = [0.0]
 		for i in range(1, pts.size()):
@@ -11007,7 +11267,7 @@ func _build_desert_roads() -> void:
 	gravel_tool.generate_tangents()
 	var gravel_mesh := gravel_tool.commit()
 	if gravel_mesh != null:
-		var gravel_mat := _material("dz_gravel_road", "user_stone_rubble.jpg", "user_stone_rubble_normal.jpg", Color(0.76, 0.67, 0.54), 1.0)
+		var gravel_mat := _material("dz_gravel_road_dz", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(1.0, 0.99, 0.96), 1.0, 0.0, Vector3.ONE, false, "dz_trail_gravel_roughness.jpg")
 		gravel_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		var inst := _mesh_instance(root, gravel_mesh, gravel_mat, Transform3D.IDENTITY, "DesertGravel", false)
 		inst.custom_aabb = _active_aabb
@@ -11104,7 +11364,18 @@ func _dz_build_bridges(root: Node) -> void:
 
 
 func _dz_build_tunnel(root: Node) -> void:
-	var tunnel: Dictionary = _dz_data().get("tunnel", {})
+	# 0.2.54: worlds may declare several tunnels (`tunnels` list);
+	# the desert's single `tunnel` dict remains the fallback.
+	var tunnel_list: Array = _dz_data().get("tunnels", [])
+	if tunnel_list.is_empty():
+		var single: Dictionary = _dz_data().get("tunnel", {})
+		if not single.is_empty():
+			tunnel_list = [single]
+	for tunnel_variant in tunnel_list:
+		_dz_build_one_tunnel(root, tunnel_variant)
+
+
+func _dz_build_one_tunnel(root: Node, tunnel: Dictionary) -> void:
 	if tunnel.is_empty():
 		return
 	var road := _dz_find_road(String(tunnel.get("road", "")))
@@ -11142,6 +11413,7 @@ func _dz_build_tunnel(root: Node) -> void:
 		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 2.1, p.z), Vector3(width + 10.4, 3.6, 2.6), yaw)
 		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 5.0, p.z), Vector3(width + 5.0, 2.6, 2.2), yaw + 0.04)
 	_enhancement_stats["desert_tunnel"] = true
+	_enhancement_stats["forest_tunnels_built"] = int(_enhancement_stats.get("forest_tunnels_built", 0)) + 1
 
 
 # --- merged static geometry ---------------------------------------------------
@@ -11180,6 +11452,12 @@ func _dz_material(key: String) -> Material:
 			return _material("dz_rust", "rock.jpg", "", Color(0.50, 0.30, 0.20), 0.95)
 		"dz_rust_light":
 			return _material("dz_rust_light", "rock.jpg", "", Color(0.66, 0.47, 0.33), 0.95)
+		"dz_wreck_blue":
+			return _material("dz_wreck_blue", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.42, 0.55), 0.72, 0.25)
+		"dz_wreck_red":
+			return _material("dz_wreck_red", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.48, 0.22, 0.16), 0.72, 0.25)
+		"dz_wreck_cream":
+			return _material("dz_wreck_cream", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.55, 0.42), 0.75, 0.20)
 		"dz_concrete":
 			return _material("dz_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.70, 0.69, 0.66), 0.95)
 		"dz_tunnel_wall":
@@ -11188,6 +11466,21 @@ func _dz_material(key: String) -> Material:
 			return _material("dz_tunnel_roof", "rock.jpg", "rock_normal.jpg", Color(0.55, 0.40, 0.32), 1.0)
 		"dz_rock":
 			return _material("dz_rock", "rock.jpg", "rock_normal.jpg", Color(0.68, 0.45, 0.34), 1.0)
+		"gf_waterfall":
+			var wf := _material("gf_waterfall", "", "", Color(0.78, 0.89, 0.96, 0.55), 0.15)
+			wf.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			wf.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			return wf
+		"gf_tractor_green":
+			return _material("gf_tractor_green", "brushed_metal.jpg", "brushed_metal_normal.jpg", Color(0.16, 0.34, 0.14), 0.45, 0.55)
+		"gf_tractor_red":
+			return _material("gf_tractor_red", "brushed_metal.jpg", "brushed_metal_normal.jpg", Color(0.44, 0.12, 0.10), 0.45, 0.55)
+		"gf_deer":
+			return _material("gf_deer", "cafe_linen.jpg", "cafe_linen_normal.jpg", Color(0.48, 0.34, 0.21), 0.95)
+		"gf_deer_belly":
+			return _material("gf_deer_belly", "cafe_linen.jpg", "cafe_linen_normal.jpg", Color(0.68, 0.58, 0.44), 0.95)
+		"gf_bird":
+			return _material("gf_bird", "", "", Color(0.10, 0.10, 0.12), 0.9)
 		"dz_glass":
 			var glass := _material("dz_glass", "", "", Color(0.10, 0.15, 0.19), 0.12, 0.9)
 			return glass
@@ -11396,7 +11689,7 @@ func _dz_flat_roof(mat_key: String, origin: Vector3, basis: Basis, y: float, w: 
 
 
 func _dz_building(origin: Vector3, basis: Basis, yaw: float, w: float, d: float, h: float, wall: String, roof: String, gable: bool, windows: bool = true) -> void:
-	_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.22, 0.0), Vector3(w + 0.5, 0.45, d + 0.5))
+	_dz_lbox("dz_concrete", origin, basis, Vector3(0.0, 0.02, 0.0), Vector3(w + 0.5, 0.85, d + 0.5))
 	_dz_lbox(wall, origin, basis, Vector3(0.0, h * 0.5, 0.0), Vector3(w, h, d))
 	if gable:
 		_dz_gable_roof(roof, origin, basis, h, w, d, maxf(1.1, d * 0.24))
@@ -11426,6 +11719,52 @@ func _dz_setup_dynamic_materials() -> void:
 	_dz_flare_material.emission_energy_multiplier = 3.2
 
 
+func _dz_build_fence(o: Vector3, basis: Basis, yaw: float, w: float) -> void:
+	# 0.2.51: terrain-following wooden fence.  Every post is
+	# planted on its own ground height with a little weathered
+	# height/tilt jitter, and the rails are individual planks
+	# sloped span-by-span between the posts, so a long fence
+	# hugs a hillside instead of floating as one rigid slab.
+	# Short town/yard fences get three solid planks; long
+	# ranch runs get two planks, a top wire strand and
+	# diagonal end braces.  Kept as its own function: the
+	# inline match-branch version shadowed the structures
+	# ground-Y local and Godot rejected the whole script.
+	var fence_is_ranch: bool = w >= 18.0
+	var fence_spans: int = maxi(1, int(round(w / 2.4)))
+	var fence_side: Vector3 = basis * Vector3(0.0, 0.0, 0.105)
+	var fence_bases: Array = []
+	for fence_pi in range(fence_spans + 1):
+		var fence_lx: float = -w * 0.5 + w * float(fence_pi) / float(fence_spans)
+		var fence_wp: Vector3 = o + basis * Vector3(fence_lx, 0.0, 0.0)
+		var fence_ground_y: float = height_at(fence_wp.x, fence_wp.z)
+		var fence_jitter: float = _hash01(int(round(fence_wp.x * 7.0)), int(round(fence_wp.z * 7.0)))
+		var fence_post_h: float = 1.08 + (fence_jitter - 0.5) * 0.10
+		var fence_tilt: float = (fence_jitter - 0.5) * 0.07
+		_dz_box("dz_wood_dark", Vector3(fence_wp.x, fence_ground_y + fence_post_h * 0.5 - 0.07, fence_wp.z), Vector3(0.16, fence_post_h, 0.16), yaw, fence_tilt, fence_tilt * 0.6)
+		fence_bases.append(Vector3(fence_wp.x, fence_ground_y, fence_wp.z))
+	var fence_levels: Array = []
+	if fence_is_ranch:
+		fence_levels.append(0.55)
+		fence_levels.append(0.92)
+	else:
+		fence_levels.append(0.32)
+		fence_levels.append(0.64)
+		fence_levels.append(0.96)
+	for fence_si in range(fence_spans):
+		var fence_ba: Vector3 = fence_bases[fence_si]
+		var fence_bb: Vector3 = fence_bases[fence_si + 1]
+		for fence_lvl_variant in fence_levels:
+			var fence_lvl: float = float(fence_lvl_variant)
+			_dz_beam("dz_wood", fence_ba + fence_side + Vector3(0.0, fence_lvl, 0.0), fence_bb + fence_side + Vector3(0.0, fence_lvl, 0.0), 0.05, 0.15)
+		if fence_is_ranch:
+			_dz_beam("dz_metal_dark", fence_ba + Vector3(0.0, 1.10, 0.0), fence_bb + Vector3(0.0, 1.10, 0.0), 0.025, 0.025)
+			if fence_si == 0 or fence_si == fence_spans - 1:
+				_dz_beam("dz_wood_dark", fence_ba + Vector3(0.0, 0.06, 0.0), fence_bb + Vector3(0.0, 0.95, 0.0), 0.07, 0.07)
+	_dz_collider(o, basis, yaw, Vector3(0.0, 0.5, 0.0), Vector3(w, 1.0, 0.3))
+	_enhancement_stats["desert_fences_0251"] = int(_enhancement_stats.get("desert_fences_0251", 0)) + 1
+
+
 func _build_desert_structures() -> void:
 	var root := Node3D.new()
 	root.name = "DesertStructures"
@@ -11438,6 +11777,7 @@ func _build_desert_structures() -> void:
 	var structures: Array = dz.get("structures", [])
 	for s_variant in structures:
 		_dz_structure(anim_root, s_variant)
+	var pipe_road_gaps_0253 := 0
 	for pipe_variant in dz.get("pipes", []):
 		var pipe: Array = pipe_variant
 		if pipe.size() < 4:
@@ -11450,8 +11790,15 @@ func _build_desert_structures() -> void:
 			var t := float(si) / float(steps)
 			var p := a.lerp(b, t)
 			var top := Vector3(p.x, height_at(p.x, p.z) + 1.15, p.z)
+			var pipe_mid3 := (prev + top) * 0.5
+			var pipe_clear := minf(_road_clearance_xz(prev), minf(_road_clearance_xz(top), _road_clearance_xz(pipe_mid3)))
+			if pipe_clear < 0.25:
+				pipe_road_gaps_0253 += 1
+				prev = top
+				continue
 			_dz_pipe_beam("dz_rust_light", prev, top, 0.30)
-			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
+			if _road_clearance_xz(top) >= 0.45:
+				_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.2, p.z), top, 0.16, 0.16)
 			var pipe_flat := Vector2(top.x - prev.x, top.z - prev.z)
 			var pipe_len := pipe_flat.length()
 			if pipe_len > 0.5:
@@ -11490,14 +11837,19 @@ func _build_desert_structures() -> void:
 			var top_off := 11.2 if absf(off) > 0.01 else 11.6
 			var a3 := Vector3(va.x + perp.x * off, height_at(va.x, va.y) + top_off, va.y + perp.y * off)
 			var b3 := Vector3(vb.x + perp.x * off, height_at(vb.x, vb.y) + top_off, vb.y + perp.y * off)
-			var mid3 := (a3 + b3) * 0.5
-			mid3.y -= dist * 0.03 + 0.5
-			_dz_beam("dz_metal_dark", a3, mid3, 0.05, 0.05)
-			_dz_beam("dz_metal_dark", mid3, b3, 0.05, 0.05)
+			var wire_prev := a3
+			for wi in range(1, 4):
+				var wt := float(wi) / 4.0
+				var wp := a3.lerp(b3, wt)
+				wp.y -= sin(wt * PI) * (dist * 0.03 + 0.5)
+				_dz_beam("dz_metal_dark", wire_prev, wp, 0.075, 0.075)
+				wire_prev = wp
+			_dz_beam("dz_metal_dark", wire_prev, b3, 0.075, 0.075)
 	var merged := _dz_flush_merge(root)
 	_enhancement_stats["desert_structures"] = structures.size()
 	_enhancement_stats["desert_merged_chunks"] = merged
 	_enhancement_stats["desert_poles"] = line.size()
+	_enhancement_stats["desert_pipe_road_gaps_0253"] = pipe_road_gaps_0253
 
 
 func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
@@ -11518,6 +11870,8 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 		var steps := int(Vector2(x2 - x, z2 - z).length() / 22.0)
 		for ci in range(1, maxi(steps, 1)):
 			var p := a.lerp(b, float(ci) / float(maxi(steps, 1)))
+			if _road_clearance_xz(p) < 1.0:
+				continue
 			_dz_beam("dz_metal_dark", Vector3(p.x, height_at(p.x, p.z) - 0.3, p.z), p + Vector3(0, -0.3, 0), 0.35, 0.35)
 			var support_ground := height_at(p.x, p.z) - 0.3
 			var support_h := maxf(p.y - 0.3 - support_ground, 1.0)
@@ -11527,6 +11881,8 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 	var gy := _dz_footprint_y(x, z, w, d, yaw) if kind in big_kinds else _dz_ground_y(x, z, 0.04)
 	var o := Vector3(x, gy, z)
 	var hash_pick := int(absf(x) * 3.0 + absf(z) * 7.0) % 3
+	if _is_forest and _gf_structure_kind(kind, o, basis, w, d, h, hash_pick):
+		return
 	match kind:
 		"gas_station":
 			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_metal", false)
@@ -11623,12 +11979,7 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_canvas", o, basis, Vector3(0.0, h + 1.2, 0.0), Vector3(w + 1.0, 0.14, d + 1.2), 0.0, 0.1, 0.0)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 0.7, 0.0), Vector3(w, 1.4, d))
 		"fence":
-			var posts := maxi(2, int(w / 3.0))
-			for pi in range(posts + 1):
-				_dz_lbox("dz_wood_dark", o, basis, Vector3(-w * 0.5 + w * float(pi) / float(posts), 0.55, 0.0), Vector3(0.13, 1.1, 0.13))
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.95, 0.0), Vector3(w, 0.09, 0.07))
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.5, 0.0), Vector3(w, 0.09, 0.07))
-			_dz_collider(o, basis, yaw, Vector3(0.0, 0.5, 0.0), Vector3(w, 1.0, 0.3))
+			_dz_build_fence(o, basis, yaw, w)
 		"crate":
 			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 0.6, 0.0), Vector3(1.2, 1.2, 1.2))
 			if hash_pick != 0:
@@ -11851,16 +12202,23 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			for sx in [-1.4, 1.4]:
 				_add_cylinder_collider(o + basis * Vector3(sx, 1.3, 0.0), 0.16, 2.6)
 		"car_wreck":
-			var wm: String = ["dz_rust", "dz_rust_light", "dz_metal_dark"][hash_pick]
+			var wm: String = ["dz_wreck_blue", "dz_wreck_cream", "dz_wreck_red"][hash_pick]
 			var roll := 0.10 if hash_pick == 1 else 0.0
-			_dz_lbox(wm, o, basis, Vector3(0.0, 0.62, 0.0), Vector3(1.85, 0.62, 4.5), 0.0, 0.0, roll)
-			_dz_lbox(wm, o, basis, Vector3(0.0, 1.22, 0.25), Vector3(1.65, 0.6, 2.2), 0.0, 0.0, roll)
-			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 1.24, 0.25), Vector3(1.7, 0.5, 2.0), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.58, 0.0), Vector3(1.82, 0.58, 4.35), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.78, -1.85), Vector3(1.70, 0.28, 1.05), 0.0, -0.16, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 0.80, 1.82), Vector3(1.72, 0.30, 1.00), 0.0, 0.12, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 1.06, 0.18), Vector3(1.58, 0.50, 2.05), 0.0, 0.0, roll)
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 1.10, 0.18), Vector3(1.62, 0.30, 1.82), 0.0, 0.0, roll)
+			_dz_lbox(wm, o, basis, Vector3(0.0, 1.34, 0.18), Vector3(1.48, 0.10, 1.75), 0.0, 0.0, roll)
+			_dz_lbox("dz_rust", o, basis, Vector3(0.45, 0.48, -0.9), Vector3(0.55, 0.18, 1.0), 0.0, 0.0, roll)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.42, -2.23), Vector3(1.86, 0.22, 0.16), 0.0, 0.0, roll)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.42, 2.23), Vector3(1.86, 0.22, 0.16), 0.0, 0.0, roll)
 			for sx in [-1.0, 1.0]:
 				for wz in [-1.45, 1.45]:
 					if hash_pick == 0 and wz > 0.0 and sx > 0.0:
 						continue
 					_dz_lcyl("dz_metal_dark", o, basis, Vector3(sx * 0.82, 0.34, wz), 0.34, 0.22, 0.0, 0.0, PI * 0.5, 1.0, 10)
+					_dz_lcyl("dz_metal", o, basis, Vector3(sx * 0.82, 0.34, wz), 0.16, 0.24, 0.0, 0.0, PI * 0.5, 1.0, 10)
 			_dz_collider(o, basis, yaw, Vector3(0.0, 0.8, 0.0), Vector3(1.9, 1.6, 4.5))
 		"salt_gate":
 			for sx in [-1.0, 1.0]:
@@ -11882,22 +12240,24 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 			_dz_lbox("dz_dirt", o, basis, Vector3(0.0, 0.05, 0.0), Vector3(w + 0.6, 0.1, d + 0.6))
 			_dz_collider(o, basis, yaw, Vector3(0.0, h * 0.4, 0.0), Vector3(w * 0.8, h * 0.8, d * 0.85))
 		"pier":
-			var plen := maxf(d, 12.0)
-			_dz_lbox("dz_wood", o, basis, Vector3(0.0, 1.15, -plen * 0.5), Vector3(2.6, 0.18, plen))
-			_dz_collider(o, basis, yaw, Vector3(0.0, 1.02, -plen * 0.5), Vector3(2.6, 0.4, plen))
+			var plen := maxf(maxf(w, d), 12.0)
+			var pier_lake: Dictionary = _dz_data().get("lake", {})
+			var pier_deck_y := maxf(1.15, _f(pier_lake, "y", gy + 1.15) - gy + 0.55)
+			_dz_lbox("dz_wood", o, basis, Vector3(0.0, pier_deck_y, -plen * 0.5), Vector3(2.6, 0.18, plen))
+			_dz_collider(o, basis, yaw, Vector3(0.0, pier_deck_y - 0.13, -plen * 0.5), Vector3(2.6, 0.4, plen))
 			var psteps := int(plen / 3.5)
 			for pi in range(psteps + 1):
 				for sx in [-1.1, 1.1]:
-					_dz_lcyl("dz_wood_dark", o, basis, Vector3(sx, 0.2, -1.0 - float(pi) * 3.5), 0.09, 2.0)
+					_dz_lcyl("dz_wood_dark", o, basis, Vector3(sx, pier_deck_y * 0.5 - 0.45, -1.0 - float(pi) * 3.5), 0.09, pier_deck_y + 1.3)
 		"billboard":
 			for sx in [-1.0, 1.0]:
-				_dz_lcyl("dz_pole", o, basis, Vector3(sx * w * 0.3, 3.0, 0.35), 0.14, 6.0)
+				_dz_lcyl("dz_pole", o, basis, Vector3(sx * w * 0.3, 2.85, 0.35), 0.14, 6.5)
 				_add_cylinder_collider(o + basis * Vector3(sx * w * 0.3, 1.4, 0.35), 0.2, 2.8)
 			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, h - 1.35, 0.12), Vector3(w + 0.25, 2.9, 0.14))
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, -0.02), Vector3(w, 2.6, 0.1))
 			_dz_lbox("dz_sign_cream", o, basis, Vector3(0.0, h - 1.35, 0.26), Vector3(w, 2.6, 0.1))
 		"sign", "sign_smash":
-			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.42, 0.0), 0.06, h * 0.85, 0.0, 0.0, 0.0, 1.0, 8)
+			_dz_lcyl("dz_pole", o, basis, Vector3(0.0, h * 0.38, 0.0), 0.06, h * 0.95, 0.0, 0.0, 0.0, 1.0, 8)
 			var sm := "dz_sign_red" if kind == "sign_smash" else ("dz_sign_blue" if hash_pick != 1 else "dz_sign_cream")
 			_dz_lbox(sm, o, basis, Vector3(0.0, h * 0.9, 0.0), Vector3(1.15, 0.85, 0.07))
 			_dz_lbox("dz_white", o, basis, Vector3(0.0, h * 0.9, -0.05), Vector3(0.85, 0.24, 0.03))
@@ -11951,18 +12311,74 @@ func _dz_scatter_mesh(parts: Array) -> ArrayMesh:
 	return mesh
 
 
+func _dz_saguaro_mesh(variant: int) -> ArrayMesh:
+	# 0.2.50: three authored saguaro silhouettes (classic two-arm,
+	# tall one-arm, squat three-arm) instead of identical clones.
+	# Parts stay white: the ribbed dz_cactus_skin PBR material
+	# colours them through the cylinder UVs that _dz_scatter_mesh
+	# preserves.  Elbow spheres hide the arm joints.
+	var trunk_prim := _dz_unit_cyl(14, 0.86)
+	var arm_prim := _dz_unit_cyl(12, 0.82)
+	var cap_prim := _dz_unit_sphere(12, 8)
+	var skin := Color(1.0, 1.0, 1.0)
+	var trunk_h := 4.6
+	var trunk_r := 0.30
+	var arms: Array = [[-1.0, 2.4, 1.5, 0.17], [1.0, 1.9, 1.1, 0.15]]
+	match variant:
+		1:
+			trunk_h = 5.4
+			trunk_r = 0.27
+			arms = [[-1.0, 3.0, 1.7, 0.16]]
+		2:
+			trunk_h = 3.8
+			trunk_r = 0.34
+			arms = [[-1.0, 2.0, 1.2, 0.17], [1.0, 2.5, 1.4, 0.16], [1.0, 1.4, 0.7, 0.13]]
+	var parts: Array = []
+	parts.append(_dz_scatter_part(trunk_prim, Vector3(0.0, trunk_h * 0.5, 0.0), Vector3(trunk_r * 2.0, trunk_h, trunk_r * 2.0), skin))
+	parts.append(_dz_scatter_part(cap_prim, Vector3(0.0, trunk_h, 0.0), Vector3(trunk_r * 1.72, trunk_r * 1.1, trunk_r * 1.72), skin))
+	for arm_variant in arms:
+		var arm: Array = arm_variant
+		var side := float(arm[0])
+		var ay := float(arm[1])
+		var ah := float(arm[2])
+		var ar := float(arm[3])
+		var reach := trunk_r + ar + 0.34
+		var elbow_x := side * reach
+		parts.append(_dz_scatter_part(arm_prim, Vector3(side * (trunk_r * 0.4 + reach * 0.5), ay, 0.0), Vector3(ar * 2.0, reach + trunk_r * 0.6, ar * 2.0), skin, 0.0, 0.0, side * PI * 0.5))
+		parts.append(_dz_scatter_part(cap_prim, Vector3(elbow_x, ay, 0.0), Vector3(ar * 2.1, ar * 2.1, ar * 2.1), skin))
+		parts.append(_dz_scatter_part(arm_prim, Vector3(elbow_x, ay + ah * 0.5, 0.0), Vector3(ar * 2.0, ah, ar * 2.0), skin))
+		parts.append(_dz_scatter_part(cap_prim, Vector3(elbow_x, ay + ah, 0.0), Vector3(ar * 1.65, ar * 1.0, ar * 1.65), skin))
+	return _dz_scatter_mesh(parts)
+
+
 func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
-	var prim := _dz_unit_sphere(9, 6)
+	# 0.2.50: coherent multi-octave displacement on a denser sphere
+	# (the old 9x6 sphere with per-vertex hash jitter read as crumpled
+	# paper).  Flat shading and baked face tints stay; the fine surface
+	# detail comes from the world-triplanar dz_rock_red PBR set, and
+	# the squashed underside lets boulders sit in the ground.
+	var prim := _dz_unit_sphere(18, 12)
 	var arrays: Array = prim.surface_get_arrays(0)
 	var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var ph := float(seed_i) * 1.73
+	var stretch_x := 0.88 + _hash01(seed_i * 7 + 1, 13) * 0.30
+	var stretch_z := 0.88 + _hash01(seed_i * 11 + 5, 29) * 0.30
 	var displaced := PackedVector3Array()
 	displaced.resize(pv.size())
 	for i in range(pv.size()):
 		var p := pv[i]
-		var hsh := _hash01(int(round(p.x * 40.0)) + seed_i * 131, int(round(p.y * 40.0 + p.z * 57.0)) - seed_i * 17)
-		var r := 0.76 + hsh * 0.48
-		displaced[i] = Vector3(p.x * r, p.y * 0.74 * r, p.z * r)
+		var noise := 0.55 * sin(p.x * 3.1 + ph) * sin(p.y * 2.7 + ph * 1.3) * sin(p.z * 3.4 - ph)
+		noise += 0.30 * sin(p.x * 6.3 - ph * 0.7) * sin(p.y * 5.1 + ph) * sin(p.z * 5.7 + ph * 0.5)
+		noise += 0.15 * sin(p.x * 11.0 + ph * 2.1) * sin(p.y * 9.3 - ph * 0.4) * sin(p.z * 9.0 - ph)
+		var ridge := 1.0 - absf(sin(p.x * 4.7 + ph * 0.8) * sin(p.z * 4.1 - ph))
+		noise -= ridge * 0.18
+		noise += (_hash01(int((p.x + 0.5) * 14.0) + seed_i * 23, int((p.y + 0.5) * 17.0) + int((p.z + 0.5) * 19.0)) - 0.5) * 0.16
+		var r := clampf(1.0 + noise * 0.36, 0.56, 1.38)
+		var y := p.y * 0.70 * r
+		if y < -0.34:
+			y = -0.34 + (y + 0.34) * 0.22
+		displaced[i] = Vector3(p.x * r * stretch_x, y, p.z * r * stretch_z)
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
@@ -11976,7 +12392,8 @@ func _dz_rock_mesh(seed_i: int, color: Color) -> ArrayMesh:
 		if n.length_squared() < 0.000001:
 			continue
 		n = n.normalized()
-		var shade := 0.72 + clampf(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.38
+		var shade := 0.70 + clampf(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.40
+		shade *= 0.93 + _hash01(t * 3 + seed_i, seed_i * 31 + t) * 0.14
 		var face_color := Color(color.r * shade, color.g * shade, color.b * shade)
 		for v in [a, b, c]:
 			verts.append(v)
@@ -12048,42 +12465,43 @@ func _build_desert_scatter() -> void:
 		_dz_scatter_material.vertex_color_use_as_albedo = true
 		_dz_scatter_material.roughness = 0.95
 		_dz_scatter_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	var cyl8 := _dz_unit_cyl(8, 0.85)
 	var cyl7 := _dz_unit_cyl(7, 0.4)
 	var cyl11 := _dz_unit_cyl(11, 0.05)
 	var sph := _dz_unit_sphere(10, 7)
 	var torus := _dz_unit_torus()
-	var cactus_green := Color(0.20, 0.40, 0.19)
-	var saguaro_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl8, Vector3(0, 2.1, 0), Vector3(0.55, 4.2, 0.55), cactus_green),
-		_dz_scatter_part(sph, Vector3(0, 4.25, 0), Vector3(0.52, 0.5, 0.52), cactus_green),
-		_dz_scatter_part(cyl8, Vector3(-0.62, 2.55, 0), Vector3(0.32, 1.05, 0.32), cactus_green, 0.0, 0.0, PI * 0.5),
-		_dz_scatter_part(cyl8, Vector3(-1.05, 3.25, 0), Vector3(0.34, 1.5, 0.34), cactus_green),
-		_dz_scatter_part(cyl8, Vector3(0.55, 1.95, 0), Vector3(0.28, 0.8, 0.28), cactus_green, 0.0, 0.0, -PI * 0.5),
-		_dz_scatter_part(cyl8, Vector3(0.9, 2.5, 0), Vector3(0.3, 1.1, 0.3), cactus_green),
-	])
+	# 0.2.50: dedicated PBR materials for the hero scatter kinds.
+	# The shared vertex-colour material still serves shrubs/bones.
+	var cactus_mat := _material("dz_cactus_skin_mat", "dz_cactus_skin.jpg", "dz_cactus_skin_normal.jpg", Color(0.86, 0.94, 0.84), 1.0, 0.0, Vector3(1.0, 2.0, 1.0), false, "dz_cactus_skin_roughness.jpg")
+	var rock_mat := _material("dz_rock_red_mat", "dz_rock_red.jpg", "dz_rock_red_normal.jpg", Color(0.90, 0.85, 0.78), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "dz_rock_red_roughness.jpg")
+	rock_mat.vertex_color_use_as_albedo = true
+	var pile_mat := _material("dz_gravel_pile_mat", "dz_trail_gravel.jpg", "dz_trail_gravel_normal.jpg", Color(0.84, 0.80, 0.74), 1.0, 0.0, Vector3(0.35, 0.35, 0.35), true, "dz_trail_gravel_roughness.jpg")
+	pile_mat.vertex_color_use_as_albedo = true
+	var saguaro_meshes: Array = [_dz_saguaro_mesh(0), _dz_saguaro_mesh(1), _dz_saguaro_mesh(2)]
 	var barrel_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.30, 0.46, 0.22)),
-		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.92, 0.52, 0.16)),
+		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(0.78, 0.95, 0.78), Color(0.15, 0.27, 0.12)),
+		_dz_scatter_part(sph, Vector3(0, 0.92, 0), Vector3(0.2, 0.16, 0.2), Color(0.55, 0.27, 0.07)),
 	])
 	var prickly_parts: Array = []
 	for pi in range(5):
 		var ang := TAU * float(pi) / 5.0
-		prickly_parts.append(_dz_scatter_part(sph, Vector3(cos(ang) * 0.42, 0.34, sin(ang) * 0.42), Vector3(0.55, 0.72, 0.15), Color(0.27, 0.47, 0.23), -ang, 0.0, 0.24))
-	prickly_parts.append(_dz_scatter_part(sph, Vector3(0, 0.3, 0), Vector3(0.5, 0.62, 0.15), Color(0.27, 0.47, 0.23), 0.4))
+		prickly_parts.append(_dz_scatter_part(sph, Vector3(cos(ang) * 0.42, 0.34, sin(ang) * 0.42), Vector3(0.55, 0.72, 0.15), Color(0.14, 0.27, 0.12), -ang, 0.0, 0.24))
+	prickly_parts.append(_dz_scatter_part(sph, Vector3(0, 0.3, 0), Vector3(0.5, 0.62, 0.15), Color(0.14, 0.27, 0.12), 0.4))
 	var prickly_mesh := _dz_scatter_mesh(prickly_parts)
 	var shrub_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(1.25, 0.85, 1.25), Color(0.36, 0.40, 0.27)),
-		_dz_scatter_part(sph, Vector3(0.5, 0.62, 0.22), Vector3(0.8, 0.62, 0.8), Color(0.41, 0.44, 0.30)),
-		_dz_scatter_part(sph, Vector3(-0.48, 0.55, -0.3), Vector3(0.7, 0.55, 0.7), Color(0.33, 0.37, 0.25)),
+		_dz_scatter_part(cyl7, Vector3(0, 0.25, 0), Vector3(0.16, 0.5, 0.16), Color(0.16, 0.10, 0.05), 0.0, 0.0, 0.15),
+		_dz_scatter_part(sph, Vector3(0, 0.38, 0), Vector3(1.30, 0.70, 1.20), Color(0.075, 0.105, 0.045)),
+		_dz_scatter_part(sph, Vector3(0.52, 0.55, 0.22), Vector3(0.82, 0.52, 0.76), Color(0.10, 0.13, 0.055)),
+		_dz_scatter_part(sph, Vector3(-0.52, 0.48, -0.28), Vector3(0.74, 0.46, 0.70), Color(0.065, 0.095, 0.040)),
+		_dz_scatter_part(sph, Vector3(-0.18, 0.66, 0.40), Vector3(0.62, 0.40, 0.58), Color(0.16, 0.125, 0.065)),
+		_dz_scatter_part(sph, Vector3(0.30, 0.30, -0.52), Vector3(0.66, 0.42, 0.60), Color(0.085, 0.11, 0.048)),
 	])
 	var dead_tree_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.8, 0), Vector3(0.5, 3.6, 0.5), Color(0.45, 0.36, 0.27), 0.0, 0.0, 0.07),
-		_dz_scatter_part(cyl7, Vector3(0.75, 3.2, 0.1), Vector3(0.2, 1.9, 0.2), Color(0.45, 0.36, 0.27), 0.0, 0.0, -0.85),
-		_dz_scatter_part(cyl7, Vector3(-0.65, 2.8, -0.2), Vector3(0.17, 1.6, 0.17), Color(0.48, 0.39, 0.29), 0.0, 0.35, 0.9),
-		_dz_scatter_part(cyl7, Vector3(0.15, 3.9, -0.6), Vector3(0.14, 1.4, 0.14), Color(0.48, 0.39, 0.29), 0.0, 0.8, 0.2),
+		_dz_scatter_part(cyl7, Vector3(0, 1.8, 0), Vector3(0.5, 3.6, 0.5), Color(0.20, 0.14, 0.09), 0.0, 0.0, 0.07),
+		_dz_scatter_part(cyl7, Vector3(0.75, 3.2, 0.1), Vector3(0.2, 1.9, 0.2), Color(0.20, 0.14, 0.09), 0.0, 0.0, -0.85),
+		_dz_scatter_part(cyl7, Vector3(-0.65, 2.8, -0.2), Vector3(0.17, 1.6, 0.17), Color(0.23, 0.16, 0.10), 0.0, 0.35, 0.9),
+		_dz_scatter_part(cyl7, Vector3(0.15, 3.9, -0.6), Vector3(0.14, 1.4, 0.14), Color(0.23, 0.16, 0.10), 0.0, 0.8, 0.2),
 	])
-	var bone_color := Color(0.84, 0.79, 0.68)
+	var bone_color := Color(0.48, 0.42, 0.32)
 	var bones_mesh := _dz_scatter_mesh([
 		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0.28, 0), Vector3(0.22, 0.22, 2.2), bone_color),
 		_dz_scatter_part(torus, Vector3(0, 0.32, -0.55), Vector3(1.15, 1.3, 1.15), bone_color, 0.0, PI * 0.5, 0.0),
@@ -12092,36 +12510,38 @@ func _build_desert_scatter() -> void:
 		_dz_scatter_part(sph, Vector3(0.35, 0.22, -1.45), Vector3(0.55, 0.45, 0.8), bone_color, 0.4),
 	])
 	var tumble_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.9, 0.9, 0.9), Color(0.60, 0.49, 0.32)),
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.85, 0.85, 0.85), Color(0.56, 0.45, 0.30), 0.0, PI * 0.5, 0.0),
-		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.8, 0.8, 0.8), Color(0.64, 0.53, 0.35), 0.7, PI * 0.25, 0.5),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.9, 0.9, 0.9), Color(0.30, 0.22, 0.12)),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.85, 0.85, 0.85), Color(0.27, 0.20, 0.11), 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(torus, Vector3(0, 0.42, 0), Vector3(0.8, 0.8, 0.8), Color(0.33, 0.24, 0.13), 0.7, PI * 0.25, 0.5),
 	])
 	var reed_parts: Array = []
 	for ri in range(6):
 		var rang := TAU * float(ri) / 6.0
-		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.8, sin(rang) * 0.3), Vector3(0.06, 1.7, 0.06), Color(0.34, 0.50, 0.24), 0.0, cos(rang) * 0.14, sin(rang) * 0.14))
+		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.72, sin(rang) * 0.3), Vector3(0.085, 1.5, 0.085), Color(0.14, 0.24, 0.09), 0.0, cos(rang) * 0.18, sin(rang) * 0.18))
+		if ri % 2 == 0:
+			reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.38, 1.48, sin(rang) * 0.38), Vector3(0.09, 0.34, 0.09), Color(0.24, 0.15, 0.07), 0.0, cos(rang) * 0.18, sin(rang) * 0.18))
 	var reed_mesh := _dz_scatter_mesh(reed_parts)
 	var pile_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl11, Vector3(0, 1.45, 0), Vector3(6.2, 2.9, 6.2), Color(0.60, 0.53, 0.43)),
-		_dz_scatter_part(cyl11, Vector3(3.4, 0.8, 1.6), Vector3(3.4, 1.6, 3.4), Color(0.56, 0.49, 0.40)),
+		_dz_scatter_part(cyl11, Vector3(0, 1.10, 0), Vector3(6.2, 2.2, 6.2), Color(0.72, 0.68, 0.62)),
+		_dz_scatter_part(cyl11, Vector3(3.4, 0.62, 1.6), Vector3(3.4, 1.25, 3.4), Color(0.64, 0.60, 0.55)),
 	])
-	var rock_small_mesh := _dz_rock_mesh(1, Color(0.58, 0.47, 0.38))
-	var rock_medium_mesh := _dz_rock_mesh(2, Color(0.60, 0.44, 0.34))
-	var rock_large_mesh := _dz_rock_mesh(3, Color(0.62, 0.43, 0.32))
+	var rock_small_meshes: Array = [_dz_rock_mesh(11, Color(0.78, 0.72, 0.64)), _dz_rock_mesh(12, Color(0.74, 0.68, 0.60)), _dz_rock_mesh(13, Color(0.82, 0.75, 0.66))]
+	var rock_medium_meshes: Array = [_dz_rock_mesh(21, Color(0.84, 0.76, 0.66)), _dz_rock_mesh(22, Color(0.80, 0.73, 0.63)), _dz_rock_mesh(23, Color(0.86, 0.78, 0.68))]
+	var rock_large_meshes: Array = [_dz_rock_mesh(31, Color(0.88, 0.80, 0.69)), _dz_rock_mesh(32, Color(0.85, 0.77, 0.66)), _dz_rock_mesh(33, Color(0.90, 0.82, 0.71))]
 
 	var cfg := {
-		"cactus_saguaro": {"mesh": saguaro_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
+		"cactus_saguaro": {"meshes": saguaro_meshes, "material": cactus_mat, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.10, "collider_r": 0.36, "collider_h": 2.6, "foliage": true},
 		"cactus_barrel": {"mesh": barrel_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.34, "collider_h": 0.8},
 		"cactus_prickly": {"mesh": prickly_mesh, "base": 1.0, "range": 220.0, "shadow": true, "sink": 0.05, "collider_r": 0.38, "collider_h": 0.6},
-		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.06, "foliage": true},
-		"rock_small": {"mesh": rock_small_mesh, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.10},
-		"rock_medium": {"mesh": rock_medium_mesh, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.14, "collider_r": 0.62, "collider_h": 1.6},
-		"rock_large": {"mesh": rock_large_mesh, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.30, "collider_r": 1.35, "collider_h": 2.4},
+		"shrub": {"mesh": shrub_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.14, "foliage": true},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 220.0, "shadow": false, "sink": 0.16},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1200.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
 		"dead_tree": {"mesh": dead_tree_mesh, "base": 1.0, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
 		"bones": {"mesh": bones_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.04},
 		"tumbleweed": {"mesh": tumble_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.03},
-		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.30},
-		"gravel_pile": {"mesh": pile_mesh, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
+		"oasis_reed": {"mesh": reed_mesh, "base": 1.0, "range": 220.0, "shadow": false, "sink": 0.18},
+		"gravel_pile": {"mesh": pile_mesh, "material": pile_mat, "base": 1.0, "range": 900.0, "shadow": true, "sink": 0.15, "collider_r": 1.9, "collider_h": 1.6},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
 	var total := 0
@@ -12157,8 +12577,19 @@ func _build_desert_scatter() -> void:
 				_add_cylinder_collider(Vector3(px, pos.y + 0.35 * sc, pz), 0.30 * sc, 0.7 * sc)
 			if is_foliage:
 				_foliage_points.append(pos)
+		var kind_meshes: Array = conf.get("meshes", [])
+		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
 		for key_variant in buckets.keys():
-			_dz_emit_multimesh(root, conf["mesh"], _dz_scatter_material, buckets[key_variant], "DzScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			var bucket_xforms: Array = buckets[key_variant]
+			if kind_meshes.is_empty():
+				_dz_emit_multimesh(root, conf["mesh"] as Mesh, kind_mat, bucket_xforms, "DzScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			else:
+				for vi in range(kind_meshes.size()):
+					var sub: Array = []
+					for ti in range(bucket_xforms.size()):
+						if ti % kind_meshes.size() == vi:
+							sub.append(bucket_xforms[ti])
+					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "DzScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
 	# Oasis palms reuse the detailed date/royal GLBs (same batching path
 	# as RichTown so LOD/streaming treatment is identical).
 	var palm_items: Array = scatter.get("oasis_palm", [])
@@ -12183,6 +12614,8 @@ func _build_desert_scatter() -> void:
 	_add_batched_model(root, "res://assets/vegetation/palm_date.glb", date_t, "DesertOasisPalms")
 	_add_batched_model(root, "res://assets/vegetation/palm_royal.glb", royal_t, "DesertOasisPalms")
 	_enhancement_stats["desert_scatter"] = total
+	_enhancement_stats["desert_detail_0250"] = true
+	_enhancement_stats["desert_scatter_variants"] = saguaro_meshes.size() + rock_small_meshes.size() + rock_medium_meshes.size() + rock_large_meshes.size()
 	_enhancement_stats["palm_count"] = palm_items.size()
 
 
@@ -12191,10 +12624,10 @@ func _build_desert_scatter() -> void:
 func _dz_banner(root: Node3D, pos: Vector3, yaw: float, mat_key: String) -> void:
 	var basis := Basis(Vector3.UP, yaw)
 	for sx in [-1.0, 1.0]:
-		_dz_lcyl("dz_pole", pos, basis, Vector3(sx * 5.4, 3.1, 0.0), 0.13, 6.2)
+		_dz_lcyl("dz_pole", pos, basis, Vector3(sx * 5.4, 3.5, 0.0), 0.13, 7.0)
 		_add_cylinder_collider(pos + basis * Vector3(sx * 5.4, 1.5, 0.0), 0.2, 3.0)
-	_dz_lbox(mat_key, pos, basis, Vector3(0.0, 6.0, 0.0), Vector3(11.4, 1.15, 0.16))
-	_dz_lbox("dz_white", pos, basis, Vector3(0.0, 6.0, -0.1), Vector3(6.4, 0.5, 0.06))
+	_dz_lbox(mat_key, pos, basis, Vector3(0.0, 6.6, 0.0), Vector3(11.4, 0.95, 0.16))
+	_dz_lbox("dz_white", pos, basis, Vector3(0.0, 6.6, -0.1), Vector3(6.4, 0.5, 0.06))
 
 
 func _build_desert_game_markers() -> void:
@@ -12203,14 +12636,14 @@ func _build_desert_game_markers() -> void:
 	add_child(root)
 	var game: Dictionary = _dz_data().get("game", {})
 	var ring_mat := StandardMaterial3D.new()
-	ring_mat.albedo_color = Color(1.0, 0.55, 0.12, 0.38)
+	ring_mat.albedo_color = Color(1.0, 0.55, 0.12, 0.20)
 	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	ring_mat.no_depth_test = false
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 3.3
-	ring_mesh.outer_radius = 3.95
+	ring_mesh.inner_radius = 3.0
+	ring_mesh.outer_radius = 3.42
 	ring_mesh.rings = 26
 	ring_mesh.ring_segments = 8
 	var ring_count := 0
@@ -12242,9 +12675,14 @@ func _build_desert_game_markers() -> void:
 					if route_dir.length_squared() < 0.01:
 						route_dir = Vector2.RIGHT
 					var ring_yaw := atan2(-route_dir.x, -route_dir.y)
-					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 1.15)
-					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 5.6, v.y)), "RaceRing", false)
+					var ring_basis := (Basis(Vector3.UP, ring_yaw) * Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))).scaled_local(Vector3.ONE * 0.92)
+					var ring := _mesh_instance(root, ring_mesh, ring_mat, Transform3D(ring_basis, Vector3(v.x, height_at(v.x, v.y) + 3.35, v.y)), "RaceRing", false)
 					ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					ring.visibility_range_begin = 14.0
+					ring.visibility_range_begin_margin = 8.0
+					ring.visibility_range_end = 340.0
+					ring.visibility_range_end_margin = 60.0
+					ring.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 					ring_count += 1
 					acc = 0.0
 					if points.size() >= 2 and (is_first or is_last):
@@ -12306,6 +12744,7 @@ func _build_desert_game_markers() -> void:
 		_dz_lbox("dz_dirt", origin, basis, Vector3(1.3, 0.3, 0.8), Vector3(1.6, 0.5, 1.4))
 	var merged := _dz_flush_merge(root)
 	_enhancement_stats["desert_race_rings"] = ring_count
+	_enhancement_stats["desert_race_rings_subtle_0253"] = true
 	_enhancement_stats["desert_banners"] = banner_count
 	_enhancement_stats["desert_game_merged_chunks"] = merged
 
@@ -12412,6 +12851,7 @@ func _build_desert_skyline() -> void:
 
 
 func _dz_animate(delta: float) -> void:
+	_gf_animate_birds()
 	if _dz_pumpjack_pivots.is_empty() and _dz_rotors.is_empty() and _dz_beacon_material == null:
 		return
 	for entry in _dz_pumpjack_pivots:
@@ -12426,3 +12866,1397 @@ func _dz_animate(delta: float) -> void:
 		_dz_beacon_material.emission_energy_multiplier = 3.2 if fmod(_elapsed, 1.6) < 0.18 else 0.12
 	if _dz_flare_material != null:
 		_dz_flare_material.emission_energy_multiplier = 2.9 + sin(_elapsed * 11.0) * 0.45 + sin(_elapsed * 23.7) * 0.25
+
+
+# --- GreenForest (0.2.54) -------------------------------------------------
+# Third world.  Roads/bridges/tunnels/merged structures/game markers
+# reuse the data-driven desert path above through _dz_data(); the
+# functions below are the forest-specific terrain splat, water,
+# vegetation scatter, authored structure kinds and living details.
+
+func _gf_in_field(x: float, z: float) -> bool:
+	for rect in _gf_field_rects:
+		if rect.has_point(Vector2(x, z)):
+			return true
+	return false
+
+
+func _build_forest_terrain() -> void:
+	_gf_field_rects.clear()
+	for field_variant in _dz_data().get("fields", []):
+		var field: Dictionary = field_variant
+		var fw := _f(field, "w", 100.0)
+		var fd := _f(field, "d", 100.0)
+		_gf_field_rects.append(Rect2(_f(field, "x") - fw * 0.5, _f(field, "z") - fd * 0.5, fw, fd))
+	var lake: Dictionary = _dz_data().get("lake", {})
+	_gf_lake_y = _f(lake, "y", 14.0)
+	_build_desert_terrain()
+	_enhancement_stats["forest_terrain_chunks"] = int(_enhancement_stats.get("desert_terrain_chunks", 0))
+	_enhancement_stats["greenforest_world_0254"] = true
+
+
+func _build_forest_water() -> void:
+	var root := Node3D.new()
+	root.name = "Water"
+	add_child(root)
+	var lake: Dictionary = _dz_data().get("lake", {})
+	var lake_x := _f(lake, "x", 3050.0)
+	var lake_z := _f(lake, "z", 2200.0)
+	var lake_y := _f(lake, "y", 14.0)
+	var lake_rx := _f(lake, "rx", 450.0)
+	var lake_rz := _f(lake, "rz", 400.0)
+	var lake_mesh := CylinderMesh.new()
+	lake_mesh.top_radius = 1.0
+	lake_mesh.bottom_radius = 1.0
+	lake_mesh.height = 0.24
+	lake_mesh.radial_segments = 72
+	lake_mesh.rings = 1
+	_mesh_instance(root, lake_mesh, _water_material(),
+		make_transform(Vector3(lake_x, lake_y - 0.12, lake_z), 0.0, Vector3(lake_rx + 12.0, 1.0, lake_rz + 12.0)),
+		"ForestLake", false)
+	# Swamp sheet: terrain humps poke through it as boggy islets.
+	var swamp: Dictionary = _dz_data().get("swamp", {})
+	if not swamp.is_empty():
+		var swamp_mesh := CylinderMesh.new()
+		swamp_mesh.top_radius = 1.0
+		swamp_mesh.bottom_radius = 1.0
+		swamp_mesh.height = 0.18
+		swamp_mesh.radial_segments = 48
+		_mesh_instance(root, swamp_mesh, _water_material(),
+			make_transform(Vector3(_f(swamp, "x"), _f(swamp, "y", 8.9) - 0.08, _f(swamp, "z")), 0.0,
+				Vector3(_f(swamp, "rx", 370.0), 1.0, _f(swamp, "rz", 285.0))),
+			"ForestSwamp", false)
+	# River ribbons follow the generator's stored water heights.
+	var river_segments := 0
+	for river_variant in _dz_data().get("river", []):
+		var river: Array = river_variant
+		if river.size() < 2:
+			continue
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var pts: Array[Vector3] = []
+		for p_variant in river:
+			var p: Array = p_variant
+			if p.size() < 3:
+				continue
+			pts.append(Vector3(float(p[0]), float(p[2]), float(p[1])))
+		for i in range(pts.size() - 1):
+			var a := pts[i]
+			var b := pts[i + 1]
+			var dir := Vector2(b.x - a.x, b.z - a.z).normalized()
+			var perp := Vector2(-dir.y, dir.x) * 5.5
+			var v0 := Vector3(a.x - perp.x, a.y, a.z - perp.y)
+			var v1 := Vector3(a.x + perp.x, a.y, a.z + perp.y)
+			var v2 := Vector3(b.x + perp.x, b.y, b.z + perp.y)
+			var v3 := Vector3(b.x - perp.x, b.y, b.z - perp.y)
+			for vertex in [v0, v1, v2, v0, v2, v3]:
+				tool.set_uv(Vector2(vertex.x / 9.0, vertex.z / 9.0))
+				tool.add_vertex(vertex)
+			river_segments += 1
+		tool.generate_normals()
+		var river_mesh := tool.commit()
+		if river_mesh != null:
+			_mesh_instance(root, river_mesh, _water_material(), Transform3D.IDENTITY, "ForestRiver", false)
+	_enhancement_stats["forest_lake"] = true
+	_enhancement_stats["forest_river_segments"] = river_segments
+
+
+func _build_forest_reflection_probes() -> void:
+	_reflection_probes.clear()
+	var root := Node3D.new()
+	root.name = "ReflectionProbes"
+	add_child(root)
+	var specs := [
+		["Village", 3600.0, 2150.0, 26.0],
+		["Lake", 3050.0, 2200.0, 24.0],
+		["Farm", 2050.0, 3450.0, 26.0],
+		["DarkForest", 650.0, 2000.0, 30.0],
+		["Summit", 1850.0, 350.0, 34.0],
+		["Sawmill", 920.0, 3520.0, 26.0],
+	]
+	for spec_variant in specs:
+		var spec: Array = spec_variant
+		var label := String(spec[0])
+		var px := float(spec[1])
+		var pz := float(spec[2])
+		var ph := float(spec[3])
+		var probe := ReflectionProbe.new()
+		probe.name = "Probe" + label
+		probe.size = Vector3(340.0, 130.0, 340.0)
+		probe.position = Vector3(px, height_at(px, pz) + ph, pz)
+		probe.origin_offset = Vector3(0.0, ph * 0.5 - ph, 0.0)
+		probe.box_projection = true
+		probe.enable_shadows = false
+		probe.intensity = 0.68
+		probe.max_distance = 240.0
+		probe.mesh_lod_threshold = 0.65
+		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+		probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		probe.cull_mask = (1 << 19) - 1
+		probe.blend_distance = 60.0
+		root.add_child(probe)
+		_reflection_probes.append(probe)
+	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
+	_enhancement_stats["reflection_probe_mode"] = "once_box_projected_cell_grid"
+	_enhancement_stats["reflection_probe_update_budget_ms"] = 1.2
+	_enhancement_stats["reflection_probe_stagger"] = "per_4_cells"
+
+
+func _build_forest_bounds() -> void:
+	# Hills reach ~158 m; the lowest drivable ground is the river
+	# bed (~9 m), so the safety floor sits just under y=1.
+	_add_box_collider(Vector3(-3.0, 95.0, 2000.0), Vector3(6.0, 230.0, 4012.0))
+	_add_box_collider(Vector3(4003.0, 95.0, 2000.0), Vector3(6.0, 230.0, 4012.0))
+	_add_box_collider(Vector3(2000.0, 95.0, -3.0), Vector3(4012.0, 230.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 95.0, 4003.0), Vector3(4012.0, 230.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 0.0, 2000.0), Vector3(4080.0, 2.0, 4080.0))
+
+
+func _build_forest_skyline() -> void:
+	if _skyline_root == null:
+		_skyline_root = Node3D.new()
+		_skyline_root.name = "DistantSkyline"
+		add_child(_skyline_root)
+	# Forested far ridges: tapered frustums in two mossy greens with
+	# local (not world) triplanar mapping, tangential to the horizon
+	# ring like the desert mesas, plus a nearer spruce-spike ring.
+	var mat := _material("gf_far_ridge_local", "gf_forest_floor.jpg", "gf_forest_floor_normal.jpg", Color(0.30, 0.42, 0.24), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat.uv1_world_triplanar = false
+	var mat_light := _material("gf_far_ridge_local_light", "gf_meadow.jpg", "gf_meadow_normal.jpg", Color(0.38, 0.50, 0.28), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat_light.uv1_world_triplanar = false
+	var base_mesh := _dz_unit_cyl(9, 0.66)
+	var cap_mesh := _dz_unit_cyl(9, 0.84)
+	var spike_mesh := _dz_unit_cyl(7, 0.03)
+	var spike_mat := _material("gf_far_spruce", "", "", Color(0.10, 0.20, 0.10), 1.0)
+	var count := 0
+	for i in range(22):
+		var ang := TAU * float(i) / 22.0 + _hash01(i * 3 + 1, 7) * 0.18
+		var radius := 1780.0 + _hash01(i * 5 + 2, 11) * 280.0
+		var w := 620.0 + _hash01(i * 7 + 3, 13) * 560.0
+		var depth := 300.0 + _hash01(i * 13 + 4, 19) * 180.0
+		var hgt := 110.0 + _hash01(i * 11 + 5, 17) * 90.0
+		var base_h := hgt * 0.78
+		var cap_h := hgt * 0.30
+		var yaw := -ang + (_hash01(i * 17 + 6, 23) - 0.5) * 0.10
+		var base_pos := Vector3(cos(ang) * radius, base_h * 0.5 - 22.0, sin(ang) * radius)
+		var inst := _mesh_instance(_skyline_root, base_mesh, mat if i % 2 == 0 else mat_light, make_transform(base_pos, yaw, Vector3(depth, base_h, w)), "FarRidge", false)
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var cap_pos := Vector3(base_pos.x, base_h - 22.0 + cap_h * 0.5 - 5.0, base_pos.z)
+		var cap := _mesh_instance(_skyline_root, cap_mesh, mat_light if i % 2 == 0 else mat, make_transform(cap_pos, yaw + 0.04, Vector3(depth * 0.72, cap_h, w * 0.62)), "FarRidgeCap", false)
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		count += 2
+		for si in range(3):
+			var sang := ang + (float(si) - 1.0) * 0.055
+			var sradius := radius - 260.0 - _hash01(i * 31 + si, 41) * 120.0
+			var sh := 130.0 + _hash01(i * 37 + si, 43) * 90.0
+			var spike_pos := Vector3(cos(sang) * sradius, sh * 0.5 - 26.0, sin(sang) * sradius)
+			var spike := _mesh_instance(_skyline_root, spike_mesh, spike_mat, make_transform(spike_pos, sang, Vector3(95.0, sh, 95.0)), "FarSpruce", false)
+			spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			count += 1
+	set_skyline_origin(spawn_transform.origin)
+	_set_skyline_time(time_of_day)
+	_enhancement_stats["skyline_layers"] = 1
+	_enhancement_stats["skyline_assets"] = count
+	_enhancement_stats["forest_skyline_0254"] = true
+
+
+func _finish_forest_build() -> void:
+	_enhancement_stats["greenforest_world_0254"] = true
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	set_time_of_day("day")
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_build_foliage_grid()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
+	is_built = true
+
+
+func _gf_structure_kind(kind: String, o: Vector3, basis: Basis, w: float, d: float, h: float, hash_pick: int) -> bool:
+	# Forest-only structure kinds; returns false so shared kinds fall
+	# through to the desert catalogue in _dz_structure.
+	match kind:
+		"silo":
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h * 0.5, 0.0), w * 0.5, h, 0.0, 0.0, 0.0, 0.92, 14)
+			_dz_lcyl("dz_roof_metal", o, basis, Vector3(0.0, h + w * 0.22, 0.0), w * 0.54, w * 0.44, 0.0, 0.0, 0.0, 0.05, 14)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(w * 0.52, h * 0.5, 0.0), Vector3(0.18, h, 0.5))
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.25, d * 0.7), Vector3(w * 0.8, 0.5, d * 0.6))
+			_add_cylinder_collider(o + basis * Vector3(0.0, 2.2, 0.0), w * 0.52, 4.4)
+		"greenhouse":
+			var gh := 2.9
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.18, 0.0), Vector3(w + 0.6, 0.36, d + 0.6))
+			for px in [-0.5, 0.5]:
+				_dz_lbox("dz_glass", o, basis, Vector3(px * w, gh * 0.55, 0.0), Vector3(0.12, gh * 1.1, d))
+				_dz_lbox("dz_white", o, basis, Vector3(px * w, gh + 0.35, 0.0), Vector3(0.2, 0.24, d))
+			for pz in [-0.5, -0.17, 0.17, 0.5]:
+				_dz_lbox("dz_white", o, basis, Vector3(0.0, gh * 0.55, pz * d), Vector3(w, gh * 1.1, 0.14))
+			var roof_pitch := 0.62
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_glass", o, basis, Vector3(sx * w * 0.25, gh + w * 0.16, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, sx * roof_pitch)
+			_dz_lbox("dz_white", o, basis, Vector3(0.0, gh + w * 0.30, 0.0), Vector3(0.28, 0.22, d))
+			_dz_lbox("gf_deer_belly", o, basis, Vector3(0.0, 0.55, 0.0), Vector3(w * 0.7, 0.4, d * 0.8))
+			_add_box_collider(o + basis * Vector3(0.0, 1.2, 0.0), Vector3(w, 2.4, d), atan2(-basis.z.x, -basis.z.z))
+		"tractor":
+			var paint := "gf_tractor_green" if hash_pick % 2 == 0 else "gf_tractor_red"
+			_dz_lbox(paint, o, basis, Vector3(0.0, 1.05, -0.9), Vector3(1.15, 0.85, 2.2))
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.55, 0.4), Vector3(1.3, 0.5, 3.4))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 2.0, 0.85), Vector3(1.35, 1.25, 1.3))
+			_dz_lbox(paint, o, basis, Vector3(0.0, 2.72, 0.85), Vector3(1.5, 0.18, 1.5))
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.42, 1.85, -1.5), 0.07, 1.1)
+			for tx in [-0.85, 0.85]:
+				_dz_lcyl("dz_metal_dark", o, basis, Vector3(tx, 0.78, 1.35), 0.78, 0.42, 0.0, 0.0, PI * 0.5, 1.0, 12)
+				_dz_lcyl("dz_yellow", o, basis, Vector3(tx * 1.06, 0.78, 1.35), 0.36, 0.46, 0.0, 0.0, PI * 0.5, 1.0, 10)
+				_dz_lcyl("dz_metal_dark", o, basis, Vector3(tx * 0.88, 0.45, -1.55), 0.45, 0.3, 0.0, 0.0, PI * 0.5, 1.0, 10)
+			_add_box_collider(o + basis * Vector3(0.0, 1.0, 0.0), Vector3(1.9, 2.0, 4.0), atan2(-basis.z.x, -basis.z.z))
+		"log_stack":
+			var layers := [4, 3, 2]
+			for li in range(layers.size()):
+				var count: int = layers[li]
+				for ci in range(count):
+					var lx := (float(ci) - float(count - 1) * 0.5) * 0.62
+					_dz_lcyl("dz_wood", o, basis, Vector3(lx, 0.32 + float(li) * 0.54, 0.0), 0.30, d, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			_add_box_collider(o + basis * Vector3(0.0, 0.9, 0.0), Vector3(w, 1.8, d), atan2(-basis.z.x, -basis.z.z))
+		"log_truck":
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.95, 0.0), Vector3(2.2, 0.5, d))
+			_dz_lbox("dz_orange", o, basis, Vector3(0.0, 1.7, -d * 0.38), Vector3(2.2, 1.5, 1.9))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 2.05, -d * 0.38 - 0.6), Vector3(2.0, 0.7, 0.8))
+			for li in range(3):
+				for ci in range(3 - (1 if li == 2 else 0)):
+					var lx := (float(ci) - 1.0) * 0.66 + (0.33 if li == 2 else 0.0)
+					_dz_lcyl("dz_wood", o, basis, Vector3(lx, 1.55 + float(li) * 0.56, d * 0.12), 0.31, d * 0.62, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			for wz in [-d * 0.36, d * 0.30, d * 0.42]:
+				for wx in [-1.05, 1.05]:
+					_dz_lcyl("dz_metal_dark", o, basis, Vector3(wx, 0.52, wz), 0.52, 0.34, 0.0, 0.0, PI * 0.5, 1.0, 10)
+			_add_box_collider(o + basis * Vector3(0.0, 1.2, 0.0), Vector3(2.4, 2.4, d), atan2(-basis.z.x, -basis.z.z))
+		"sawmill_hall":
+			var post_h := 4.6
+			for px in [-0.5, 0.5]:
+				for pz in [-0.5, 0.0, 0.5]:
+					_dz_lbox("dz_wood_dark", o, basis, Vector3(px * w, post_h * 0.5, pz * d), Vector3(0.42, post_h, 0.42))
+			var rp := 0.34
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_roof_metal", o, basis, Vector3(sx * w * 0.26, post_h + w * 0.075, 0.0), Vector3(w * 0.62, 0.16, d + 1.2), 0.0, 0.0, sx * rp)
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.12, 0.0), Vector3(w + 1.0, 0.24, d + 1.0))
+			_dz_lbox("dz_yellow", o, basis, Vector3(-w * 0.2, 1.0, 0.0), Vector3(1.2, 1.6, d * 0.5))
+			_dz_lcyl("dz_metal", o, basis, Vector3(-w * 0.2, 1.9, -d * 0.1), 0.75, 0.1, 0.0, 0.0, PI * 0.5, 1.0, 16)
+			_dz_lcyl("dz_wood", o, basis, Vector3(w * 0.18, 0.85, 0.0), 0.34, d * 0.55, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			_add_box_collider(o + basis * Vector3(-w * 0.5, 2.0, 0.0), Vector3(0.6, 4.0, d), atan2(-basis.z.x, -basis.z.z))
+			_add_box_collider(o + basis * Vector3(w * 0.5, 2.0, 0.0), Vector3(0.6, 4.0, d), atan2(-basis.z.x, -basis.z.z))
+		"lighthouse":
+			_dz_lcyl("dz_white", o, basis, Vector3(0.0, h * 0.42, 0.0), w * 0.5, h * 0.84, 0.0, 0.0, 0.0, 0.68, 12)
+			_dz_lcyl("dz_sign_red", o, basis, Vector3(0.0, h * 0.55, 0.0), w * 0.42, h * 0.16, 0.0, 0.0, 0.0, 0.96, 12)
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.0, h * 0.86, 0.0), w * 0.44, 0.35, 0.0, 0.0, 0.0, 1.0, 12)
+			_dz_lcyl("dz_lamp", o, basis, Vector3(0.0, h * 0.94, 0.0), w * 0.3, h * 0.12, 0.0, 0.0, 0.0, 1.0, 10)
+			_dz_lcyl("dz_roof_red", o, basis, Vector3(0.0, h * 1.05, 0.0), w * 0.42, h * 0.12, 0.0, 0.0, 0.0, 0.05, 10)
+			_add_cylinder_collider(o + basis * Vector3(0.0, 2.4, 0.0), w * 0.52, 4.8)
+		"waterfall":
+			# Rock cleft + translucent falling sheet + foam pool.
+			_dz_lbox("dz_rock", o, basis, Vector3(-w * 0.42, h * 0.45, d * 0.18), Vector3(w * 0.4, h * 0.9, d * 0.7), 0.06)
+			_dz_lbox("dz_rock", o, basis, Vector3(w * 0.42, h * 0.45, d * 0.18), Vector3(w * 0.4, h * 0.9, d * 0.7), -0.05)
+			_dz_lbox("dz_rock", o, basis, Vector3(0.0, h * 0.92, d * 0.3), Vector3(w * 0.7, h * 0.2, d * 0.5))
+			_dz_lbox("gf_waterfall", o, basis, Vector3(0.0, h * 0.48, 0.0), Vector3(w * 0.34, h * 0.9, 0.5), 0.0, -0.10, 0.0)
+			_dz_lcyl("gf_waterfall", o, basis, Vector3(0.0, 0.35, -d * 0.22), w * 0.34, 0.7, 0.0, 0.0, 0.0, 1.0, 12)
+			_add_box_collider(o + basis * Vector3(-w * 0.42, 2.5, d * 0.18), Vector3(w * 0.4, 5.0, d * 0.7), atan2(-basis.z.x, -basis.z.z))
+			_add_box_collider(o + basis * Vector3(w * 0.42, 2.5, d * 0.18), Vector3(w * 0.4, 5.0, d * 0.7), atan2(-basis.z.x, -basis.z.z))
+		_:
+			return false
+	return true
+
+
+func _gf_near_road(px: float, pz: float, limit: float) -> bool:
+	# Exact uncapped near-road test over the 3x3 road-grid
+	# neighbourhood.  _road_clearance_xz() caps its answer at
+	# ROAD_GRID_QUERY_CLEARANCE_M (10 m), so the 0.2.54 test
+	# `clearance < 22` was true for EVERY tree and the scatter stage
+	# tried to create 37.5k physics colliders: CI timed out at 600 s
+	# and Android killed the app mid-loading.  True roadside trees
+	# within 22 m number ~6.9k (verified against the data).
+	var centre := _road_grid_cell(px, pz)
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var candidates: Array = _road_segment_grid.get(Vector2i(centre.x + dx, centre.y + dz), [])
+			for index_variant in candidates:
+				var i := int(index_variant)
+				var a: Vector3 = _road_segment_starts[i]
+				var b: Vector3 = _road_segment_ends[i]
+				var ab := Vector2(b.x - a.x, b.z - a.z)
+				var ap := Vector2(px - a.x, pz - a.z)
+				var length_squared := ab.length_squared()
+				var dist := ap.length()
+				if length_squared > 0.0001:
+					var t := clampf(ap.dot(ab) / length_squared, 0.0, 1.0)
+					dist = ap.distance_to(ab * t)
+				if dist - float(_road_segment_half_widths[i]) < limit:
+					return true
+	return false
+
+
+# 0.2.57 photoreal-leaning foliage: alpha-cut card materials, card
+# surface packing and per-species tree builders (textured bark trunk
+# + dark crown core + painted leaf/needle cards).
+func _gf_foliage_material(key: String, file: String, tint: Color) -> StandardMaterial3D:
+	var material := _material(key, file, "", tint, 0.92, 0.0, Vector3.ONE, false, "")
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	material.alpha_scissor_threshold = 0.42
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.vertex_color_use_as_albedo = true
+	return material
+
+
+func _gf_cards_surface(cards: Array) -> Array:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for card_variant in cards:
+		var card: Dictionary = card_variant
+		var c := card["c"] as Vector3
+		var r := card["r"] as Vector3
+		var u := card["u"] as Vector3
+		var n := (card["n"] as Vector3).normalized()
+		var col := card["col"] as Color
+		var corners: Array = [c - r - u, c + r - u, c + r + u, c - r + u]
+		var uv_corners: Array = [Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0)]
+		if bool(card.get("flip", false)):
+			uv_corners = [Vector2(1.0, 1.0), Vector2(0.0, 1.0), Vector2(0.0, 0.0), Vector2(1.0, 0.0)]
+		for vi in [0, 1, 2, 0, 2, 3]:
+			verts.append(corners[vi])
+			normals.append(n)
+			colors.append(col)
+			uvs.append(uv_corners[vi])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	return out
+
+
+func _gf_branch_part(prim: Mesh, p0: Vector3, p1: Vector3, r_bottom: float, color: Color) -> Dictionary:
+	var dirv := p1 - p0
+	var len := maxf(dirv.length(), 0.001)
+	var up := dirv / len
+	var ref := Vector3.RIGHT if absf(up.y) > 0.92 else Vector3.UP
+	var side := ref.cross(up).normalized()
+	var fwd := up.cross(side).normalized()
+	var basis := Basis(side * (r_bottom * 2.0), up * len, fwd * (r_bottom * 2.0))
+	return {"prim": prim, "xform": Transform3D(basis, (p0 + p1) * 0.5), "color": color}
+
+
+func _gf_tree_mesh(trunk_parts: Array, core_parts: Array, cards: Array, bark_material: Material) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	if not trunk_parts.is_empty():
+		var trunk_mesh := _dz_scatter_mesh(trunk_parts)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, trunk_mesh.surface_get_arrays(0))
+		if bark_material != null:
+			mesh.surface_set_material(mesh.get_surface_count() - 1, bark_material)
+	if not core_parts.is_empty():
+		var core_mesh := _dz_scatter_mesh(core_parts)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, core_mesh.surface_get_arrays(0))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, _dz_scatter_material)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _gf_cards_surface(cards))
+	return mesh
+
+
+func _gf_apply_wind(mesh: ArrayMesh, texture_file: String, tint: Color, bend: float) -> ArrayMesh:
+	var wind := _create_foliage_wind_material(mesh, texture_file, tint, 0.32, bend, false)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, wind)
+	return mesh
+
+
+# One foliage cluster: two crossed cards centred on a branch tip.
+func _gf_add_cluster(cards: Array, centre: Vector3, size: float, rng: RandomNumberGenerator) -> void:
+	var base_yaw := rng.randf() * TAU
+	for ci in range(2):
+		var yaw := base_yaw + float(ci) * PI * 0.5 + rng.randf_range(-0.22, 0.22)
+		var right := Vector3(cos(yaw), 0.0, sin(yaw)) * size * 0.5
+		var flat := Vector3(-sin(yaw), 0.0, cos(yaw))
+		var upv := (Vector3.UP + flat * rng.randf_range(-0.35, 0.35)).normalized() * size * 0.47
+		var b := rng.randf_range(0.85, 1.08)
+		cards.append({"c": centre, "r": right, "u": upv, "n": (flat + Vector3.UP * 0.45).normalized(), "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+
+
+func _gf_add_roots(parts: Array, prim: Mesh, trunk_r: float, rng: RandomNumberGenerator) -> void:
+	# 0.2.60: buttress roots — tapered cylinders running from the
+	# trunk flare out and down into the soil, so the tree is
+	# planted instead of sitting on a disc.
+	var white := Color(1.0, 1.0, 1.0)
+	for k in range(5):
+		var ang := TAU * float(k) / 5.0 + rng.randf_range(-0.3, 0.3)
+		var dirv := Vector3(cos(ang), 0.0, sin(ang))
+		var top_p := dirv * (trunk_r * 0.55) + Vector3(0.0, 0.62, 0.0)
+		var toe_p := dirv * (trunk_r * rng.randf_range(2.0, 2.6)) + Vector3(0.0, -0.3, 0.0)
+		parts.append(_gf_branch_part(prim, top_p, toe_p, trunk_r * 0.44, white))
+
+
+func _gf_crown_shell(cards: Array, core: Array, core_prim: Mesh, center: Vector3, radii: Vector3, count: int, size: float, rng: RandomNumberGenerator, core_col: Color, with_core: bool) -> void:
+	# 0.2.60: one continuous crown mass over the treetop. Clusters
+	# are sampled on an ellipsoid shell (biased toward the top), so
+	# the silhouette reads as a whole crown; branch-tip clusters
+	# stay as outer detail and small dark cores give depth inside.
+	for i in range(count):
+		var yaw := rng.randf() * TAU
+		var vy := rng.randf_range(-0.18, 1.0)
+		var ring := sqrt(maxf(1.0 - vy * vy, 0.0))
+		var dirv := Vector3(cos(yaw) * ring, vy, sin(yaw) * ring)
+		var depth := rng.randf_range(0.72, 1.0)
+		var shell_pos := center + Vector3(dirv.x * radii.x, dirv.y * radii.y, dirv.z * radii.z) * depth
+		_gf_add_cluster(cards, shell_pos, size * rng.randf_range(0.9, 1.15), rng)
+		if with_core and i % 3 == 1:
+			var cpos := center + Vector3(dirv.x * radii.x, dirv.y * radii.y, dirv.z * radii.z) * (depth * 0.6)
+			core.append(_dz_scatter_part(core_prim, cpos, Vector3(size * 0.5, size * 0.42, size * 0.5), core_col))
+
+
+# 0.2.58 branching skeletons: real trunk -> primary -> secondary
+# branch cylinders with foliage clusters at the branch ends, so the
+# woody structure reads through the crown instead of a round blob.
+func _gf_broadleaf_mesh(variant: int, is_oak: bool, bark_material: Material, foliage_file: String, foliage_tint: Color) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = (20261653 if is_oak else 20261801) + variant * 181
+	var branch_prim := _dz_unit_cyl(7, 0.62)
+	var core_prim := _dz_unit_sphere(6, 4)
+	var white := Color(1.0, 1.0, 1.0)
+	var trunk_r := 0.42 if is_oak else 0.27
+	var trunk_h := rng.randf_range(2.9, 3.5) if is_oak else rng.randf_range(3.2, 3.9)
+	var parts: Array = []
+	var core: Array = []
+	var cards: Array = []
+	var core_col := Color(0.030, 0.078, 0.022) if is_oak else Color(0.034, 0.088, 0.025)
+	var p_base := Vector3(0.0, -0.2, 0.0)
+	var p_mid := Vector3(rng.randf_range(-0.14, 0.14), trunk_h * 0.55, rng.randf_range(-0.14, 0.14))
+	var collar := Vector3(rng.randf_range(-0.2, 0.2), trunk_h, rng.randf_range(-0.2, 0.2))
+	var p_low := Vector3(rng.randf_range(-0.1, 0.1), trunk_h * 0.3, rng.randf_range(-0.1, 0.1))
+	parts.append(_gf_branch_part(branch_prim, p_base, p_low, trunk_r, white))
+	parts.append(_gf_branch_part(branch_prim, p_low, p_mid, trunk_r * 0.84, white))
+	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.68, white))
+	_gf_add_roots(parts, branch_prim, trunk_r, rng)
+	parts.append(_dz_scatter_part(branch_prim, Vector3(0.0, 0.28, 0.0), Vector3(trunk_r * 3.1, 0.75, trunk_r * 3.1), white))
+	var prim_count := (5 if is_oak else 4) + variant
+	var reach := rng.randf_range(2.1, 2.7) if is_oak else rng.randf_range(1.7, 2.3)
+	var cluster := 2.05 if is_oak else 1.78
+	for i in range(prim_count):
+		var yaw := TAU * float(i) / float(prim_count) + rng.randf_range(-0.3, 0.3)
+		var elev := rng.randf_range(0.32, 0.62) if is_oak else rng.randf_range(0.45, 0.8)
+		var dir1 := Vector3(cos(yaw) * cos(elev), sin(elev), sin(yaw) * cos(elev))
+		var p1 := collar + dir1 * (reach * rng.randf_range(0.5, 0.65))
+		var dir2 := (dir1 + Vector3.UP * rng.randf_range(0.25, 0.5) + Vector3(rng.randf_range(-0.18, 0.18), 0.0, rng.randf_range(-0.18, 0.18))).normalized()
+		var p2 := p1 + dir2 * (reach * rng.randf_range(0.5, 0.75))
+		parts.append(_gf_branch_part(branch_prim, collar, p1, trunk_r * 0.42, white))
+		parts.append(_gf_branch_part(branch_prim, p1, p2, trunk_r * 0.24, white))
+		_gf_add_cluster(cards, p2 + Vector3.UP * cluster * 0.16, cluster, rng)
+		core.append(_dz_scatter_part(core_prim, p2, Vector3(cluster * 0.62, cluster * 0.52, cluster * 0.62), core_col))
+		_gf_add_cluster(cards, p1.lerp(p2, 0.55) + Vector3.UP * cluster * 0.22, cluster * 0.9, rng)
+		for k in range(2):
+			var origin := p1.lerp(p2, 0.25 + 0.35 * float(k))
+			var syaw := yaw + rng.randf_range(0.5, 0.95) * (1.0 if k == 0 else -1.0)
+			var selev := elev + rng.randf_range(0.05, 0.35)
+			var sdir := Vector3(cos(syaw) * cos(selev), sin(selev), sin(syaw) * cos(selev))
+			var send := origin + sdir * (reach * rng.randf_range(0.42, 0.62))
+			parts.append(_gf_branch_part(branch_prim, origin, send, trunk_r * 0.13, white))
+			_gf_add_cluster(cards, send + Vector3.UP * cluster * 0.13, cluster * 0.78, rng)
+	var lead_end := collar + Vector3(rng.randf_range(-0.3, 0.3), reach * rng.randf_range(0.75, 1.0), rng.randf_range(-0.3, 0.3))
+	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.3, white))
+	_gf_add_cluster(cards, lead_end + Vector3.UP * cluster * 0.2, cluster * 1.05, rng)
+	core.append(_dz_scatter_part(core_prim, lead_end, Vector3(cluster * 0.6, cluster * 0.5, cluster * 0.6), core_col))
+	var crown_center := collar + Vector3(0.0, reach * 0.82, 0.0)
+	var crown_radii := Vector3(reach * 1.22, reach * 0.70, reach * 1.22) if is_oak else Vector3(reach * 1.02, reach * 0.82, reach * 1.02)
+	_gf_crown_shell(cards, core, core_prim, crown_center, crown_radii, (7 if is_oak else 6) + variant, cluster, rng, core_col, true)
+	var mesh := _gf_tree_mesh(parts, core, cards, bark_material)
+	return _gf_apply_wind(mesh, foliage_file, foliage_tint, 0.08)
+
+
+func _gf_birch_mesh(variant: int, bark_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261477 + variant * 167
+	var branch_prim := _dz_unit_cyl(6, 0.6)
+	var white := Color(1.0, 1.0, 1.0)
+	var trunk_r := 0.16
+	var trunk_h := rng.randf_range(4.4, 5.2)
+	var parts: Array = []
+	var cards: Array = []
+	var p_base := Vector3(0.0, -0.2, 0.0)
+	var p_mid := Vector3(rng.randf_range(-0.2, 0.2), trunk_h * 0.55, rng.randf_range(-0.2, 0.2))
+	var collar := Vector3(rng.randf_range(-0.25, 0.25), trunk_h, rng.randf_range(-0.25, 0.25))
+	parts.append(_gf_branch_part(branch_prim, p_base, p_mid, trunk_r, white))
+	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.7, white))
+	_gf_add_roots(parts, branch_prim, trunk_r * 0.9, rng)
+	if variant == 1:
+		# Birches often grow as a clump: a second thinner stem leans
+		# out of the same root crown with its own small top.
+		var sb := Vector3(0.16, -0.2, 0.08)
+		var sm := Vector3(0.38, trunk_h * 0.42, 0.2)
+		var scollar := Vector3(0.72, trunk_h * 0.8, 0.36)
+		parts.append(_gf_branch_part(branch_prim, sb, sm, trunk_r * 0.68, white))
+		parts.append(_gf_branch_part(branch_prim, sm, scollar, trunk_r * 0.5, white))
+		for j in range(3):
+			var syaw := rng.randf() * TAU
+			var selev := rng.randf_range(0.75, 1.1)
+			var sdir := Vector3(cos(syaw) * cos(selev), sin(selev), sin(syaw) * cos(selev))
+			var send2 := scollar + sdir * rng.randf_range(1.5, 2.0)
+			parts.append(_gf_branch_part(branch_prim, scollar, send2, trunk_r * 0.26, white))
+			_gf_add_cluster(cards, send2 + Vector3.UP * 0.22, 1.45, rng)
+	for i in range(5 + variant):
+		var from := p_mid.lerp(collar, rng.randf_range(0.15, 0.9))
+		var yaw := TAU * float(i) / 5.0 + rng.randf_range(-0.35, 0.35)
+		var elev := rng.randf_range(0.7, 1.15)
+		var dir1 := Vector3(cos(yaw) * cos(elev), sin(elev), sin(yaw) * cos(elev))
+		var p1 := from + dir1 * rng.randf_range(1.0, 1.5)
+		var dir2 := (dir1 + Vector3.UP * rng.randf_range(0.1, 0.35)).normalized()
+		var p2 := p1 + dir2 * rng.randf_range(0.9, 1.4)
+		parts.append(_gf_branch_part(branch_prim, from, p1, trunk_r * 0.45, white))
+		parts.append(_gf_branch_part(branch_prim, p1, p2, trunk_r * 0.22, white))
+		_gf_add_cluster(cards, p2 + Vector3.UP * 0.22, 1.55, rng)
+		_gf_add_cluster(cards, p1.lerp(p2, 0.5) + Vector3.UP * 0.3, 1.35, rng)
+	var lead_end := collar + Vector3(rng.randf_range(-0.2, 0.2), rng.randf_range(1.4, 1.9), rng.randf_range(-0.2, 0.2))
+	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.4, white))
+	_gf_add_cluster(cards, lead_end + Vector3.UP * 0.25, 1.6, rng)
+	_gf_crown_shell(cards, [], branch_prim, collar + Vector3(0.0, 1.0, 0.0), Vector3(1.15, 1.45, 1.15), 5 + variant, 1.5, rng, Color(0.034, 0.088, 0.025), false)
+	var mesh := _gf_tree_mesh(parts, [], cards, bark_material)
+	return _gf_apply_wind(mesh, "gf_birch_cluster.png", Color(1.0, 1.0, 1.0), 0.09)
+
+
+func _gf_pine_mesh(variant: int, bark_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261301 + variant * 149
+	var branch_prim := _dz_unit_cyl(6, 0.6)
+	var core_prim := _dz_unit_sphere(6, 4)
+	var white := Color(1.0, 1.0, 1.0)
+	var trunk_r := 0.23
+	var trunk_h := rng.randf_range(5.4, 6.4)
+	var lean := rng.randf_range(-0.35, 0.35)
+	var parts: Array = []
+	var core: Array = []
+	var cards: Array = []
+	var p_base := Vector3(0.0, -0.2, 0.0)
+	var p_mid := Vector3(lean * 0.5, trunk_h * 0.55, rng.randf_range(-0.12, 0.12))
+	var collar := Vector3(lean, trunk_h, rng.randf_range(-0.15, 0.15))
+	var p_low := Vector3(lean * 0.25, trunk_h * 0.3, rng.randf_range(-0.08, 0.08))
+	parts.append(_gf_branch_part(branch_prim, p_base, p_low, trunk_r, white))
+	parts.append(_gf_branch_part(branch_prim, p_low, p_mid, trunk_r * 0.84, white))
+	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.66, white))
+	_gf_add_roots(parts, branch_prim, trunk_r, rng)
+	parts.append(_dz_scatter_part(branch_prim, Vector3(0.0, 0.26, 0.0), Vector3(trunk_r * 3.0, 0.7, trunk_r * 3.0), white))
+	var core_col := Color(0.022, 0.058, 0.018)
+	core.append(_dz_scatter_part(core_prim, collar + Vector3(0.0, 0.55, 0.0), Vector3(2.2, 1.0, 2.2), core_col))
+	for i in range(6 + variant):
+		var from := p_mid.lerp(collar, rng.randf_range(0.45, 0.95))
+		var yaw := TAU * float(i) / 6.0 + rng.randf_range(-0.3, 0.3)
+		var elev := rng.randf_range(0.12, 0.45)
+		var dir1 := Vector3(cos(yaw) * cos(elev), sin(elev), sin(yaw) * cos(elev))
+		var p1 := from + dir1 * rng.randf_range(1.3, 1.9)
+		var dir2 := (dir1 + Vector3.UP * rng.randf_range(0.3, 0.55)).normalized()
+		var p2 := p1 + dir2 * rng.randf_range(0.9, 1.4)
+		parts.append(_gf_branch_part(branch_prim, from, p1, trunk_r * 0.4, white))
+		parts.append(_gf_branch_part(branch_prim, p1, p2, trunk_r * 0.2, white))
+		_gf_add_cluster(cards, p2 + Vector3.UP * 0.3, 2.15, rng)
+		if i % 2 == 0:
+			_gf_add_cluster(cards, p1 + Vector3.UP * 0.35, 1.8, rng)
+	var lead_end := collar + Vector3(lean * 0.3, rng.randf_range(1.2, 1.7), 0.0)
+	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.32, white))
+	_gf_add_cluster(cards, lead_end + Vector3.UP * 0.3, 2.0, rng)
+	_gf_crown_shell(cards, core, core_prim, collar + Vector3(0.0, 0.8, 0.0), Vector3(2.25, 0.8, 2.25), 6 + variant, 2.0, rng, core_col, true)
+	var mesh := _gf_tree_mesh(parts, core, cards, bark_material)
+	return _gf_apply_wind(mesh, "gf_pine_spray.png", Color(1.0, 1.0, 1.0), 0.065)
+
+
+func _gf_spruce_mesh(variant: int, bark_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261117 + variant * 131
+	var cyl := _dz_unit_cyl(8, 0.35)
+	var cone := _dz_unit_cyl(9, 0.04)
+	var branch_prim := _dz_unit_cyl(5, 0.5)
+	var white := Color(1.0, 1.0, 1.0)
+	var top := 9.7 if variant == 0 else 10.5
+	var trunk: Array = [_dz_scatter_part(cyl, Vector3(0.0, 2.3, 0.0), Vector3(0.52, 4.6, 0.52), white)]
+	trunk.append(_dz_scatter_part(cyl, Vector3(0.0, 0.24, 0.0), Vector3(0.85, 0.6, 0.85), white))
+	_gf_add_roots(trunk, branch_prim, 0.26, rng)
+	var core: Array = []
+	var cards: Array = []
+	var tiers := 7
+	for t in range(tiers):
+		var ft := float(t) / float(tiers - 1)
+		var tier_y := lerpf(1.9, top - 1.1, ft)
+		var tier_r := lerpf(2.25, 0.55, pow(ft, 0.85))
+		core.append(_dz_scatter_part(cone, Vector3(0.0, tier_y + 0.6, 0.0), Vector3(tier_r * 1.02, 2.1, tier_r * 1.02), Color(0.016, 0.044, 0.014)))
+		for si in range(6):
+			var ang := TAU * float(si) / 6.0 + float(t) * 0.52 + rng.randf_range(-0.10, 0.10)
+			var out := Vector3(cos(ang), 0.0, sin(ang))
+			var tangent := Vector3(-out.z, 0.0, out.x)
+			var b_start := Vector3(0.0, tier_y + 0.45, 0.0)
+			var b_end := Vector3(out.x * tier_r * 1.02, tier_y - tier_r * 0.16, out.z * tier_r * 1.02)
+			trunk.append(_gf_branch_part(branch_prim, b_start, b_end, 0.045, white))
+			var centre := Vector3(out.x * tier_r * 0.78, tier_y + 0.26, out.z * tier_r * 0.78)
+			var right := out * (tier_r * 0.78)
+			right.y = -tier_r * rng.randf_range(0.22, 0.34)
+			var upv := tangent * (tier_r * 0.46)
+			var b := rng.randf_range(0.78, 1.05) + ft * 0.08
+			cards.append({"c": centre, "r": right, "u": upv, "n": Vector3.UP, "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	core.append(_dz_scatter_part(cone, Vector3(0.0, top - 0.35, 0.0), Vector3(0.55, 1.5, 0.55), Color(0.020, 0.052, 0.016)))
+	var mesh := _gf_tree_mesh(trunk, core, cards, bark_material)
+	return _gf_apply_wind(mesh, "gf_spruce_spray.png", Color(1.0, 1.0, 1.0), 0.05)
+
+
+func _gf_bush_mesh() -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261999
+	var sph := _dz_unit_sphere(7, 5)
+	var branch_prim := _dz_unit_cyl(5, 0.55)
+	var white := Color(1.0, 1.0, 1.0)
+	var core_col := Color(0.032, 0.082, 0.024)
+	var twigs: Array = []
+	for i in range(5):
+		var yaw := TAU * float(i) / 5.0 + rng.randf_range(-0.3, 0.3)
+		var end := Vector3(cos(yaw) * rng.randf_range(0.3, 0.5), rng.randf_range(0.5, 0.8), sin(yaw) * rng.randf_range(0.3, 0.5))
+		twigs.append(_gf_branch_part(branch_prim, Vector3(0.0, 0.0, 0.0), end, 0.035, Color(0.09, 0.055, 0.030)))
+	var core: Array = [
+		_dz_scatter_part(sph, Vector3(0.0, 0.45, 0.0), Vector3(1.35, 0.78, 1.26), core_col),
+		_dz_scatter_part(sph, Vector3(0.45, 0.6, 0.22), Vector3(0.88, 0.55, 0.82), core_col),
+		_dz_scatter_part(sph, Vector3(-0.48, 0.54, -0.26), Vector3(0.8, 0.5, 0.75), core_col),
+	]
+	var cards: Array = []
+	for ci in range(7):
+		var dir := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.05, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		var centre := Vector3(dir.x * 0.6, 0.56 + dir.y * 0.34, dir.z * 0.6)
+		_gf_add_cluster(cards, centre, 1.05, rng)
+	var mesh := _gf_tree_mesh([], twigs + core, cards, null)
+	return _gf_apply_wind(mesh, "gf_leaf_cluster.png", Color(1.0, 1.0, 1.0), 0.06)
+
+
+# Crossed vertical cards for ground tufts (grass, ferns).
+func _gf_cross_mesh(planes: int, half_w: float, height: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var base_col := Color(0.5, 0.55, 0.45)
+	var top_col := Color(1.0, 1.0, 1.0)
+	for pi in range(planes):
+		var ang := float(pi) * PI / float(planes)
+		var right := Vector3(cos(ang), 0.0, sin(ang)) * half_w
+		var corners: Array = [
+			Vector3(-right.x, 0.0, -right.z), Vector3(right.x, 0.0, right.z),
+			Vector3(right.x, height, right.z), Vector3(-right.x, height, -right.z),
+		]
+		var uv_corners: Array = [Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0)]
+		var cols: Array = [base_col, base_col, top_col, top_col]
+		for vi in [0, 1, 2, 0, 2, 3]:
+			verts.append(corners[vi])
+			normals.append(Vector3.UP)
+			colors.append(cols[vi])
+			uvs.append(uv_corners[vi])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _gf_vnoise3(lat: PackedFloat32Array, p: Vector3) -> float:
+	# Trilinear value noise on a wrapped 8^3 lattice — the coherent
+	# low-frequency field that shapes real-looking boulders.
+	const LS := 8
+	var xi := int(floor(p.x))
+	var yi := int(floor(p.y))
+	var zi := int(floor(p.z))
+	var xf := p.x - float(xi)
+	var yf := p.y - float(yi)
+	var zf := p.z - float(zi)
+	var xs := xf * xf * (3.0 - 2.0 * xf)
+	var ys := yf * yf * (3.0 - 2.0 * yf)
+	var zs := zf * zf * (3.0 - 2.0 * zf)
+	var x0: int = int(posmod(xi, LS))
+	var x1: int = int(posmod(xi + 1, LS))
+	var y0: int = int(posmod(yi, LS)) * LS
+	var y1: int = int(posmod(yi + 1, LS)) * LS
+	var z0: int = int(posmod(zi, LS)) * LS * LS
+	var z1: int = int(posmod(zi + 1, LS)) * LS * LS
+	var c000 := lat[x0 + y0 + z0]
+	var c100 := lat[x1 + y0 + z0]
+	var c010 := lat[x0 + y1 + z0]
+	var c110 := lat[x1 + y1 + z0]
+	var c001 := lat[x0 + y0 + z1]
+	var c101 := lat[x1 + y0 + z1]
+	var c011 := lat[x0 + y1 + z1]
+	var c111 := lat[x1 + y1 + z1]
+	return lerpf(lerpf(lerpf(c000, c100, xs), lerpf(c010, c110, xs), ys),
+		lerpf(lerpf(c001, c101, xs), lerpf(c011, c111, xs), ys), zs)
+
+
+func _gf_rock_mid(verts: Array, cache: Dictionary, a: int, b: int) -> int:
+	var key := mini(a, b) * 100000 + maxi(a, b)
+	if cache.has(key):
+		return int(cache[key])
+	var m: Vector3 = (verts[a] + verts[b]) * 0.5
+	verts.append(m.normalized())
+	var idx := verts.size() - 1
+	cache[key] = idx
+	return idx
+
+
+func _gf_rock_mesh(seed_i: int, sharpness: float) -> ArrayMesh:
+	# 0.2.59 ground-cover pass: icosphere displaced by 3-D value noise
+	# (broad shape + chip detail), three random planar joint cuts and
+	# a flattened seat. Flat-shaded facets; vertex colours carry moss
+	# on damp flat tops and a dark soil skirt at the base, while the
+	# triplanar gf_rock_gray PBR set does the micro-surface.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41000 + seed_i * 131
+	const LS := 8
+	var lat := PackedFloat32Array()
+	lat.resize(LS * LS * LS)
+	for li in range(lat.size()):
+		lat[li] = rng.randf()
+	var t := 1.6180339887
+	var src: Array = []
+	for v in [Vector3(-1, t, 0), Vector3(1, t, 0), Vector3(-1, -t, 0), Vector3(1, -t, 0),
+			Vector3(0, -1, t), Vector3(0, 1, t), Vector3(0, -1, -t), Vector3(0, 1, -t),
+			Vector3(t, 0, -1), Vector3(t, 0, 1), Vector3(-t, 0, -1), Vector3(-t, 0, 1)]:
+		src.append((v as Vector3).normalized())
+	var faces: Array = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+		[1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+		[3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+		[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]]
+	var cache: Dictionary = {}
+	for sub in range(2):
+		var nf: Array = []
+		for f in faces:
+			var a := int(f[0])
+			var b := int(f[1])
+			var c := int(f[2])
+			var ab := _gf_rock_mid(src, cache, a, b)
+			var bc := _gf_rock_mid(src, cache, b, c)
+			var ca := _gf_rock_mid(src, cache, c, a)
+			nf.append([a, ab, ca])
+			nf.append([b, bc, ab])
+			nf.append([c, ca, bc])
+			nf.append([ab, bc, ca])
+		faces = nf
+	var planes: Array = []
+	for pi in range(3):
+		var pn := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-0.5, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		planes.append(Vector4(pn.x, pn.y, pn.z, rng.randf_range(0.55, 0.85)))
+	var stretch := Vector3(rng.randf_range(0.85, 1.25), rng.randf_range(0.62, 0.90), rng.randf_range(0.85, 1.25))
+	var disp := PackedVector3Array()
+	disp.resize(src.size())
+	var broad := PackedFloat32Array()
+	broad.resize(src.size())
+	for vi in range(src.size()):
+		var p: Vector3 = src[vi]
+		var n1 := _gf_vnoise3(lat, p * 1.7 + Vector3(2.0, 2.0, 2.0))
+		var n2 := _gf_vnoise3(lat, p * 4.6 + Vector3(5.0, 1.0, 7.0))
+		var n3 := _gf_vnoise3(lat, p * 9.0 + Vector3(1.0, 6.0, 3.0))
+		broad[vi] = n1
+		var r := 1.0 + (n1 - 0.5) * 0.66 + (n2 - 0.5) * 0.26 * sharpness + (n3 - 0.5) * 0.10 * sharpness
+		var dp := p * clampf(r, 0.5, 1.45)
+		for plv in planes:
+			var pl: Vector4 = plv
+			var pn2 := Vector3(pl.x, pl.y, pl.z)
+			var dist := dp.dot(pn2)
+			if dist > pl.w:
+				dp -= pn2 * (dist - pl.w)
+		if dp.y < -0.32:
+			dp.y = -0.32 + (dp.y + 0.32) * 0.18
+		disp[vi] = Vector3(dp.x * stretch.x, dp.y * stretch.y, dp.z * stretch.z)
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var moss_col := Color(0.52, 0.72, 0.42)
+	var soil_col := Color(0.46, 0.39, 0.31)
+	for ti in range(faces.size()):
+		var f: Array = faces[ti]
+		var ia := int(f[0])
+		var ib := int(f[1])
+		var ic := int(f[2])
+		var a := disp[ia]
+		var b := disp[ib]
+		var c := disp[ic]
+		var n := (b - a).cross(c - a)
+		if n.length_squared() < 0.0000001:
+			continue
+		n = n.normalized()
+		var face_broad := (broad[ia] + broad[ib] + broad[ic]) / 3.0
+		var moss := smoothstep(0.35, 0.85, n.y) * smoothstep(0.45, 0.75, face_broad)
+		var shade := 0.86 + _hash01(ti * 7 + seed_i, seed_i * 13 + ti) * 0.24
+		var base_col := Color(0.94 * shade, 0.94 * shade, 0.93 * shade)
+		base_col = base_col.lerp(moss_col, moss * 0.55)
+		for v in [a, b, c]:
+			var soil := smoothstep(0.02, -0.28, v.y)
+			verts.append(v)
+			normals.append(n)
+			colors.append(base_col.lerp(soil_col, soil * 0.6))
+			uvs.append(Vector2.ZERO)
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _gf_rock_cluster_mesh(seed_i: int) -> ArrayMesh:
+	# Rock formation: one hero boulder plus two satellites leaning on
+	# it — reads as a natural outcrop instead of a lone ball.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.append_from(_gf_rock_mesh(seed_i * 3, 1.15), 0, Transform3D.IDENTITY)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 777 + seed_i * 17
+	for sat in range(2):
+		var ang := rng.randf_range(0.0, TAU)
+		var off := Vector3(cos(ang) * 0.85, -0.10, sin(ang) * 0.85)
+		var bs := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * rng.randf_range(0.45, 0.62))
+		st.append_from(_gf_rock_mesh(seed_i * 3 + 1 + sat, 1.2), 0, Transform3D(bs, off))
+	return st.commit()
+
+
+func _gf_grass_blades_mesh(seed_i: int) -> ArrayMesh:
+	# 0.2.60 second grass pass: two blade kinds per tuft — wide
+	# meadow blades with a fake centre crease (split normals, no
+	# extra triangles) plus taller thin seed-head stalks, so a tuft
+	# has a real uneven silhouette instead of a uniform brush.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9100 + seed_i * 37
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var blade_rows: Array = [[0.0, 1.0], [0.5, 0.62], [1.0, 0.05]]
+	var stalk_rows: Array = [[0.0, 0.42], [0.55, 0.34], [0.84, 1.5], [1.0, 0.14]]
+	for blade in range(30):
+		var is_stalk := blade >= 24
+		var rows_spec: Array = stalk_rows if is_stalk else blade_rows
+		var ra := rng.randf_range(0.0, TAU)
+		var rr := sqrt(rng.randf()) * 0.5
+		var root := Vector3(cos(ra) * rr, 0.0, sin(ra) * rr)
+		var yaw := rng.randf_range(0.0, TAU)
+		var right := Vector3(cos(yaw), 0.0, sin(yaw))
+		var fwd := Vector3(-sin(yaw), 0.0, cos(yaw))
+		var lean := fwd.rotated(Vector3.UP, rng.randf_range(-0.8, 0.8))
+		var h := rng.randf_range(1.05, 1.35) if is_stalk else rng.randf_range(0.5, 0.95)
+		var w := rng.randf_range(0.030, 0.042) if is_stalk else rng.randf_range(0.045, 0.075)
+		var bend := rng.randf_range(0.06, 0.16) if is_stalk else rng.randf_range(0.10, 0.30)
+		var nrm := (fwd * 0.6 + Vector3.UP * 0.8).normalized()
+		# Split normals fake the centre fold of a real blade.
+		var n_left := nrm.rotated(Vector3.UP, -0.5)
+		var n_right := nrm.rotated(Vector3.UP, 0.5)
+		var rows: Array = []
+		for spec_variant in rows_spec:
+			var spec: Array = spec_variant
+			var tt := float(spec[0])
+			var ws := float(spec[1])
+			var centre := root + Vector3.UP * (tt * h) + lean * (bend * tt * tt)
+			rows.append([centre - right * w * 0.5 * ws, centre + right * w * 0.5 * ws, tt])
+		for seg in range(rows.size() - 1):
+			var a0: Vector3 = rows[seg][0]
+			var b0: Vector3 = rows[seg][1]
+			var a1: Vector3 = rows[seg + 1][0]
+			var b1: Vector3 = rows[seg + 1][1]
+			var t0 := float(rows[seg][2])
+			var t1 := float(rows[seg + 1][2])
+			var vseq: Array = [a0, b0, b1, a0, b1, a1]
+			var nseq: Array = [n_left, n_right, n_right, n_left, n_right, n_left]
+			var useq: Array = [Vector2(0.0, t0), Vector2(1.0, t0), Vector2(1.0, t1), Vector2(0.0, t0), Vector2(1.0, t1), Vector2(0.0, t1)]
+			for k in range(6):
+				verts.append(vseq[k])
+				normals.append(nseq[k])
+				colors.append(Color.WHITE)
+				uvs.append(useq[k])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
+func _gf_slope_rocks(buckets: Dictionary, base: float, sink: float, collider_r: float, collider_h: float) -> int:
+	# 0.2.60: outcrop clusters embedded in steep slopes — real rock
+	# meshes breaking out of the hillside instead of rock texture
+	# alone. Sampled deterministically at build time; road, field
+	# and lowland guards keep them out of the driving space.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261160
+	var added := 0
+	for _attempt in range(2600):
+		if added >= 380:
+			break
+		var px := rng.randf_range(60.0, 3940.0)
+		var pz := rng.randf_range(60.0, 3940.0)
+		var gy := height_at(px, pz)
+		if gy < 10.5:
+			continue
+		var sx: float = absf(height_at(px + 6.0, pz) - height_at(px - 6.0, pz)) / 12.0
+		var sz: float = absf(height_at(px, pz + 6.0) - height_at(px, pz - 6.0)) / 12.0
+		var slope := maxf(sx, sz)
+		if slope < 0.55 or slope > 1.7:
+			continue
+		if _gf_in_field(px, pz):
+			continue
+		if _gf_near_road(px, pz, 16.0):
+			continue
+		var sc := base * rng.randf_range(0.75, 1.5)
+		var pos := Vector3(px, gy - sink - 0.3 * sc, pz)
+		var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+		if not buckets.has(key):
+			buckets[key] = []
+		(buckets[key] as Array).append(make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * sc))
+		_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+		added += 1
+	return added
+
+
+func _gf_roadside_grass(buckets: Dictionary, base: float, sink: float) -> int:
+	# 0.2.59: dense blade tufts hugging every road verge — the strip
+	# of ground the player actually looks at. Generated from road
+	# samples at build time, so the world data file stays untouched.
+	# Relative-height rejects keep tufts off bridges, tunnel roofs
+	# and lake beds.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261159
+	var added := 0
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		var half_w := _f(road, "widthM", 10.0) * 0.5
+		for si in range(0, samples.size() - 1, 2):
+			var a := _sample_point(samples[si])
+			var b := _sample_point(samples[si + 1])
+			var dir2 := Vector2(b.x - a.x, b.z - a.z)
+			if dir2.length_squared() < 0.01:
+				continue
+			dir2 = dir2.normalized()
+			var perp := Vector2(-dir2.y, dir2.x)
+			for side in [-1.0, 1.0]:
+				var off := half_w + rng.randf_range(0.6, 6.0)
+				var along := rng.randf_range(-3.0, 3.0)
+				var px: float = a.x + perp.x * off * float(side) + dir2.x * along
+				var pz: float = a.z + perp.y * off * float(side) + dir2.y * along
+				if _gf_in_field(px, pz):
+					continue
+				var gy := height_at(px, pz)
+				if gy < a.y - 2.2 or gy > a.y + 4.5:
+					continue
+				var sc := base * rng.randf_range(0.8, 1.45)
+				var pos := Vector3(px, gy - sink, pz)
+				var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+				if not buckets.has(key):
+					buckets[key] = []
+				(buckets[key] as Array).append(make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * sc))
+				added += 1
+	return added
+
+
+func _build_forest_scatter() -> void:
+	_gf_scatter_build([])
+
+
+func _gf_scatter_build(kinds_filter: Array) -> void:
+	var root := Node3D.new()
+	root.name = "ForestScatter"
+	add_child(root)
+	if _dz_scatter_material == null:
+		_dz_scatter_material = StandardMaterial3D.new()
+		_dz_scatter_material.vertex_color_use_as_albedo = true
+		_dz_scatter_material.roughness = 0.95
+		_dz_scatter_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var cyl7 := _dz_unit_cyl(7, 0.4)
+	var cyl11 := _dz_unit_cyl(11, 0.05)
+	var sph := _dz_unit_sphere(10, 7)
+	var rock_mat := _material("gf_rock_gray_mat", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(0.92, 0.92, 0.90), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "gf_rock_gray_roughness.jpg")
+	rock_mat.vertex_color_use_as_albedo = true
+	_apply_ao(rock_mat, "gf_rock_gray_ao.jpg", 0.65)
+	rock_mat.normal_scale = 1.35
+	var bark := Color(0.09, 0.055, 0.030)
+	# 0.2.57 photoreal-leaning trees: textured bark trunks, dark
+	# crown cores and alpha-cut foliage cards (painted leaf/needle
+	# sprays) instead of solid plastic cones and blobs.
+	var bark_oak_mat := _material("gf_bark_oak_mat", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.88, 0.83, 0.78), 1.0, 0.0, Vector3(1.2, 2.2, 1.2), false, "oak_bark_roughness.jpg")
+	var bark_pine_mat := _material("gf_bark_pine_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.95, 0.90, 0.85), 1.0, 0.0, Vector3(1.2, 2.0, 1.2), false, "gf_pine_bark_roughness.jpg")
+	var bark_spruce_mat := _material("gf_bark_spruce_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.60, 0.57, 0.54), 1.0, 0.0, Vector3(1.1, 1.8, 1.1), false, "gf_pine_bark_roughness.jpg")
+	var bark_birch_mat := _material("gf_bark_birch_mat", "gf_birch_bark.jpg", "gf_birch_bark_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3(1.0, 1.6, 1.0), false, "gf_birch_bark_roughness.jpg")
+	# 0.2.60: per-species bark depth — baked furrow AO + stronger normals
+	_apply_ao(bark_oak_mat, "oak_bark_ao.jpg", 0.7)
+	bark_oak_mat.normal_scale = 1.25
+	_apply_ao(bark_pine_mat, "gf_pine_bark_ao.jpg", 0.65)
+	bark_pine_mat.normal_scale = 1.2
+	_apply_ao(bark_spruce_mat, "gf_pine_bark_ao.jpg", 0.65)
+	bark_spruce_mat.normal_scale = 1.2
+	_apply_ao(bark_birch_mat, "gf_birch_bark_ao.jpg", 0.5)
+	bark_birch_mat.normal_scale = 1.1
+	var spruce_a := _gf_spruce_mesh(0, bark_spruce_mat)
+	var spruce_b := _gf_spruce_mesh(1, bark_spruce_mat)
+	var pine_meshes: Array = [_gf_pine_mesh(0, bark_pine_mat), _gf_pine_mesh(1, bark_pine_mat)]
+	var birch_meshes: Array = [_gf_birch_mesh(0, bark_birch_mat), _gf_birch_mesh(1, bark_birch_mat)]
+	var leafy_meshes: Array = [_gf_broadleaf_mesh(0, false, bark_oak_mat, "gf_leaf_cluster.png", Color(1.0, 1.0, 1.0)), _gf_broadleaf_mesh(1, false, bark_oak_mat, "gf_leaf_cluster.png", Color(1.0, 1.0, 1.0))]
+	var oak_meshes: Array = [_gf_broadleaf_mesh(0, true, bark_oak_mat, "gf_leaf_cluster.png", Color(0.85, 0.92, 0.82)), _gf_broadleaf_mesh(1, true, bark_oak_mat, "gf_leaf_cluster.png", Color(0.85, 0.92, 0.82))]
+	var dead_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.9, 0), Vector3(0.45, 3.8, 0.45), Color(0.16, 0.13, 0.10), 0.0, 0.0, 0.06),
+		_dz_scatter_part(cyl7, Vector3(0.8, 3.4, 0.1), Vector3(0.18, 2.0, 0.18), Color(0.16, 0.13, 0.10), 0.0, 0.0, -0.85),
+		_dz_scatter_part(cyl7, Vector3(-0.7, 3.0, -0.2), Vector3(0.15, 1.7, 0.15), Color(0.18, 0.15, 0.11), 0.0, 0.35, 0.9),
+	])
+	var bush_card_mesh := _gf_bush_mesh()
+	var fern_card_mesh := _gf_cross_mesh(3, 0.55, 0.95)
+	var fern_mat := _create_foliage_wind_material(fern_card_mesh, "gf_fern_frond.png", Color(1.0, 1.0, 1.0), 0.30, 0.05, false)
+	var flower_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.26, 0), Vector3(0.05, 0.52, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0, 0.58, 0), Vector3(0.17, 0.17, 0.17), Color(0.55, 0.34, 0.02)),
+		_dz_scatter_part(cyl7, Vector3(0.28, 0.22, 0.14), Vector3(0.05, 0.44, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.28, 0.5, 0.14), Vector3(0.15, 0.15, 0.15), Color(0.62, 0.62, 0.57)),
+		_dz_scatter_part(cyl7, Vector3(-0.24, 0.2, -0.1), Vector3(0.05, 0.4, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(-0.24, 0.46, -0.1), Vector3(0.14, 0.14, 0.14), Color(0.24, 0.14, 0.38)),
+	])
+	var mushroom_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.18, 0), Vector3(0.12, 0.36, 0.12), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(0, 0.4, 0), Vector3(0.44, 0.2, 0.44), Color(0.34, 0.09, 0.04)),
+		_dz_scatter_part(cyl7, Vector3(0.3, 0.13, 0.18), Vector3(0.09, 0.26, 0.09), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(0.3, 0.29, 0.18), Vector3(0.3, 0.14, 0.3), Color(0.30, 0.08, 0.035)),
+		_dz_scatter_part(cyl7, Vector3(-0.26, 0.1, -0.14), Vector3(0.08, 0.2, 0.08), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(-0.26, 0.22, -0.14), Vector3(0.24, 0.11, 0.24), Color(0.38, 0.12, 0.05)),
+	])
+	var stump_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.27, 0), Vector3(0.85, 0.55, 0.85), Color(0.20, 0.135, 0.08)),
+		_dz_scatter_part(sph, Vector3(0, 0.55, 0), Vector3(0.78, 0.1, 0.78), Color(0.36, 0.27, 0.18)),
+	])
+	var log_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.26, 0), Vector3(0.5, 4.8, 0.5), Color(0.14, 0.09, 0.05), 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(sph, Vector3(0.05, 0.52, -0.8), Vector3(0.45, 0.18, 1.6), Color(0.05, 0.11, 0.035)),
+		_dz_scatter_part(cyl7, Vector3(0.35, 0.5, 1.2), Vector3(0.12, 0.8, 0.12), Color(0.14, 0.09, 0.05), 0.0, 0.0, -0.7),
+	])
+	var reed_parts: Array = []
+	for ri in range(6):
+		var rang := TAU * float(ri) / 6.0
+		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.75, sin(rang) * 0.3), Vector3(0.08, 1.55, 0.08), Color(0.07, 0.16, 0.05), 0.0, cos(rang) * 0.16, sin(rang) * 0.16))
+		if ri % 2 == 0:
+			reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.38, 1.52, sin(rang) * 0.38), Vector3(0.09, 0.36, 0.09), Color(0.20, 0.12, 0.05), 0.0, cos(rang) * 0.16, sin(rang) * 0.16))
+	var reed_mesh := _dz_scatter_mesh(reed_parts)
+	var hay_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl11, Vector3(0, 0.75, 0), Vector3(1.5, 1.25, 1.5), Color(0.46, 0.33, 0.10), 0.0, PI * 0.5, 0.0),
+	])
+	var wheat_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.57, 0), Vector3(0.34, 1.15, 0.34), Color(0.44, 0.32, 0.09)),
+		_dz_scatter_part(cyl7, Vector3(0.45, 0.5, 0.28), Vector3(0.3, 1.0, 0.3), Color(0.48, 0.35, 0.10)),
+		_dz_scatter_part(cyl7, Vector3(-0.4, 0.53, -0.22), Vector3(0.31, 1.06, 0.31), Color(0.41, 0.29, 0.08)),
+	])
+	var corn_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.95, 0), Vector3(0.09, 1.9, 0.09), Color(0.05, 0.13, 0.035)),
+		_dz_scatter_part(cyl11, Vector3(0, 1.15, 0), Vector3(0.55, 0.95, 0.55), Color(0.055, 0.14, 0.038)),
+		_dz_scatter_part(cyl7, Vector3(0.5, 0.85, 0.3), Vector3(0.08, 1.7, 0.08), Color(0.05, 0.13, 0.035)),
+		_dz_scatter_part(cyl11, Vector3(0.5, 1.05, 0.3), Vector3(0.48, 0.85, 0.48), Color(0.05, 0.13, 0.035)),
+	])
+	var sunflower_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.85, 0), Vector3(0.08, 1.7, 0.08), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.12, 1.78, 0), Vector3(0.56, 0.56, 0.16), Color(0.56, 0.37, 0.03), 0.0, 0.0, 0.35),
+		_dz_scatter_part(sph, Vector3(0.16, 1.78, 0.02), Vector3(0.34, 0.34, 0.18), Color(0.18, 0.10, 0.03), 0.0, 0.0, 0.35),
+		_dz_scatter_part(cyl7, Vector3(0.55, 0.75, 0.35), Vector3(0.07, 1.5, 0.07), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.64, 1.56, 0.35), Vector3(0.46, 0.46, 0.14), Color(0.56, 0.37, 0.03), 0.0, 0.0, 0.3),
+	])
+	# 0.2.59: value-noise boulders with joint cuts, moss and soil
+	# skirts; large rocks are three-boulder outcrop clusters.
+	var rock_small_meshes: Array = [_gf_rock_mesh(1, 1.0), _gf_rock_mesh(2, 1.0), _gf_rock_mesh(3, 1.1), _gf_rock_mesh(4, 0.9)]
+	var rock_medium_meshes: Array = [_gf_rock_mesh(11, 1.1), _gf_rock_mesh(12, 1.0), _gf_rock_mesh(13, 1.25)]
+	var rock_large_meshes: Array = [_gf_rock_cluster_mesh(21), _gf_rock_cluster_mesh(22), _gf_rock_cluster_mesh(23)]
+	# 0.2.59: geometric grass blades, no alpha card — the wind shader
+	# runs in its no-texture root-to-tip gradient mode.
+	var grass_blade_meshes: Array = [_gf_grass_blades_mesh(1), _gf_grass_blades_mesh(2), _gf_grass_blades_mesh(3)]
+	var grass_mat := _create_foliage_wind_material(grass_blade_meshes[0], "", Color(1.18, 1.12, 0.78), 0.0, 0.06, false)
+	var cfg := {
+		"spruce": {"meshes": [spruce_a, spruce_b], "material": null, "base": 1.45, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"pine": {"meshes": pine_meshes, "material": null, "base": 1.5, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"birch": {"meshes": birch_meshes, "material": null, "base": 1.4, "range": 430.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
+		"leafy": {"meshes": leafy_meshes, "material": null, "base": 1.4, "range": 420.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"oak": {"meshes": oak_meshes, "material": null, "base": 1.5, "range": 430.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
+		"dead_tree": {"mesh": dead_mesh, "material": bark_spruce_mat, "base": 1.2, "range": 370.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
+		"bush": {"mesh": bush_card_mesh, "material": null, "base": 1.0, "range": 200.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
+		"fern": {"mesh": fern_card_mesh, "material": fern_mat, "base": 1.1, "range": 165.0, "shadow": false, "sink": 0.06},
+		"flower": {"mesh": flower_mesh, "base": 1.0, "range": 130.0, "shadow": false, "sink": 0.02},
+		"mushroom": {"mesh": mushroom_mesh, "base": 1.0, "range": 110.0, "shadow": false, "sink": 0.02},
+		"stump": {"mesh": stump_mesh, "base": 1.0, "range": 260.0, "shadow": true, "sink": 0.05, "collider_r": 0.42, "collider_h": 0.6},
+		"fallen_log": {"mesh": log_mesh, "base": 1.0, "range": 280.0, "shadow": true, "sink": 0.05, "collider_r": 0.55, "collider_h": 0.7},
+		"reed": {"mesh": reed_mesh, "base": 1.0, "range": 210.0, "shadow": false, "sink": 0.18},
+		"hay_bale": {"mesh": hay_mesh, "base": 1.0, "range": 300.0, "shadow": true, "sink": 0.04, "collider_r": 0.8, "collider_h": 1.2},
+		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"grass_tuft": {"meshes": grass_blade_meshes, "material": grass_mat, "base": 1.25, "range": 95.0, "shadow": false, "sink": 0.02},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 210.0, "shadow": false, "sink": 0.16},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 370.0, "shadow": true, "sink": 0.22, "collider_r": 0.72, "collider_h": 1.2},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 900.0, "shadow": true, "sink": 0.45, "collider_r": 1.10, "collider_h": 1.05},
+	}
+	var scatter: Dictionary = _dz_data().get("scatter", {})
+	var total := 0
+	var trees := 0
+	for kind_variant in cfg.keys():
+		var kind := String(kind_variant)
+		if not kinds_filter.is_empty() and not kinds_filter.has(kind):
+			continue
+		var conf: Dictionary = cfg[kind]
+		var items: Array = scatter.get(kind, [])
+		if items.is_empty():
+			continue
+		var buckets: Dictionary = {}
+		var base := float(conf.get("base", 1.0))
+		var sink := float(conf.get("sink", 0.05))
+		var collider_r := float(conf.get("collider_r", 0.0))
+		var collider_h := float(conf.get("collider_h", 2.0))
+		var is_tree := bool(conf.get("tree", false))
+		var foliage_every := int(conf.get("foliage_every", 0))
+		var item_index := 0
+		for item_variant in items:
+			var item: Array = item_variant
+			item_index += 1
+			if item.size() < 4:
+				continue
+			var px := float(item[0])
+			var pz := float(item[1])
+			var sc := float(item[2]) * base
+			var pyaw := float(item[3])
+			var pos := Vector3(px, height_at(px, pz) - sink, pz)
+			var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+			if not buckets.has(key):
+				buckets[key] = []
+			(buckets[key] as Array).append(make_transform(pos, pyaw, Vector3.ONE * sc))
+			total += 1
+			if is_tree:
+				trees += 1
+			if collider_r > 0.0:
+				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+			elif is_tree and _gf_near_road(px, pz, 22.0):
+				# Only roadside trees need physics; deep forest stays
+				# collider-free so the streaming grid stays light.
+				_add_cylinder_collider(Vector3(px, pos.y + 1.5 * sc, pz), 0.34 * sc, 3.0 * sc)
+			elif kind == "rock_small" and sc > 0.70:
+				_add_cylinder_collider(Vector3(px, pos.y + 0.30 * sc, pz), 0.60 * sc, 1.1 * sc)
+			if foliage_every > 0 and item_index % foliage_every == 0:
+				_foliage_points.append(pos)
+		if kind == "grass_tuft":
+			total += _gf_roadside_grass(buckets, base, sink)
+		if kind == "rock_large":
+			total += _gf_slope_rocks(buckets, base, sink, collider_r, collider_h)
+		var kind_meshes: Array = conf.get("meshes", [])
+		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
+		for key_variant in buckets.keys():
+			var bucket_xforms: Array = buckets[key_variant]
+			if kind_meshes.is_empty():
+				_dz_emit_multimesh(root, conf["mesh"] as Mesh, kind_mat, bucket_xforms, "GfScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			else:
+				for vi in range(kind_meshes.size()):
+					var sub: Array = []
+					for ti in range(bucket_xforms.size()):
+						if ti % kind_meshes.size() == vi:
+							sub.append(bucket_xforms[ti])
+					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "GfScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+	_gf_scatter_total_acc += total
+	_gf_scatter_trees_acc += trees
+	_enhancement_stats["forest_scatter"] = _gf_scatter_total_acc
+	_enhancement_stats["forest_trees"] = _gf_scatter_trees_acc
+	_enhancement_stats["forest_scatter_0254"] = true
+	_enhancement_stats["forest_photoreal_trees_0257"] = true
+	_enhancement_stats["forest_ground_cover_0259"] = true
+	_enhancement_stats["forest_canopy_0260"] = true
+
+
+func _build_forest_extras() -> void:
+	var root := Node3D.new()
+	root.name = "ForestExtras"
+	add_child(root)
+	# Falling leaves around the car (0.2.58): world-locked particles,
+	# the emitter recentres on the streaming focus every frame.
+	var leaf_emitter := GPUParticles3D.new()
+	leaf_emitter.name = "ForestFallingLeaves"
+	leaf_emitter.amount = 170
+	leaf_emitter.lifetime = 8.0
+	leaf_emitter.local_coords = false
+	leaf_emitter.visibility_aabb = AABB(Vector3(-70.0, -35.0, -70.0), Vector3(140.0, 70.0, 140.0))
+	var leaf_pm := ParticleProcessMaterial.new()
+	leaf_pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	leaf_pm.emission_box_extents = Vector3(26.0, 4.0, 26.0)
+	leaf_pm.direction = Vector3(0.0, -1.0, 0.0)
+	leaf_pm.spread = 26.0
+	leaf_pm.gravity = Vector3(0.25, -0.85, 0.1)
+	leaf_pm.initial_velocity_min = 0.15
+	leaf_pm.initial_velocity_max = 0.5
+	leaf_pm.angular_velocity_min = -170.0
+	leaf_pm.angular_velocity_max = 170.0
+	leaf_pm.angle_min = -180.0
+	leaf_pm.angle_max = 180.0
+	leaf_pm.scale_min = 0.7
+	leaf_pm.scale_max = 1.3
+	leaf_pm.hue_variation_min = -0.07
+	leaf_pm.hue_variation_max = 0.10
+	leaf_emitter.process_material = leaf_pm
+	var leaf_quad := QuadMesh.new()
+	leaf_quad.size = Vector2(0.17, 0.17)
+	leaf_quad.material = _gf_foliage_material("gf_fall_leaf_mat", "gf_leaf_single.png", Color(1.0, 1.0, 1.0))
+	leaf_emitter.draw_pass_1 = leaf_quad
+	root.add_child(leaf_emitter)
+	_gf_leaf_emitter = leaf_emitter
+	_enhancement_stats["forest_falling_leaves_0258"] = true
+	# Deer herds: merged low-poly animals grazing the meadows and
+	# clearings (static poses, one collider each).
+	var deer_count := 0
+	for group_variant in _dz_data().get("deerGroups", []):
+		# Data ships herd centres {x, z, count}; expand them into
+		# individual deer deterministically around the centre.
+		var group: Dictionary = group_variant
+		var gx := _f(group, "x")
+		var gz := _f(group, "z")
+		var group_count := int(group.get("count", 3))
+		for di in range(group_count):
+			var ang := _hash01(int(gx) + di * 17, int(gz) + di * 29) * TAU
+			var rad := 4.0 + _hash01(int(gx) + di * 31, int(gz) + di * 13) * 16.0
+			var dx := gx + cos(ang) * rad
+			var dz := gz + sin(ang) * rad
+			var dyaw := _hash01(int(dx) * 3 + di * 7, int(dz) * 7 + di) * TAU
+			var o := Vector3(dx, height_at(dx, dz), dz)
+			var dbasis := Basis(Vector3.UP, dyaw)
+			var graze := int(absf(dx) * 3.0 + absf(dz) * 7.0) % 3 == 0
+			_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.02, 0.0), Vector3(0.52, 0.62, 1.35))
+			_dz_lbox("gf_deer_belly", o, dbasis, Vector3(0.0, 0.78, 0.05), Vector3(0.46, 0.3, 1.1))
+			if graze:
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 0.95, -0.85), Vector3(0.2, 0.62, 0.2), 0.0, 0.85, 0.0)
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 0.62, -1.15), Vector3(0.26, 0.3, 0.5), 0.0, 0.5, 0.0)
+			else:
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.45, -0.75), Vector3(0.2, 0.65, 0.2), 0.0, -0.35, 0.0)
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.72, -1.02), Vector3(0.26, 0.3, 0.52))
+				if int(absf(dx) * 5.0 + absf(dz)) % 2 == 0:
+					for ax in [-0.12, 0.12]:
+						_dz_lbox("dz_sign_cream", o, dbasis, Vector3(ax, 2.05, -0.95), Vector3(0.06, 0.45, 0.06), 0.0, 0.3, ax * 2.4)
+			for lx in [-0.18, 0.18]:
+				for lz in [-0.5, 0.5]:
+					_dz_lbox("gf_deer", o, dbasis, Vector3(lx, 0.38, lz), Vector3(0.11, 0.76, 0.11))
+			_dz_lbox("gf_deer_belly", o, dbasis, Vector3(0.0, 1.12, 0.72), Vector3(0.16, 0.3, 0.1), 0.0, 0.4, 0.0)
+			_add_cylinder_collider(o + dbasis * Vector3(0.0, 0.9, 0.0), 0.55, 1.8)
+			deer_count += 1
+	var deer_chunks := _dz_flush_merge(root)
+	_enhancement_stats["forest_deer"] = deer_count
+	_enhancement_stats["forest_deer_chunks"] = deer_chunks
+	# Bird flocks: three V-formations circling the lake, meadows and
+	# summit; animated in _gf_animate_birds from _dz_animate.
+	_gf_bird_flocks.clear()
+	var bird_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0, 0), Vector3(1.5, 0.05, 0.34), Color(0.08, 0.08, 0.10)),
+		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0, 0.05), Vector3(0.22, 0.1, 0.85), Color(0.10, 0.10, 0.12)),
+	])
+	var bird_mat := _dz_material("gf_bird")
+	var flock_specs := [
+		[3050.0, 2200.0, 62.0, 340.0, 0.055],
+		[1900.0, 1900.0, 74.0, 420.0, 0.045],
+		[1850.0, 420.0, 196.0, 380.0, 0.05],
+	]
+	for fi in range(flock_specs.size()):
+		var spec: Array = flock_specs[fi]
+		var flock := Node3D.new()
+		flock.name = "BirdFlock%d" % fi
+		root.add_child(flock)
+		for bi in range(7):
+			var bird := MeshInstance3D.new()
+			bird.mesh = bird_mesh
+			bird.material_override = bird_mat
+			bird.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var row := float((bi + 1) / 2)
+			var side := 1.0 if bi % 2 == 0 else -1.0
+			if bi == 0:
+				side = 0.0
+				row = 0.0
+			bird.position = Vector3(side * row * 3.2, -row * 0.5, row * 3.4)
+			flock.add_child(bird)
+		_gf_bird_flocks.append({
+			"node": flock,
+			"cx": float(spec[0]), "cz": float(spec[1]),
+			"h": float(spec[2]), "r": float(spec[3]),
+			"speed": float(spec[4]), "phase": float(fi) * 2.1,
+		})
+	_enhancement_stats["forest_bird_flocks"] = _gf_bird_flocks.size()
+	# Chimney smoke over the village and farmsteads.
+	var smoke_count := 0
+	for point_variant in _dz_data().get("smokePoints", []):
+		var point: Array = point_variant
+		if point.size() < 2:
+			continue
+		var sx := float(point[0])
+		var sz := float(point[1])
+		var process := ParticleProcessMaterial.new()
+		process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		process.emission_sphere_radius = 0.3
+		process.direction = Vector3(0.0, 1.0, 0.0)
+		process.spread = 10.0
+		process.initial_velocity_min = 1.1
+		process.initial_velocity_max = 1.9
+		process.gravity = Vector3(0.35, 0.55, 0.0)
+		process.damping_min = 0.1
+		process.damping_max = 0.4
+		process.scale_min = 0.8
+		process.scale_max = 2.2
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.82, 0.83, 0.85, 0.0))
+		ramp.set_color(1, Color(0.82, 0.83, 0.85, 0.0))
+		ramp.add_point(0.15, Color(0.82, 0.83, 0.85, 0.34))
+		ramp.add_point(0.7, Color(0.84, 0.85, 0.87, 0.16))
+		var ramp_texture := GradientTexture1D.new()
+		ramp_texture.gradient = ramp
+		ramp_texture.width = 32
+		process.color_ramp = ramp_texture
+		var smoke_mat := StandardMaterial3D.new()
+		smoke_mat.albedo_color = Color.WHITE
+		smoke_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		smoke_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		smoke_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		smoke_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		smoke_mat.vertex_color_use_as_albedo = true
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.6, 1.6)
+		quad.material = smoke_mat
+		var emitter := GPUParticles3D.new()
+		emitter.name = "ChimneySmoke"
+		emitter.amount = 22
+		emitter.lifetime = 4.2
+		emitter.randomness = 0.7
+		emitter.local_coords = false
+		emitter.process_material = process
+		emitter.draw_pass_1 = quad
+		emitter.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		emitter.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		emitter.visibility_aabb = AABB(Vector3(-14.0, -2.0, -14.0), Vector3(28.0, 26.0, 28.0))
+		emitter.position = Vector3(sx, height_at(sx, sz) + 6.4, sz)
+		emitter.emitting = true
+		root.add_child(emitter)
+		smoke_count += 1
+	_enhancement_stats["forest_smoke_points"] = smoke_count
+	_enhancement_stats["forest_extras_0254"] = true
+
+
+func _gf_animate_birds() -> void:
+	for entry in _gf_bird_flocks:
+		var flock := entry["node"] as Node3D
+		if flock == null or not is_instance_valid(flock):
+			continue
+		var ang := _elapsed * float(entry["speed"]) + float(entry["phase"])
+		var r := float(entry["r"])
+		flock.position = Vector3(
+			float(entry["cx"]) + cos(ang) * r,
+			float(entry["h"]) + sin(_elapsed * 0.23 + float(entry["phase"])) * 3.0,
+			float(entry["cz"]) + sin(ang) * r)
+		flock.rotation.y = -ang
+		var flap := sin(_elapsed * 7.0 + float(entry["phase"])) * 0.35
+		for bi in range(flock.get_child_count()):
+			var bird := flock.get_child(bi) as Node3D
+			if bird != null:
+				bird.rotation.z = flap if bi % 2 == 0 else -flap

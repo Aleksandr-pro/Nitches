@@ -263,9 +263,18 @@ H = H * (1.0 - lake_bed) + 23.6 * lake_bed
 q_c = np.array([3300.0, 1000.0])
 q_d = np.sqrt(((GX - q_c[0]) / 430.0) ** 2 + ((GZ - q_c[1]) / 390.0) ** 2) * (1.0 + 0.22 * fbm([13], 2718))
 q_target = 48.0 + np.clip(q_d - 0.18, 0.0, 1.0) * 40.0
-q_target = np.floor(q_target / 6.0) * 6.0 + (q_target - np.floor(q_target / 6.0) * 6.0) * 0.22 + fbm([17], 1414) * 1.6
+q_target = np.floor(q_target / 6.0) * 6.0 + (q_target - np.floor(q_target / 6.0) * 6.0) * 0.40 + fbm([17], 1414) * 1.0
 q_mask = 1.0 - smoothstep(0.92, 1.12, q_d)
 H = H * (1.0 - q_mask) + np.maximum(q_target, 48.0) * q_mask
+# 0.2.53 screenshot audit: the 8 m grid turned the quantized quarry
+# benches into rows of sharp pyramids.  A masked relaxation keeps the
+# bench levels but rounds their crests/edges before roads are profiled.
+_q_smooth = H.copy()
+for _qi in range(2):
+    _q_avg = 0.25 * (np.roll(_q_smooth, 1, 0) + np.roll(_q_smooth, -1, 0) +
+                     np.roll(_q_smooth, 1, 1) + np.roll(_q_smooth, -1, 1))
+    _q_smooth = _q_smooth * 0.62 + _q_avg * 0.38
+H = H * (1.0 - q_mask * 0.55) + _q_smooth * (q_mask * 0.55)
 
 # Canyons: carved polylines with descending floor profiles.
 CANYON_A = [(560, 150), (700, 330), (640, 520), (800, 700), (760, 900), (920, 1080), (1040, 1260), (1030, 1440)]
@@ -443,7 +452,7 @@ for (rid, _name, ctrl, _w, _lanes, _surf, closed, _spd) in ROAD_DEFS:
 BRIDGES = [
     ("ring", np.array([3435.0, 2430.0]), 46.0),
     ("ring", np.array([2110.0, 3165.0]), 42.0),
-    ("oasis_road", np.array([3300.0, 3495.0]), 20.0),
+    ("oasis_road", np.array([3340.0, 3510.0]), 95.0),
 ]
 TUNNEL = ("ring", np.array([2740.0, 755.0]), 55.0)  # half-length
 
@@ -526,6 +535,18 @@ for (rid, _name, _ctrl, width, _lanes, surf, closed, _spd) in ROAD_DEFS:
         d = np.linalg.norm(dense - TUNNEL[1], axis=1)
         s0 = float(s_cum[int(np.argmin(d))])
         tunnel_s_range = (s0 - TUNNEL[2], s0 + TUNNEL[2])
+
+    if rid == "oasis_road" and skip_ranges:
+        # The smoothed terrain profile follows the lake bed (24-25 m),
+        # so the old 40 m bridge span still drove under LAKE_Y.  Keep
+        # a causeway deck 0.95 m above water across the full span,
+        # feathered into both shores; terrain flattening stays off
+        # in the bridge skip range below.
+        for (_ba, _bb) in skip_ranges:
+            _deck = np.maximum(prof, LAKE_Y + 0.95)
+            _w = smoothstep(_ba, _ba + 24.0, s_cum) * (1.0 - smoothstep(_bb - 24.0, _bb, s_cum))
+            prof = prof * (1.0 - _w) + _deck * _w
+        road_profiles[rid] = prof
 
     half_w = width * 0.5
     falloff = 14.0 if follow else 18.0
@@ -622,6 +643,161 @@ def road_dist_at(x, z):
     return bilinear(road_dist, x, z)
 
 
+def segment_points(x, z, yaw, length, step=1.0):
+    """Sample points along a fence segment (builder basis: local +X)."""
+    dx, dz = math.cos(yaw), -math.sin(yaw)
+    n = max(2, int(length / step) + 1)
+    return [(x + dx * (-length * 0.5 + length * i / n),
+             z + dz * (-length * 0.5 + length * i / n)) for i in range(n + 1)]
+
+
+def segment_clear_of_roads(x, z, yaw, length, clearance):
+    """True when EVERY point of the segment stays at least
+    `clearance` metres from any road centreline.  The old town
+    fences only tested the segment centre with 5 m, so 14 m long
+    fences ended with their ends on the carriageway (0.2.51)."""
+    return all(road_dist_at(px, pz) >= clearance
+               for (px, pz) in segment_points(x, z, yaw, length))
+
+# Exact polyline clearance: the raster above is 8 m bilinear and
+# can be a couple of metres off next to diagonal roads.  Segments
+# are built lazily from roads_out on first use.
+_EXACT_CACHE = {}
+
+
+def _exact_segments():
+    if "A" not in _EXACT_CACHE:
+        A, B, HW = [], [], []
+        for r in roads_out:
+            pts = [(float(smp[0]), float(smp[2])) for smp in r["samples"]]
+            if r.get("closed") and pts:
+                pts = pts + [pts[0]]
+            hw = float(r["widthM"]) * 0.5
+            for a, b in zip(pts[:-1], pts[1:]):
+                A.append(a)
+                B.append(b)
+                HW.append(hw)
+        _EXACT_CACHE["A"] = np.array(A)
+        _EXACT_CACHE["B"] = np.array(B)
+        _EXACT_CACHE["HW"] = np.array(HW)
+    return _EXACT_CACHE["A"], _EXACT_CACHE["B"], _EXACT_CACHE["HW"]
+
+
+def exact_edge_clearances(points):
+    """Per-point distance to nearest road EDGE (negative = on it)."""
+    A, B, HW = _exact_segments()
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-9)
+    P = np.array(points, dtype=np.float64)
+    best = np.full(len(P), 1e9)
+    for j in range(0, len(A), 1500):
+        a = A[j:j + 1500]
+        ab = AB[j:j + 1500]
+        l2 = L2[j:j + 1500]
+        hw = HW[j:j + 1500]
+        t = np.clip(((P[:, None, :] - a[None, :, :]) * ab[None, :, :]).sum(-1) / l2[None, :], 0, 1)
+        proj = a[None, :, :] + t[:, :, None] * ab[None, :, :]
+        d = np.linalg.norm(P[:, None, :] - proj, axis=-1) - hw[None, :]
+        best = np.minimum(best, d.min(axis=1))
+    return best
+
+
+def exact_edge_clearance(points):
+    """(min clearance to any road EDGE, nearest road point)."""
+    A, B, HW = _exact_segments()
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-9)
+    P = np.array(points, dtype=np.float64)
+    best = np.full(len(P), 1e9)
+    best_pt = np.zeros((len(P), 2))
+    for j in range(0, len(A), 1500):
+        a = A[j:j + 1500]
+        ab = AB[j:j + 1500]
+        l2 = L2[j:j + 1500]
+        hw = HW[j:j + 1500]
+        t = np.clip(((P[:, None, :] - a[None, :, :]) * ab[None, :, :]).sum(-1) / l2[None, :], 0, 1)
+        proj = a[None, :, :] + t[:, :, None] * ab[None, :, :]
+        d = np.linalg.norm(P[:, None, :] - proj, axis=-1) - hw[None, :]
+        k = np.argmin(d, axis=1)
+        dk = d[np.arange(len(P)), k]
+        upd = dk < best
+        if upd.any():
+            best[upd] = dk[upd]
+            best_pt[upd] = proj[np.arange(len(P))[upd], k[upd]]
+    i = int(np.argmin(best))
+    return float(best[i]), best_pt[i]
+
+
+def exact_nearest_road(points):
+    """Per-point (edge clearance, nearest centreline point, segment dir).
+
+    Chunked in both dimensions so the 0.2.53 scatter audit can run it
+    over tens of thousands of instances without materialising a
+    points-by-segments array for the whole world at once.
+    """
+    A, B, HW = _exact_segments()
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-9)
+    seg_len = np.sqrt(L2)
+    P = np.array(points, dtype=np.float64).reshape(-1, 2)
+    best = np.full(len(P), 1e9)
+    best_pt = np.zeros((len(P), 2))
+    best_dir = np.tile(np.array([1.0, 0.0]), (len(P), 1))
+    for p0 in range(0, len(P), 384):
+        pp = P[p0:p0 + 384]
+        local_best = np.full(len(pp), 1e9)
+        local_pt = np.zeros((len(pp), 2))
+        local_dir = np.tile(np.array([1.0, 0.0]), (len(pp), 1))
+        rows = np.arange(len(pp))
+        for j in range(0, len(A), 1000):
+            a = A[j:j + 1000]
+            ab = AB[j:j + 1000]
+            l2 = L2[j:j + 1000]
+            hw = HW[j:j + 1000]
+            t = np.clip(((pp[:, None, :] - a[None, :, :]) * ab[None, :, :]).sum(-1) / l2[None, :], 0, 1)
+            proj = a[None, :, :] + t[:, :, None] * ab[None, :, :]
+            d = np.linalg.norm(pp[:, None, :] - proj, axis=-1) - hw[None, :]
+            k = np.argmin(d, axis=1)
+            dk = d[rows, k]
+            upd = dk < local_best
+            if upd.any():
+                upd_rows = rows[upd]
+                upd_k = k[upd]
+                local_best[upd] = dk[upd]
+                local_pt[upd] = proj[upd_rows, upd_k]
+                local_dir[upd] = ab[upd_k] / np.maximum(seg_len[j:j + 1000][upd_k][:, None], 1e-9)
+        best[p0:p0 + len(pp)] = local_best
+        best_pt[p0:p0 + len(pp)] = local_pt
+        best_dir[p0:p0 + len(pp)] = local_dir
+    return best, best_pt, best_dir
+
+
+def segment_edge_clear(x, z, yaw, length, min_edge):
+    return float(exact_edge_clearances(
+        segment_points(x, z, yaw, length, step=0.5)).min()) >= min_edge
+
+
+def clear_runs(x, z, yaw, length, min_edge, min_run=7.0):
+    """Sub-segments of a fence side keeping `min_edge` from roads."""
+    pts = segment_points(x, z, yaw, length, step=1.0)
+    cls = exact_edge_clearances(pts)
+    dx, dz = math.cos(yaw), -math.sin(yaw)
+    runs = []
+    start = None
+    for i in range(len(pts) + 1):
+        ok = i < len(pts) and cls[i] >= min_edge
+        if ok and start is None:
+            start = i
+        elif not ok and start is not None:
+            t0 = -length * 0.5 + length * start / (len(pts) - 1)
+            t1 = -length * 0.5 + length * (i - 1) / (len(pts) - 1)
+            if t1 - t0 >= min_run:
+                tc = (t0 + t1) / 2.0
+                runs.append((x + dx * tc, z + dz * tc, t1 - t0))
+            start = None
+    return runs
+
+
 def zone_of(x, z):
     if in_rect(x, z, TOWN_RECT):
         return "town"
@@ -651,12 +827,19 @@ for rid, dense in roads_dense.items():
     lens = np.linalg.norm(np.diff(dense, axis=0), axis=1)
     road_pick.append((rid, dense, np.concatenate([[0.0], np.cumsum(lens)])))
 road_pick_total = sum(float(c[-1]) for _r, _d, c in road_pick)
+road_pick_starts = []
+_acc_pick = 0.0
+for _r, _d, _c in road_pick:
+    road_pick_starts.append(_acc_pick)
+    _acc_pick += float(_c[-1])
 
 
 def random_road_point():
     pick = rng.random() * road_pick_total
-    for _rid, dense, cum in road_pick:
-        if pick <= cum[-1]:
+    for _pi, (_rid, dense, cum) in enumerate(road_pick):
+        local_pick = pick - road_pick_starts[_pi]
+        if 0.0 <= local_pick <= cum[-1]:
+            pick = local_pick
             i = int(np.searchsorted(cum, pick))
             i = min(max(i, 1), len(dense) - 1)
             a, b = dense[i - 1], dense[i]
@@ -831,6 +1014,111 @@ scatter_data["gravel_pile"] = mk_instances(piles, 0.8, 2.2)
 
 print("[desert] scatter totals:", {k: len(v) for k, v in scatter_data.items()})
 
+# --- exact scatter road audit (0.2.53 screenshot audit) -------------
+# road_dist_at() is CENTRELINE distance on an 8 m raster.  The old
+# 4.5-7 m thresholds therefore legally placed rocks/shrubs/cacti on
+# wide carriageways.  Relocate (do not silently delete) every instance
+# whose exact road-edge clearance is below its physical margin.
+def _scatter_road_margin_0253(kind, scale):
+    if kind == "rock_large":
+        return 1.10 + 1.55 * scale
+    if kind == "gravel_pile":
+        return 2.40 + 1.65 * scale
+    if kind == "rock_medium":
+        return 1.15
+    if kind in ("cactus_saguaro", "dead_tree", "oasis_palm"):
+        return 1.55
+    if kind in ("bones", "shrub"):
+        return 1.05
+    if kind == "oasis_reed":
+        return 0.90
+    return 0.80
+
+
+_scatter_moved_0253 = 0
+_scatter_dropped_0253 = 0
+for _kind in list(scatter_data.keys()):
+    _items = scatter_data[_kind]
+    if not _items:
+        continue
+    _pts = np.array([[float(_i[0]), float(_i[1])] for _i in _items], dtype=np.float64)
+    _clear, _near, _dirs = exact_nearest_road(_pts)
+    _kept = []
+    for _idx, _inst in enumerate(_items):
+        _req = _scatter_road_margin_0253(_kind, float(_inst[2]))
+        _p = _pts[_idx].copy()
+        _c = float(_clear[_idx])
+        _n = _near[_idx].copy()
+        _d = _dirs[_idx].copy()
+        _moved = False
+        for _attempt in range(6):
+            if _c >= _req:
+                break
+            _away = _p - _n
+            _ln = float(np.linalg.norm(_away))
+            if _ln < 1e-5:
+                _away = np.array([-_d[1], _d[0]])
+                if int((_p[0] + _p[1]) * 10.0) % 2:
+                    _away = -_away
+                _ln = 1.0
+            _away = _away / _ln
+            _p = np.clip(_p + _away * ((_req - _c) + 0.35), 32.0, SIZE - 32.0)
+            _moved = True
+            _cc, _nn, _dd = exact_nearest_road([_p])
+            _c = float(_cc[0])
+            _n = _nn[0].copy()
+            _d = _dd[0].copy()
+        if _c < _req:
+            _scatter_dropped_0253 += 1
+            continue
+        if _kind != "oasis_reed" and math.hypot(float(_p[0] - OASIS_CENTRE[0]), float(_p[1] - OASIS_CENTRE[1])) < LAKE_R + 4.0:
+            _scatter_dropped_0253 += 1
+            continue
+        if _moved:
+            _scatter_moved_0253 += 1
+        _kept.append([round(float(_p[0]), 1), round(float(_p[1]), 1), _inst[2], _inst[3]])
+    scatter_data[_kind] = _kept
+
+# Reeds belong only in the shallow shoreline band.  The old radial
+# ring put hundreds either in deep water or across the oasis roads;
+# move each bad clump deterministically to the first shoreline point
+# on a golden-angle search instead of letting it streak the lake.
+def _reed_shore_ok_0253(px, pz):
+    return (LAKE_Y - 0.80 <= height_at(px, pz) <= LAKE_Y + 0.55 and
+            road_dist_at(px, pz) >= 10.0)
+
+
+_reeds_kept_0253 = []
+_reeds_moved_0253 = 0
+for _inst in scatter_data.get("oasis_reed", []):
+    _x, _z = float(_inst[0]), float(_inst[1])
+    if _reed_shore_ok_0253(_x, _z):
+        _reeds_kept_0253.append(_inst)
+        continue
+    _base_ang = math.atan2(_z - float(OASIS_CENTRE[1]), _x - float(OASIS_CENTRE[0]))
+    _found = None
+    for _ai in range(18):
+        _ang = _base_ang + _ai * 2.399963229728653
+        for _r in np.arange(58.0, 116.0, 2.0):
+            _px = float(OASIS_CENTRE[0] + math.cos(_ang) * _r)
+            _pz = float(OASIS_CENTRE[1] + math.sin(_ang) * _r)
+            if not _reed_shore_ok_0253(_px, _pz):
+                continue
+            _cc, _nn, _dd = exact_nearest_road([(_px, _pz)])
+            if float(_cc[0]) >= 0.90:
+                _found = (_px, _pz)
+                break
+        if _found is not None:
+            break
+    if _found is None:
+        _scatter_dropped_0253 += 1
+    else:
+        _reeds_moved_0253 += 1
+        _reeds_kept_0253.append([round(_found[0], 1), round(_found[1], 1), _inst[2], _inst[3]])
+scatter_data["oasis_reed"] = _reeds_kept_0253
+print(f"[desert] exact scatter audit: moved {_scatter_moved_0253}, "
+      f"reed shoreline moves {_reeds_moved_0253}, dropped {_scatter_dropped_0253}")
+
 # ---------------------------------------------------------------- structures
 print("[desert] structures ...")
 structures = []   # {kind,x,z,yaw,w,d,h, name?} ; linear kinds add x2,z2
@@ -873,6 +1161,24 @@ house_spots = [
 for (hx, hz, hyaw) in house_spots:
     add_structure("house", hx, hz, hyaw, float(rng.uniform(9, 12)), float(rng.uniform(8, 10)),
                   float(rng.uniform(3.6, 6.2)))
+# Front-yard fences on the street side of most houses, so the town
+# reads as fenced plots instead of houses dropped on open dirt.
+# Dedicated RNG: the main stream below must not shift.
+frng = np.random.default_rng(SEED + 251)
+for (hx, hz, hyaw) in house_spots:
+    if frng.random() < 0.22:
+        continue
+    cands = []
+    for (ox, oz, fyaw) in [(0.0, 9.5, 0.0), (0.0, -9.5, 0.0),
+                           (9.5, 0.0, math.pi / 2), (-9.5, 0.0, math.pi / 2)]:
+        cands.append((road_dist_at(hx + ox, hz + oz), ox, oz, fyaw))
+    cands.sort(key=lambda c: c[0])
+    flen = float(frng.uniform(11.0, 16.0))
+    for (_d, ox, oz, fyaw) in cands:
+        if segment_clear_of_roads(hx + ox, hz + oz, fyaw, flen, 7.5):
+            add_structure("fence", float(hx + ox), float(hz + oz), fyaw,
+                          flen, 0.3, 1.1, building=False)
+            break
 # fairground stalls on the plaza (x 700..880, z 2100..2210)
 for i in range(12):
     add_structure("stall", 712 + (i % 6) * 30, 2122 + (i // 6) * 46,
@@ -882,10 +1188,15 @@ add_structure("stage", 790, 2196, math.pi, 16, 8, 5, building=False)
 for i in range(70):
     fx = float(rng.uniform(470, 1150))
     fz = float(rng.choice([rng.uniform(1920, 1995), rng.uniform(2115, 2225)]))
-    if road_dist_at(fx, fz) < 5.0:
+    fyaw = float(rng.choice([0.0, math.pi / 2]))
+    flen = float(rng.uniform(6, 14))
+    pts = segment_points(fx, fz, fyaw, flen)
+    if any(road_dist_at(px, pz) < 8.0 for (px, pz) in pts):
         continue
-    add_structure("fence", fx, fz, float(rng.choice([0.0, math.pi / 2])),
-                  float(rng.uniform(6, 14)), 0.3, 1.1, building=False)
+    if any(abs(px - hx) < 8.5 and abs(pz - hz) < 7.5
+           for (px, pz) in pts for (hx, hz, _hy) in house_spots):
+        continue
+    add_structure("fence", fx, fz, fyaw, flen, 0.3, 1.1, building=False)
 for i in range(80):
     fx = float(rng.uniform(480, 1140))
     fz = float(rng.choice([rng.uniform(1990, 2035), rng.uniform(2070, 2115),
@@ -989,7 +1300,7 @@ for i in range(36):
     if 40 < wx < SIZE - 40 and 40 < wz < SIZE - 40 and slope_at(wx, wz) < 0.4:
         wrecks.append((wx, wz))
 for (wx, wz) in wrecks:
-    add_structure("car_wreck", wx, wz, float(rng.random() * math.tau), 4.4, 1.9, 1.5, building=False)
+    add_structure("car_wreck", wx, wz, float(rng.random() * math.tau), 1.9, 4.4, 1.5, building=False)
 for i in range(6):
     add_structure("container", 928 + i * 3.2, 2440, 0.03 * i, 6, 2.6, 2.6, building=False)
 
@@ -1000,8 +1311,70 @@ for i, (rx, rz) in enumerate(RANCHES):
     add_structure("barn", rx + 16, rz + 7, float(rng.random() * math.pi), 13, 8, 5.5)
     add_structure("windmill", rx - 13, rz + 10, 0.0, 3, 3, 11, building=False)
     add_structure("ranch_tank", rx + 6, rz - 12, 0.0, 4, 4, 4.5, building=False)
-    add_structure("fence", rx, rz - 18, 0.0, 44, 0.3, 1.1, building=False)
-    add_structure("fence", rx, rz + 18, 0.0, 44, 0.3, 1.1, building=False)
+    # Corral: a full 48x36 m enclosure with a 7 m gate gap on the
+    # road side.  Every side is segment-checked against the roads;
+    # the corral first shifts away from a colliding side, and a
+    # side that still collides stays open (driveway).  A fence must
+    # never cross the carriageway: the old two blind 44 m lines cut
+    # straight through roads at three of the six ranches (0.2.51).
+    # Corrals shrink (48x36 -> 40x30 -> 32x24) before giving up,
+    # so a ranch squeezed between two roads still gets a yard.
+    # Sides are checked against the exact road polylines (2 m
+    # from the road edge); crossed sides keep their clear runs.
+    ccx0, ccz0 = float(rx), float(rz)
+    def corral_sides(cx, cz, hx, hz):
+        return [(cx, cz - hz, 0.0, hx * 2.0), (cx, cz + hz, 0.0, hx * 2.0),
+                (cx - hx, cz, math.pi / 2, hz * 2.0), (cx + hx, cz, math.pi / 2, hz * 2.0)]
+    chosen = None
+    for (chx, chz) in [(24.0, 18.0), (20.0, 15.0), (16.0, 12.0)]:
+        ccx, ccz = ccx0, ccz0
+        for _try in range(6):
+            sides = corral_sides(ccx, ccz, chx, chz)
+            bad = [si for si, sd in enumerate(sides)
+                   if not segment_edge_clear(sd[0], sd[1], sd[2], sd[3], 2.0)]
+            if not bad:
+                break
+            si = bad[0]
+            if si == 0:
+                ccz += 3.0
+            elif si == 1:
+                ccz -= 3.0
+            elif si == 2:
+                ccx += 3.0
+            else:
+                ccx -= 3.0
+        sides = corral_sides(ccx, ccz, chx, chz)
+        ok = [segment_edge_clear(sd[0], sd[1], sd[2], sd[3], 2.0) for sd in sides]
+        if sum(ok) >= 2:
+            chosen = (ccx, ccz, chx, chz)
+            break
+    if chosen is not None:
+        ccx, ccz, chx, chz = chosen
+        # Keep the ranch house comfortably inside its own corral:
+        # escaping a road must not shove a fence line through the
+        # house.  Sides are re-checked below, so clamping is safe.
+        ccx = min(max(ccx, ccx0 - (chx - 9.0)), ccx0 + (chx - 9.0))
+        ccz = min(max(ccz, ccz0 - (chz - 8.0)), ccz0 + (chz - 8.0))
+        out_pts = [(ccx, ccz - chz - 24.0), (ccx, ccz + chz + 24.0),
+                   (ccx - chx - 24.0, ccz), (ccx + chx + 24.0, ccz)]
+        gate_side = min(range(4), key=lambda si: road_dist_at(*out_pts[si]))
+        for si, (sx, sz, syaw, slen) in enumerate(corral_sides(ccx, ccz, chx, chz)):
+            if not segment_edge_clear(sx, sz, syaw, slen, 2.0):
+                # Side crossed by a road: keep the clear runs so
+                # the fence stops at the roadside instead of the
+                # whole corral being dropped.
+                for (cx2, cz2, clen) in clear_runs(sx, sz, syaw, slen, 2.0):
+                    add_structure("fence", cx2, cz2, syaw, clen, 0.3, 1.1, building=False)
+                continue
+            if si == gate_side:
+                gap = 7.0
+                seg_len = (slen - gap) / 2.0
+                off = gap / 2.0 + seg_len / 2.0
+                dx, dz = math.cos(syaw), -math.sin(syaw)
+                add_structure("fence", sx - dx * off, sz - dz * off, syaw, seg_len, 0.3, 1.1, building=False)
+                add_structure("fence", sx + dx * off, sz + dz * off, syaw, seg_len, 0.3, 1.1, building=False)
+            else:
+                add_structure("fence", sx, sz, syaw, slen, 0.3, 1.1, building=False)
 
 # Salt-flat furniture (Bonneville vibe): drag markers + crossing poles
 for (mx, mz) in [(1500, 2268), (1500, 2292), (2300, 2268), (2300, 2292),
@@ -1075,10 +1448,12 @@ for (bx, bz, byaw, _cx, _cz, _s) in billboards[:20]:
 
 # signs along all roads ~150
 signs = []
+_road_width_by_id = {r[0]: float(r[3]) for r in ROAD_DEFS}
 for rid, dense in roads_dense.items():
     lens = np.linalg.norm(np.diff(dense, axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(lens)])
-    for (sx, sz, syaw, _cx, _cz, _s) in walk_polyline(dense, cum, 340.0, 6.8, jitter=0.4):
+    _sign_offset = _road_width_by_id.get(rid, 9.0) * 0.5 + 1.35
+    for (sx, sz, syaw, _cx, _cz, _s) in walk_polyline(dense, cum, 340.0, _sign_offset, jitter=0.4):
         signs.append((sx, sz, syaw))
 rng.shuffle(signs)
 signs = signs[:150]
@@ -1186,6 +1561,136 @@ add_drop_guardrails()
 
 print(f"[desert] structures: {len(structures)} (poles {len(pole_points)}, "
       f"guardrail sections {len(guardrails)}, pipe segments {len(pipes)})")
+
+# --- exact road-clearance safety net (0.2.51) -----------------------
+# The road-distance raster is 8 m bilinear and offset rails on
+# switchbacks can land on the neighbouring leg, so placement checks
+# alone cannot promise "no fence/rail on the carriageway".  Verify
+# every fence and guardrail against the exact road polylines here:
+# fences within 1.2 m of a road edge are dropped; guardrails are
+# nudged away from the nearest road point first and dropped only
+# when there is no room (tight switchback legs).  Baseline before
+# this filter: 12/72 fences and 21/209 guardrails on the roadway.
+_kept = []
+_dropped_fences = 0
+for _s in structures:
+    if _s["kind"] == "fence":
+        _c, _near = exact_edge_clearance(
+            segment_points(_s["x"], _s["z"], _s["yaw"], float(_s["w"]), step=0.5))
+        if _c < 1.2:
+            _dropped_fences += 1
+            continue
+    _kept.append(_s)
+structures = _kept
+
+_fixed_rails = []
+_shifted_rails = 0
+for (_x1, _z1, _x2, _z2) in guardrails:
+    _seg = [(float(_x1), float(_z1)), (float(_x2), float(_z2))]
+    _c = -1.0
+    for _attempt in range(7):
+        _n = max(2, int(math.hypot(_seg[1][0] - _seg[0][0], _seg[1][1] - _seg[0][1])) + 1)
+        _pts = [(_seg[0][0] + (_seg[1][0] - _seg[0][0]) * i / _n,
+                 _seg[0][1] + (_seg[1][1] - _seg[0][1]) * i / _n) for i in range(_n + 1)]
+        _c, _near = exact_edge_clearance(_pts)
+        if _c >= 0.55:
+            break
+        _mid = np.array([(_seg[0][0] + _seg[1][0]) / 2.0, (_seg[0][1] + _seg[1][1]) / 2.0])
+        _away = _mid - _near
+        _ln = float(np.linalg.norm(_away))
+        if _ln < 1e-6:
+            break
+        _away = _away / _ln * 0.5
+        _seg = [(_seg[0][0] + float(_away[0]), _seg[0][1] + float(_away[1])),
+                (_seg[1][0] + float(_away[0]), _seg[1][1] + float(_away[1]))]
+        if _attempt == 0:
+            _shifted_rails += 1
+    if _c >= 0.55:
+        _fixed_rails.append([round(_seg[0][0], 1), round(_seg[0][1], 1),
+                              round(_seg[1][0], 1), round(_seg[1][1], 1)])
+guardrails = _fixed_rails
+print(f"[desert] fence/rail clearance filter: dropped fences {_dropped_fences}, "
+      f"guardrails kept {len(guardrails)} (nudged {_shifted_rails})")
+
+# --- exact small-structure footprint audit (0.2.53) -----------------
+# Authored landmarks that intentionally span/terminate a road (stone
+# arch, pier, rail stub, plane wreck) are excluded.  Roadside props
+# are nudged as whole footprints in the builder's Godot yaw basis
+# (local X=(cos,-sin), Z=(sin,cos)); unfixable props are dropped.
+def _structure_footprint_points_0253(st):
+    _yaw = float(st.get("yaw", 0.0))
+    _ca, _sa = math.cos(_yaw), math.sin(_yaw)
+    _ex = np.array([_ca, -_sa])
+    _ez = np.array([_sa, _ca])
+    _centre = np.array([float(st["x"]), float(st["z"])])
+    _w = float(st.get("w", 1.0))
+    _d = float(st.get("d", 1.0))
+    _pts = []
+    _nx = max(2, int(math.ceil(_w / 1.0)))
+    _nz = max(2, int(math.ceil(_d / 1.0)))
+    for _i in range(_nx + 1):
+        _lx = -_w * 0.5 + _w * _i / _nx
+        for _lz in (-_d * 0.5, _d * 0.5):
+            _pts.append(_centre + _ex * _lx + _ez * _lz)
+    for _i in range(1, _nz):
+        _lz = -_d * 0.5 + _d * _i / _nz
+        for _lx in (-_w * 0.5, _w * 0.5):
+            _pts.append(_centre + _ex * _lx + _ez * _lz)
+    return _pts
+
+
+_small_structure_margins_0253 = {
+    "sign": 0.55, "sign_smash": 0.55, "power_pole": 0.80,
+    "town_pole": 0.70, "billboard": 0.80, "car_wreck": 0.90,
+    "barrel_group": 0.80, "crate": 0.80, "tank_small": 0.80,
+    "container": 0.80,
+}
+_small_kept_0253 = []
+_small_moved_0253 = 0
+_small_dropped_0253 = 0
+for _st in structures:
+    _kind = _st.get("kind", "")
+    if _kind not in _small_structure_margins_0253:
+        _small_kept_0253.append(_st)
+        continue
+    _req = _small_structure_margins_0253[_kind]
+    _cur = dict(_st)
+    _moved = False
+    _worst = -1e9
+    for _attempt in range(6):
+        _pts = _structure_footprint_points_0253(_cur)
+        _clear, _near, _dirs = exact_nearest_road(_pts)
+        _wi = int(np.argmin(_clear))
+        _worst = float(_clear[_wi])
+        if _worst >= _req:
+            break
+        _away = _pts[_wi] - _near[_wi]
+        _ln = float(np.linalg.norm(_away))
+        if _ln < 1e-5:
+            _d = _dirs[_wi]
+            _away = np.array([-_d[1], _d[0]])
+            _ln = 1.0
+        _away = _away / _ln
+        _shift = (_req - _worst) + 0.30
+        _cur["x"] = round(float(_cur["x"] + _away[0] * _shift), 1)
+        _cur["z"] = round(float(_cur["z"] + _away[1] * _shift), 1)
+        _moved = True
+    if _worst < _req:
+        # Re-check after the final nudge before deciding to drop.
+        _pts = _structure_footprint_points_0253(_cur)
+        _clear, _near, _dirs = exact_nearest_road(_pts)
+        _worst = float(np.min(_clear))
+    if _worst >= _req:
+        if _moved:
+            _small_moved_0253 += 1
+        _small_kept_0253.append(_cur)
+    else:
+        _small_dropped_0253 += 1
+structures = _small_kept_0253
+pole_points = [[round(s["x"], 1), round(s["z"], 1)] for s in structures if s["kind"] == "power_pole"]
+smash_signs = [[round(s["x"], 1), round(s["z"], 1)] for s in structures if s["kind"] == "sign_smash"]
+print(f"[desert] small-structure footprint audit: moved {_small_moved_0253}, dropped {_small_dropped_0253}")
+
 
 # ---------------------------------------------------------------- game content
 print("[desert] game content ...")

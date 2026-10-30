@@ -9,9 +9,12 @@ extends RefCounted
 ## Shelby entry reproduces the pre-0.2.40 constants exactly; the three new
 ## entries use the owner-supplied model/spec files:
 ##
-## * Audi R8 V10 plus (Type 4S): 5.2 V10, 610 hp, 560 Nm, AWD.
-## * Chevrolet Camaro SS: 6.2 LT1 V8, 455 hp, 617 Nm, RWD.
-## * Mercedes-Benz 560 SEL (W126): 5.5 M117 V8, 300 hp, 455 Nm, RWD.
+## * Audo R8 V10 plus: 5.2 V10, 610 hp, 560 Nm, AWD.
+## * Chevrole Kamaro SS: 6.2 LT1 V8, 455 hp, 617 Nm, RWD.
+## * Mercedez-Bens 560 SEL: 5.5 V8, 300 hp, 455 Nm, RWD.
+##
+## 0.2.61: display names are lightly fictionalised so the game needs
+## no manufacturer licences; ids/model paths stay stable for saves.
 ##
 ## All lengths are metres in vehicle-local Godot axes (nose -Z, up +Y,
 ## origin on the ground midway between the axles), matching the GLB
@@ -177,7 +180,9 @@ static func _with_common(car: Dictionary) -> Dictionary:
 static func _shelby() -> Dictionary:
 	return _with_common({
 		"id": "shelby_gt500",
-		"name": "Shelby GT500",
+		"name": "Shelbie GT500",
+		"price_cr": 0,
+		"owned_by_default": true,
 		"short_name": "GT500",
 		"year": 1967,
 		"year_label": "'67",
@@ -256,7 +261,9 @@ static func _shelby() -> Dictionary:
 static func _audi_r8() -> Dictionary:
 	return _with_common({
 		"id": "audi_r8_v10_plus",
-		"name": "Audi R8 V10 plus",
+		"name": "Audo R8 V10 plus",
+		"price_cr": 50000,
+		"owned_by_default": false,
 		"short_name": "R8 V10 plus",
 		"year": 2016,
 		"year_label": "'16",
@@ -343,7 +350,9 @@ static func _audi_r8() -> Dictionary:
 static func _camaro_ss() -> Dictionary:
 	return _with_common({
 		"id": "chevrolet_camaro_ss",
-		"name": "Chevrolet Camaro SS",
+		"name": "Chevrole Kamaro SS",
+		"price_cr": 95000,
+		"owned_by_default": false,
 		"short_name": "Camaro SS",
 		"year": 2017,
 		"year_label": "'17",
@@ -430,7 +439,9 @@ static func _camaro_ss() -> Dictionary:
 static func _mercedes_560_sel() -> Dictionary:
 	return _with_common({
 		"id": "mercedes_560_sel",
-		"name": "Mercedes-Benz 560 SEL",
+		"name": "Mercedez-Bens 560 SEL",
+		"price_cr": 160000,
+		"owned_by_default": false,
 		"short_name": "560 SEL",
 		"year": 1990,
 		"year_label": "'90",

@@ -13,7 +13,49 @@ const HudScript := preload("res://scripts/hud.gd")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
 const RouteGuideScript := preload("res://scripts/route_guide.gd")
+const LoadingScreenScript := preload("res://scripts/loading_screen.gd")
 const PROFILE_PATH := "user://nitches_profile.cfg"
+const NET_CONFIG_PATH := "user://nitches_net.cfg"
+
+## 0.2.61 progression economy: the Shelbie GT500 and RichTown are
+## free; the other three cars and two worlds are bought with CR
+## earned by driving (200 CR/km), achievements and daily quests.
+const START_CREDITS := 15000
+const WORLD_PRICES := {"richtown": 0, "desert": 25000, "greenforest": 80000}
+
+## daily quest pool: 10 of these 14 are active each day.  IDs,
+## metrics, targets and rewards MUST mirror QUEST_POOL in
+## server/src/index.js.  A full day of quests pays roughly
+## 6 500-8 000 CR — about a week of quests per car tier, faster
+## with driving income and one-off achievements on top.
+const QUEST_POOL := [
+	{"id": "dist_5", "metric": "distance_km", "target": 5.0, "reward": 400, "title": "Разминка", "detail": "Проехать 5 км", "unit": "км"},
+	{"id": "dist_15", "metric": "distance_km", "target": 15.0, "reward": 900, "title": "Дальний круг", "detail": "Проехать 15 км", "unit": "км"},
+	{"id": "dist_30", "metric": "distance_km", "target": 30.0, "reward": 1600, "title": "Марафон", "detail": "Проехать 30 км", "unit": "км"},
+	{"id": "dist_50", "metric": "distance_km", "target": 50.0, "reward": 2500, "title": "Неутомимый", "detail": "Проехать 50 км", "unit": "км"},
+	{"id": "speed_160", "metric": "top_speed_kmh", "target": 160.0, "reward": 500, "title": "Быстрый старт", "detail": "Разогнаться до 160 км/ч", "unit": "км/ч"},
+	{"id": "speed_200", "metric": "top_speed_kmh", "target": 200.0, "reward": 900, "title": "Гонщик", "detail": "Разогнаться до 200 км/ч", "unit": "км/ч"},
+	{"id": "drift_time_30", "metric": "drift_seconds", "target": 30.0, "reward": 600, "title": "Первый занос", "detail": "Дрифтить суммарно 30 секунд", "unit": "с"},
+	{"id": "drift_time_90", "metric": "drift_seconds", "target": 90.0, "reward": 1100, "title": "Мастер заноса", "detail": "Дрифтить суммарно 90 секунд", "unit": "с"},
+	{"id": "drift_angle_30", "metric": "drift_angle_deg", "target": 30.0, "reward": 500, "title": "Угол атаки", "detail": "Держать угол дрифта 30°", "unit": "°"},
+	{"id": "drift_angle_40", "metric": "drift_angle_deg", "target": 40.0, "reward": 900, "title": "На грани", "detail": "Держать угол дрифта 40°", "unit": "°"},
+	{"id": "play_10", "metric": "play_minutes", "target": 10.0, "reward": 350, "title": "Заглянул погонять", "detail": "Играть 10 минут", "unit": "мин"},
+	{"id": "play_25", "metric": "play_minutes", "target": 25.0, "reward": 700, "title": "Вечер за рулём", "detail": "Играть 25 минут", "unit": "мин"},
+	{"id": "nitro_20", "metric": "nitro_seconds", "target": 20.0, "reward": 550, "title": "Азот!", "detail": "Использовать нитро 20 секунд", "unit": "с"},
+	{"id": "earn_2000", "metric": "credits_from_driving", "target": 2000.0, "reward": 600, "title": "Заработок", "detail": "Заработать 2000 CR ездой", "unit": "CR"},
+]
+
+## 0.2.62 wheel of fortune (home screen): +1 free spin per day and
+## +1 per driver level, capped.  Prizes are CR plus one extra-spin
+## slot; average payout ~1000 CR per spin keeps the car/world
+## prices meaningful while giving a daily reason to open the game.
+const WHEEL_SEGMENTS := [
+	{"cr": 200, "kind": "cr"}, {"cr": 750, "kind": "cr"}, {"cr": 300, "kind": "cr"},
+	{"cr": 1500, "kind": "cr"}, {"cr": 250, "kind": "cr"}, {"cr": 500, "kind": "cr"},
+	{"cr": 5000, "kind": "cr"}, {"cr": 400, "kind": "cr"}, {"cr": 1000, "kind": "cr"},
+	{"cr": 0, "kind": "spin"}, {"cr": 600, "kind": "cr"}, {"cr": 2000, "kind": "cr"},
+]
+const WHEEL_SPIN_CAP := 5
 const SETTINGS_PATH := "user://nitches_settings.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -36,6 +78,10 @@ var _hud: NativeHud
 var _menu: NativeMainMenu
 var _world_map: NativeWorldMap
 var _route_guide: NativeRouteGuide
+var _loading_screen: NativeLoadingScreen
+var _is_bootstrapping := false
+var _bootstrap_completed := false
+var _world_switch_in_progress := false
 var _map_open := false
 var _in_menu := false
 var _has_entered_game := false
@@ -55,6 +101,19 @@ var _session_top_speed_kmh := 0.0
 var _session_drift_deg := 0.0
 var _session_seconds := 0.0
 var _credit_distance_bank_m := 0.0
+
+## 0.2.61 online session state: account + multiplayer (main_menu
+## collects the input; NitchesNetClient / NitchesMpClient do IO).
+var _net: NitchesNetClient
+var _mp: NitchesMpClient
+var _server_url := ""
+var _auth_token := ""
+var _account_username := ""
+var _account_role := "player"
+var _logged_in := false
+var _online_quests: Array = []
+var _net_sync_timer := 0.0
+var _quest_progress_pushed: Dictionary = {}
 var _selected_car_id := NativeCarCatalog.DEFAULT_CAR_ID
 var _car_customizations: Dictionary = {}
 var _car_stats: Dictionary = {}
@@ -107,17 +166,124 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args() + OS.get_cmdline_args():
 		if String(arg).begins_with("--native-world="):
 			var wanted := String(arg).trim_prefix("--native-world=")
-			if wanted == "richtown" or wanted == "desert":
+			if wanted == "richtown" or wanted == "desert" or wanted == "greenforest":
 				_selected_world_id = wanted
+	_ensure_loading_screen()
+	if _smoke_mode or _screenshot_mode:
+		_loading_screen.hide_immediately()
+		_bootstrap_game_sync()
+		return
+	_is_bootstrapping = true
+	_show_loading_screen("Открываем фестиваль скорости")
+	call_deferred("_bootstrap_game_async")
+
+
+func _bootstrap_game_sync() -> void:
+	_create_world_node()
+	var stats := _world.build_world()
+	_handle_world_build_result(_world, stats)
+	_bootstrap_create_vehicle()
+	_bootstrap_create_camera_and_systems()
+	_bootstrap_create_profile_and_menu()
+	_bootstrap_create_world_map()
+	_bootstrap_finish_startup()
+	_bootstrap_completed = true
+
+
+func _bootstrap_game_async() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_set_loading_progress(0.04, "Читаем данные мира")
+	await get_tree().process_frame
+	_create_world_node()
+	_world.process_mode = Node.PROCESS_MODE_DISABLED
+	await _build_world_with_loading(_world, 0.08, 0.72)
+	_world.process_mode = Node.PROCESS_MODE_INHERIT
+	_set_loading_progress(0.76, "Готовим автомобиль")
+	await get_tree().process_frame
+	_bootstrap_create_vehicle()
+	_set_loading_progress(0.84, "Настраиваем камеру и эффекты")
+	await get_tree().process_frame
+	_bootstrap_create_camera_and_systems()
+	_set_loading_progress(0.92, "Собираем меню и профиль")
+	await get_tree().process_frame
+	_bootstrap_create_profile_and_menu()
+	_set_loading_progress(0.97, "Подключаем карту и маршрут")
+	await get_tree().process_frame
+	_bootstrap_create_world_map()
+	_set_loading_progress(1.0, "Мир готов")
+	_bootstrap_finish_startup()
+	_bootstrap_completed = true
+	_is_bootstrapping = false
+	await _finish_loading_screen()
+
+
+func _create_world_node() -> void:
 	_world = WorldBuilderScript.new() as NativeWorldBuilder
 	_world.name = "NativeWorld"
 	_world.world_id = _selected_world_id
 	add_child(_world)
-	var stats := _world.build_world()
-	print("[native] World build stats (%s): " % _selected_world_id, stats)
-	if not _world.build_error.is_empty():
-		push_error("Native world failed to build: %s" % _world.build_error)
 
+
+func _handle_world_build_result(world: NativeWorldBuilder, stats: Dictionary) -> void:
+	print("[native] World build stats (%s): " % world.world_id, stats)
+	if not world.build_error.is_empty():
+		push_error("Native world failed to build: %s" % world.build_error)
+		if _loading_screen != null and _loading_screen.visible:
+			_loading_screen.set_error(world.build_error)
+
+
+func _build_world_with_loading(world: NativeWorldBuilder, from_fraction: float, to_fraction: float) -> Dictionary:
+	world.begin_build_world()
+	while not world.is_build_finished():
+		var before: Dictionary = world.get_build_progress_state()
+		_set_loading_progress(
+			lerpf(from_fraction, to_fraction, float(before.get("fraction", 0.0))),
+			String(before.get("stage", "Строим мир"))
+		)
+		await get_tree().process_frame
+		var after: Dictionary = world.build_world_step()
+		_set_loading_progress(
+			lerpf(from_fraction, to_fraction, float(after.get("fraction", 0.0))),
+			String(after.get("completed_stage", after.get("stage", "Строим мир")))
+		)
+	var stats: Dictionary = {}
+	if world.get_world_data().is_empty():
+		stats = {"error": world.build_error}
+	else:
+		stats = world.get_stats()
+	_handle_world_build_result(world, stats)
+	if not world.build_error.is_empty() and _loading_screen != null and _loading_screen.visible:
+		await _loading_screen.error_continue_requested
+		_loading_screen.clear_error()
+	return stats
+
+
+func _ensure_loading_screen() -> void:
+	if _loading_screen != null:
+		return
+	_loading_screen = LoadingScreenScript.new() as NativeLoadingScreen
+	_loading_screen.name = "LoadingScreen"
+	add_child(_loading_screen)
+
+
+func _show_loading_screen(initial_stage: String) -> void:
+	_ensure_loading_screen()
+	_loading_screen.restart(_selected_world_id)
+	_loading_screen.set_progress(0.0, initial_stage)
+
+
+func _set_loading_progress(fraction: float, stage: String) -> void:
+	if _loading_screen != null:
+		_loading_screen.set_progress(fraction, stage)
+
+
+func _finish_loading_screen() -> void:
+	if _loading_screen != null:
+		await _loading_screen.finish()
+
+
+func _bootstrap_create_vehicle() -> void:
 	_vehicle = VehicleScript.new() as NativeVehicle
 	_selected_car_id = _load_saved_selected_car_id()
 	_vehicle.configure_car(_selected_car_id)
@@ -134,6 +300,8 @@ func _ready() -> void:
 	# there is deliberately no hidden traffic node or parked-car fleet.
 	print("[native] Traffic removed: player vehicle only")
 
+
+func _bootstrap_create_camera_and_systems() -> void:
 	_create_camera()
 	_atmosphere_fx = AtmosphereFxScript.new() as NativeAtmosphereFX
 	_atmosphere_fx.configure(_vehicle, _camera, _world)
@@ -156,6 +324,8 @@ func _ready() -> void:
 	_hud.reset_requested.connect(_reset_vehicle_to_road)
 	_hud.menu_requested.connect(_show_menu)
 
+
+func _bootstrap_create_profile_and_menu() -> void:
 	# 0.2.29: the game opens on the main menu (profile / garage /
 	# store / worlds) over a cinematic orbit of the car; Play enters
 	# the world.  Smoke and screenshot runs skip straight to driving.
@@ -182,9 +352,24 @@ func _ready() -> void:
 	_menu.profile_changed.connect(_on_profile_changed)
 	_menu.car_selection_requested.connect(_select_car)
 	_menu.world_selected.connect(switch_world)
+	_menu.car_purchase_requested.connect(_buy_car)
+	_menu.world_purchase_requested.connect(_buy_world)
+	_menu.daily_quest_claim_requested.connect(_claim_daily_quest)
+	_menu.account_register_requested.connect(_on_account_register_requested)
+	_menu.account_login_requested.connect(_on_account_login_requested)
+	_menu.account_logout_requested.connect(_on_account_logout_requested)
+	_menu.feedback_requested.connect(_on_feedback_requested)
+	_menu.leaderboard_requested.connect(_on_leaderboard_requested)
+	_menu.admin_requested.connect(_on_admin_requested)
+	_menu.multiplayer_join_requested.connect(_on_multiplayer_join_requested)
+	_menu.multiplayer_leave_requested.connect(_on_multiplayer_leave_requested)
+	_menu.wheel_spin_requested.connect(_on_wheel_spin_requested)
 	_menu.set_current_world(_selected_world_id)
+	_setup_net()
 	_apply_settings(_settings, false)
 
+
+func _bootstrap_create_world_map() -> void:
 	# 0.2.32: full-screen named RichTown map over the game.  The HUD
 	# minimap and M/Tab open it; the car is frozen while it is read.
 	_world_map = WorldMapScript.new() as NativeWorldMap
@@ -197,6 +382,9 @@ func _ready() -> void:
 	_hud.set_minimap_points(_world_map.get_minimap_points())
 	_on_world_map_destination_changed(_world_map.get_route_destination())
 	_hud.map_requested.connect(_show_world_map)
+
+
+func _bootstrap_finish_startup() -> void:
 	if _smoke_mode or _screenshot_mode:
 		_enter_game()
 	else:
@@ -243,7 +431,7 @@ func _sanitize_settings(source: Dictionary) -> Dictionary:
 		graphics_quality = "balanced"
 	result["graphics_quality"] = graphics_quality
 	var selected_world := String(result.get("selected_world", "richtown"))
-	if selected_world != "richtown" and selected_world != "desert":
+	if selected_world != "richtown" and selected_world != "desert" and selected_world != "greenforest":
 		selected_world = "richtown"
 	result["selected_world"] = selected_world
 	return result
@@ -547,6 +735,11 @@ func _select_car(car_id: String) -> void:
 	if _vehicle == null:
 		return
 	var next_id := NativeCarCatalog.normalize_id(car_id)
+	if not _is_car_owned(next_id) and not _smoke_mode and not _screenshot_mode:
+		if _menu != null:
+			_menu.set_garage_status("%s ещё не куплен — загляните в Магазин." % String(NativeCarCatalog.get_car(next_id).get("name", next_id)))
+		_refresh_menu_profile_and_customization()
+		return
 	if next_id == _vehicle.get_car_id():
 		_selected_car_id = next_id
 		_refresh_menu_profile_and_customization()
@@ -764,6 +957,7 @@ func _set_garage_active(active: bool) -> void:
 func _on_menu_panel_changed(panel: int) -> void:
 	# Garage (1) and Store (2) both present the live selected-car studio.
 	_set_garage_active(panel == NativeMainMenu.PANEL_GARAGE or panel == NativeMainMenu.PANEL_STORE)
+	_apply_menu_lightweight()
 
 
 func _on_garage_dragged(relative: Vector2) -> void:
@@ -806,7 +1000,7 @@ func _load_profile() -> void:
 	_profile = {
 		"name": "ИГРОК",
 		"avatar_id": "wheel",
-		"credits": 35000,
+		"credits": START_CREDITS,
 		"distance_m": 0.0,
 		"top_speed_kmh": 0.0,
 		"drift_record_deg": 0.0,
@@ -816,6 +1010,13 @@ func _load_profile() -> void:
 		"selected_car_id": NativeCarCatalog.DEFAULT_CAR_ID,
 		"car_customizations": {},
 		"car_stats": {},
+		"owned_cars": [],
+		"owned_worlds": [],
+		"daily": {},
+		"economy_v": 0,
+		"wheel_spins": 1,
+		"wheel_last_day": "",
+		"wheel_level": 1,
 		"paint_id": "red",
 		"paint_color": "7a0609ff",
 		"wheel_finish": "silver",
@@ -872,6 +1073,35 @@ func _load_profile() -> void:
 			_car_stats[car_id] = {"distance_km": 0.0, "top_speed_kmh": 0.0, "drift_deg": 0.0, "play_seconds": 0.0}
 	_profile["car_customizations"] = _car_customizations.duplicate(true)
 	_profile["car_stats"] = _car_stats.duplicate(true)
+	# 0.2.61 progression migration (runs once): pre-economy saves
+	# keep every car they actually drove (>=0.5 km) and the desert
+	# if the old 50 000 CR balance rule had already unlocked it.
+	# New profiles start with the Shelbie + RichTown and buy the
+	# rest with CR.  The Green Forest stays a purchase for all.
+	if int(_profile.get("economy_v", 0)) < 1:
+		var migrated_cars: Array = [NativeCarCatalog.DEFAULT_CAR_ID]
+		for car_id in NativeCarCatalog.car_ids():
+			var driven := _car_stats.get(car_id, {}) as Dictionary
+			if float(driven.get("distance_km", 0.0)) >= 0.5 and car_id not in migrated_cars:
+				migrated_cars.append(car_id)
+		var migrated_worlds: Array = ["richtown"]
+		if int(_profile.get("credits", START_CREDITS)) >= 50000:
+			migrated_worlds.append("desert")
+		# Worlds were free for everyone in 0.2.48-0.2.60, so an
+		# existing player also keeps the world they last played in.
+		if _selected_world_id != "richtown" and _selected_world_id not in migrated_worlds and float(_profile.get("distance_m", 0.0)) > 0.0:
+			migrated_worlds.append(_selected_world_id)
+		_profile["owned_cars"] = migrated_cars
+		_profile["owned_worlds"] = migrated_worlds
+		_profile["economy_v"] = 1
+	if not (_profile.get("owned_cars", []) is Array) or (_profile.get("owned_cars", []) as Array).is_empty():
+		_profile["owned_cars"] = [NativeCarCatalog.DEFAULT_CAR_ID]
+	if not (_profile.get("owned_worlds", []) is Array) or (_profile.get("owned_worlds", []) as Array).is_empty():
+		_profile["owned_worlds"] = ["richtown"]
+	if _selected_car_id not in (_profile.get("owned_cars", []) as Array):
+		_selected_car_id = NativeCarCatalog.DEFAULT_CAR_ID
+		_profile["selected_car_id"] = _selected_car_id
+	_grant_wheel_spins()
 	_store_active_customization(_active_customization())
 
 
@@ -906,7 +1136,8 @@ func _save_profile(record_history: bool = false) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
-		_save_profile(true)
+		if _bootstrap_completed:
+			_save_profile(true)
 		_save_settings()
 
 
@@ -939,7 +1170,7 @@ func _claim_achievement_rewards() -> void:
 		var achievement_id := String(spec.get("id", ""))
 		if bool(spec.get("unlocked", false)) and not claimed.has(achievement_id):
 			claimed.append(achievement_id)
-			_profile["credits"] = int(_profile.get("credits", 35000)) + int(spec.get("reward", 0))
+			_profile["credits"] = _credits() + int(spec.get("reward", 0))
 			changed = true
 	if changed:
 		_profile["achievement_rewards_claimed"] = claimed
@@ -978,6 +1209,13 @@ func _profile_view() -> Dictionary:
 		"xp_to_next_km": 50.0 - level_progress_km,
 		"achievements": achievements,
 		"history": history,
+		"owned_cars": (_profile.get("owned_cars", []) as Array).duplicate(),
+		"owned_worlds": (_profile.get("owned_worlds", []) as Array).duplicate(),
+		"world_prices": WORLD_PRICES.duplicate(),
+		"daily_quests": _daily_quests_view(),
+		"wheel_spins": int(_profile.get("wheel_spins", 0)),
+		"wheel_segments": WHEEL_SEGMENTS.duplicate(true),
+		"account": _account_view(),
 		"selected_car_id": _selected_car_id,
 		"car_stats": _car_stats_view(),
 	}
@@ -992,6 +1230,7 @@ func _show_menu() -> void:
 	if _hud != null:
 		_hud.reset_touch_controls()
 	_in_menu = true
+	_apply_menu_lightweight()
 	if _atmosphere_fx != null:
 		_atmosphere_fx.set_active(false)
 	if _vehicle != null:
@@ -1018,6 +1257,7 @@ func _enter_game() -> void:
 		_world_map.hide_map()
 	_map_open = false
 	_in_menu = false
+	_apply_menu_lightweight()
 	if _atmosphere_fx != null:
 		_atmosphere_fx.set_active(true)
 	if _menu != null:
@@ -1106,6 +1346,545 @@ func _update_menu_camera(delta: float) -> void:
 	_camera.look_at(centre, Vector3.UP)
 
 
+## --- 0.2.61 progression: owned cars/worlds, purchases ---
+
+func _credits() -> int:
+	return int(_profile.get("credits", START_CREDITS))
+
+
+func _fmt_cr(value: int) -> String:
+	var digits := str(absi(value))
+	var out := ""
+	while digits.length() > 3:
+		out = " " + digits.right(3) + out
+		digits = digits.left(digits.length() - 3)
+	return ("-" if value < 0 else "") + digits + out
+
+
+func _is_car_owned(car_id: String) -> bool:
+	return NativeCarCatalog.normalize_id(car_id) in (_profile.get("owned_cars", []) as Array)
+
+
+func _is_world_owned(world_id: String) -> bool:
+	return world_id in (_profile.get("owned_worlds", []) as Array)
+
+
+func _buy_car(car_id: String) -> void:
+	var id := NativeCarCatalog.normalize_id(car_id)
+	if _is_car_owned(id):
+		_select_car(id)
+		return
+	var price := int(NativeCarCatalog.get_car(id).get("price_cr", 0))
+	if _credits() < price:
+		if _menu != null:
+			_menu.set_garage_status("Не хватает CR: нужно %s, у вас %s. Зарабатывайте ездой и ежедневными заданиями (вкладка «Онлайн»)." % [_fmt_cr(price), _fmt_cr(_credits())])
+		return
+	_profile["credits"] = _credits() - price
+	var owned: Array = (_profile.get("owned_cars", []) as Array).duplicate()
+	owned.append(id)
+	_profile["owned_cars"] = owned
+	_save_profile()
+	_sync_progress_online()
+	_select_car(id)
+
+
+func _buy_world(world_id: String) -> void:
+	if _is_world_owned(world_id):
+		switch_world(world_id)
+		return
+	var price := int(WORLD_PRICES.get(world_id, 0))
+	if _credits() < price:
+		_refresh_menu_profile_and_customization()
+		return
+	_profile["credits"] = _credits() - price
+	var owned: Array = (_profile.get("owned_worlds", []) as Array).duplicate()
+	owned.append(world_id)
+	_profile["owned_worlds"] = owned
+	_save_profile()
+	_sync_progress_online()
+	switch_world(world_id)
+
+
+## --- 0.2.61 daily quests ---
+
+func _daily_today() -> Dictionary:
+	var day := Time.get_date_string_from_system()
+	var daily := _profile.get("daily", {}) as Dictionary
+	if String(daily.get("day", "")) != day:
+		daily = {
+			"day": day,
+			"distance_m": 0.0,
+			"drift_seconds": 0.0,
+			"drift_angle_deg": 0.0,
+			"top_speed_kmh": 0.0,
+			"play_seconds": 0.0,
+			"nitro_seconds": 0.0,
+			"credits_from_driving": 0,
+			"claimed": [],
+		}
+		_profile["daily"] = daily
+		_quest_progress_pushed.clear()
+	return daily
+
+
+func _daily_metric(daily: Dictionary, metric: String) -> float:
+	match metric:
+		"distance_km":
+			return float(daily.get("distance_m", 0.0)) / 1000.0
+		"top_speed_kmh":
+			return float(daily.get("top_speed_kmh", 0.0))
+		"drift_seconds":
+			return float(daily.get("drift_seconds", 0.0))
+		"drift_angle_deg":
+			return float(daily.get("drift_angle_deg", 0.0))
+		"play_minutes":
+			return float(daily.get("play_seconds", 0.0)) / 60.0
+		"nitro_seconds":
+			return float(daily.get("nitro_seconds", 0.0))
+		"credits_from_driving":
+			return float(int(daily.get("credits_from_driving", 0)))
+		_:
+			return 0.0
+
+
+func _quest_spec(quest_id: String) -> Dictionary:
+	for spec_variant in QUEST_POOL:
+		var spec: Dictionary = spec_variant
+		if String(spec.get("id", "")) == quest_id:
+			return spec
+	return {}
+
+
+func _local_daily_quests() -> Array:
+	# Offline/guest daily set: deterministic by date + profile name.
+	# Logged-in players get the server set instead (authoritative).
+	var daily := _daily_today()
+	var key := String(daily.get("day", "")) + ":" + String(_profile.get("name", "ИГРОК"))
+	var seed_value := 2166136261
+	for i in key.length():
+		seed_value = int((seed_value ^ key.unicode_at(i)) * 16777619) & 0xFFFFFFFF
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var order: Array = []
+	for i in QUEST_POOL.size():
+		order.append(i)
+	for i in range(order.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp: Variant = order[i]
+		order[i] = order[j]
+		order[j] = tmp
+	var claimed: Array = daily.get("claimed", [])
+	var out: Array = []
+	for k in mini(10, order.size()):
+		var spec: Dictionary = (QUEST_POOL[int(order[k])] as Dictionary).duplicate()
+		var value := _daily_metric(daily, String(spec.get("metric", "")))
+		spec["progress"] = value
+		spec["claimed"] = String(spec.get("id", "")) in claimed
+		spec["completed"] = value >= float(spec.get("target", 0.0))
+		out.append(spec)
+	return out
+
+
+func _daily_quests_view() -> Array:
+	if _logged_in and not _online_quests.is_empty():
+		var daily := _daily_today()
+		var out: Array = []
+		for row_variant in _online_quests:
+			var row: Dictionary = row_variant
+			var spec := _quest_spec(String(row.get("id", "")))
+			if spec.is_empty():
+				continue
+			var merged := spec.duplicate()
+			merged["target"] = float(row.get("target", spec.get("target", 0.0)))
+			merged["reward"] = int(row.get("reward", spec.get("reward", 0)))
+			var value := maxf(_daily_metric(daily, String(spec.get("metric", ""))), float(row.get("progress", 0.0)))
+			merged["progress"] = value
+			merged["claimed"] = bool(row.get("claimed", false))
+			merged["completed"] = value >= float(merged["target"])
+			out.append(merged)
+		if not out.is_empty():
+			return out
+	return _local_daily_quests()
+
+
+func _claim_daily_quest(quest_id: String) -> void:
+	var spec := _quest_spec(quest_id)
+	if spec.is_empty():
+		return
+	var daily := _daily_today()
+	var value := _daily_metric(daily, String(spec.get("metric", "")))
+	if _logged_in and _net != null:
+		_net.claim_quest(quest_id, value)
+		return
+	var claimed: Array = (daily.get("claimed", []) as Array).duplicate()
+	if quest_id in claimed or value < float(spec.get("target", 0.0)):
+		return
+	claimed.append(quest_id)
+	daily["claimed"] = claimed
+	_profile["daily"] = daily
+	_profile["credits"] = _credits() + int(spec.get("reward", 0))
+	_save_profile()
+	_refresh_menu_profile_and_customization()
+	if _menu != null:
+		_menu.online_set_status("Награда +%s CR получена (офлайн-режим)!" % _fmt_cr(int(spec.get("reward", 0))))
+
+
+func _push_quest_progress_online() -> void:
+	if not _logged_in or _net == null:
+		return
+	var daily := _daily_today()
+	for row_variant in _daily_quests_view():
+		var row: Dictionary = row_variant
+		var quest_id := String(row.get("id", ""))
+		if quest_id.is_empty() or bool(row.get("claimed", false)):
+			continue
+		var value := _daily_metric(daily, String(row.get("metric", "")))
+		if value > float(_quest_progress_pushed.get(quest_id, -1.0)):
+			_quest_progress_pushed[quest_id] = value
+			_net.push_quest_progress(quest_id, value)
+
+
+## --- 0.2.61 online account / multiplayer glue ---
+
+func _account_view() -> Dictionary:
+	return {
+		"logged_in": _logged_in,
+		"username": _account_username,
+		"role": _account_role,
+		"is_admin": _account_role == "admin",
+		"server_url": _server_url,
+		"mp_connected": _mp != null and _mp.is_connected_to_room(),
+		"mp_peers": _mp.peer_count() if _mp != null else 0,
+	}
+
+
+func _net_config_load() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(NET_CONFIG_PATH) == OK:
+		_server_url = String(cfg.get_value("net", "server_url", ""))
+		_auth_token = String(cfg.get_value("net", "token", ""))
+		_account_username = String(cfg.get_value("net", "username", ""))
+
+
+func _net_config_save() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("net", "server_url", _server_url)
+	cfg.set_value("net", "token", _auth_token)
+	cfg.set_value("net", "username", _account_username)
+	cfg.save(NET_CONFIG_PATH)
+
+
+func _setup_net() -> void:
+	_net_config_load()
+	_net = NitchesNetClient.new()
+	add_child(_net)
+	_net.configure(_server_url, _auth_token)
+	_net.auth_succeeded.connect(_on_auth_succeeded)
+	_net.me_loaded.connect(_on_me_loaded)
+	_net.quests_loaded.connect(_on_quests_loaded)
+	_net.quest_claimed.connect(_on_quest_claimed_online)
+	_net.leaderboard_loaded.connect(_on_leaderboard_loaded)
+	_net.rooms_loaded.connect(_on_rooms_loaded)
+	_net.admin_data_loaded.connect(_on_admin_data_loaded)
+	_net.feedback_sent.connect(_on_feedback_sent)
+	_net.request_failed.connect(_on_net_request_failed)
+	_mp = NitchesMpClient.new()
+	add_child(_mp)
+	_mp.connection_changed.connect(_on_mp_connection_changed)
+	_mp.peers_changed.connect(_on_mp_peers_changed)
+	if not _server_url.is_empty() and not _auth_token.is_empty() and not _smoke_mode:
+		_net.fetch_me()
+
+
+func _apply_server_profile(profile: Dictionary) -> void:
+	# Server economy wins on login; lifetime records merge by max so
+	# offline driving before the first login is never lost.
+	if profile.is_empty():
+		return
+	_profile["credits"] = int(profile.get("credits", _credits()))
+	var cars: Array = profile.get("owned_cars", [])
+	if not cars.is_empty():
+		_profile["owned_cars"] = cars.duplicate()
+	var worlds: Array = profile.get("owned_worlds", [])
+	if not worlds.is_empty():
+		_profile["owned_worlds"] = worlds.duplicate()
+	var stats: Dictionary = profile.get("stats", {})
+	_profile["distance_m"] = maxf(float(_profile.get("distance_m", 0.0)), float(stats.get("distance_km", 0.0)) * 1000.0)
+	_profile["top_speed_kmh"] = maxf(float(_profile.get("top_speed_kmh", 0.0)), float(stats.get("top_speed_kmh", 0.0)))
+	_profile["drift_record_deg"] = maxf(float(_profile.get("drift_record_deg", 0.0)), float(stats.get("drift_deg", 0.0)))
+	_profile["play_seconds"] = maxf(float(_profile.get("play_seconds", 0.0)), float(stats.get("play_seconds", 0.0)))
+	if _selected_car_id not in (_profile.get("owned_cars", []) as Array):
+		_selected_car_id = NativeCarCatalog.DEFAULT_CAR_ID
+		_profile["selected_car_id"] = _selected_car_id
+	_save_profile()
+	if _vehicle != null and _vehicle.get_car_id() != _selected_car_id and not _smoke_mode:
+		_select_car(_selected_car_id)
+
+
+func _sync_progress_online() -> void:
+	if not _logged_in or _net == null:
+		return
+	_net.put_progress({
+		"credits": _credits(),
+		"owned_cars": (_profile.get("owned_cars", []) as Array).duplicate(),
+		"owned_worlds": (_profile.get("owned_worlds", []) as Array).duplicate(),
+		"stats": {
+			"distance_km": float(_profile.get("distance_m", 0.0)) / 1000.0,
+			"top_speed_kmh": float(_profile.get("top_speed_kmh", 0.0)),
+			"drift_deg": float(_profile.get("drift_record_deg", 0.0)),
+			"play_seconds": float(_profile.get("play_seconds", 0.0)),
+		},
+	})
+
+
+func _menu_online_status(text: String) -> void:
+	if _menu != null:
+		_menu.online_set_status(text)
+
+
+func _on_auth_succeeded(user: Dictionary, profile: Dictionary, token: String, is_new_account: bool, first_player: bool) -> void:
+	_auth_token = token
+	_account_username = String(user.get("username", _account_username))
+	_account_role = String(user.get("role", "player"))
+	_logged_in = true
+	_profile["name"] = _account_username
+	_net_config_save()
+	_apply_server_profile(profile)
+	_net.fetch_quests()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	if is_new_account:
+		_menu_online_status("Аккаунт создан. Добро пожаловать в тест Nitches, %s!" % _account_username)
+	else:
+		_menu_online_status("Вы вошли как %s. Прогресс синхронизируется с сервером." % _account_username)
+	if first_player:
+		_menu_online_status("Вы — ПЕРВЫЙ игрок этого сервера: вам выдана роль разработчика (admin). Админ-панель — внизу этой вкладки.")
+
+
+func _on_me_loaded(user: Dictionary, profile: Dictionary) -> void:
+	_logged_in = true
+	_account_username = String(user.get("username", _account_username))
+	_account_role = String(user.get("role", "player"))
+	_profile["name"] = _account_username
+	_apply_server_profile(profile)
+	_net.fetch_quests()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("С возвращением, %s!" % _account_username)
+
+
+func _on_quests_loaded(_day: String, quests: Array) -> void:
+	_online_quests = quests.duplicate(true)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_quest_claimed_online(quest_id: String, reward: int, credits: int) -> void:
+	_profile["credits"] = credits
+	for i in _online_quests.size():
+		var row: Dictionary = _online_quests[i]
+		if String(row.get("id", "")) == quest_id:
+			row["claimed"] = true
+			_online_quests[i] = row
+	_save_profile()
+	_net.fetch_quests()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("Награда +%s CR получена!" % _fmt_cr(reward))
+
+
+func _on_leaderboard_loaded(rows: Array, by: String) -> void:
+	if _menu != null:
+		_menu.show_leaderboard(rows, by)
+
+
+func _on_rooms_loaded(data: Dictionary) -> void:
+	if _menu != null:
+		_menu.show_online_rooms(data)
+
+
+func _on_admin_data_loaded(kind: String, data: Dictionary) -> void:
+	if _menu != null:
+		_menu.show_admin_data(kind, data)
+
+
+func _on_feedback_sent() -> void:
+	_menu_online_status("Спасибо! Отзыв отправлен разработчику.")
+
+
+func _on_net_request_failed(tag: String, message: String) -> void:
+	var text := message
+	match message:
+		"username taken":
+			text = "Этот ник уже занят — выберите другой."
+		"invalid username or password":
+			text = "Неверный логин или пароль."
+		"unauthorized":
+			text = "Сессия истекла — войдите снова."
+		"username: 3-16 chars, letters/digits/_":
+			text = "Ник: 3–16 символов, латиница, цифры и подчёркивание."
+		"password: 6-128 chars":
+			text = "Пароль: от 6 символов."
+		"quest not completed":
+			text = "Задание ещё не выполнено — прогресс синхронизируется каждые 30 секунд."
+		"already claimed":
+			text = "Награда за это задание уже получена."
+		"no connection":
+			text = "Нет соединения с сервером. Проверьте адрес сервера и интернет."
+		"admin only":
+			text = "Доступ только для разработчика (первый игрок сервера)."
+	if tag == "me" and message == "unauthorized":
+		_logged_in = false
+		_auth_token = ""
+		_net_config_save()
+	_menu_online_status(text)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_mp_connection_changed(_connected: bool, message: String) -> void:
+	_menu_online_status(message)
+	_refresh_menu_profile_and_customization()
+
+
+func _on_mp_peers_changed(_count: int) -> void:
+	_refresh_menu_profile_and_customization()
+
+
+func _remember_server_url(server_url: String) -> void:
+	_server_url = server_url.strip_edges().trim_suffix("/")
+	_net_config_save()
+	if _net != null:
+		_net.configure(_server_url, _auth_token)
+
+
+func _on_account_register_requested(server_url: String, username: String, password: String) -> void:
+	_remember_server_url(server_url)
+	if _net != null:
+		_menu_online_status("Создаю аккаунт…")
+		_net.register_account(username.strip_edges(), password)
+
+
+func _on_account_login_requested(server_url: String, username: String, password: String) -> void:
+	_remember_server_url(server_url)
+	if _net != null:
+		_menu_online_status("Вхожу…")
+		_net.login_account(username.strip_edges(), password)
+
+
+func _on_account_logout_requested() -> void:
+	if _mp != null:
+		_mp.leave_room()
+	if _net != null:
+		_net.logout_account()
+	_logged_in = false
+	_auth_token = ""
+	_account_role = "player"
+	_online_quests = []
+	if _net != null:
+		_net.set_token("")
+	_net_config_save()
+	_refresh_menu_profile_and_customization()
+	_menu_online_status("Вы вышли. Локальная игра гостем продолжается.")
+
+
+func _on_feedback_requested(text: String, category: String) -> void:
+	if _logged_in and _net != null:
+		_net.send_feedback(text, category)
+	else:
+		_menu_online_status("Отзыв отправляется с аккаунта — войдите или зарегистрируйтесь выше.")
+
+
+func _on_leaderboard_requested(by: String) -> void:
+	if _net != null:
+		_net.fetch_leaderboard(by)
+		_net.fetch_rooms()
+
+
+func _on_admin_requested(action: String, payload: Dictionary) -> void:
+	if _net == null or not _logged_in:
+		return
+	match action:
+		"stats":
+			_net.admin_fetch("stats")
+		"users":
+			_net.admin_fetch("users")
+		"feedback":
+			_net.admin_fetch("feedback")
+		"grant":
+			_net.admin_grant(String(payload.get("username", "")), int(payload.get("amount", 0)))
+		"feedback_delete":
+			_net.admin_feedback_delete(int(payload.get("id", 0)))
+
+
+func _on_multiplayer_join_requested() -> void:
+	if not _logged_in:
+		_menu_online_status("Мультиплеер доступен после входа в аккаунт.")
+		return
+	if _mp != null:
+		_mp.join_room(_server_url, _auth_token, _selected_world_id, _account_username, _selected_car_id)
+
+
+func _on_multiplayer_leave_requested() -> void:
+	if _mp != null:
+		_mp.leave_room()
+
+
+## --- 0.2.62 lightweight menu background + wheel of fortune ---
+
+func _apply_menu_lightweight() -> void:
+	# The main menu no longer renders the live 3D world behind its
+	# panels: on phones that made the whole menu stutter.  A static
+	# gameplay splash image in the menu layer replaces it (see
+	# main_menu.gd), the world node is hidden while the menu is up and
+	# the car stays visible only inside the garage studio.  World
+	# streaming also pauses (see _process).  Smoke/screenshot flows
+	# keep the old always-rendered behaviour for CI stability.
+	if _smoke_mode or _screenshot_mode:
+		return
+	if _world != null:
+		_world.visible = not _in_menu
+	if _vehicle != null:
+		_vehicle.visible = (not _in_menu) or _garage_active
+
+
+func _grant_wheel_spins() -> void:
+	# +1 free wheel spin per calendar day and +1 per driver level
+	# (level = 1 + km/50, same formula as the profile view), capped
+	# so spins stay a daily treat instead of a farming strategy.
+	var spins := int(_profile.get("wheel_spins", 0))
+	var today := Time.get_date_string_from_system()
+	if String(_profile.get("wheel_last_day", "")) != today:
+		_profile["wheel_last_day"] = today
+		spins = mini(spins + 1, WHEEL_SPIN_CAP)
+	var level := 1 + int(float(_profile.get("distance_m", 0.0)) / 50000.0)
+	var granted_level := int(_profile.get("wheel_level", 1))
+	if level > granted_level:
+		spins = mini(spins + (level - granted_level), WHEEL_SPIN_CAP)
+		_profile["wheel_level"] = level
+	_profile["wheel_spins"] = spins
+
+
+func _on_wheel_spin_requested() -> void:
+	_grant_wheel_spins()
+	var spins := int(_profile.get("wheel_spins", 0))
+	if spins <= 0:
+		if _menu != null:
+			_menu.show_wheel_result(-1, {}, 0)
+		return
+	_profile["wheel_spins"] = spins - 1
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var index := rng.randi_range(0, WHEEL_SEGMENTS.size() - 1)
+	var prize: Dictionary = WHEEL_SEGMENTS[index]
+	if String(prize.get("kind", "cr")) == "spin":
+		_profile["wheel_spins"] = int(_profile["wheel_spins"]) + 1
+	else:
+		_profile["credits"] = _credits() + int(prize.get("cr", 0))
+	_save_profile()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	if _menu != null:
+		_menu.show_wheel_result(index, prize, int(_profile.get("wheel_spins", 0)))
+
+
 func _accumulate_profile(delta: float) -> void:
 	if _vehicle == null or delta <= 0.0:
 		return
@@ -1126,14 +1905,29 @@ func _accumulate_profile(delta: float) -> void:
 	_session_top_speed_kmh = maxf(_session_top_speed_kmh, speed_kmh)
 	_session_drift_deg = maxf(_session_drift_deg, drift_deg)
 	_session_seconds += delta
+	# 0.2.61 daily quest counters (reset at local midnight).
+	var daily := _daily_today()
+	daily["distance_m"] = float(daily.get("distance_m", 0.0)) + speed_kmh / 3.6 * delta
+	daily["top_speed_kmh"] = maxf(float(daily.get("top_speed_kmh", 0.0)), speed_kmh)
+	daily["play_seconds"] = float(daily.get("play_seconds", 0.0)) + delta
+	if _vehicle.is_drifting():
+		daily["drift_seconds"] = float(daily.get("drift_seconds", 0.0)) + delta
+		daily["drift_angle_deg"] = maxf(float(daily.get("drift_angle_deg", 0.0)), drift_deg)
+	if _vehicle.is_boosting():
+		daily["nitro_seconds"] = float(daily.get("nitro_seconds", 0.0)) + delta
+	_profile["daily"] = daily
 	_credit_distance_bank_m += speed_kmh / 3.6 * delta
 	while _credit_distance_bank_m >= 100.0:
 		_credit_distance_bank_m -= 100.0
-		_profile["credits"] = int(_profile.get("credits", 35000)) + 20
+		_profile["credits"] = _credits() + 20
+		var daily_after := _profile.get("daily", {}) as Dictionary
+		daily_after["credits_from_driving"] = int(daily_after.get("credits_from_driving", 0)) + 20
+		_profile["daily"] = daily_after
 	_claim_achievement_rewards()
 	_profile_save_timer += delta
 	if _profile_save_timer >= 5.0:
 		_profile_save_timer = 0.0
+		_grant_wheel_spins()
 		_save_profile()
 
 
@@ -1240,6 +2034,9 @@ func _create_camera() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_bootstrapping or _world_switch_in_progress:
+		get_viewport().set_input_as_handled()
+		return
 	if _map_open:
 		if event.is_action_pressed("ui_cancel") or event.is_action_pressed(&"map_toggle"):
 			_hide_world_map()
@@ -1435,8 +2232,21 @@ func _reset_vehicle_to_road() -> void:
 
 
 func _process(delta: float) -> void:
+	# 0.2.61 multiplayer relay + periodic account sync (runs even
+	# while bootstrapping so logins resolve under the load screen).
+	if _mp != null and _mp.is_connected_to_room() and _vehicle != null:
+		_mp.update_local_state(_vehicle.get_global_transform_interpolated(), _vehicle.get_absolute_speed_kmh())
+	if _logged_in and _net != null and not _smoke_mode:
+		_net_sync_timer += delta
+		if _net_sync_timer >= 30.0:
+			_net_sync_timer = 0.0
+			_sync_progress_online()
+			_net.send_presence(_selected_world_id)
+			_push_quest_progress_online()
+	if _is_bootstrapping or _world_switch_in_progress:
+		return
 	_update_adaptive_render_quality(delta)
-	if _world != null and _camera != null and _vehicle != null and not _garage_active:
+	if _world != null and _camera != null and _vehicle != null and not _garage_active and (not _in_menu or _smoke_mode or _screenshot_mode):
 		# 0.2.30 directional streaming retired load behind the
 		# camera; 0.2.37 also retires whole chunks outside the side
 		# of the real horizontal view cone (with a wide margin), so
@@ -1657,12 +2467,30 @@ func _run_smoke_checks() -> void:
 		failures.append("HUD node is missing")
 	if _world_map == null:
 		failures.append("world map node is missing")
+	if _loading_screen == null:
+		failures.append("0.2.52 branded loading screen node is missing")
+	else:
+		var loading_state := _loading_screen.get_visual_state()
+		if not bool(loading_state.get("custom_loading_screen_0252", false)) or not bool(loading_state.get("real_gameplay_background", false)) or int(loading_state.get("checkpoints", 0)) < 5:
+			failures.append("0.2.52 branded loading screen is incomplete: %s" % str(loading_state))
 	if not failures.is_empty():
 		_finish_smoke(failures)
 		return
 
 	if _selected_world_id == "desert":
 		_run_desert_smoke_checks(failures)
+		# _finish_smoke() quits(0) silently on success; the PASS line
+		# CI greps for is printed by the RichTown battery, so the
+		# per-world gates must print their own (0.2.55: a passing
+		# forest smoke otherwise looked like a silent failure).
+		if failures.is_empty():
+			print("[native-smoke] PASS world=desert enhancements=%s" % str(_world.get_enhancement_stats()))
+		_finish_smoke(failures)
+		return
+	if _selected_world_id == "greenforest":
+		_run_forest_smoke_checks(failures)
+		if failures.is_empty():
+			print("[native-smoke] PASS world=greenforest enhancements=%s" % str(_world.get_enhancement_stats()))
 		_finish_smoke(failures)
 		return
 
@@ -2138,6 +2966,8 @@ func _run_screenshot_tour() -> void:
 	]
 	if _selected_world_id == "desert":
 		shots = _desert_screenshot_shots()
+	elif _selected_world_id == "greenforest":
+		shots = _forest_screenshot_shots()
 
 	# Warm-up: import/runtime LOD, reflection probes and visibility
 	# ranges all settle over the first rendered frames.
@@ -2256,22 +3086,51 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 ## first, rebinds every system that cached a world reference and only
 ## then frees the old one, so the car never points at a dead world.
 func switch_world(world_id: String) -> void:
-	if world_id != "richtown" and world_id != "desert":
+	if world_id != "richtown" and world_id != "desert" and world_id != "greenforest":
 		return
+	if not _is_world_owned(world_id) and not _smoke_mode and not _screenshot_mode:
+		return
+	if _mp != null:
+		_mp.leave_room()
 	if world_id == _selected_world_id and _world != null:
 		return
+	if _is_bootstrapping or _world_switch_in_progress or not _bootstrap_completed:
+		return
+	_world_switch_in_progress = true
+	call_deferred("_switch_world_async", world_id)
+
+
+func _switch_world_async(world_id: String) -> void:
 	_selected_world_id = world_id
 	_settings["selected_world"] = world_id
 	_save_settings()
+	_show_loading_screen("Переезжаем в новый мир")
+	_set_loading_progress(0.03, "Сохраняем настройки")
+	if _vehicle != null:
+		_vehicle.freeze = true
+		_vehicle.set_physics_process(false)
+		_vehicle.set_audio_suspended(true)
+	if _atmosphere_fx != null:
+		_atmosphere_fx.set_active(false)
+	if _hud != null:
+		_hud.visible = false
+	if _world_map != null:
+		_world_map.hide_map()
+	_map_open = false
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var old_world := _world
+	if old_world != null:
+		old_world.process_mode = Node.PROCESS_MODE_DISABLED
 	var new_world := WorldBuilderScript.new() as NativeWorldBuilder
 	new_world.name = "NativeWorld"
 	new_world.world_id = world_id
+	new_world.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(new_world)
-	var stats := new_world.build_world()
-	print("[native] World build stats (%s): " % world_id, stats)
-	if not new_world.build_error.is_empty():
-		push_error("Native world failed to build: %s" % new_world.build_error)
+	await _build_world_with_loading(new_world, 0.07, 0.84)
+	new_world.process_mode = Node.PROCESS_MODE_INHERIT
+	_set_loading_progress(0.90, "Подключаем автомобиль и интерфейс")
+	await get_tree().process_frame
 	_world = new_world
 	_vehicle.set_world(_world)
 	_vehicle.reset_to_transform(_world.spawn_transform)
@@ -2289,6 +3148,21 @@ func switch_world(world_id: String) -> void:
 	if old_world != null:
 		old_world.queue_free()
 	_update_camera(0.0, true)
+	if _in_menu:
+		if _hud != null:
+			_hud.visible = false
+	else:
+		if _atmosphere_fx != null:
+			_atmosphere_fx.set_active(true)
+		if _hud != null:
+			_hud.visible = true
+		if _vehicle != null:
+			_vehicle.freeze = false
+			_vehicle.set_physics_process(true)
+			_vehicle.set_audio_suspended(false)
+	_set_loading_progress(1.0, "Мир готов")
+	_world_switch_in_progress = false
+	await _finish_loading_screen()
 
 
 ## 0.2.47 desert smoke gate: the RichTown assert battery below is
@@ -2326,6 +3200,29 @@ func _run_desert_smoke_checks(failures: Array[String]) -> void:
 		failures.append("desert far-mesa skyline is incomplete: %s" % str(es))
 	if int(es.get("desert_road_deck_colliders", 0)) < 3000:
 		failures.append("desert physical road deck is incomplete: %s" % str(es))
+	if int(es.get("desert_scatter_variants", 0)) < 12 or not bool(es.get("desert_detail_0250", false)):
+		failures.append("desert 0.2.50 cactus/rock detail is incomplete: %s" % str(es))
+	if int(es.get("desert_fences_0251", 0)) < 85:
+		failures.append("desert 0.2.51 fences are incomplete: %s" % str(es))
+	if not bool(es.get("desert_screenshot_audit_0253", false)) or not bool(es.get("desert_rock_triplanar_0253", false)) or not bool(es.get("desert_race_rings_subtle_0253", false)) or not bool(es.get("desert_lake_calm_0253", false)) or not es.has("desert_pipe_road_gaps_0253"):
+		failures.append("desert 0.2.53 screenshot-audit repair is incomplete: %s" % str(es))
+	var dz_smoke: Dictionary = world_data.get("desert", {})
+	var lake_smoke: Dictionary = dz_smoke.get("lake", {})
+	var lake_y_smoke := float(lake_smoke.get("y", 26.2))
+	var oasis_deck_ok := false
+	for road_variant2 in world_data.get("roads", []):
+		var road2: Dictionary = road_variant2
+		if String(road2.get("id", "")) != "dz-oasis_road":
+			continue
+		var min_deck_y := 1e9
+		for sample_variant2 in road2.get("samples", []):
+			var sample2: Array = sample_variant2
+			var d_lake := Vector2(float(sample2[0]) - float(lake_smoke.get("x", 3350.0)), float(sample2[2]) - float(lake_smoke.get("z", 3500.0))).length()
+			if d_lake < 95.0:
+				min_deck_y = minf(min_deck_y, float(sample2[1]))
+		oasis_deck_ok = min_deck_y > lake_y_smoke + 0.1
+	if not oasis_deck_ok:
+		failures.append("oasis road deck is not above lake level (0.2.53)")
 	var salt_point := Vector3(2000.0, _world.height_at(2000.0, 1900.0) + 0.5, 1900.0)
 	var salt_surface := _world.get_surface_at(salt_point)
 	if String(salt_surface.get("kind", "")) != "salt":
@@ -2414,4 +3311,174 @@ func _desert_screenshot_shots() -> Array[Dictionary]:
 			"camera": Vector3(2000.0, 650.0, 150.0), "target": Vector3(2000.0, 0.0, 2300.0),
 		},
 		{"name": "d14_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
+	]
+
+
+## 0.2.54 GreenForest smoke gate: own strict checklist against the
+## forest spec (docs/GREENFOREST_MAP.md), mirroring the desert gate.
+func _run_forest_smoke_checks(failures: Array[String]) -> void:
+	if not _world.has_world_data() or _world.get_world_data().is_empty():
+		failures.append("forest world data is empty: %s" % _world.build_error)
+		return
+	var world_data := _world.get_world_data()
+	var terrain: Dictionary = world_data.get("terrain", {})
+	if (terrain.get("heights", []) as Array).size() != 251001:
+		failures.append("forest terrain heights are incomplete")
+	if (world_data.get("roads", []) as Array).size() < 35:
+		failures.append("forest road network is incomplete")
+	var data_stats: Dictionary = world_data.get("stats", {})
+	if float(data_stats.get("roadLengthKm", 0.0)) < 50.0:
+		failures.append("forest road length is below the 50 km floor: %s" % str(data_stats))
+	if int(data_stats.get("scatterInstances", 0)) < 90000:
+		failures.append("forest data scatter is below budget: %s" % str(data_stats))
+	var es := _world.get_enhancement_stats()
+	if not bool(es.get("greenforest_world_0254", false)):
+		failures.append("forest build flag is missing: %s" % str(es))
+	if int(es.get("forest_scatter", 0)) < 90000:
+		failures.append("forest built scatter is below budget: %s" % str(es))
+	if int(es.get("forest_trees", 0)) < 35000:
+		failures.append("forest tree count is below budget: %s" % str(es))
+	if int(es.get("desert_structures", 0)) < 380:
+		failures.append("forest structures are incomplete: %s" % str(es))
+	if int(es.get("forest_terrain_chunks", 0)) < 100:
+		failures.append("forest terrain chunks are missing: %s" % str(es))
+	if int(es.get("reflection_probes", 0)) < 6:
+		failures.append("forest reflection probes are incomplete: %s" % str(es))
+	if int(es.get("road_markings", 0)) < 800:
+		failures.append("forest road markings are incomplete: %s" % str(es))
+	if int(es.get("desert_bridges", 0)) < 8 or int(es.get("forest_tunnels_built", 0)) != 2 or not bool(es.get("forest_lake", false)):
+		failures.append("forest bridges/tunnels/lake are incomplete: %s" % str(es))
+	if int(es.get("forest_river_segments", 0)) < 100:
+		failures.append("forest river ribbons are incomplete: %s" % str(es))
+	if int(es.get("skyline_layers", 0)) < 1 or not bool(es.get("forest_skyline_0254", false)):
+		failures.append("forest far-ridge skyline is incomplete: %s" % str(es))
+	if int(es.get("desert_road_deck_colliders", 0)) < 2500:
+		failures.append("forest physical road deck is incomplete: %s" % str(es))
+	if int(es.get("forest_deer", 0)) < 25 or int(es.get("forest_bird_flocks", 0)) != 3 or int(es.get("forest_smoke_points", 0)) < 4:
+		failures.append("forest living details are incomplete: %s" % str(es))
+	if int(es.get("desert_race_rings", 0)) < 40:
+		failures.append("forest race rings are incomplete: %s" % str(es))
+	var forest_smoke: Dictionary = world_data.get("forest", {})
+	var game_smoke: Dictionary = forest_smoke.get("game", {})
+	if (game_smoke.get("circuits", []) as Array).size() != 4 or (game_smoke.get("sprints", []) as Array).size() != 3 or (game_smoke.get("drags", []) as Array).size() != 2 or (game_smoke.get("jumps", []) as Array).size() != 12:
+		failures.append("forest race content is incomplete: %s" % str(game_smoke.keys()))
+	if (world_data.get("landmarks", []) as Array).size() < 25:
+		failures.append("forest landmarks are incomplete")
+	# The dam deck must stay above lake level across the open water.
+	var lake_smoke: Dictionary = forest_smoke.get("lake", {})
+	var lake_y_smoke := float(lake_smoke.get("y", 14.0))
+	var dam_ok := false
+	for road_variant2 in world_data.get("roads", []):
+		var road2: Dictionary = road_variant2
+		if String(road2.get("id", "")) != "gf-dam_road":
+			continue
+		var min_deck_y := 1e9
+		for sample_variant2 in road2.get("samples", []):
+			var sample2: Array = sample_variant2
+			var ndx := (float(sample2[0]) - float(lake_smoke.get("x", 3050.0))) / float(lake_smoke.get("rx", 450.0))
+			var ndz := (float(sample2[2]) - float(lake_smoke.get("z", 2200.0))) / float(lake_smoke.get("rz", 400.0))
+			if Vector2(ndx, ndz).length() < 0.92:
+				min_deck_y = minf(min_deck_y, float(sample2[1]))
+		dam_ok = min_deck_y > lake_y_smoke + 0.4
+	if not dam_ok:
+		failures.append("forest dam deck is not above lake level")
+	var meadow_surface := _world.get_surface_at(Vector3(1900.0, _world.height_at(1900.0, 1900.0) + 0.5, 1900.0))
+	if String(meadow_surface.get("kind", "")) != "grass":
+		failures.append("meadow surface is misclassified: %s" % str(meadow_surface))
+	var floor_surface := _world.get_surface_at(Vector3(400.0, _world.height_at(400.0, 2400.0) + 0.5, 2400.0))
+	if String(floor_surface.get("kind", "")) != "forest_floor":
+		failures.append("dark-forest floor surface is misclassified: %s" % str(floor_surface))
+	var mud_surface := _world.get_surface_at(Vector3(1250.0, _world.height_at(1250.0, 2750.0) + 0.5, 2750.0))
+	if String(mud_surface.get("kind", "")) != "mud":
+		failures.append("swamp mud surface is misclassified: %s" % str(mud_surface))
+	var field_surface := _world.get_surface_at(Vector3(1580.0, _world.height_at(1580.0, 3120.0) + 0.5, 3120.0))
+	if String(field_surface.get("kind", "")) != "field":
+		failures.append("field surface is misclassified: %s" % str(field_surface))
+	var found_gravel := false
+	for road_variant in world_data.get("roads", []):
+		var road: Dictionary = road_variant
+		if String(road.get("surface", "asphalt")) != "gravel":
+			continue
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 3:
+			continue
+		var sample: Array = samples[samples.size() / 2]
+		var road_surface := _world.get_surface_at(Vector3(float(sample[0]), float(sample[1]) + 0.5, float(sample[2])))
+		if String(road_surface.get("kind", "")) == "gravel":
+			found_gravel = true
+			break
+	if not found_gravel:
+		failures.append("no forest dirt road classifies as gravel surface")
+	var spawn_surface := _world.get_surface_at(_world.spawn_transform.origin + Vector3(0.0, 0.5, 0.0))
+	if String(spawn_surface.get("kind", "")) != "asphalt":
+		failures.append("forest spawn is not on asphalt: %s" % str(spawn_surface))
+	var atmosphere_state := _atmosphere_fx.get_state() if _atmosphere_fx != null else {}
+	if not bool(atmosphere_state.get("ready", false)):
+		failures.append("atmosphere is not ready in forest: %s" % str(atmosphere_state))
+	var vehicle_effect_state := _vehicle.get_effect_state()
+	if int(vehicle_effect_state.get("tire_smoke_emitters", 0)) < 2 or not bool(vehicle_effect_state.get("engine_audio", false)):
+		failures.append("vehicle effects/audio incomplete in forest: %s" % str(vehicle_effect_state))
+
+
+func _forest_screenshot_shots() -> Array[Dictionary]:
+	return [
+		{
+			"name": "01_spawn_gameplay", "time": "day", "hud": true,
+			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
+		},
+		{
+			"name": "f02_village_main", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(3580.0, 0.0, 2150.0),
+			"camera": Vector3(3450.0, 26.0, 1980.0), "target": Vector3(3620.0, 18.0, 2150.0),
+		},
+		{
+			"name": "f03_lake_dam", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(3050.0, 0.0, 2350.0),
+			"camera": Vector3(2870.0, 30.0, 2050.0), "target": Vector3(3120.0, 15.0, 2380.0),
+		},
+		{
+			"name": "f04_dark_forest", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(520.0, 0.0, 2050.0),
+			"camera": Vector3(430.0, 28.0, 1900.0), "target": Vector3(560.0, 22.0, 2100.0),
+		},
+		{
+			"name": "f05_meadow_straight", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1900.0, 0.0, 2450.0),
+			"camera": Vector3(1750.0, 32.0, 2300.0), "target": Vector3(2000.0, 24.0, 2500.0),
+		},
+		{
+			"name": "f06_serpentine", "time": "day", "vehicle": "hide",
+			"camera": Vector3(1250.0, 170.0, 1050.0), "target": Vector3(1650.0, 110.0, 650.0),
+		},
+		{
+			"name": "f07_summit_view_sunset", "time": "sunset", "vehicle": "hide",
+			"camera": Vector3(1760.0, 160.0, 420.0), "target": Vector3(2400.0, 40.0, 1400.0),
+		},
+		{
+			"name": "f08_waterfall", "time": "day", "vehicle": "hide",
+			"camera": Vector3(3300.0, 120.0, 560.0), "target": Vector3(3385.0, 128.0, 655.0),
+		},
+		{
+			"name": "f09_farm_fields", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(2000.0, 0.0, 3300.0),
+			"camera": Vector3(1820.0, 34.0, 3120.0), "target": Vector3(2150.0, 20.0, 3400.0),
+		},
+		{
+			"name": "f10_sawmill", "time": "day", "vehicle": "hide",
+			"camera": Vector3(760.0, 30.0, 3360.0), "target": Vector3(940.0, 20.0, 3520.0),
+		},
+		{
+			"name": "f11_swamp_causeway", "time": "day", "vehicle": "road",
+			"vehicle_at": Vector3(1000.0, 0.0, 2920.0),
+			"camera": Vector3(850.0, 24.0, 2750.0), "target": Vector3(1050.0, 10.0, 2980.0),
+		},
+		{
+			"name": "f12_cliff_gorge_bridge", "time": "day", "vehicle": "hide",
+			"camera": Vector3(3400.0, 150.0, 350.0), "target": Vector3(3550.0, 120.0, 560.0),
+		},
+		{
+			"name": "f13_forest_aerial", "time": "day", "vehicle": "hide",
+			"camera": Vector3(2000.0, 700.0, 150.0), "target": Vector3(2000.0, 0.0, 2300.0),
+		},
+		{"name": "f14_menu_worlds", "time": "day", "vehicle": "spawn", "menu_panel": NativeMainMenu.PANEL_WORLDS, "frames": 5},
 	]

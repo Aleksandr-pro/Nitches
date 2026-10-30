@@ -21,12 +21,33 @@ function parseGlbJson(bytes) {
   return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
 }
 
-const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText] = await Promise.all([
+function parseJpegDimensions(bytes) {
+  assert(bytes[0] === 0xff && bytes[1] === 0xd8, 'JPEG header is missing');
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    assert(bytes[offset] === 0xff, 'JPEG marker is missing');
+    const marker = bytes[offset + 1];
+    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+      return { height: bytes.readUInt16BE(offset + 5), width: bytes.readUInt16BE(offset + 7) };
+    }
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    const segmentLength = bytes.readUInt16BE(offset + 2);
+    assert(segmentLength >= 2, 'JPEG segment length is invalid');
+    offset += 2 + segmentLength;
+  }
+  throw new Error('JPEG dimensions are missing');
+}
+
+const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, worldScript, vehicleScript, hudScript, minimapScript, dynamicWorldScript, speedPostScript, arcadeCarScript, carPaintShader, speedPostShader, wetAsphaltShader, foliageWindShader, curtainWallGlassShader, curtainWallFacadeShader, concreteSurfaceShader, premiumStonePavingShader, syncScript, blenderScript, desktopWorkflow, mainMenuScript, steeringWheelScript, worldMapScript, dashboardGaugeScript, touchPedalScript, roundActionButtonScript, circularMaskShader, routeGuideScript, carSilhouetteScript, backdropBlurShader, vehicleAudioScript, ignitionButtonScript, audioCredits, avatarIconScript, wheelPreviewScript, lockIconScript, carCatalogScript, desertDataText, forestDataText] = await Promise.all([
   readText('project.godot'),
   readText('export_presets.cfg'),
   readText('scenes/main.tscn'),
   readText('data/richtown_native.json'),
   readText('scripts/main.gd'),
+  readText('scripts/loading_screen.gd'),
   readText('scripts/world_builder.gd'),
   readText('scripts/vehicle_controller.gd'),
   readText('scripts/hud.gd'),
@@ -63,6 +84,7 @@ const [project, preset, mainScene, dataText, mainScript, worldScript, vehicleScr
   readText('scripts/lock_icon.gd'),
   readText('scripts/car_catalog.gd'),
   readText('data/desert_native.json'),
+  readText('data/greenforest_native.json'),
 ]);
 
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
@@ -75,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.49-native-alpha"'), 'Native project version metadata must match 0.2.49-native-alpha');
-assert(preset.includes('version/code=52'), 'Native 0.2.49 must bump Android versionCode to 52');
-assert(preset.includes('version/name="0.2.49-native-alpha"'), 'Native version name must be 0.2.49-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.49-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.62-native-alpha"'), 'Native project version metadata must match 0.2.62-native-alpha');
+assert(preset.includes('version/code=65'), 'Native 0.2.62 must bump Android versionCode to 65');
+assert(preset.includes('version/name="0.2.62-native-alpha"'), 'Native version name must be 0.2.62-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.62-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -87,6 +109,20 @@ for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) 
 }
 for (const marker of ['skyline_panorama_textures_0243', 'near_field_lod_0243', 'range_fade_mode', 'tree_detail_end_m', 'palm_detail_end_m', 'shrub_detail_end_m']) {
   assert(worldScript.includes(marker), `0.2.43 near-field/skyline validation marker is missing: ${marker}`);
+}
+assert(project.includes('boot_splash/image="res://assets/ui/boot_splash_richtown.jpg"') && project.includes('boot_splash/fullsize=true') && project.includes('boot_splash/show_image=true') && project.includes('boot_splash/min_display_time=0'), 'Native 0.2.52 must replace the default Godot boot splash with the branded fullscreen RichTown splash');
+assert(syncScript.includes('boot_splash_richtown.jpg'), 'Native asset sync must stage the 0.2.52 boot splash');
+const bootSplash = await readFile('src/assets/ui/boot_splash_richtown.jpg');
+const bootSplashSize = parseJpegDimensions(bootSplash);
+assert(bootSplash.length > 150_000 && bootSplashSize.width === 1920 && bootSplashSize.height === 1080, `Native 0.2.52 boot splash must be a detailed 1920x1080 gameplay frame, got ${bootSplashSize.width}x${bootSplashSize.height}`);
+for (const marker of ['class_name NativeLoadingScreen', 'custom_loading_screen_0252', 'menu_richtown_gameplay.jpg', 'error_continue_requested', 'get_visual_state', 'hide_immediately']) {
+  assert(loadingScreenScript.includes(marker), `Native 0.2.52 loading-screen marker is missing: ${marker}`);
+}
+for (const marker of ['begin_build_world', 'build_world_step', 'get_build_progress_state', 'is_build_finished']) {
+  assert(worldScript.includes(marker), `Native 0.2.52 staged world-build marker is missing: ${marker}`);
+}
+for (const marker of ['_bootstrap_game_async', '_build_world_with_loading', '_switch_world_async', '0.2.52 branded loading screen']) {
+  assert(mainScript.includes(marker), `Native 0.2.52 async bootstrap marker is missing: ${marker}`);
 }
 for (const marker of ['wet_streak', 'wet_roughness', 'puddle_roughness']) {
   assert(wetAsphaltShader.includes(marker), `0.2.43 low-cost wet-road shading marker is missing: ${marker}`);
@@ -123,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.49"') && preset.includes('application/product_version="0.2.49"'), 'Desktop Windows version metadata must match native 0.2.49');
+assert(preset.includes('application/file_version="0.2.62"') && preset.includes('application/product_version="0.2.62"'), 'Desktop Windows version metadata must match native 0.2.62');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -134,7 +170,7 @@ for (const marker of ['--native-screenshots', '_run_screenshot_tour', '_capture_
 assert((mainScript.match(/_run_screenshot_tour/g) ?? []).length >= 2, 'Screenshot tour must be both defined and called from _ready');
 assert(curtainWallGlassShader.includes('depth_prepass_alpha') && !curtainWallGlassShader.includes('depth_draw_alpha_prepass'), 'Curtain-wall glass shader must use the Godot 4 depth_prepass_alpha render mode (the Godot 3 name never compiles, found by the screenshot tour)');
 
-const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
+const combinedRuntime = `${steeringWheelScript}\n${worldMapScript}\n${mainScript}\n${loadingScreenScript}\n${worldScript}\n${vehicleScript}\n${hudScript}\n${dynamicWorldScript}\n${speedPostScript}\n${arcadeCarScript}\n${carPaintShader}\n${speedPostShader}\n${wetAsphaltShader}\n${foliageWindShader}\n${curtainWallGlassShader}\n${curtainWallFacadeShader}\n${concreteSurfaceShader}\n${premiumStonePavingShader}\n${mainMenuScript}\n${minimapScript}\n${dashboardGaugeScript}\n${touchPedalScript}\n${roundActionButtonScript}\n${circularMaskShader}\n${routeGuideScript}\n${carSilhouetteScript}\n${backdropBlurShader}\n${vehicleAudioScript}\n${ignitionButtonScript}\n${avatarIconScript}\n${wheelPreviewScript}\n${lockIconScript}\n${carCatalogScript}`;
 for (const marker of ['KEY_F11', '_toggle_desktop_fullscreen', '_ensure_action(&"accelerate"', '_ensure_action(&"boost"', '_ensure_action(&"camera_toggle"']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.21 desktop parity marker is missing: ${marker}`);
 }
@@ -630,7 +666,7 @@ for (const marker of [
   assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
-for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/ui/boot_splash_richtown.jpg', 150_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
   const info = await stat(relative);
   assert(info.size > minimumSize, `Native 0.2.36 canonical UI asset is unexpectedly small: ${relative}`);
   if (relative.endsWith('.jpg')) {
@@ -868,6 +904,7 @@ if (requireAssets) {
     'assets/ui/menu_mercedes_560_sel_gameplay.jpg',
     'assets/ui/menu_richtown_gameplay.jpg',
     'assets/ui/menu_world_gameplay.jpg',
+    'assets/ui/boot_splash_richtown.jpg',
     'assets/ui/steering_wheel_common.png',
     'assets/audio/ui_click.wav',
     ...shelbyAudioFiles.map((name) => `assets/audio/shelby/${name}`),
@@ -898,26 +935,235 @@ assert(desertData.desert.guardrails.length >= 180, 'Desert cliff-edge guardrails
 assert(desertData.stats.roadLengthKm >= 55, 'Desert road network must meet the 55 km spec floor');
 assert(desertData.roads.length >= 40, 'Desert road list is incomplete');
 assert(desertData.desert.structures.length >= 700, 'Desert structures are incomplete');
+// 0.2.51: no fence or guardrail may sit on the carriageway.
+// Baseline before the fix: 12/72 fences and 21/209 rails on-road.
+const roadSegs = [];
+for (const road of desertData.roads) {
+  const pts = road.samples.map((sm) => [sm[0], sm[2]]);
+  if (road.closed && pts.length) pts.push(pts[0]);
+  for (let i = 0; i + 1 < pts.length; i++) roadSegs.push([pts[i], pts[i + 1], road.widthM * 0.5]);
+}
+function edgeClearance(points) {
+  let best = Infinity;
+  for (const [px, pz] of points) {
+    for (const [[ax, az], [bx, bz], hw] of roadSegs) {
+      const abx = bx - ax, abz = bz - az;
+      const l2 = Math.max(abx * abx + abz * abz, 1e-9);
+      let t = ((px - ax) * abx + (pz - az) * abz) / l2;
+      t = Math.min(1, Math.max(0, t));
+      const dx = px - (ax + abx * t), dz2 = pz - (az + abz * t);
+      best = Math.min(best, Math.hypot(dx, dz2) - hw);
+    }
+  }
+  return best;
+}
+let fenceCount = 0;
+let worstFence = Infinity;
+for (const st of desertData.desert.structures) {
+  if (st.kind !== 'fence') continue;
+  fenceCount += 1;
+  const dx = Math.cos(st.yaw), dz = -Math.sin(st.yaw);
+  const pts = [];
+  const n = Math.max(2, Math.round(st.w / 0.5));
+  for (let i = 0; i <= n; i++) {
+    const t = -st.w / 2 + (st.w * i) / n;
+    pts.push([st.x + dx * t, st.z + dz * t]);
+  }
+  worstFence = Math.min(worstFence, edgeClearance(pts));
+}
+assert(fenceCount >= 85, `Desert fences are incomplete: ${fenceCount}`);
+assert(worstFence >= 1.2, `Desert fence sits on a road (edge clearance ${worstFence})`);
+let worstRail = Infinity;
+for (const g of desertData.desert.guardrails) {
+  const pts = [];
+  const n = Math.max(2, Math.round(Math.hypot(g[2] - g[0], g[3] - g[1])));
+  for (let i = 0; i <= n; i++) pts.push([g[0] + ((g[2] - g[0]) * i) / n, g[1] + ((g[3] - g[1]) * i) / n]);
+  worstRail = Math.min(worstRail, edgeClearance(pts));
+}
+assert(worstRail >= 0.5, `Desert guardrail sits on a road (edge clearance ${worstRail})`);
 const desertScatterTotal = Object.values(desertData.desert.scatter).reduce((sum, items) => sum + items.length, 0);
 assert(desertScatterTotal >= 37000, 'Desert scatter is below the authored budget');
+// 0.2.53 screenshot audit: scatter used centreline-distance raster
+// thresholds below road half-widths, so rocks/shrubs/cacti legally
+// spawned on carriageways.  Grid-accelerated exact check: no scatter
+// centre may remain on a carriageway.
+const segGrid0253 = new Map();
+const SEG_CELL_0253 = 100;
+roadSegs.forEach((seg, idx) => {
+  const [[ax, az], [bx, bz], hw] = seg;
+  const pad = hw + 40;
+  const x0 = Math.floor((Math.min(ax, bx) - pad) / SEG_CELL_0253);
+  const x1 = Math.floor((Math.max(ax, bx) + pad) / SEG_CELL_0253);
+  const z0 = Math.floor((Math.min(az, bz) - pad) / SEG_CELL_0253);
+  const z1 = Math.floor((Math.max(az, bz) + pad) / SEG_CELL_0253);
+  for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    const key = `${cx},${cz}`;
+    if (!segGrid0253.has(key)) segGrid0253.set(key, []);
+    segGrid0253.get(key).push(idx);
+  }
+});
+function fastEdgeClearance0253(px, pz) {
+  const key = `${Math.floor(px / SEG_CELL_0253)},${Math.floor(pz / SEG_CELL_0253)}`;
+  const cand = segGrid0253.get(key) ?? [];
+  let best = Infinity;
+  for (const idx of cand) {
+    const [[ax, az], [bx, bz], hw] = roadSegs[idx];
+    const abx = bx - ax, abz = bz - az;
+    const l2 = Math.max(abx * abx + abz * abz, 1e-9);
+    let t = ((px - ax) * abx + (pz - az) * abz) / l2;
+    t = Math.min(1, Math.max(0, t));
+    best = Math.min(best, Math.hypot(px - (ax + abx * t), pz - (az + abz * t)) - hw);
+  }
+  return best;
+}
+let scatterOnRoad0253 = 0;
+for (const items of Object.values(desertData.desert.scatter)) {
+  for (const it of items) if (fastEdgeClearance0253(it[0], it[1]) < 0) scatterOnRoad0253 += 1;
+}
+assert(scatterOnRoad0253 === 0, `Desert scatter instances on carriageways after the 0.2.53 audit: ${scatterOnRoad0253}`);
+const lake0253 = desertData.desert.lake;
+const oasisRoad0253 = desertData.roads.find((r) => r.id === 'dz-oasis_road');
+assert(oasisRoad0253, 'Desert oasis road is missing');
+const oasisNearLake0253 = oasisRoad0253.samples.filter((sm) => Math.hypot(sm[0] - lake0253.x, sm[2] - lake0253.z) < 95);
+assert(oasisNearLake0253.length >= 8 && Math.min(...oasisNearLake0253.map((sm) => sm[1])) > lake0253.y + 0.1, 'Oasis road deck must stay above lake level across the bridge span (0.2.53)');
+const wreckCluster0253 = desertData.desert.structures.filter((st) => st.kind === 'car_wreck' && Math.abs(st.z - 2050) < 0.11 && st.x > 1000 && st.x < 1350).length;
+assert(wreckCluster0253 <= 2, `Town Main car-wreck sampler cluster regressed (0.2.53): ${wreckCluster0253}`);
 assert(desertData.desert.game.fastTravel.length === 8 && desertData.desert.game.photoSpots.length === 10, 'Desert game markers are incomplete');
 assert(desertData.spawn.x > 0 && desertData.spawn.x < 4000 && desertData.spawn.z > 0 && desertData.spawn.z < 4000, 'Desert spawn must be inside the basin');
-for (const marker of ['DESERT_DATA_PATH', '_build_desert_world', 'desert_world_0247', '_build_desert_scatter', '_dz_animate', '_add_pitched_box_collider', 'desert_road_deck_colliders', 'desert_smooth_roads_0249']) {
+for (const marker of ['DESERT_DATA_PATH', '_build_desert_world', 'desert_world_0247', '_build_desert_scatter', '_dz_animate', '_add_pitched_box_collider', 'desert_road_deck_colliders', 'desert_smooth_roads_0249', 'desert_detail_0250', '_dz_saguaro_mesh', 'dz_cactus_skin.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel_roughness.jpg', 'desert_fences_0251']) {
   assert(worldScript.includes(marker), `0.2.47 desert builder marker is missing: ${marker}`);
 }
-for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders']) {
+for (const marker of ['desert_screenshot_audit_0253', 'desert_rock_triplanar_0253', 'desert_scatter_road_audit_0253', 'desert_oasis_deck_0253', 'desert_pipe_road_gaps_0253', 'desert_race_rings_subtle_0253', 'desert_lake_calm_0253', 'dz_wreck_blue', 'minimap_contrast_0253', 'static_cache_always_until_ready_0253', 'route_beacon_subtle_0253']) {
+  assert(combinedRuntime.includes(marker), `0.2.53 screenshot-audit marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('SubViewport.UPDATE_ALWAYS') && minimapScript.includes('SubViewport.UPDATE_DISABLED'), '0.2.53 minimap static cache must render continuously until ready, then freeze');
+assert(hudScript.includes('vh * 0.15') && hudScript.includes('Vector2(56.0, 48.0)'), '0.2.53 reverse indicator must stay a compact top-centre chip off the car');
+for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders', 'desert_scatter_variants', 'desert_fences_0251']) {
   assert(mainScript.includes(marker), `0.2.47 world-switch marker is missing: ${marker}`);
 }
-for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 50000']) {
+for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 25000']) {
   assert(mainMenuScript.includes(marker), `0.2.47 menu world-selection marker is missing: ${marker}`);
 }
-assert(mainMenuScript.includes('const WORLDS_FREE_FOR_ALL := true'), '0.2.48 temporary free-world flag is missing');
+assert(mainMenuScript.includes('const WORLDS_FREE_FOR_ALL := false'), '0.2.61 progression must switch the temporary free-world flag off');
 assert(mainMenuScript.includes('worlds_free_for_all_0248'), '0.2.48 free-world smoke marker is missing');
 for (const marker of ['_build_desert_pois', '_road_labels_data']) {
   assert(worldMapScript.includes(marker), `0.2.47 world-map desert marker is missing: ${marker}`);
 }
-for (const name of ['user_dirt_cracked.jpg', 'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg', 'metal_pole.jpg', 'metal_pole_normal.jpg']) {
+for (const name of ['user_dirt_cracked.jpg', 'user_stone_rubble.jpg', 'user_stone_rubble_normal.jpg', 'metal_pole.jpg', 'metal_pole_normal.jpg', 'dz_packed_earth.jpg', 'dz_packed_earth_normal.jpg', 'dz_packed_earth_roughness.jpg', 'dz_trail_gravel.jpg', 'dz_trail_gravel_normal.jpg', 'dz_trail_gravel_roughness.jpg', 'dz_sand_dune.jpg', 'dz_sand_dune_normal.jpg', 'dz_sand_dune_roughness.jpg', 'dz_salt_crust.jpg', 'dz_salt_crust_normal.jpg', 'dz_salt_crust_roughness.jpg', 'dz_rock_red.jpg', 'dz_rock_red_normal.jpg', 'dz_rock_red_roughness.jpg', 'dz_cactus_skin.jpg', 'dz_cactus_skin_normal.jpg', 'dz_cactus_skin_roughness.jpg']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the desert texture ${name}`);
+}
+
+
+// 0.2.54 third world: the generated GreenForest data set and its
+// runtime wiring (builder stages, smoke gate, menu card, world map).
+const forestData = JSON.parse(forestDataText);
+assert(forestData.bounds.maxX === 4000 && forestData.bounds.maxZ === 4000, 'GreenForest bounds must cover the full 4x4 km map');
+assert(forestData.terrain.heights.length === 251001, 'GreenForest terrain must ship the full 501x501 height grid');
+assert(forestData.terrain.heights.every((v) => v > 0), 'GreenForest heights must stay above the safety floor');
+assert(forestData.terrain.heights.reduce((m, v) => Math.max(m, v), 0) < 165, 'GreenForest northern hills must stay under the 160 m spec ceiling');
+assert(forestData.stats.roadLengthKm >= 50, 'GreenForest road network must meet the 50 km floor');
+assert(forestData.roads.length >= 35, 'GreenForest road list is incomplete');
+assert(forestData.forest.structures.length >= 380, 'GreenForest structures are incomplete');
+assert(forestData.forest.bridges.length >= 8, 'GreenForest must ship at least eight bridges');
+assert(forestData.forest.tunnels.length === 2, 'GreenForest must ship exactly two tunnels');
+assert(forestData.forest.game.circuits.length === 4 && forestData.forest.game.sprints.length === 3 && forestData.forest.game.drags.length === 2 && forestData.forest.game.jumps.length === 12 && forestData.forest.game.fastTravel.length === 8 && forestData.forest.game.photoSpots.length === 10, 'GreenForest game content is incomplete');
+assert(forestData.landmarks.length >= 25, 'GreenForest landmarks are incomplete');
+const forestScatterTotal = Object.values(forestData.forest.scatter).reduce((sum, items) => sum + items.length, 0);
+assert(forestScatterTotal >= 90000, 'GreenForest scatter is below the authored budget');
+const forestTreeKinds = ['spruce', 'pine', 'birch', 'leafy', 'oak', 'dead_tree'];
+const forestTreeTotal = forestTreeKinds.reduce((sum, kind) => sum + (forestData.forest.scatter[kind]?.length ?? 0), 0);
+assert(forestTreeTotal >= 35000, 'GreenForest tree count is below budget');
+// Exact on-road audit, same grid approach as the 0.2.53 desert gate.
+const forestSegs = [];
+for (const road of forestData.roads) {
+  const pts = road.samples.map((sm) => [sm[0], sm[2]]);
+  if (road.closed && pts.length) pts.push(pts[0]);
+  for (let i = 0; i + 1 < pts.length; i++) forestSegs.push([pts[i], pts[i + 1], road.widthM * 0.5]);
+}
+const forestSegGrid = new Map();
+forestSegs.forEach((seg, idx) => {
+  const [[ax, az], [bx, bz], hw] = seg;
+  const pad = hw + 40;
+  const x0 = Math.floor((Math.min(ax, bx) - pad) / 100);
+  const x1 = Math.floor((Math.max(ax, bx) + pad) / 100);
+  const z0 = Math.floor((Math.min(az, bz) - pad) / 100);
+  const z1 = Math.floor((Math.max(az, bz) + pad) / 100);
+  for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    const key = `${cx},${cz}`;
+    if (!forestSegGrid.has(key)) forestSegGrid.set(key, []);
+    forestSegGrid.get(key).push(idx);
+  }
+});
+function forestEdgeClearance(px, pz) {
+  const key = `${Math.floor(px / 100)},${Math.floor(pz / 100)}`;
+  const cand = forestSegGrid.get(key) ?? [];
+  let best = Infinity;
+  for (const idx of cand) {
+    const [[ax, az], [bx, bz], hw] = forestSegs[idx];
+    const abx = bx - ax, abz = bz - az;
+    const l2 = Math.max(abx * abx + abz * abz, 1e-9);
+    let t = ((px - ax) * abx + (pz - az) * abz) / l2;
+    t = Math.min(1, Math.max(0, t));
+    best = Math.min(best, Math.hypot(px - (ax + abx * t), pz - (az + abz * t)) - hw);
+  }
+  return best;
+}
+let forestScatterOnRoad = 0;
+for (const items of Object.values(forestData.forest.scatter)) {
+  for (const it of items) if (forestEdgeClearance(it[0], it[1]) < 0) forestScatterOnRoad += 1;
+}
+assert(forestScatterOnRoad === 0, `GreenForest scatter instances on carriageways: ${forestScatterOnRoad}`);
+const forestLake = forestData.forest.lake;
+const damRoad = forestData.roads.find((r) => r.id === 'gf-dam_road');
+assert(damRoad, 'GreenForest dam road is missing');
+const damOverWater = damRoad.samples.filter((sm) => Math.hypot((sm[0] - forestLake.x) / forestLake.rx, (sm[2] - forestLake.z) / forestLake.rz) < 0.92);
+assert(damOverWater.length >= 8 && Math.min(...damOverWater.map((sm) => sm[1])) > forestLake.y + 0.4, 'GreenForest dam deck must stay above lake level across the open water');
+assert(forestData.spawn.x > 0 && forestData.spawn.x < 4000 && forestData.spawn.z > 0 && forestData.spawn.z < 4000, 'GreenForest spawn must be inside the map');
+for (const marker of ['FOREST_DATA_PATH', 'greenforest_world_0254', '_queue_forest_build_stages', '_build_forest_terrain', '_build_forest_water', '_build_forest_scatter', '_gf_structure_kind', '_gf_near_road', '_gf_scatter_build', '_build_forest_extras', '_build_forest_skyline', 'forest_tunnels_built', 'gf_meadow.jpg', 'gf_forest_floor_roughness.jpg', 'gf_rock_gray_normal.jpg']) {
+  assert(worldScript.includes(marker), `0.2.54 forest builder marker is missing: ${marker}`);
+}
+for (const marker of ['_run_forest_smoke_checks', '_forest_screenshot_shots', 'greenforest']) {
+  assert(mainScript.includes(marker), `0.2.54 forest main marker is missing: ${marker}`);
+}
+for (const marker of ['_forest_card', 'ЗЕЛЁНЫЙ ЛЕС', 'forest_world_0254']) {
+  assert(mainMenuScript.includes(marker), `0.2.54 forest menu marker is missing: ${marker}`);
+}
+assert(worldMapScript.includes('forest_map_0254'), '0.2.54 forest world-map marker is missing');
+assert(loadingScreenScript.includes('ЗЕЛЁНЫЙ ЛЕС'), '0.2.54 forest loading label is missing');
+for (const name of ['gf_meadow.jpg', 'gf_meadow_normal.jpg', 'gf_meadow_roughness.jpg', 'gf_forest_floor.jpg', 'gf_forest_floor_normal.jpg', 'gf_forest_floor_roughness.jpg', 'gf_mud.jpg', 'gf_mud_normal.jpg', 'gf_mud_roughness.jpg', 'gf_rock_gray.jpg', 'gf_rock_gray_normal.jpg', 'gf_rock_gray_roughness.jpg', 'gf_field_soil.jpg', 'gf_field_soil_normal.jpg', 'gf_field_soil_roughness.jpg']) {
+  assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the forest texture ${name}`);
+}
+
+
+// 0.2.61 online release: purchasable cars/worlds, server accounts,
+// 10 daily quests, multiplayer rooms, fictionalised car names.
+for (const marker of ['START_CREDITS := 15000', 'WORLD_PRICES', 'QUEST_POOL', 'func _buy_car', 'func _buy_world', 'func _daily_quests_view', 'func _setup_net', 'NitchesNetClient', 'NitchesMpClient', 'economy_v']) {
+  assert(mainScript.includes(marker), `0.2.61 progression/online marker is missing in main.gd: ${marker}`);
+}
+for (const marker of ['PANEL_ONLINE := 6', 'signal car_purchase_requested', 'signal account_register_requested', 'signal daily_quest_claim_requested', 'func _build_online_panel', 'func show_admin_data', 'ONLINE_PRIVACY_TEXT', 'ONLINE_WELCOME_TEXT', '_is_car_owned_menu', '_is_world_owned_menu']) {
+  assert(mainMenuScript.includes(marker), `0.2.61 online menu marker is missing: ${marker}`);
+}
+const netClientScript = await readText('scripts/net_client.gd');
+const mpClientScript = await readText('scripts/multiplayer_client.gd');
+assert(netClientScript.includes('class_name NitchesNetClient') && netClientScript.includes('/api/quests/claim') && netClientScript.includes('/api/admin/'), '0.2.61 net client is incomplete');
+assert(mpClientScript.includes('class_name NitchesMpClient') && mpClientScript.includes('WebSocketPeer') && mpClientScript.includes('Label3D'), '0.2.61 multiplayer client is incomplete');
+const serverScript = await readFile('server/src/index.js', 'utf8');
+for (const marker of ['export class RoomDO', '/api/register', 'PBKDF2', 'QUEST_POOL', '/api/admin/grant', 'PRIVACY_HTML']) {
+  assert(serverScript.includes(marker), `0.2.61 server marker is missing: ${marker}`);
+}
+const carCatalogScript61 = await readText('scripts/car_catalog.gd');
+for (const marker of ['Shelbie GT500', 'Audo R8 V10 plus', 'Chevrole Kamaro SS', 'Mercedez-Bens 560 SEL', '"price_cr": 50000', '"price_cr": 95000', '"price_cr": 160000']) {
+  assert(carCatalogScript61.includes(marker), `0.2.61 catalog marker is missing: ${marker}`);
+}
+
+
+// 0.2.62: lightweight menu splash (no live world render in menu),
+// classified store filters (class/power/ownership), wheel of fortune.
+for (const marker of ['func _apply_menu_lightweight', 'WHEEL_SEGMENTS', 'func _grant_wheel_spins', 'func _on_wheel_spin_requested', 'wheel_spin_requested']) {
+  assert(mainScript.includes(marker), `0.2.62 main marker is missing: ${marker}`);
+}
+for (const marker of ['MenuBackground0262', 'class WheelView', 'func show_wheel_result', '_store_class_filter', '_store_power_filter', '_store_owned_filter', '_store_item_matches_filters', 'menu_light_bg_0262', 'wheel_ui_0262', 'store_filters_0262']) {
+  assert(mainMenuScript.includes(marker), `0.2.62 menu marker is missing: ${marker}`);
 }
 
 console.log('Native Godot project validation OK');

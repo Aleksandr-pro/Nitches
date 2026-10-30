@@ -39,7 +39,7 @@ func _ready() -> void:
     _route_mesh.name = "RouteRibbon"
     _route_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     var route_material := StandardMaterial3D.new()
-    route_material.albedo_color = Color(1.0, 0.52, 0.05, 0.84)
+    route_material.albedo_color = Color(1.0, 0.52, 0.05, 0.58)
     route_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     route_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     route_material.emission_enabled = true
@@ -51,14 +51,14 @@ func _ready() -> void:
     _beacon = MeshInstance3D.new()
     _beacon.name = "RouteDestinationBeacon"
     var cylinder := CylinderMesh.new()
-    cylinder.top_radius = 2.0
-    cylinder.bottom_radius = 2.0
-    cylinder.height = 38.0
+    cylinder.top_radius = 1.2
+    cylinder.bottom_radius = 1.2
+    cylinder.height = 24.0
     cylinder.radial_segments = 24
     _beacon.mesh = cylinder
     _beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     _beacon_material = StandardMaterial3D.new()
-    _beacon_material.albedo_color = Color(1.0, 0.52, 0.05, 0.20)
+    _beacon_material.albedo_color = Color(1.0, 0.52, 0.05, 0.14)
     _beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     _beacon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     _beacon_material.emission_enabled = true
@@ -126,7 +126,7 @@ func update_route(delta: float) -> void:
         var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.004)
         _beacon.scale = Vector3(0.86 + pulse * 0.28, 1.0, 0.86 + pulse * 0.28)
         if _beacon_material != null:
-            _beacon_material.albedo_color.a = 0.14 + pulse * 0.10
+            _beacon_material.albedo_color.a = 0.08 + pulse * 0.06
     _update_timer += maxf(delta, 0.0)
     if _update_timer < 0.75:
         return
@@ -137,6 +137,7 @@ func update_route(delta: float) -> void:
 func get_smoke_state() -> Dictionary:
     return {
         "route_guide_0234": true,
+        "route_beacon_subtle_0253": true,
         "graph_nodes": _nodes.size(),
         "graph_edges": _edge_count,
         "has_route": has_route(),

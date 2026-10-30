@@ -126,6 +126,13 @@ jobs:
             echo "Native source smoke reported a fatal runtime problem" >&2
             exit 1
           fi
+          timeout 300 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            -- --native-smoke --native-world=greenforest 2>&1 | tee "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
+          grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
+          if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"; then
+            echo "GreenForest source smoke reported a fatal runtime problem" >&2
+            exit 1
+          fi
 
       - name: Export Windows and Linux desktop builds
         run: |
@@ -201,6 +208,34 @@ jobs:
                           print(f"::error title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
                       elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line:
                           print(f"::notice title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
+          PY
+
+      - name: Publish build stage profiles
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          log_dir = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "native-logs"
+
+          def esc(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          for log_name in ("source-smoke-forest.log", "source-smoke.log"):
+              log_path = log_dir / log_name
+              if not log_path.exists():
+                  continue
+              lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+              profile = [line for line in lines if "[native-build]" in line]
+              if profile:
+                  print(f"::error title=Build profile {log_name}::{esc(profile[-1][:1400])}")
+              else:
+                  tail = " | ".join(lines[-3:])[:600]
+                  print(f"::error title=Build profile {log_name}::no profile lines; tail={esc(tail)}")
+              hits = [line for line in lines if any(k in line for k in ("[native-smoke]", "SCRIPT ERROR", "ERROR:", "crash", "Crash", "signal", "Aborted"))]
+              joined = " || ".join(hits[-5:])[:1400] if hits else "no smoke/error lines; raw tail: " + " | ".join(lines[-4:])[:900]
+              print(f"::error title=Smoke tail {log_name}::{esc(joined)}")
           PY
 
       - name: Package desktop ZIPs (install-and-play)
