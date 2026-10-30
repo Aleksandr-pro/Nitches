@@ -569,8 +569,81 @@ for (rid, _name, _ctrl, width, _lanes, surf, closed, _spd) in ROAD_DEFS:
             return sub * (1.0 - w) + target_h * w
         return fn
 
-    _polyline_local_op_s(H, dense, half_w + falloff + STEP, make_fn(), s_cum)
+    # 0.2.56: flattening moved after junction harmonisation below so
+    # crossing profiles are reconciled before they touch the terrain.
     flatten_jobs[rid] = (dense, s_cum, prof, half_w, falloff, list(skip_ranges))
+
+# Junction height harmonisation (0.2.56): where two roads cross or
+# join, ease both profiles to a common height so the runtime deck
+# ribbons meet flush instead of overlapping with flickering strips.
+# Asphalt wins (dirt eases fully, asphalt barely moves); bridge and
+# tunnel spans plus a 30 m apron stay untouched; deltas cap at 1.2 m.
+_surf_by_id = {r[0]: r[5] for r in ROAD_DEFS}
+_jgrid = {}
+for _rid, _dense in roads_dense.items():
+    for _i, _p in enumerate(_dense):
+        _jgrid.setdefault((int(_p[0] // 16), int(_p[1] // 16)),
+                          []).append((_rid, _i))
+
+
+def _in_protected(_s, _ranges, _margin):
+    return any(_a - _margin <= _s <= _b + _margin
+               for (_a, _b) in _ranges)
+
+
+_harmonised_points = 0
+for _rid, _dense in roads_dense.items():
+    _prof = road_profiles[_rid].copy()
+    _s_cum = flatten_jobs[_rid][1]
+    _protected = (list(bridge_s_ranges.get(_rid, []))
+                  + list(tunnel_s_ranges.get(_rid, [])))
+    for _i, _p in enumerate(_dense):
+        if _in_protected(float(_s_cum[_i]), _protected, 30.0):
+            continue
+        _best = None
+        _kx, _kz = int(_p[0] // 16), int(_p[1] // 16)
+        for _gx in (_kx - 1, _kx, _kx + 1):
+            for _gz in (_kz - 1, _kz, _kz + 1):
+                for (_orid, _oi) in _jgrid.get((_gx, _gz), ()):
+                    if _orid == _rid:
+                        continue
+                    _op = roads_dense[_orid][_oi]
+                    _d = float(np.hypot(_op[0] - _p[0], _op[1] - _p[1]))
+                    if _d < 14.0 and (_best is None or _d < _best[0]):
+                        _best = (_d, float(road_profiles[_orid][_oi]),
+                                 _surf_by_id[_orid])
+        if _best is None:
+            continue
+        _d, _other_h, _other_surf = _best
+        _t = min(1.0, max(0.0, (14.0 - _d) / 10.0))
+        _w = _t * _t * (3.0 - 2.0 * _t)
+        if _surf_by_id[_rid] == "asphalt" and _other_surf != "asphalt":
+            _w *= 0.15
+        _delta = float(np.clip((_other_h - _prof[_i]) * _w, -1.2, 1.2))
+        if _delta != 0.0:
+            _prof[_i] += _delta
+            _harmonised_points += 1
+    road_profiles[_rid] = _prof
+    _job = flatten_jobs[_rid]
+    flatten_jobs[_rid] = (_job[0], _job[1], _prof, _job[3], _job[4],
+                          _job[5])
+print(f"[forest] junction harmonisation: {_harmonised_points} points")
+
+# Terrain flattening for every road (was inline in the profile loop).
+for (rid, _name, _ctrl, _width, _lanes, _surf, _closed, _spd) in ROAD_DEFS:
+    dense, s_cum, prof, half_w, falloff, skip_ranges = flatten_jobs[rid]
+
+    def make_fn0(prof=prof, s_cum=s_cum, half_w=half_w,
+                 falloff=falloff, skip_ranges=skip_ranges):
+        def fn(sub, dist, s):
+            target_h = np.interp(s, s_cum, prof)
+            w = 1.0 - smoothstep(half_w + 3.0, half_w + falloff, dist)
+            for (a, b) in skip_ranges:
+                w = np.where((s > a) & (s < b), 0.0, w)
+            return sub * (1.0 - w) + target_h * w
+        return fn
+
+    _polyline_local_op_s(H, dense, half_w + falloff + STEP, make_fn0(), s_cum)
 
 # Asphalt corridors win at junctions (see desert generator note).
 for (rid, _name, _ctrl, _width, _lanes, surf, _closed, _spd) in ROAD_DEFS:
