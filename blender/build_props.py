@@ -629,7 +629,65 @@ def builder_ellipsoid(builder, centre, radii, segments=6, yaw=0.0, pitch=0.0, ri
                 builder.quad(current[side_index], current[next_side], following[next_side], following[side_index])
 
 
+def _merge_meshes_by_material_for_export(filename):
+    """0.3.4 compression/loading pass.
+
+    The detailed builders below author one Blender object per bolt,
+    mullion and balcony slab (grand_hotel alone had 2,741 mesh
+    objects).  The game has always merged those nodes back into one
+    mesh per semantic material at load time; doing the identical
+    join at the source leaves world-space geometry, UVs, polygon
+    smoothing and material names untouched, but removes thousands of
+    glTF nodes/accessors, shrinks the GLBs and makes Godot's import
+    and the native part-collector dramatically cheaper.  Botanical
+    models are excluded (their MeshBuilder output is already merged
+    and the user asked for vegetation geometry to stay untouched).
+    """
+    if filename in {"palm_date.glb", "palm_royal.glb", "grass_tuft.glb", "flower_clump.glb", "ornamental_shrub.glb"}:
+        return (0, 0)
+    mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    before = len(mesh_objects)
+    if before <= 1:
+        return (before, before)
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in mesh_objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = mesh_objects[0]
+    try:
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    except RuntimeError:
+        pass
+    groups = {}
+    for obj in list(bpy.context.scene.objects):
+        if obj.type != "MESH":
+            continue
+        material_names = tuple(mat.name if mat else "" for mat in obj.data.materials)
+        if len(material_names) > 1:
+            continue
+        groups.setdefault(material_names, []).append(obj)
+    for material_names, objs in groups.items():
+        if len(objs) <= 1:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in objs:
+            obj.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        try:
+            bpy.ops.object.join()
+        except RuntimeError:
+            continue
+        joined = bpy.context.view_layer.objects.active
+        label = material_names[0] if material_names and material_names[0] else "Unmaterialled"
+        joined.name = f"Merged_{label}"
+        if joined.data is not None:
+            joined.data.name = f"Merged_{label}_mesh"
+    bpy.context.view_layer.update()
+    after = sum(1 for obj in bpy.context.scene.objects if obj.type == "MESH")
+    return (before, after)
+
+
 def export(out_dir, filename):
+    meshes_before, meshes_after = _merge_meshes_by_material_for_export(filename)
     path = os.path.join(out_dir, filename)
     bpy.ops.export_scene.gltf(
         filepath=path, export_format="GLB", export_yup=True, export_apply=True,
@@ -638,7 +696,7 @@ def export(out_dir, filename):
     for obj in bpy.context.scene.objects:
         if obj.type == "MESH":
             tris += sum(len(p.vertices) - 2 for p in obj.data.polygons)
-    print(f"[props] {filename}: {os.path.getsize(path)} bytes, ~{tris} tris")
+    print(f"[props] {filename}: {os.path.getsize(path)} bytes, ~{tris} tris, meshes {meshes_before}->{meshes_after}")
 
 
 # --------------------------------------------------------------------------- #
@@ -6540,6 +6598,11 @@ def build_school():
     for floor_z in (3.4, 6.9, 10.2):
         box("school_win_front", 0, 6.82, floor_z, 57, 0.3, 1.7, dark_glass)
         box("school_win_back", 0, 25.18, floor_z, 57, 0.3, 1.7, dark_glass)
+        # 0.3.4: ribbon glazing reads as real classroom windows once
+        # it is broken into bays; ten schools make this nearly free.
+        for mullion_x in range(-24, 25, 6):
+            box("school_win_mullion", mullion_x, 6.60, floor_z, 0.26, 0.18, 1.75, trim)
+            box("school_win_mullion", mullion_x, 25.40, floor_z, 0.26, 0.18, 1.75, trim)
     for wx in (-29.0, 29.0):
         box("school_wing", wx, 3, 4.85, 18, 26, 9, plaster)
         gable_roof("school_wing_roof", wx, 3, 11.1, 19.4, 27.4, 3.4, roof, ridge_axis="y")
@@ -6588,6 +6651,10 @@ def build_airport_terminal():
         rbox("term_roof_slab", 0, sy, slab_z, 386, 15.5, 1.1, metal, rotation=(sang, 0, 0))
     box("term_skylight", 0, 0, 26.0, 300, 5, 0.5, glass)
     box("term_entrance", 0, -34.5, 2.6, 130, 5, 5.2, glass)
+    for door_x in range(-52, 53, 13):
+        box("term_door_mullion", door_x, -37.12, 2.6, 0.45, 0.25, 5.2, metal)
+    for hvac_x in range(-150, 151, 50):
+        box("term_roof_hvac", hvac_x, 8, 24.6, 10, 6, 1.8, dark)
     box("term_canopy", 0, -39, 8.4, 210, 12, 0.9, metal)
     for cx in range(-96, 97, 24):
         cyl("term_column", cx, -43.5, 4.2, 0.45, 8.4, metal, vertices=10)
@@ -6632,9 +6699,13 @@ def _build_hangar(width, length, wall_h, roof_h):
     for rail_z in (0.22, 0.48, 0.74):
         box("hangar_door_rail", 0, door_y - 0.25, wall_h * rail_z, width * 0.74, 0.25, 0.35, clad)
     box("hangar_door_seam", 0, door_y - 0.32, wall_h * 0.42, 0.4, 0.2, wall_h * 0.8, clad)
+    for seam_x in (-0.30, -0.15, 0.15, 0.30):
+        box("hangar_door_leaf", width * seam_x, door_y - 0.38, wall_h * 0.42, 0.28, 0.16, wall_h * 0.8, clad)
+    box("hangar_skylight", 0, 0, wall_h + roof_h + 0.02, 2.2, length * 0.70, 0.18, glass)
     for sx in (-1.0, 1.0):
         box("hangar_side_glass", sx * (width / 2.0 + 0.18), 0, wall_h * 0.72, 0.35, length * 0.66, 1.7, glass)
         box("hangar_personnel", sx * (width / 2.0 + 0.2), -length * 0.3, 1.6, 0.35, 2.2, 3.2, frame)
+        box("hangar_side_vent", sx * (width / 2.0 + 0.20), length * 0.28, wall_h * 0.45, 0.30, 3.2, 1.4, frame)
     for vy in (-length * 0.28, 0.0, length * 0.28):
         cyl("hangar_vent", 0, vy, wall_h + roof_h - 0.4, 1.05, 1.6, clad, vertices=10)
 
@@ -6814,6 +6885,9 @@ def build_stadium():
     for i in range(36):
         a = 2.0 * math.pi * i / 36.0
         rbox("stadium_rib", math.cos(a) * 150.2, math.sin(a) * 127.2, 17.5, 2.8, 2.4, 35.0, concrete, rotation=(0, 0, a))
+    for portal_i in range(8):
+        portal_a = 2.0 * math.pi * portal_i / 8.0
+        rbox("stadium_portal", math.cos(portal_a) * 150.8, math.sin(portal_a) * 127.8, 5.0, 9.0, 2.5, 10.0, MATS["WindowFrame"], rotation=(0, 0, portal_a))
     box("stadium_pitch", 0, 0, 0.18, 112, 72, 0.36, pitch)
     box("stadium_line_mid", 0, 0, 0.4, 0.5, 68, 0.06, white)
     box("stadium_line_box", -44, 0, 0.4, 0.5, 40, 0.06, white)
@@ -6839,6 +6913,9 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
     box("office_canopy", 0, -(podium_w / 2.0 + 2.2), 5.4, podium_w * 0.55, 4.6, 0.45, metal)
     for cx in (-podium_w * 0.22, podium_w * 0.22):
         cyl("office_column", cx, -(podium_w / 2.0 + 3.8), 2.7, 0.34, 5.4, metal, vertices=8)
+    for mullion_frac in (-0.18, -0.09, 0.0, 0.09, 0.18):
+        box("office_storefront_mullion", podium_w * mullion_frac, -(podium_w / 2.0 + 0.92), 2.4, 0.28, 0.22, 4.6, metal)
+    box("office_entrance_step", 0, -(podium_w / 2.0 + 2.0), 0.18, podium_w * 0.60, 3.6, 0.36, stone)
     lower_top = setback_at if setback_at > 0 else total_h - 4.0
     box("office_shaft", 0, 0, 6 + (lower_top - 6) / 2.0, shaft_w, shaft_w, lower_top - 6, glass)
     ring_z = 15.0
@@ -6861,6 +6938,10 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
     box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
     box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
     box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
+    for rail_y in (-top_w / 2.0 - 0.3, top_w / 2.0 + 0.3):
+        box("office_roof_rail", 0, rail_y, total_h - 1.45, top_w + 0.8, 0.18, 0.55, metal)
+    for rail_x in (-top_w / 2.0 - 0.3, top_w / 2.0 + 0.3):
+        box("office_roof_rail", rail_x, 0, total_h - 1.45, 0.18, top_w + 0.8, 0.55, metal)
     if spire:
         cone("office_spire", 0, 0, total_h + 4.6, 1.7, 0.12, 9.4, metal, vertices=10)
         cyl("office_beacon", 0, 0, total_h + 9.6, 0.32, 0.6, MATS["CityAccentRed"], vertices=8)
@@ -6907,6 +6988,12 @@ def _build_midrise(width, depth, floors):
     box("mid_parapet", 0, 0, 1.2 + body_h + 0.4, width + 0.6, depth + 0.6, 0.8, stone)
     box("mid_bulkhead", -width * 0.2, 0, 1.2 + body_h + 1.6, 7, 6, 2.4, plaster)
     box("mid_hvac", width * 0.24, depth * 0.15, 1.2 + body_h + 1.2, 4.2, 3.4, 1.1, metal)
+    for light_x in (-2.0, 2.0):
+        box("mid_entry_light", light_x, -(depth / 2.0 + 0.45), 3.2, 0.35, 0.18, 0.50, MATS["LampGlow"])
+    for rail_y in (-depth / 2.0 - 0.15, depth / 2.0 + 0.15):
+        box("mid_roof_rail", 0, rail_y, 1.2 + body_h + 1.05, width + 0.2, 0.14, 0.50, metal)
+    for rail_x in (-width / 2.0 - 0.15, width / 2.0 + 0.15):
+        box("mid_roof_rail", rail_x, 0, 1.2 + body_h + 1.05, 0.14, depth + 0.2, 0.50, metal)
 
 
 def build_midrise_a():
@@ -6932,11 +7019,16 @@ def _build_warehouse(length, width, wall_h, roof_h, doors):
     for i in range(doors):
         dx = -door_span / 2.0 + (i + 0.5) * (door_span / doors)
         box("wh_dock_door", dx, -(width / 2.0 + 0.22), 2.4, 4.3, 0.4, 4.7, frame)
+        for seam_z in (1.35, 2.95):
+            box("wh_dock_seam", dx, -(width / 2.0 + 0.46), seam_z, 4.0, 0.16, 0.16, MATS["RoofDark"])
         box("wh_dock_bump", dx, -(width / 2.0 + 0.5), 0.5, 4.6, 0.7, 0.9, MATS["RoofDark"])
     rbox("wh_dock_canopy", 0, -(width / 2.0 + 1.5), 5.6, door_span + 6, 3.0, 0.3, metal, rotation=(math.radians(14), 0, 0))
     box("wh_office", length / 2.0 - 6.0, -(width / 2.0 + 2.2), wall_h * 0.42, 12, 4.6, wall_h * 0.84, MATS["FacadeMain"])
     box("wh_office_glass", length / 2.0 - 6.0, -(width / 2.0 + 4.65), wall_h * 0.5, 11, 0.35, wall_h * 0.5, MATS["FacadeGlass"])
     box("wh_end_door", length / 2.0 + 0.22, 0, 2.7, 0.4, 6.4, 5.4, frame)
+    box("wh_gutter", 0, -(width / 2.0 + 0.28), wall_h - 0.25, length * 0.98, 0.35, 0.30, metal)
+    for downspout_x in (-length * 0.38, 0.0, length * 0.38):
+        box("wh_downspout", downspout_x, -(width / 2.0 + 0.30), wall_h / 2.0, 0.18, 0.18, wall_h, metal)
     for vx in (-length * 0.3, 0.0, length * 0.3):
         cyl("wh_vent", vx, 0, wall_h + roof_h - 0.3, 0.85, 1.5, metal, vertices=10)
 
@@ -6969,6 +7061,10 @@ def _build_container(material):
     box("cont_door_b", 6.18, 0.6, 1.42, 0.16, 1.12, 2.3, material)
     for lx in (-0.95, -0.25, 0.25, 0.95):
         cyl("cont_lockrod", 6.3, lx, 1.42, 0.07, 2.2, metal, vertices=6)
+    for hinge_z in (0.65, 2.2):
+        for hinge_y in (-1.12, 1.12):
+            box("cont_hinge", 6.25, hinge_y, hinge_z, 0.18, 0.28, 0.42, metal)
+    box("cont_data_plate", 6.29, -0.6, 1.95, 0.05, 0.75, 0.50, MATS["CityWhitePaint"])
 
 
 def build_container_red():
@@ -7001,6 +7097,15 @@ def build_villa_b():
     box("villab_garage_roof", 6.4, -2.6, 3.7, 6.1, 7.0, 0.35, dark)
     box("villab_garage_door", 6.4, -5.95, 1.55, 4.4, 0.25, 2.5, MATS["TownGarage"])
     box("villab_door", 2.6, -6.05, 1.6, 1.5, 0.25, 2.9, wood)
+    for mullion_x in (-5.9, -2.4, 1.1):
+        box("villab_glass_mullion", mullion_x, -6.22, 2.9, 0.22, 0.16, 4.4, wood)
+    box("villab_glass_rail", -2.4, -6.22, 2.9, 9.2, 0.16, 0.22, wood)
+    for garage_seam_z in (0.80, 1.55, 2.30):
+        box("villab_garage_seam", 6.4, -6.11, garage_seam_z, 4.3, 0.10, 0.12, dark)
+    box("villab_step", 2.6, -6.55, 0.16, 2.2, 0.9, 0.32, granite)
+    box("villab_porch_light", 3.65, -6.20, 2.8, 0.28, 0.16, 0.42, MATS["LampGlow"])
+    for downspout_x in (-8.55, 3.75):
+        box("villab_downspout", downspout_x, -6.03, 3.65, 0.16, 0.16, 6.6, dark)
     for px in (3.4, 8.6):
         for py in (1.2, 5.6):
             cyl("villab_pergola_post", px, py, 1.6, 0.14, 3.2, wood, vertices=8)
@@ -7025,11 +7130,18 @@ def build_townhouse_b():
         box("townb_bay_glass", ux - 1.9, -7.6, 2.9, 3.0, 0.25, 4.2, glass)
         box("townb_bay_roof", ux - 1.9, -6.9, 5.5, 4.0, 1.7, 0.3, roof)
         box("townb_garage", ux + 2.2, -6.45, 1.45, 3.3, 0.3, 2.4, MATS["TownGarage"])
+        box("townb_bay_mullion_v", ux - 1.9, -7.76, 2.9, 0.18, 0.14, 4.2, trim)
+        box("townb_bay_mullion_h", ux - 1.9, -7.76, 2.9, 3.0, 0.14, 0.18, trim)
+        box("townb_garage_seam", ux + 2.2, -6.64, 1.45, 3.2, 0.10, 0.12, trim)
+        box("townb_downspout", ux + (-4.55 if ux < 0 else 4.55), -6.35, 3.4, 0.16, 0.16, 6.8, roof)
         for wx in (-2.6, 0.2, 3.0):
             box("townb_window", ux + wx, -6.42, 5.5, 1.5, 0.22, 1.7, glass)
         box("townb_chimney", ux + 2.8, 1.8, 10.4, 1.1, 1.1, 2.6, stone)
+        box("townb_chimney_band", ux + 2.8, 1.8, 11.55, 1.35, 1.35, 0.20, trim)
     box("townb_door_l", -1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"])
     box("townb_door_r", 1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoorAccent"])
+    for porch_light_x in (-1.95, 1.95):
+        box("townb_porch_light", porch_light_x, -6.58, 2.9, 0.25, 0.14, 0.40, MATS["LampGlow"])
     box("townb_porch_roof", 0, -7.0, 3.35, 5.4, 1.6, 0.28, roof)
     for px in (-2.4, 2.4):
         cyl("townb_porch_post", px, -7.6, 1.65, 0.13, 3.3, trim, vertices=8)
@@ -7052,6 +7164,11 @@ def build_barn():
         box("barn_win_glass", wx, -7.2, 4.2, 1.2, 0.15, 1.3, MATS["WindowGlassDark"])
     box("barn_leanto", -2, 8.4, 1.7, 17, 3.4, 3.4, red)
     rbox("barn_leanto_roof", -2, 8.6, 3.6, 17.6, 4.4, 0.3, dark, rotation=(math.radians(10), 0, 0))
+    box("barn_ridge_cap", 0, 0, 10.42, 31.6, 0.5, 0.25, dark)
+    for gutter_y in (-7.95, 7.95):
+        box("barn_gutter", 0, gutter_y, 6.95, 30.5, 0.25, 0.25, dark)
+    for hinge_y in (-2.9, 2.9):
+        box("barn_door_hinge", -15.56, hinge_y, 2.6, 0.14, 0.35, 0.8, MATS["PropsMetal"])
     box("barn_cupola", 0, 0, 11.1, 2.2, 2.2, 1.6, white)
     cupola_roof = cone("barn_cupola_roof", 0, 0, 12.5, 1.9, 0.15, 1.4, dark, vertices=4)
     cupola_roof.rotation_euler = (0, 0, math.radians(45))
@@ -7079,6 +7196,9 @@ def build_greenhouse():
         box("gh_end_peak", ex, 0, 5.3, 0.3, 8.6, 2.6, glass)
         box("gh_end_frame", ex, 0, 4.4, 0.35, 9.0, 0.5, metal)
     box("gh_door", -22.1, 0, 1.7, 0.3, 2.4, 3.0, MATS["WindowFrame"])
+    box("gh_ridge_vent", 0, 0, 6.05, 40, 1.2, 0.25, metal)
+    for fan_x in (-22.12, 22.12):
+        box("gh_fan", fan_x, 4.2, 2.6, 0.18, 2.2, 2.2, MATS["WindowFrame"])
     for row_y in (-4.4, -1.5, 1.5, 4.4):
         box("gh_crops", 0, row_y, 1.25, 40, 1.7, 0.95, green)
 
