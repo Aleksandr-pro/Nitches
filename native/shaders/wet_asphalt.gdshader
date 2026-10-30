@@ -17,6 +17,11 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, r
 uniform sampler2D normal_tex : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D wear_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool use_textures = true;
+// 0.3.0: hero-avenue fresh-asphalt mask placement (defaults keep the
+// retired RichTown Boulevard values; the 7x7 map points it at the
+// Central Avenue from GDScript).  Mask shading itself is unchanged.
+uniform float hero_avenue_x = 760.0;
+uniform float hero_avenue_half_z = 433.0;
 uniform bool use_wear_texture = false;
 uniform vec4 asphalt_color : source_color = vec4(0.030, 0.032, 0.036, 1.0);
 uniform float texture_brightness : hint_range(0.05, 2.0) = 1.08;
@@ -226,9 +231,9 @@ void fragment() {
 	// resurfaced charcoal carriageway, while side streets retain the
 	// older grey aggregate.  The world-space mask is confined to the
 	// exported X=760, Z=-430..430 avenue and its intersection pads.
-	float boulevard_mask = (1.0 - smoothstep(11.2, 13.2, abs(world_pos.x - 760.0)))
-		* smoothstep(-438.0, -428.0, world_pos.z)
-		* (1.0 - smoothstep(428.0, 438.0, world_pos.z));
+	float boulevard_mask = (1.0 - smoothstep(11.2, 13.2, abs(world_pos.x - hero_avenue_x)))
+		* smoothstep(-hero_avenue_half_z - 5.0, -hero_avenue_half_z + 5.0, world_pos.z)
+		* (1.0 - smoothstep(hero_avenue_half_z - 5.0, hero_avenue_half_z + 5.0, world_pos.z));
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.43, 0.45, 0.49), boulevard_mask * 0.86);
 	ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.86, 0.90, 0.96), wet_streak * 0.16);
 

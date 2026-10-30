@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.62-native-alpha"'), 'Native project version metadata must match 0.2.62-native-alpha');
-assert(preset.includes('version/code=65'), 'Native 0.2.62 must bump Android versionCode to 65');
-assert(preset.includes('version/name="0.2.62-native-alpha"'), 'Native version name must be 0.2.62-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.62-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.1-native-alpha"'), 'Native project version metadata must match 0.3.1-native-alpha');
+assert(preset.includes('version/code=67'), 'Native 0.3.1 must bump Android versionCode to 67');
+assert(preset.includes('version/name="0.3.1-native-alpha"'), 'Native version name must be 0.3.1-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.1-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.62"') && preset.includes('application/product_version="0.2.62"'), 'Desktop Windows version metadata must match native 0.2.62');
+assert(preset.includes('application/file_version="0.3.1"') && preset.includes('application/product_version="0.3.1"'), 'Desktop Windows version metadata must match native 0.3.1');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -252,7 +252,7 @@ for (const roughnessMap of ['cottage_basalt_roughness.jpg', 'cottage_limestone_b
   assert(syncScript.includes(roughnessMap), `Native asset sync is missing the PBR roughness map ${roughnessMap}`);
   assert(worldScript.includes(roughnessMap), `Native world does not use the PBR roughness map ${roughnessMap}`);
 }
-for (const marker of ['sail_cottage_estates_0239', 'sail_cottage_models_0239', 'sail_cottage_fixed_scale_0239', 'sail_cottage_exterior_only_0239', 'sail_cottage_pbr_roughness_0239', 'sail_cottage_material_pass_0239', 'sail_cottage_multi_box_colliders_0239', 'sail_cottage_podiums_0239', 'sail_cottage_dune_triangles_0239', 'sail_cottage_courtyard_triangles_0239', 'sail_cottage_palm_triangles_0239', 'sail_cottage_garden_palms_0239', 'sail_open_lookout_0239', 'sail_cottage_resort_fit_0239', 'SailCottageDune', 'SailCottageCourtyard', 'SailCottagePalm', 'SailCottagePodiums', 'cottage_rammed_sand', 'cottage_travertine_coarse', 'cottage_glass_physical', '_cottage_estate_ground_y_0239', '_add_cottage_estate_colliders_0239', 'roughness_texture_channel', '23_sail_cottage_dune', '24_sail_cottage_courtyard', '25_sail_cottage_palm', '26_sail_cottages_aerial']) {
+for (const marker of ['sail_cottage_estates_0239', 'sail_cottage_models_0239', 'sail_cottage_fixed_scale_0239', 'sail_cottage_exterior_only_0239', 'sail_cottage_pbr_roughness_0239', 'sail_cottage_material_pass_0239', 'sail_cottage_multi_box_colliders_0239', 'sail_cottage_podiums_0239', 'sail_cottage_dune_triangles_0239', 'sail_cottage_courtyard_triangles_0239', 'sail_cottage_palm_triangles_0239', 'sail_cottage_garden_palms_0239', 'sail_open_lookout_0239', 'sail_cottage_resort_fit_0239', 'SailCottageDune', 'SailCottageCourtyard', 'SailCottagePalm', 'SailCottagePodiums', 'cottage_rammed_sand', 'cottage_travertine_coarse', 'cottage_glass_physical', '_cottage_estate_ground_y_0239', '_add_cottage_estate_colliders_0239', 'roughness_texture_channel', '23_rich_hills_villas', '24_beach_sunset', '25_mall', '26_city_aerial_7km']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.39 cottage-estate marker is missing: ${marker}`);
 }
 for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
@@ -299,7 +299,7 @@ for (const marker of ['_build_store_panel', 'PANEL_STORE', '_store_items', '_cyc
 // arms that really exist; shelters/planters/bins/signs are checked by
 // footprint, and curb/paint geometry is subdivided only near real
 // junction mouths so openings no longer stop at source-sample bounds.
-for (const marker of ['road_infrastructure_repair_0236', '_junction_arm_mask', '_junction_has_both_axes', '_is_footprint_clear_of_roads', '_is_pole_clear_of_road', '_subdivide_road_points_for_junctions', 'rejected_fake_junction_pads_0236', 'real_crosswalk_groups_0236', 'rejected_fake_crosswalks_0236', 'rejected_offroad_crosswalk_stripes_0236', 'traffic_signals_on_real_arms_0236', 'rejected_fake_signal_approaches_0236', 'continuous_arterial_curbs_0236', 'rounded_curb_edge_alignment_0236', 'road_junction_subsegments_0236', 'bike_lane_junction_breaks_0236', 'bus_shelter_footprints_clear_0236', 'roadside_footprints_clear_0236', 'rejected_road_palms_0236', 'rejected_road_trees_0236', 'rejected_road_bushes_0236', 'rejected_road_lamps_0236', '15_corniche_t_junction', '16_corniche_l_corner', '17_boulevard_full_junction', '18_west_t_junction']) {
+for (const marker of ['road_infrastructure_repair_0236', '_junction_arm_mask', '_junction_has_both_axes', '_is_footprint_clear_of_roads', '_is_pole_clear_of_road', '_subdivide_road_points_for_junctions', 'rejected_fake_junction_pads_0236', 'real_crosswalk_groups_0236', 'rejected_fake_crosswalks_0236', 'rejected_offroad_crosswalk_stripes_0236', 'traffic_signals_on_real_arms_0236', 'rejected_fake_signal_approaches_0236', 'continuous_arterial_curbs_0236', 'rounded_curb_edge_alignment_0236', 'road_junction_subsegments_0236', 'bike_lane_junction_breaks_0236', 'bus_shelter_footprints_clear_0236', 'roadside_footprints_clear_0236', 'rejected_road_palms_0236', 'rejected_road_trees_0236', 'rejected_road_bushes_0236', 'rejected_road_lamps_0236', '15_corniche_t_junction', '16_corniche_l_corner', '17_plaza_ring_junction', '18_west_t_junction']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.36 road-infrastructure marker is missing: ${marker}`);
 }
 assert(!worldScript.includes('{"x": 914.0, "z": -300.0') && !worldScript.includes('{"x": 914.0, "z": -110.0') && !worldScript.includes('{"x": 914.0, "z": 70.0'), 'Native 0.2.36 must not restore the Corniche bus shelters centred on cross streets/crosswalks');
@@ -309,7 +309,7 @@ assert(!worldScript.includes('{"x": 914.0, "z": -300.0') && !worldScript.include
 // shadow pass, and the minimap renders its static road network once.
 // The same pass expands Sail Island into a landscaped resort with a
 // loop road and audits every canonical building's true footprint.
-for (const marker of ['view_sector_streaming_0237', 'STREAM_SECTOR_HIDE_MARGIN_RAD', 'horizontal_half_fov', '_is_flat_shadow_free_multimesh_0237', 'flat_shadow_casters_disabled_0237', 'static_map_cache_0237', '_draw_cached_world', '_draw_static_cache', 'UPDATE_ONCE', '_expand_sail_island_0237', 'rt-sail-loop', 'sail_island_land_area_m2_0237', '_build_sail_island_resort_0237', 'sail_island_promenade_segments_0237', 'sail_island_infill_excluded_0237', '_sanitize_canonical_buildings_0237', '_sanitize_canonical_pools_0237', '_rect_road_clearance_0237', 'canonical_building_min_clearance_0237', 'canonical_pools_relocated_0237', 'bridge_roadside_props_removed_0237', 'readable_road_signs_0237', 'CityRoadSignBacks0237', 'road_wear_scale_0237', '19_sail_island_resort', '20_sail_island_arrival']) {
+for (const marker of ['view_sector_streaming_0237', 'STREAM_SECTOR_HIDE_MARGIN_RAD', 'horizontal_half_fov', '_is_flat_shadow_free_multimesh_0237', 'flat_shadow_casters_disabled_0237', 'static_map_cache_0237', '_draw_cached_world', '_draw_static_cache', 'UPDATE_ONCE', '_expand_sail_island_0237', 'rt-sail-loop', 'sail_island_land_area_m2_0237', '_build_sail_island_resort_0237', 'sail_island_promenade_segments_0237', 'sail_island_infill_excluded_0237', '_sanitize_canonical_buildings_0237', '_sanitize_canonical_pools_0237', '_rect_road_clearance_0237', 'canonical_building_min_clearance_0237', 'canonical_pools_relocated_0237', 'bridge_roadside_props_removed_0237', 'readable_road_signs_0237', 'CityRoadSignBacks0237', 'road_wear_scale_0237', '19_corniche_hotels', '20_cable_bridge_arrival']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.37 performance/Sail Island marker is missing: ${marker}`);
 }
 assert(minimapScript.includes('func _draw_vector_world() -> void:\n    var radius := _clip_radius()'), 'Native 0.2.37 minimap vector fallback must declare its clip radius locally, not borrow _draw() scope');
@@ -319,7 +319,7 @@ assert(minimapScript.includes('func _draw_vector_world() -> void:\n    var radiu
 // resort paving/hedges/pools are fitted and re-audited against the
 // carriageway, and the pool audit counts the concrete rim without
 // letting a pool reject its own relocation candidate.
-for (const marker of ['closedLoop0238', 'resortRoad0238', 'sail_loop_closed_0238', 'sail_loop_entry_pad_0238', 'sail_loop_center_dashes_0238', 'sail_loop_clean_markings_0238', 'sail_loop_pristine_asphalt_0238', 'sail_resort_min_road_clearance_0238', 'sail_resort_rejected_road_overlaps_0238', 'sail_island_hedges_0238', 'sail_pools_final_0238', 'sail_pool_min_road_clearance_0238', 'sail_loop_road_repair_0238', 'canonical_pool_rim_clearance_0238', 'canonical_pool_self_excluded_0238', 'excluded_pool_index', 'sail_loop_generic_props_removed_0238', 'sail_loop_segments_without_props_0238', '21_sail_loop_entry', '22_sail_loop_east']) {
+for (const marker of ['closedLoop0238', 'resortRoad0238', 'sail_loop_closed_0238', 'sail_loop_entry_pad_0238', 'sail_loop_center_dashes_0238', 'sail_loop_clean_markings_0238', 'sail_loop_pristine_asphalt_0238', 'sail_resort_min_road_clearance_0238', 'sail_resort_rejected_road_overlaps_0238', 'sail_island_hedges_0238', 'sail_pools_final_0238', 'sail_pool_min_road_clearance_0238', 'sail_loop_road_repair_0238', 'canonical_pool_rim_clearance_0238', 'canonical_pool_self_excluded_0238', 'excluded_pool_index', 'sail_loop_generic_props_removed_0238', 'sail_loop_segments_without_props_0238', '21_stadium', '22_downtown_aerial']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.38 Sail loop road-repair marker is missing: ${marker}`);
 }
 assert(worldScript.includes('{"x": 1216.0, "z": 80.0, "w": 16.0, "d": 26.0}') && worldScript.includes('{"x": 1149.8, "z": 80.0, "w": 4.4, "d": 18.0'), 'Native 0.2.38 must keep the east Sail pool and arrival apron inside the loop with road clearance');
@@ -679,17 +679,30 @@ const data = JSON.parse(dataText);
 assert(data.schemaVersion === 1, 'Unexpected native world schema');
 assert(data.units === 'metres', 'Native world must use real metres');
 assert(data.terrain.heights.length === data.terrain.cols * data.terrain.rows, 'Terrain height count mismatch');
-assert(data.bounds.minX === 520 && data.bounds.maxX === 1500, 'RichTown X bounds changed unexpectedly');
-assert(data.roads.length >= 50, 'Too few RichTown road edges exported');
-assert(data.roads.filter((r) => r.id.startsWith('rt-villa-')).length === 6, 'Native 0.2.24 must export 6 South Villa District streets');
-assert(data.roads.filter((r) => r.id.startsWith('rt-palm-local-')).length === 3, 'Native 0.2.24 must export 3 Palm Island local streets');
-assert(data.districts.some((d) => d.id === 'south-villa-district'), 'Native 0.2.24 South Villa District metadata is missing');
-assert(data.buildings.length >= 45, 'Too few RichTown buildings exported');
-assert(data.buildings.filter((b) => b.model === 'villa').length === 14, 'Expected 14 Blender villas');
-assert(data.buildings.filter((b) => b.model === 'glass_tower').length === 8, 'Expected 8 Blender glass towers');
-assert(data.landmarks.length === 15, 'Expected all 15 RichTown landmarks');
-assert(data.palms.length === 112, 'Expected 112 RichTown palms');
-assert(data.spawn.x === 760 && data.spawn.z === 330, 'Unexpected native spawn point');
+assert(data.layout === 'richtown7', 'RichTown must ship the 0.3.0 7x7 km layout');
+assert(data.bounds.minX === -3500 && data.bounds.maxX === 3500 && data.bounds.minZ === -3500 && data.bounds.maxZ === 3500, 'RichTown 7x7 bounds changed unexpectedly');
+assert(data.terrain.cols === 501 && data.terrain.rows === 501 && data.terrain.stepM === 14, 'RichTown 7x7 terrain grid must stay 501x501 at 14 m');
+assert(data.roads.length >= 300, 'Too few RichTown 7x7 road edges exported');
+assert(data.stats.roadLengthKm >= 110, 'RichTown 7x7 road network must exceed 110 km');
+assert(data.roads.filter((r) => r.id.startsWith('rt7-hwy')).length >= 10 && data.roads.some((r) => r.id === 'rt7-plaza-ring'), 'RichTown 7x7 big ring + plaza ring roads are missing');
+assert(data.roads.filter((r) => r.id.includes('bridge')).length >= 6, 'RichTown 7x7 must export six canal bridges (incl. the Corniche mouth)');
+assert(data.districts.some((d) => d.id === 'downtown') && data.districts.some((d) => d.id === 'rich-hills') && data.districts.some((d) => d.id === 'port'), 'RichTown 7x7 district metadata is missing');
+assert(data.buildings.length >= 400, 'Too few RichTown 7x7 buildings exported');
+assert(data.buildings.filter((b) => b.model === 'villa').length >= 14, 'Expected at least 14 Blender villas');
+assert(data.buildings.filter((b) => b.model === 'glass_tower').length >= 8, 'Expected at least 8 Blender glass towers');
+assert(data.landmarks.length >= 20, 'Expected at least 20 RichTown 7x7 landmarks');
+const richTower = data.landmarks.find((landmark) => landmark.kind === 'rt-tower');
+assert(richTower && richTower.x === 0 && richTower.z === 0 && richTower.h === 148, 'Rich Tower must anchor the 7x7 centre at 148 m');
+assert(data.landmarks.some((l) => l.kind === 'rt7-stadium') && data.landmarks.some((l) => l.kind === 'rt7-cable-bridge'), 'RichTown 7x7 stadium/cable-bridge landmarks are missing');
+assert(data.palms.length >= 900, 'Expected at least 900 RichTown 7x7 palms');
+assert(data.buildings.length >= 1400, 'RichTown 0.3.1 densification must export at least 1400 buildings');
+assert(data.landmarks.length >= 70, 'RichTown 0.3.1 must export at least 70 landmarks');
+for (const kind of ['rt7-terminal', 'rt7-atc', 'rt7-plane', 'rt7-cooling', 'rt7-reactor', 'rt7-chimney', 'rt7-radar', 'rt7-watchtower', 'rt7-helipad', 'rt7-afv', 'rt7-hangar', 'rt7-tank']) {
+  assert(data.landmarks.some((l) => l.kind === kind), `RichTown 0.3.1 landmark kind is missing: ${kind}`);
+}
+assert(data.landmarks.filter((l) => l.kind === 'rt7-school').length >= 10, 'RichTown 0.3.1 needs one school per residential district (10)');
+assert(data.roads.some((r) => r.id.startsWith('rt7-runway')), 'RichTown 0.3.1 airport runway roads are missing');
+assert(data.spawn.x === 5 && data.spawn.z === 640, 'Unexpected RichTown 7x7 spawn point');
 
 const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
 assert(detailedCafeInfo.size > 2_500_000, 'Native 0.2.19 must use the detailed 2.86 MB PR #61 Dubai Premium Cafe, not the earlier lightweight GLB');
@@ -698,25 +711,25 @@ assert(operaInfo.size > 250_000, 'Native 0.2.20 RichTown Opera GLB is unexpected
 const operaBytes = await readFile('src/assets/models/props/opera_house.glb');
 assert(operaBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Opera source is an LFS pointer or corrupt GLB');
 const operaLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-opera');
-assert(operaLandmark && operaLandmark.x === 820 && operaLandmark.z === 25 && operaLandmark.h === 22, 'RichTown Opera landmark must stay at X820 Z25 with the authored 22 m height');
+assert(operaLandmark && operaLandmark.x === -700 && operaLandmark.z === 500 && operaLandmark.h === 22, 'RichTown Opera landmark must stay at X-700 Z500 with the authored 22 m height');
 const mosqueInfo = await stat('src/assets/models/props/mosque.glb');
 assert(mosqueInfo.size > 1_000_000, 'Native 0.2.25 RichTown Mosque GLB is unexpectedly small');
 const mosqueBytes = await readFile('src/assets/models/props/mosque.glb');
 assert(mosqueBytes.subarray(0, 4).toString('utf8') === 'glTF', 'RichTown Mosque source is an LFS pointer or corrupt GLB');
 const mosqueLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-mosque');
-assert(mosqueLandmark && mosqueLandmark.x === 620 && mosqueLandmark.z === 335 && mosqueLandmark.h === 30, 'RichTown Mosque landmark must stay at X620 Z335 with the authored 30 m height');
+assert(mosqueLandmark && mosqueLandmark.x === 950 && mosqueLandmark.z === 1365 && mosqueLandmark.h === 30, 'RichTown Mosque landmark must stay at X950 Z1365 with the authored 30 m height');
 const hotelInfo = await stat('src/assets/models/props/grand_hotel.glb');
 assert(hotelInfo.size > 1_000_000, 'Native 0.2.26 Grand Hotel GLB is unexpectedly small');
 const hotelBytes = await readFile('src/assets/models/props/grand_hotel.glb');
 assert(hotelBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Grand Hotel source is an LFS pointer or corrupt GLB');
 const grandHotelParcels = data.buildings.filter((b) => b.kind === 'rt-hotel' && b.h > 38 && b.w >= 33 && b.w <= 36 && b.d >= 25 && b.d <= 28);
-assert(grandHotelParcels.length === 3 && grandHotelParcels.every((b) => b.x === 892), 'Building Model No.8 must land on exactly the three tall 34x26 Corniche parcels at X892');
+assert(grandHotelParcels.length === 3 && grandHotelParcels.every((b) => b.x === -2450), 'Building Model No.8 must land on exactly the three tall 34x26 Corniche parcels at X-2450');
 const museumInfo = await stat('src/assets/models/props/museum.glb');
 assert(museumInfo.size > 1_000_000, 'Native 0.2.29 Museum GLB is unexpectedly small');
 const museumBytes = await readFile('src/assets/models/props/museum.glb');
 assert(museumBytes.subarray(0, 4).toString('utf8') === 'glTF', 'Museum source is an LFS pointer or corrupt GLB');
 const museumLandmark = data.landmarks.find((landmark) => landmark.kind === 'rt-museum');
-assert(museumLandmark && museumLandmark.x === 665 && museumLandmark.z === -340, 'RichTown Museum landmark must stay at X665 Z-340');
+assert(museumLandmark && museumLandmark.x === 500 && museumLandmark.z === -700, 'RichTown Museum landmark must stay at X500 Z-700');
 for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottage_palm.glb']) {
   const cottageSource = `src/assets/models/props/${cottageModel}`;
   const cottageInfo = await stat(cottageSource);
@@ -1165,6 +1178,21 @@ for (const marker of ['func _apply_menu_lightweight', 'WHEEL_SEGMENTS', 'func _g
 for (const marker of ['MenuBackground0262', 'class WheelView', 'func show_wheel_result', '_store_class_filter', '_store_power_filter', '_store_owned_filter', '_store_item_matches_filters', 'menu_light_bg_0262', 'wheel_ui_0262', 'store_filters_0262']) {
   assert(mainMenuScript.includes(marker), `0.2.62 menu marker is missing: ${marker}`);
 }
+
+// 0.3.0: RichTown 7x7 km rebuild (stages 1-2) + LOD model budgets.
+for (const marker of ['_is_rt7', '_queue_rt7_build_stages', '_rt7_junction_candidates', '_rt7_terrain_class', 'model_lod_budget_0300', 'generic_building_batches_0300', 'rt7_stadium_0300', 'rt7_cable_bridge_0300', 'hero_avenue_x', 'richtown7']) {
+  assert(worldScript.includes(marker), `0.3.0 world builder marker is missing: ${marker}`);
+}
+for (const marker of ['_run_rt7_world_smoke_checks', 'richtown7_0300']) {
+  assert(mainScript.includes(marker), `0.3.0 main marker is missing: ${marker}`);
+}
+assert(worldMapScript.includes('rt7-stadium') && worldMapScript.includes('richtown7'), '0.3.0 world map must know the 7x7 POIs/labels');
+assert(wetAsphaltShader.includes('hero_avenue_x') && wetAsphaltShader.includes('boulevard_mask'), '0.3.0 wet-asphalt hero-avenue mask must be parameterised, not removed');
+// 0.3.1: airport + NPP + military base + district schools + densification.
+for (const marker of ['rt7_airport_0310', 'rt7_npp_0310', 'rt7_milbase_0310', 'rt7_schools_0310', 'rt7_cooling_towers_0310', 'rt7_planes_0310', 'rt7_hangars_0310']) {
+  assert(worldScript.includes(marker), `0.3.1 world builder marker is missing: ${marker}`);
+}
+assert(worldMapScript.includes('rt7-terminal') && worldMapScript.includes('rt7-school'), '0.3.1 world map must know the airport/school POIs');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

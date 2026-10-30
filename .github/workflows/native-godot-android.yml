@@ -11,7 +11,7 @@ on:
       - 'arena/**'
     paths:
       - 'native/**'
-      - 'scripts/export-native-world.mjs'
+      - 'scripts/generate_richtown7_world.py'
       - 'scripts/sync-native-assets.mjs'
       - 'scripts/generate_dubai_premium_cafe.py'
       - 'scripts/validate-native-project.mjs'
@@ -62,10 +62,13 @@ jobs:
           git lfs ls-files
           node scripts/check-lfs-assets.mjs
 
-      - name: Generate native world data and stage Godot assets
+      - name: Stage Godot assets and validate native project
         run: |
           set -euo pipefail
-          node scripts/export-native-world.mjs
+          # 0.3.0: world JSONs are committed generator outputs
+          # (generate_richtown7_world.py / generate_desert_world.py /
+          # generate_greenforest_world.py).  The retired 1x1 km web
+          # exporter must not overwrite them at build time.
           node scripts/sync-native-assets.mjs
           node scripts/validate-native-project.mjs --require-assets
 

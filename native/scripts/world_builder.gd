@@ -26,6 +26,7 @@ const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1
 var world_id := "richtown"
 var _is_desert := false
 var _is_forest := false
+var _is_rt7 := false
 var _gf_field_rects: Array[Rect2] = []
 var _gf_lake_y := 0.0
 var _gf_bird_flocks: Array[Dictionary] = []
@@ -189,6 +190,9 @@ var _flat_shadow_free_instances_0237 := 0
 var _stream_horizontal_half_fov_rad := 1.05
 var _stream_sector_hidden_0237 := 0
 var _pending_batched_models: Dictionary = {}
+var _generic_box_batches: Dictionary = {}
+var _generic_gable_batches: Dictionary = {}
+var _generic_batch_instances := 0
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
@@ -255,6 +259,15 @@ func begin_build_world() -> void:
 	_is_forest = world_id == "greenforest"
 	_active_aabb = DESERT_AABB if (_is_desert or _is_forest) else WORLD_AABB
 	_load_data()
+	_is_rt7 = not _is_desert and not _is_forest and String(data.get("layout", "")) == "richtown7"
+	if _is_rt7:
+		var bounds_rt7: Dictionary = data.get("bounds", {})
+		var min_x_rt7 := _f(bounds_rt7, "minX", -3500.0)
+		var min_z_rt7 := _f(bounds_rt7, "minZ", -3500.0)
+		_active_aabb = AABB(
+			Vector3(min_x_rt7, -20.0, min_z_rt7),
+			Vector3(_f(bounds_rt7, "maxX", 3500.0) - min_x_rt7, 420.0, _f(bounds_rt7, "maxZ", 3500.0) - min_z_rt7)
+		)
 	_build_stages.clear()
 	_build_stage_index = 0
 	_build_profile_parts.clear()
@@ -353,7 +366,36 @@ func _queue_emergency_build_stages() -> void:
 	_add_build_stage("Завершаем аварийный мир", Callable(self, "_finish_emergency_build"), 0.5)
 
 
+func _queue_rt7_build_stages() -> void:
+	# 0.3.0 RichTown 7x7: generic data-driven stages only.  The legacy
+	# 1x1 km authored passes (Sail Island resort, boulevard corridor,
+	# authored parks, district infill, skyline backdrop) are skipped
+	# because their coordinates belong to the retired layout; they
+	# return district by district in later rebuild stages.
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Проверяем здания у дорог", Callable(self, "_sanitize_canonical_buildings_0237"), 1.5)
+	_add_build_stage("Проверяем бассейны и участки", Callable(self, "_sanitize_canonical_pools_0237"), 0.8)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Строим ландшафт RichTown 7×7", Callable(self, "_build_desert_terrain"), 4.0)
+	_add_build_stage("Заполняем море и канал", Callable(self, "_build_water_and_pools"), 1.0)
+	_add_build_stage("Прокладываем дороги", Callable(self, "_build_roads"), 4.0)
+	_add_build_stage("Возводим здания", Callable(self, "_build_buildings"), 4.0)
+	_add_build_stage("Строим достопримечательности", Callable(self, "_build_landmarks"), 2.0)
+	_add_build_stage("Высаживаем деревья и пальмы", Callable(self, "_build_vegetation"), 3.0)
+	_add_build_stage("Ставим уличные фонари", Callable(self, "_build_street_lamps"), 1.0)
+	_add_build_stage("Расставляем скамейки", Callable(self, "_build_benches"), 0.5)
+	_add_build_stage("Собираем модели города", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы мира", Callable(self, "_build_world_bounds"), 0.5)
+	_add_build_stage("Финализируем RichTown 7×7", Callable(self, "_finish_richtown_build"), 1.0)
+
+
 func _queue_richtown_build_stages() -> void:
+	if _is_rt7:
+		_queue_rt7_build_stages()
+		return
 	_add_build_stage("Подготавливаем остров Паруса", Callable(self, "_expand_sail_island_0237"), 1.0)
 	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
 	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
@@ -429,9 +471,14 @@ func _finish_emergency_build() -> void:
 
 
 func _finish_richtown_build() -> void:
+	if _is_rt7:
+		_enhancement_stats["richtown7_0300"] = true
+		_enhancement_stats["richtown7_terrain_chunks"] = int(_enhancement_stats.get("desert_terrain_chunks", 0))
+		_enhancement_stats["richtown7_world_km"] = 7.0
+		_enhancement_stats["model_lod_budget_0300"] = true
 	_enhancement_stats["near_field_lod_0243"] = true
 	_enhancement_stats["tree_detail_end_m"] = 105.0
-	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["palm_detail_end_m"] = 105.0
 	_enhancement_stats["shrub_detail_end_m"] = 90.0
 	_enhancement_stats["range_fade_mode"] = "dithered_self"
 	_enhancement_stats["wet_asphalt_streaks_0243"] = true
@@ -674,6 +721,8 @@ func _set_skyline_time(mode: String) -> void:
 func get_park_rects() -> Array:
 	if _is_desert:
 		return [Rect2(3030.0, 3180.0, 640.0, 640.0)]
+	if _is_rt7:
+		return [_zone_rect("parkCentral"), _zone_rect("parkSunset"), _zone_rect("parkHills")]
 	var rects: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -688,6 +737,12 @@ func get_park_map_entries() -> Array:
 		return [{"id": "oasis", "label": "Оазис", "rect": Rect2(3030.0, 3180.0, 640.0, 640.0)}]
 	if _is_forest:
 		return [{"id": "meadows", "label": "Центральные луга", "rect": Rect2(1150.0, 1250.0, 1400.0, 1300.0)}]
+	if _is_rt7:
+		return [
+			{"id": "parkCentral", "label": "Центральный парк", "rect": _zone_rect("parkCentral")},
+			{"id": "parkSunset", "label": "Парк Сансет", "rect": _zone_rect("parkSunset")},
+			{"id": "parkHills", "label": "Парк Rich Hills", "rect": _zone_rect("parkHills")},
+		]
 	var entries: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -699,9 +754,21 @@ func get_park_map_entries() -> Array:
 	return entries
 
 
+func _zone_rect(zone_name: String) -> Rect2:
+	var zones: Dictionary = data.get("zones", {})
+	var zone: Dictionary = zones.get(zone_name, {})
+	if zone.is_empty():
+		return Rect2()
+	var min_x := _f(zone, "minX")
+	var min_z := _f(zone, "minZ")
+	return Rect2(min_x, min_z, _f(zone, "maxX") - min_x, _f(zone, "maxZ") - min_z)
+
+
 func _is_in_park(x: float, z: float, pad: float = 0.0) -> bool:
 	if _is_desert:
 		return false
+	if _is_rt7:
+		return _in_zone(x, z, "parkCentral") or _in_zone(x, z, "parkSunset") or _in_zone(x, z, "parkHills")
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
 		var rect: Rect2 = spec.get("rect", Rect2())
@@ -2057,6 +2124,11 @@ func _create_asphalt_material() -> ShaderMaterial:
 	material.set_shader_parameter("wet_roughness", 0.48)
 	material.set_shader_parameter("puddle_roughness", 0.16)
 	material.set_shader_parameter("bump_strength", 0.62)
+	if _is_rt7:
+		# Point the fresh-charcoal hero-avenue mask at the new
+		# Central Avenue instead of the retired X=760 boulevard.
+		material.set_shader_parameter("hero_avenue_x", 0.0)
+		material.set_shader_parameter("hero_avenue_half_z", 3200.0)
 	_asphalt_material = material
 	_enhancement_stats["asphalt_shader"] = true
 	_enhancement_stats["asphalt_textures"] = has_textures
@@ -3544,6 +3616,28 @@ func _hash01(ix: int, iz: int) -> float:
 	return value - floor(value)
 
 
+## 0.3.0 RichTown 7x7 splat rules, driven entirely by the exported
+## zone rectangles (sea/beach/dunes/downtown/port/parks).
+func _rt7_terrain_class(x: float, z: float, h: float, slope: float) -> String:
+	if (_in_zone(x, z, "sea") or _in_zone(x, z, "marina")) and h < 0.5:
+		return "sand"
+	if _in_zone(x, z, "beach") and h < 3.6:
+		return "sand"
+	if _in_zone(x, z, "dunes"):
+		return "sand"
+	if _is_in_park(x, z):
+		return "grass"
+	if _in_zone(x, z, "rtPlaza"):
+		return "plaza"
+	if _in_zone(x, z, "drift") or _in_zone(x, z, "mallParking") or _in_zone(x, z, "port"):
+		return "concrete"
+	if slope > 0.36:
+		return "rock"
+	if _in_zone(x, z, "downtown"):
+		return "concrete"
+	return "grass"
+
+
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
 	if _is_forest:
 		# GreenForest splat: grey rock on cliffs/summits, ploughed soil
@@ -3585,6 +3679,8 @@ func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int
 		if _in_zone(x, z, "quarry") and slope < 0.22:
 			return "gravel"
 		return "packed"
+	if _is_rt7:
+		return _rt7_terrain_class(x, z, h, slope)
 	if _is_in_park(x, z):
 		return "grass"
 	var in_focus_promenade := z >= -100.0 and z <= 52.0 and ((x >= 682.0 and x <= 744.0) or (x >= 776.0 and x <= 790.0))
@@ -3745,21 +3841,35 @@ func _pool_material() -> StandardMaterial3D:
 	return material
 
 
+## 0.3.0: one animated water plane per exported water rectangle
+## (western sea + canal on the 7x7 map).
+func _add_water_plane(parent: Node, rect: Rect2, node_name: String, subdivide_w: int, subdivide_d: int) -> void:
+	if rect.size.x <= 1.0 or rect.size.y <= 1.0:
+		return
+	var mesh := PlaneMesh.new()
+	mesh.size = rect.size
+	mesh.subdivide_width = subdivide_w
+	mesh.subdivide_depth = subdivide_d
+	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.04, rect.position.y + rect.size.y * 0.5)
+	var inst := _mesh_instance(parent, mesh, _water_material(), make_transform(centre), node_name, false)
+	inst.custom_aabb = AABB(Vector3(rect.position.x, -2.0, rect.position.y), Vector3(rect.size.x, 5.0, rect.size.y))
+
+
 func _build_water_and_pools() -> void:
 	var water_root := Node3D.new()
 	water_root.name = "Water"
 	add_child(water_root)
 
-	var sea_mesh := PlaneMesh.new()
-	sea_mesh.size = Vector2(760.0, 1040.0)
-	# The denser grid carries the low-frequency geometric swell smoothly;
-	# fine ripples/normals are evaluated per fragment in water_surface.gdshader.
-	sea_mesh.subdivide_width = 96
-	sea_mesh.subdivide_depth = 132
-	var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
-	# The sea plane only exists east of the shoreline; WORLD_AABB forced
-	# its 45k vertices through the vertex shader even when looking inland.
-	sea.custom_aabb = AABB(Vector3(-382.0, -2.0, -522.0), Vector3(764.0, 5.0, 1044.0))
+	if _is_rt7:
+		_add_water_plane(water_root, _zone_rect("sea"), "Sea", 40, 220)
+		_add_water_plane(water_root, _zone_rect("marina"), "Canal", 200, 3)
+	else:
+		var sea_mesh := PlaneMesh.new()
+		sea_mesh.size = Vector2(760.0, 1040.0)
+		sea_mesh.subdivide_width = 96
+		sea_mesh.subdivide_depth = 132
+		var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
+		sea.custom_aabb = AABB(Vector3(-382.0, -2.0, -522.0), Vector3(764.0, 5.0, 1044.0))
 
 	var pools: Array = data.get("pools", [])
 	if pools.is_empty():
@@ -3957,6 +4067,44 @@ func _build_roads() -> void:
 	_build_bridge_guardrails(roads_root)
 
 
+func _rt7_junction_candidates() -> Array[Dictionary]:
+	# 0.3.0: derive junction pads from the exported network itself.
+	# Every road is a block-length segment, so real junctions are the
+	# shared endpoints where a mostly-vertical and a mostly-horizontal
+	# carriageway meet; pad widths follow the widest arm on each axis.
+	var clusters: Dictionary = {}
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
+		var width := _f(road, "widthM", 12.0)
+		for end_index in [0, samples.size() - 1]:
+			var p := _sample_point(samples[end_index])
+			var neighbour_index := 1 if end_index == 0 else samples.size() - 2
+			var q := _sample_point(samples[neighbour_index])
+			var is_vertical := absf(q.z - p.z) >= absf(q.x - p.x)
+			var key := Vector2i(roundi(p.x), roundi(p.z))
+			if not clusters.has(key):
+				clusters[key] = {"x": p.x, "z": p.z, "vw": 0.0, "hw": 0.0}
+			var cluster: Dictionary = clusters[key]
+			if is_vertical:
+				cluster["vw"] = maxf(float(cluster["vw"]), width)
+			else:
+				cluster["hw"] = maxf(float(cluster["hw"]), width)
+	var out: Array[Dictionary] = []
+	for key_variant in clusters.keys():
+		var cluster: Dictionary = clusters[key_variant]
+		if float(cluster["vw"]) > 0.0 and float(cluster["hw"]) > 0.0:
+			out.append({
+				"x": float(cluster["x"]),
+				"z": float(cluster["z"]),
+				"width": float(cluster["vw"]),
+				"cross_width": float(cluster["hw"]),
+			})
+	return out
+
+
 func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) -> void:
 	# The exported ribbons deliberately overlap inside junction boxes. A
 	# 13 mm proud asphalt pad hides coplanar depth fighting and gives each
@@ -3964,59 +4112,66 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 	# flattened there by _build_road_mesh(). Lane paint stops before the
 	# pad, so the pad never covers a crosswalk or stop line.
 	var transforms: Array[Transform3D] = []
-	var vertical_roads := [
-		{"x": 560.0, "width": 11.0},
-		{"x": 760.0, "width": 22.0},
-		{"x": 930.0, "width": 24.0},
-	]
-	var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	var candidates: Array[Dictionary] = []
+	if _is_rt7:
+		candidates = _rt7_junction_candidates()
+	else:
+		var vertical_roads := [
+			{"x": 560.0, "width": 11.0},
+			{"x": 760.0, "width": 22.0},
+			{"x": 930.0, "width": 24.0},
+		]
+		var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+		for vertical_variant in vertical_roads:
+			var vertical: Dictionary = vertical_variant
+			for z_variant in cross_z:
+				var legacy_z := float(z_variant)
+				candidates.append({
+					"x": float(vertical.get("x", 760.0)),
+					"z": legacy_z,
+					"width": float(vertical.get("width", 12.0)),
+					"cross_width": 16.0 if absf(legacy_z - 225.0) <= 0.1 else 13.0,
+				})
 	var rejected_fake_junctions := 0
-	for vertical_variant in vertical_roads:
-		var vertical: Dictionary = vertical_variant
-		var center_x := float(vertical.get("x", 760.0))
-		var width := float(vertical.get("width", 12.0))
-		for z_variant in cross_z:
-			var center_z := float(z_variant)
-			var cross_width := 16.0 if absf(center_z - 225.0) <= 0.1 else 13.0
-			var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), width * 0.5, cross_width * 0.5)
-			if not _junction_has_both_axes(arms):
-				rejected_fake_junctions += 1
-				continue
-			var y := height_at(center_x, center_z) + ROAD_SURFACE_OFFSET_M + 0.007
-			# Build the pad as the union of the two carriageway
-			# strips that actually exist.  One full rectangle filled
-			# the missing quadrant of L-corners with an asphalt patch
-			# on sand/grass.  The horizontal strip is 1 mm higher so
-			# the intentional central overlap cannot z-fight.
-			var half_width := width * 0.5
-			var cross_half := cross_width * 0.5
-			var z_min := -cross_half if bool(arms.get("z_minus", false)) else 0.0
-			var z_max := cross_half if bool(arms.get("z_plus", false)) else 0.0
-			transforms.append(make_transform(
-				Vector3(center_x, y, center_z + (z_min + z_max) * 0.5),
-				0.0,
-				Vector3(width + 0.04, 0.012, z_max - z_min + 0.04)
-			))
-			var x_min := -half_width if bool(arms.get("x_minus", false)) else 0.0
-			var x_max := half_width if bool(arms.get("x_plus", false)) else 0.0
-			transforms.append(make_transform(
-				Vector3(center_x + (x_min + x_max) * 0.5, y + 0.001, center_z),
-				0.0,
-				Vector3(x_max - x_min + 0.04, 0.012, cross_width + 0.04)
-			))
-	# 0.2.38 Sail Island entry: the 10 m causeway meets the closed
-	# 9 m oval at its westernmost point (1140,80), where the loop
-	# tangent is north-south.  The city-grid loop above cannot see
-	# that T-junction, so the two ribbons simply overlapped with
-	# coplanar patches at the seam.  One pad over the exact union
-	# box (loop width x causeway width) gives the entry a single
-	# asphalt surface; its height follows the loop samples, which
-	# are registered 0.10 m above the reshaped island plateau.
-	transforms.append(make_transform(
-		Vector3(1140.0, height_at(1140.0, 80.0) + 0.202, 80.0),
-		0.0,
-		Vector3(9.04, 0.012, 10.04)
-	))
+	for cand_variant in candidates:
+		var cand: Dictionary = cand_variant
+		var center_x := float(cand.get("x", 0.0))
+		var center_z := float(cand.get("z", 0.0))
+		var width := float(cand.get("width", 12.0))
+		var cross_width := float(cand.get("cross_width", 13.0))
+		var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), width * 0.5, cross_width * 0.5)
+		if not _junction_has_both_axes(arms):
+			rejected_fake_junctions += 1
+			continue
+		var y := height_at(center_x, center_z) + ROAD_SURFACE_OFFSET_M + 0.007
+		# Build the pad as the union of the two carriageway strips that
+		# actually exist.  One full rectangle filled the missing quadrant
+		# of L-corners with an asphalt patch on sand/grass.  The horizontal
+		# strip is 1 mm higher so the intentional central overlap cannot
+		# z-fight.
+		var half_width := width * 0.5
+		var cross_half := cross_width * 0.5
+		var z_min := -cross_half if bool(arms.get("z_minus", false)) else 0.0
+		var z_max := cross_half if bool(arms.get("z_plus", false)) else 0.0
+		transforms.append(make_transform(
+			Vector3(center_x, y, center_z + (z_min + z_max) * 0.5),
+			0.0,
+			Vector3(width + 0.04, 0.012, z_max - z_min + 0.04)
+		))
+		var x_min := -half_width if bool(arms.get("x_minus", false)) else 0.0
+		var x_max := half_width if bool(arms.get("x_plus", false)) else 0.0
+		transforms.append(make_transform(
+			Vector3(center_x + (x_min + x_max) * 0.5, y + 0.001, center_z),
+			0.0,
+			Vector3(x_max - x_min + 0.04, 0.012, cross_width + 0.04)
+		))
+	if not _is_rt7:
+		# 0.2.38 Sail Island entry pad (retired 1 km layout only).
+		transforms.append(make_transform(
+			Vector3(1140.0, height_at(1140.0, 80.0) + 0.202, 80.0),
+			0.0,
+			Vector3(9.04, 0.012, 10.04)
+		))
 	var pad_mesh := BoxMesh.new()
 	pad_mesh.size = Vector3.ONE
 	pad_mesh.material = asphalt_material
@@ -4036,6 +4191,10 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 ## Quadrant arms are probed against the road-surface index, so T-junctions
 ## only receive returns on the side where both carriageways actually run.
 func _build_rounded_intersection_returns(parent: Node, asphalt_material: ShaderMaterial) -> void:
+	if _is_rt7:
+		# 0.3.0: kerb-return specs are authored for the retired 1 km grid;
+		# data-driven returns arrive with the stage-8 roadside pass.
+		return
 	var specs: Array[Dictionary] = []
 	var vertical_roads := [
 		{"x": 560.0, "width": 11.0},
@@ -5065,66 +5224,88 @@ func _build_road_details(parent: Node) -> void:
 	var signal_long_transforms: Array[Transform3D] = []
 	var signal_count := 0
 	var rejected_signal_approaches := 0
-	var signal_verticals := [
-		{"x": 560.0, "width": 11.0},
-		{"x": 760.0, "width": 22.0},
-		{"x": 930.0, "width": 24.0},
-	]
-	var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
-	for vertical_variant in signal_verticals:
-		var vertical: Dictionary = vertical_variant
-		var center_x := float(vertical.get("x", 760.0))
-		var vertical_width := float(vertical.get("width", 12.0))
+	var signal_candidates: Array[Dictionary] = []
+	if _is_rt7:
+		# 0.3.0: signalised junctions come from the exported network:
+		# an arterial (24 m+) meeting at least a 12 m street.  Bridge
+		# approaches qualify through the 12 m canal-bank roads, which
+		# also keeps the short mast-arm models in use there.
+		for cand_variant in _rt7_junction_candidates():
+			var cand: Dictionary = cand_variant
+			var w_v := float(cand.get("width", 0.0))
+			var w_h := float(cand.get("cross_width", 0.0))
+			if minf(w_v, w_h) >= 12.0 and maxf(w_v, w_h) >= 24.0:
+				signal_candidates.append(cand)
+	else:
+		var signal_verticals := [
+			{"x": 560.0, "width": 11.0},
+			{"x": 760.0, "width": 22.0},
+			{"x": 930.0, "width": 24.0},
+		]
+		var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+		for vertical_variant in signal_verticals:
+			var vertical: Dictionary = vertical_variant
+			for z_variant in signal_cross_z:
+				var legacy_z := float(z_variant)
+				signal_candidates.append({
+					"x": float(vertical.get("x", 760.0)),
+					"z": legacy_z,
+					"width": float(vertical.get("width", 12.0)),
+					"cross_width": 16.0 if absf(legacy_z - 225.0) < 0.1 else 13.0,
+				})
+	for cand_variant in signal_candidates:
+		var cand: Dictionary = cand_variant
+		var center_x := float(cand.get("x", 0.0))
+		var center_z := float(cand.get("z", 0.0))
+		var vertical_width := float(cand.get("width", 12.0))
 		var vertical_half := vertical_width * 0.5
-		for z_variant in signal_cross_z:
-			var center_z := float(z_variant)
-			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
-			var cross_half := cross_width * 0.5
-			var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
-			if not _junction_has_both_axes(arms):
-				rejected_signal_approaches += 4
+		var cross_width := float(cand.get("cross_width", 13.0))
+		var cross_half := cross_width * 0.5
+		var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
+		if not _junction_has_both_axes(arms):
+			rejected_signal_approaches += 4
+			continue
+		var approaches := [
+			{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
+			{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
+			{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
+			{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
+		]
+		for approach_variant in approaches:
+			var approach: Dictionary = approach_variant
+			var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
+			var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
+			var is_long := bool(approach.get("long", false))
+			if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
+				rejected_signal_approaches += 1
 				continue
-			var approaches := [
-				{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
-				{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
-				{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
-				{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
-			]
-			for approach_variant in approaches:
-				var approach: Dictionary = approach_variant
-				var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
-				var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
-				var is_long := bool(approach.get("long", false))
-				if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
-					rejected_signal_approaches += 1
-					continue
-				# The far/only Blender signal head is 4.18 m from the
-				# short pole and 6.68 m from the long pole.
-				var head_reach := 6.68 if is_long else 4.18
-				var pole_offset: Vector2 = head_offset - arm_dir * head_reach
-				var pole_x := center_x + pole_offset.x
-				var pole_z := center_z + pole_offset.y
-				var pole_point := Vector3(pole_x, 0.0, pole_z)
-				var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
-				# The pole belongs on the corner footway; the suspended
-				# head belongs over the approach it serves.  This also
-				# rejects any stale hard-coded corner swallowed by a
-				# widened side street or diagonal link road.
-				if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
-					rejected_signal_approaches += 1
-					continue
-				var ground_y := height_at(pole_x, pole_z) + 0.14
-				var signal_transform := make_transform(
-					Vector3(pole_x, ground_y, pole_z),
-					float(approach.get("yaw", 0.0)),
-					Vector3.ONE
-				)
-				if is_long:
-					signal_long_transforms.append(signal_transform)
-				else:
-					signal_short_transforms.append(signal_transform)
-				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
-				signal_count += 1
+			# The far/only Blender signal head is 4.18 m from the
+			# short pole and 6.68 m from the long pole.
+			var head_reach := 6.68 if is_long else 4.18
+			var pole_offset: Vector2 = head_offset - arm_dir * head_reach
+			var pole_x := center_x + pole_offset.x
+			var pole_z := center_z + pole_offset.y
+			var pole_point := Vector3(pole_x, 0.0, pole_z)
+			var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
+			# The pole belongs on the corner footway; the suspended
+			# head belongs over the approach it serves.  This also
+			# rejects any stale hard-coded corner swallowed by a
+			# widened side street or diagonal link road.
+			if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
+				rejected_signal_approaches += 1
+				continue
+			var ground_y := height_at(pole_x, pole_z) + 0.14
+			var signal_transform := make_transform(
+				Vector3(pole_x, ground_y, pole_z),
+				float(approach.get("yaw", 0.0)),
+				Vector3.ONE
+			)
+			if is_long:
+				signal_long_transforms.append(signal_transform)
+			else:
+				signal_short_transforms.append(signal_transform)
+			_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
+			signal_count += 1
 
 
 	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
@@ -5201,7 +5382,7 @@ func _build_bridge_guardrails(parent: Node) -> void:
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var road_id := String(road.get("id", ""))
-		if not bridge_ids.has(road_id):
+		if not bridge_ids.has(road_id) and not road_id.contains("bridge"):
 			continue
 		var samples: Array = road.get("samples", [])
 		if samples.size() < 2:
@@ -5329,6 +5510,54 @@ func _get_gable_mesh() -> ArrayMesh:
 	return _gable_mesh
 
 
+## 0.3.0: generic massing buildings are unit boxes.  On the 7x7 map
+## there are ~450 of them; emitting one MeshInstance per part cost
+## ~1000 nodes before frustum culling even started.  The rt7 path
+## batches every part by material into chunked MultiMeshes (same
+## meshes, same materials, same colliders), collapsing the generic
+## city into a handful of draw calls per 320 m cell.
+func _add_generic_box(parent: Node, size: Vector3, center: Vector3, material: Material, yaw: float, node_name: String) -> void:
+	if not _is_rt7:
+		_add_box(parent, size, center, material, yaw, node_name)
+		return
+	if not _generic_box_batches.has(material):
+		_generic_box_batches[material] = []
+	(_generic_box_batches[material] as Array).append(make_transform(center, yaw, size))
+	_generic_batch_instances += 1
+
+
+func _add_generic_gable(parent: Node, transform_value: Transform3D, material: Material) -> void:
+	if not _is_rt7:
+		_mesh_instance(parent, _get_gable_mesh(), material, transform_value, "GableRoof")
+		return
+	if not _generic_gable_batches.has(material):
+		_generic_gable_batches[material] = []
+	(_generic_gable_batches[material] as Array).append(transform_value)
+	_generic_batch_instances += 1
+
+
+func _flush_generic_batches(parent: Node) -> void:
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var batch_count := 0
+	for material_variant in _generic_box_batches.keys():
+		var transforms: Array = _generic_box_batches[material_variant]
+		if transforms.is_empty():
+			continue
+		if _add_multimesh(parent, unit_box, material_variant as Material, transforms, "GenericBuildings", true, 0.0, 0.0, 320.0):
+			batch_count += 1
+	for material_variant in _generic_gable_batches.keys():
+		var transforms: Array = _generic_gable_batches[material_variant]
+		if transforms.is_empty():
+			continue
+		if _add_multimesh(parent, _get_gable_mesh(), material_variant as Material, transforms, "GenericGableRoofs", true, 0.0, 0.0, 320.0):
+			batch_count += 1
+	_enhancement_stats["generic_building_batches_0300"] = batch_count
+	_enhancement_stats["generic_building_batch_instances_0300"] = _generic_batch_instances
+	_generic_box_batches.clear()
+	_generic_gable_batches.clear()
+
+
 func _add_generic_building(parent: Node, item: Dictionary) -> void:
 	var position_value := _item_position(item)
 	var yaw := _f(item, "rotY")
@@ -5347,7 +5576,7 @@ func _add_generic_building(parent: Node, item: Dictionary) -> void:
 		for i in 3:
 			var tier_height := float(heights[i])
 			var tier_size: Vector2 = base_sizes[i]
-			_add_box(
+			_add_generic_box(
 				parent,
 				Vector3(tier_size.x, tier_height, tier_size.y),
 				Vector3(position_value.x, y_cursor + tier_height * 0.5, position_value.z),
@@ -5357,13 +5586,13 @@ func _add_generic_building(parent: Node, item: Dictionary) -> void:
 			)
 			y_cursor += tier_height
 	else:
-		_add_box(parent, Vector3(w, h, d), position_value + Vector3(0.0, h * 0.5 - 0.25, 0.0), material, yaw, "Building")
+		_add_generic_box(parent, Vector3(w, h, d), position_value + Vector3(0.0, h * 0.5 - 0.25, 0.0), material, yaw, "Building")
 
 	if roof_h > 0.25:
 		var roof_transform := make_transform(position_value + Vector3(0.0, h - 0.20, 0.0), yaw, Vector3(w + 0.9, roof_h, d + 0.9))
-		_mesh_instance(parent, _get_gable_mesh(), _roof_material(true), roof_transform, "GableRoof")
+		_add_generic_gable(parent, roof_transform, _roof_material(true))
 	else:
-		_add_box(parent, Vector3(w + 0.55, 0.42, d + 0.55), position_value + Vector3(0.0, h - 0.02, 0.0), _roof_material(false), yaw, "RoofSlab")
+		_add_generic_box(parent, Vector3(w + 0.55, 0.42, d + 0.55), position_value + Vector3(0.0, h - 0.02, 0.0), _roof_material(false), yaw, "RoofSlab")
 
 	_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
 
@@ -5836,7 +6065,10 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 	elif path.ends_with("glass_tower.glb"):
 		architectural_limit = 240.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
-		return 130.0
+		# 0.3.0: 13-17k-triangle fronds retire at 105 m (far proxy from
+		# 82 m); near-field quality is untouched, avenue views drop
+		# several hundred thousand palm triangles per frame.
+		return 105.0
 	if key.contains("fruit"):
 		return minf(architectural_limit, 220.0)
 	if key.contains("leafdry"):
@@ -5894,7 +6126,7 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 	var trunk_transforms: Array = []
 	for transform_variant in transforms:
 		trunk_transforms.append((transform_variant as Transform3D) * trunk_local)
-	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 105.0, 850.0, 260.0)
+	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 82.0, 850.0, 260.0)
 
 	var crown := SphereMesh.new()
 	crown.radius = 0.5
@@ -5913,7 +6145,7 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 		crown_transforms,
 		"%sFarProxyCrown" % node_name,
 		false,
-		105.0,
+		82.0,
 		850.0,
 		260.0
 	)
@@ -5999,6 +6231,11 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		]
 	if specs.is_empty():
 		return
+	if _is_rt7:
+		# 0.3.0: 7 km sightlines need far massing to survive roughly
+		# twice as far as in the retired 1 km town, or the skyline
+		# pops in halfway across the map.
+		proxy_end = maxf(proxy_end * 2.0, 2600.0)
 
 	var unit_box := BoxMesh.new()
 	unit_box.size = Vector3.ONE
@@ -6464,6 +6701,9 @@ func _build_buildings() -> void:
 ## clears roads, exported buildings, terrain slope and every other
 ## infill parcel. Anything smaller keeps the textured facade fallback
 ## instead of stretching doors, floor heights and the pitched roof.
+	if _is_rt7:
+		_flush_generic_batches(buildings_root)
+
 func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
 	var centre := Vector2(_f(item, "x"), _f(item, "z"))
 	for footprint_variant in [Vector2(18.87, 16.37), Vector2(16.37, 18.87)]:
@@ -7298,6 +7538,53 @@ func _build_landmarks() -> void:
 				_add_cylinder(root, r - 3.0, 0.25, pos + Vector3(0.0, 0.95, 0.0), _pool_material(), 0.0, 36)
 				_add_box(root, Vector3(7.0, 15.0, 7.0), pos + Vector3(-16.0, 7.5, 0.0), hotel)
 				_add_cylinder_collider(pos + Vector3(0.0, 1.0, 0.0), r, 2.0)
+			"rt7-stadium":
+				# 0.3.0 procedural bowl: elliptical wall + roof ring, green
+				# pitch and four floodlight pylons.  Seating tiers and facade
+				# ribs arrive in rebuild stage 3.
+				var stadium_wall := CylinderMesh.new()
+				stadium_wall.top_radius = 0.5
+				stadium_wall.bottom_radius = 0.5
+				stadium_wall.height = 1.0
+				stadium_wall.radial_segments = 48
+				_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(r * 2.0, h, r * 1.6923)), "StadiumWall")
+				var stadium_roof := CylinderMesh.new()
+				stadium_roof.top_radius = 0.5
+				stadium_roof.bottom_radius = 0.5
+				stadium_roof.height = 1.0
+				stadium_roof.radial_segments = 48
+				_mesh_instance(root, stadium_roof, metal, make_transform(pos + Vector3(0.0, h + 1.2, 0.0), 0.0, Vector3(r * 2.0 + 8.0, 2.4, r * 1.6923 + 8.0)), "StadiumRoof")
+				_add_box(root, Vector3(r * 1.154, 0.3, r * 0.769), pos + Vector3(0.0, 0.35, 0.0), _terrain_material("grass"), 0.0, "StadiumPitch")
+				for sx in [-1.0, 1.0]:
+					for sz in [-1.0, 1.0]:
+						var pylon_pos := pos + Vector3(r * 0.908 * sx, 0.0, r * 0.738 * sz)
+						_add_cylinder(root, 0.8, h + 14.0, pylon_pos + Vector3(0.0, (h + 14.0) * 0.5, 0.0), metal, 0.0, 10)
+						_add_box(root, Vector3(7.0, 3.0, 1.2), pylon_pos + Vector3(0.0, h + 14.5, 0.0), metal, 0.0, "FloodlightBank")
+				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(r * 2.0 - 8.0, h, r * 1.6923 - 8.0))
+				_enhancement_stats["rt7_stadium_0300"] = true
+			"rt7-cable-bridge":
+				# Twin pylons just outside the deck edges with stay cables
+				# fanning to the deck.  The drivable surface is the bridge
+				# road itself; pos.y is the canal bed.
+				for sx in [-17.5, 17.5]:
+					_add_box(root, Vector3(2.6, h, 3.4), pos + Vector3(sx, h * 0.5 - 4.0, 0.0), concrete, 0.0, "CablePylon")
+					_add_box_collider(pos + Vector3(sx, h * 0.5 - 4.0, 0.0), Vector3(2.6, h, 3.4))
+				_add_box(root, Vector3(37.6, 2.2, 3.0), pos + Vector3(0.0, h - 6.0, 0.0), concrete, 0.0, "CablePylonBeam")
+				var cable_mesh := BoxMesh.new()
+				cable_mesh.size = Vector3(0.22, 0.22, 1.0)
+				for sx in [-17.5, 17.5]:
+					for anchor_z in [-95.0, -70.0, -45.0, -22.0, 22.0, 45.0, 70.0, 95.0]:
+						var top := Vector3(pos.x + sx, h - 6.0, pos.z)
+						var deck_y := 3.7 + 3.8 * cos(anchor_z * PI / 240.0)
+						var deck := Vector3(pos.x + sx * 0.92, deck_y, pos.z + anchor_z)
+						var mid := (top + deck) * 0.5
+						var cable_basis := Basis.looking_at((deck - top).normalized(), Vector3.UP).scaled(Vector3(1.0, 1.0, top.distance_to(deck)))
+						_mesh_instance(root, cable_mesh, metal, Transform3D(cable_basis, mid), "StayCable")
+				_enhancement_stats["rt7_cable_bridge_0300"] = true
+			"rt7-bridge-pier":
+				_add_cylinder(root, 2.2, 11.0, pos + Vector3(-6.0, 3.4, 0.0), concrete, 0.0, 14)
+				_add_cylinder(root, 2.2, 11.0, pos + Vector3(6.0, 3.4, 0.0), concrete, 0.0, 14)
+				_add_box(root, Vector3(20.0, 1.6, 4.2), pos + Vector3(0.0, 8.2, 0.0), concrete, 0.0, "BridgePierBeam")
 			"rt-lifeguard":
 				for sx in [-1.0, 1.0]:
 					for sz in [-1.0, 1.0]:
@@ -7305,6 +7592,196 @@ func _build_landmarks() -> void:
 				_add_box(root, Vector3(3.4, 2.4, 3.2), pos + Vector3(0.0, 4.4, 0.0), wood)
 				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, 5.55, 0.0), 0.0, Vector3(4.2, 1.2, 4.0)), "LifeguardRoof")
 				_add_box_collider(pos + Vector3(0.0, 3.0, 0.0), Vector3(3.6, 6.0, 3.6))
+			"rt7-school":
+				# 0.3.1 district school: main block, two wings, gym,
+				# entrance canopy, flag pole and a grass sports field.
+				var school_yaw := _f(item, "rotY")
+				var school := Node3D.new()
+				school.position = pos
+				school.rotation.y = school_yaw
+				root.add_child(school)
+				_add_box(school, Vector3(64.0, 12.0, 18.0), Vector3(0.0, 6.0, -16.0), sand, 0.0, "SchoolMain")
+				_add_box(school, Vector3(66.0, 1.0, 20.0), Vector3(0.0, 12.5, -16.0), metal, 0.0, "SchoolRoof")
+				for wx in [-29.0, 29.0]:
+					_add_box(school, Vector3(18.0, 9.0, 26.0), Vector3(wx, 4.5, -3.0), hotel, 0.0, "SchoolWing")
+					_add_box(school, Vector3(20.0, 0.8, 28.0), Vector3(wx, 9.4, -3.0), metal, 0.0, "SchoolWingRoof")
+				_add_box(school, Vector3(34.0, 9.0, 20.0), Vector3(0.0, 4.5, -34.0), hotel, 0.0, "SchoolGym")
+				_add_box(school, Vector3(16.0, 0.7, 6.0), Vector3(0.0, 4.4, -4.0), metal, 0.0, "SchoolCanopy")
+				_add_box(school, Vector3(76.0, 0.3, 40.0), Vector3(0.0, 0.16, 24.0), _terrain_material("grass"), 0.0, "SchoolField")
+				_add_box(school, Vector3(76.0, 0.34, 0.9), Vector3(0.0, 0.18, 24.0), marble, 0.0, "SchoolFieldLine")
+				for gx in [-34.0, 34.0]:
+					_add_box(school, Vector3(1.2, 3.0, 8.0), Vector3(gx, 1.5, 24.0), marble, 0.0, "SchoolGoal")
+				_add_cylinder(school, 0.14, 11.0, Vector3(16.0, 5.5, 0.0), metal, 0.0, 8, "SchoolFlagPole")
+				_add_box(school, Vector3(2.8, 1.7, 0.1), Vector3(17.5, 10.0, 0.0), gold, 0.0, "SchoolFlag")
+				var school_basis := Basis(Vector3.UP, school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 6.0, 0.0) + school_basis * Vector3(0.0, 0.0, -16.0), Vector3(64.0, 12.0, 18.0), school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 4.5, 0.0) + school_basis * Vector3(0.0, 0.0, -34.0), Vector3(34.0, 9.0, 20.0), school_yaw)
+				_enhancement_stats["rt7_schools_0310"] = int(_enhancement_stats.get("rt7_schools_0310", 0)) + 1
+			"rt7-terminal":
+				# 0.3.1 airport terminal: 380 m glass hall, roof slab,
+				# four gate fingers toward the apron, landside canopy.
+				var term_yaw := _f(item, "rotY")
+				var term := Node3D.new()
+				term.position = pos
+				term.rotation.y = term_yaw
+				root.add_child(term)
+				_add_box(term, Vector3(380.0, 24.0, 64.0), Vector3(0.0, 12.0, 0.0), glass, 0.0, "TerminalHall")
+				_add_box(term, Vector3(392.0, 2.2, 76.0), Vector3(0.0, 25.1, 0.0), metal, 0.0, "TerminalRoof")
+				for fx in [-150.0, -50.0, 50.0, 150.0]:
+					_add_box(term, Vector3(24.0, 13.0, 48.0), Vector3(fx, 6.5, -56.0), hotel, 0.0, "TerminalFinger")
+					_add_box(term, Vector3(26.0, 1.0, 50.0), Vector3(fx, 13.5, -56.0), metal, 0.0, "TerminalFingerRoof")
+				_add_box(term, Vector3(380.0, 1.2, 12.0), Vector3(0.0, 8.0, 38.0), metal, 0.0, "TerminalCanopy")
+				_add_box(term, Vector3(120.0, 5.0, 10.0), Vector3(0.0, 2.5, 36.0), marble, 0.0, "TerminalEntrance")
+				_add_box_collider(pos + Vector3(0.0, 12.0, 0.0), Vector3(380.0, 24.0, 64.0), term_yaw)
+				_enhancement_stats["rt7_airport_0310"] = true
+			"rt7-atc":
+				var atc_h := maxf(h, 22.0)
+				_add_box(root, Vector3(15.0, 5.0, 15.0), pos + Vector3(0.0, 2.5, 0.0), sand, 0.0, "AtcBase")
+				_add_cylinder(root, 3.1, atc_h - 7.0, pos + Vector3(0.0, (atc_h - 7.0) * 0.5 + 2.0, 0.0), concrete, 0.0, 16, "AtcShaft")
+				_add_cylinder(root, 6.2, 4.6, pos + Vector3(0.0, atc_h - 2.3, 0.0), glass, 0.0, 20, "AtcCab")
+				_add_cylinder(root, 7.0, 0.8, pos + Vector3(0.0, atc_h + 0.4, 0.0), metal, 0.0, 20, "AtcRoof")
+				_add_cylinder(root, 0.18, 7.0, pos + Vector3(0.0, atc_h + 3.5, 0.0), metal, 0.0, 8, "AtcAntenna")
+				_add_cylinder_collider(pos + Vector3(0.0, atc_h * 0.5, 0.0), 3.4, atc_h)
+			"rt7-hangar":
+				# 0.3.1 aircraft hangar: walls + gable roof, wide door
+				# facing +Z (the apron/strip side at yaw 0).
+				var hang_yaw := _f(item, "rotY")
+				var hang_r := maxf(r, 8.0)
+				var hang_h := maxf(h, 8.0)
+				var hang_len := hang_r * 2.6
+				var hang := Node3D.new()
+				hang.position = pos
+				hang.rotation.y = hang_yaw
+				root.add_child(hang)
+				_add_box(hang, Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), Vector3(0.0, hang_h * 0.31, 0.0), sand, 0.0, "HangarWalls")
+				_mesh_instance(hang, _get_gable_mesh(), metal, make_transform(Vector3(0.0, hang_h * 0.62, 0.0), PI * 0.5, Vector3(hang_len * 1.04, hang_h * 0.38, hang_r * 2.1)), "HangarRoof")
+				_add_box(hang, Vector3(hang_r * 1.5, hang_h * 0.5, 0.5), Vector3(0.0, hang_h * 0.25, hang_len * 0.5 + 0.1), metal, 0.0, "HangarDoor")
+				_add_box_collider(pos + Vector3(0.0, hang_h * 0.31, 0.0), Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), hang_yaw)
+				_enhancement_stats["rt7_hangars_0310"] = int(_enhancement_stats.get("rt7_hangars_0310", 0)) + 1
+			"rt7-plane":
+				# 0.3.1 parked airliner: capsule fuselage, swept wings,
+				# gold tail fin, twin engines.  Nose faces +Z at yaw 0.
+				var plane_yaw := _f(item, "rotY")
+				var plane := Node3D.new()
+				plane.position = pos
+				plane.rotation.y = plane_yaw
+				root.add_child(plane)
+				var fuselage := CapsuleMesh.new()
+				fuselage.radius = 2.1
+				fuselage.height = 42.0
+				fuselage.radial_segments = 18
+				fuselage.rings = 8
+				var fuselage_basis := Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0))
+				_mesh_instance(plane, fuselage, marble, Transform3D(fuselage_basis, Vector3(0.0, 4.4, 0.0)), "PlaneFuselage")
+				_add_box(plane, Vector3(3.6, 1.0, 4.2), Vector3(0.0, 5.3, 16.2), glass, 0.0, "PlaneCockpit")
+				for wx in [-9.4, 9.4]:
+					_add_box(plane, Vector3(19.0, 0.45, 4.4), Vector3(wx, 3.9, -2.6), metal, -0.38 * signf(wx), "PlaneWing")
+				_add_box(plane, Vector3(12.0, 0.4, 3.0), Vector3(0.0, 5.8, -19.0), metal, 0.0, "PlaneTailplane")
+				_add_box(plane, Vector3(0.5, 7.6, 5.6), Vector3(0.0, 9.2, -18.4), gold, 0.0, "PlaneFin")
+				var engine := CylinderMesh.new()
+				engine.top_radius = 1.05
+				engine.bottom_radius = 1.05
+				engine.height = 4.6
+				engine.radial_segments = 14
+				for ex in [-6.8, 6.8]:
+					_mesh_instance(plane, engine, metal, Transform3D(fuselage_basis, Vector3(ex, 2.9, -0.4)), "PlaneEngine")
+				_add_cylinder(plane, 0.32, 2.4, Vector3(0.0, 1.2, 13.0), metal, 0.0, 8, "PlaneGearNose")
+				for gx2 in [-2.2, 2.2]:
+					_add_cylinder(plane, 0.38, 2.4, Vector3(gx2, 1.2, -2.0), metal, 0.0, 8, "PlaneGearMain")
+				_add_box_collider(pos + Vector3(0.0, 3.5, 0.0), Vector3(6.0, 7.0, 40.0), plane_yaw)
+				_enhancement_stats["rt7_planes_0310"] = int(_enhancement_stats.get("rt7_planes_0310", 0)) + 1
+			"rt7-cooling":
+				# 0.3.1 hyperboloid cooling tower (two stacked frustums).
+				var cool_r := maxf(r, 18.0)
+				var cool_h := maxf(h, 40.0)
+				var cool_lower := CylinderMesh.new()
+				cool_lower.top_radius = 0.34
+				cool_lower.bottom_radius = 0.5
+				cool_lower.height = 1.0
+				cool_lower.radial_segments = 36
+				_mesh_instance(root, cool_lower, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.325, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.65, cool_r * 2.0)), "CoolingTowerLower")
+				var cool_upper := CylinderMesh.new()
+				cool_upper.top_radius = 0.40
+				cool_upper.bottom_radius = 0.34
+				cool_upper.height = 1.0
+				cool_upper.radial_segments = 36
+				_mesh_instance(root, cool_upper, concrete, make_transform(pos + Vector3(0.0, cool_h * 0.825, 0.0), 0.0, Vector3(cool_r * 2.0, cool_h * 0.35, cool_r * 2.0)), "CoolingTowerUpper")
+				_add_cylinder(root, cool_r * 0.82, 1.6, pos + Vector3(0.0, cool_h - 0.4, 0.0), metal, 0.0, 36, "CoolingTowerRim")
+				_add_cylinder_collider(pos + Vector3(0.0, cool_h * 0.5, 0.0), cool_r * 0.92, cool_h)
+				_enhancement_stats["rt7_cooling_towers_0310"] = int(_enhancement_stats.get("rt7_cooling_towers_0310", 0)) + 1
+				_enhancement_stats["rt7_npp_0310"] = true
+			"rt7-reactor":
+				var reac_r := maxf(r, 12.0) * 0.85
+				var reac_h := maxf(h, 24.0)
+				_add_cylinder(root, reac_r, reac_h * 0.62, pos + Vector3(0.0, reac_h * 0.31, 0.0), concrete, 0.0, 28, "ReactorBlock")
+				_add_sphere(root, reac_r, reac_r * 1.05, pos + Vector3(0.0, reac_h * 0.62, 0.0), marble, "ReactorDome")
+				_add_box(root, Vector3(reac_r * 1.5, reac_h * 0.3, reac_r * 0.9), pos + Vector3(reac_r * 1.35, reac_h * 0.15, 0.0), sand, 0.0, "ReactorAux")
+				_add_cylinder_collider(pos + Vector3(0.0, reac_h * 0.35, 0.0), reac_r, reac_h * 0.7)
+				_enhancement_stats["rt7_reactors_0310"] = int(_enhancement_stats.get("rt7_reactors_0310", 0)) + 1
+			"rt7-chimney":
+				var chim_h := maxf(h, 60.0)
+				var chim_r := maxf(r, 4.0)
+				var chim := CylinderMesh.new()
+				chim.top_radius = 0.30
+				chim.bottom_radius = 0.5
+				chim.height = 1.0
+				chim.radial_segments = 24
+				_mesh_instance(root, chim, concrete, make_transform(pos + Vector3(0.0, chim_h * 0.5, 0.0), 0.0, Vector3(chim_r * 2.0, chim_h, chim_r * 2.0)), "Chimney")
+				for band in [0.60, 0.76, 0.92]:
+					_add_cylinder(root, chim_r * (1.04 - band * 0.40), chim_h * 0.07, pos + Vector3(0.0, chim_h * band, 0.0), metal, 0.0, 24, "ChimneyBand")
+				_add_cylinder_collider(pos + Vector3(0.0, chim_h * 0.5, 0.0), chim_r, chim_h)
+			"rt7-tank":
+				var tank_r := maxf(r, 3.0)
+				var tank_h := maxf(h, 4.0)
+				_add_cylinder(root, tank_r, tank_h, pos + Vector3(0.0, tank_h * 0.5, 0.0), marble, 0.0, 24, "StorageTank")
+				_add_sphere(root, tank_r, tank_r * 0.55, pos + Vector3(0.0, tank_h, 0.0), metal, "StorageTankCap")
+				_add_cylinder(root, tank_r * 1.04, 0.7, pos + Vector3(0.0, 0.35, 0.0), concrete, 0.0, 24, "StorageTankBase")
+				_add_cylinder_collider(pos + Vector3(0.0, tank_h * 0.5, 0.0), tank_r, tank_h)
+			"rt7-radar":
+				var rad_r := maxf(r, 5.0)
+				var rad_h := maxf(h, 10.0)
+				_add_cylinder(root, rad_r * 0.55, rad_h * 0.55, pos + Vector3(0.0, rad_h * 0.275, 0.0), concrete, 0.0, 16, "RadarBase")
+				_add_sphere(root, rad_r, rad_r * 1.5, pos + Vector3(0.0, rad_h * 0.55 + rad_r * 0.35, 0.0), marble, "RadarDome")
+				_add_box(root, Vector3(9.0, 3.5, 6.0), pos + Vector3(rad_r + 4.0, 1.75, 0.0), sand, 0.0, "RadarHut")
+				_add_cylinder_collider(pos + Vector3(0.0, rad_h * 0.3, 0.0), rad_r * 0.6, rad_h * 0.6)
+				_enhancement_stats["rt7_milbase_0310"] = true
+			"rt7-watchtower":
+				var wt_h := maxf(h, 9.0)
+				for sx in [-1.6, 1.6]:
+					for sz in [-1.6, 1.6]:
+						_add_cylinder(root, 0.22, wt_h * 0.72, pos + Vector3(sx, wt_h * 0.36, sz), wood, 0.0, 8, "WatchtowerLeg")
+				_add_box(root, Vector3(4.8, 2.7, 4.8), pos + Vector3(0.0, wt_h * 0.72 + 1.35, 0.0), wood, 0.0, "WatchtowerCab")
+				_add_box(root, Vector3(5.0, 0.9, 5.0), pos + Vector3(0.0, wt_h * 0.72 + 2.1, 0.0), glass, 0.0, "WatchtowerGlass")
+				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, wt_h * 0.72 + 2.7, 0.0), 0.0, Vector3(5.8, 1.5, 5.8)), "WatchtowerRoof")
+				_add_box_collider(pos + Vector3(0.0, wt_h * 0.4, 0.0), Vector3(4.4, wt_h * 0.8, 4.4))
+				_enhancement_stats["rt7_watchtowers_0310"] = int(_enhancement_stats.get("rt7_watchtowers_0310", 0)) + 1
+			"rt7-helipad":
+				var pad_r := maxf(r, 8.0)
+				_add_cylinder(root, pad_r, 0.22, pos + Vector3(0.0, 0.11, 0.0), concrete, 0.0, 28, "Helipad")
+				_add_cylinder(root, pad_r * 0.8, 0.26, pos + Vector3(0.0, 0.13, 0.0), metal, 0.0, 28, "HelipadInner")
+				for hpx in [-1.7, 1.7]:
+					_add_box(root, Vector3(0.85, 0.1, 5.2), pos + Vector3(hpx, 0.3, 0.0), marble, 0.0, "HelipadH")
+				_add_box(root, Vector3(2.6, 0.1, 0.85), pos + Vector3(0.0, 0.3, 0.0), marble, 0.0, "HelipadHBar")
+			"rt7-afv":
+				# 0.3.1 parked armoured vehicle (hull, turret, barrel).
+				var afv_yaw := _f(item, "rotY")
+				var afv := Node3D.new()
+				afv.position = pos
+				afv.rotation.y = afv_yaw
+				root.add_child(afv)
+				for tz in [-1.18, 1.18]:
+					_add_box(afv, Vector3(7.4, 1.05, 1.05), Vector3(0.0, 0.55, tz), metal, 0.0, "AfvTrack")
+				_add_box(afv, Vector3(7.0, 1.15, 3.1), Vector3(0.0, 1.55, 0.0), metal, 0.0, "AfvHull")
+				_add_box(afv, Vector3(3.1, 0.95, 2.3), Vector3(-0.5, 2.55, 0.0), metal, 0.0, "AfvTurret")
+				var barrel := CylinderMesh.new()
+				barrel.top_radius = 0.5
+				barrel.bottom_radius = 0.5
+				barrel.height = 1.0
+				barrel.radial_segments = 10
+				var barrel_basis := Basis.from_euler(Vector3(0.0, 0.0, -PI * 0.5)).scaled(Vector3(0.34, 4.4, 0.34))
+				_mesh_instance(afv, barrel, metal, Transform3D(barrel_basis, Vector3(3.2, 2.65, 0.0)), "AfvBarrel")
+				_add_box_collider(pos + Vector3(0.0, 1.6, 0.0), Vector3(7.6, 3.2, 3.5), afv_yaw)
+				_enhancement_stats["rt7_afv_0310"] = int(_enhancement_stats.get("rt7_afv_0310", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
@@ -7842,7 +8319,7 @@ func _build_vegetation() -> void:
 
 		# Plaza ring: mature oaks frame the fountain instead of leaving the
 		# exported six distant hill trees as the city's only broadleaf trees.
-		for i in 10:
+		for i in (0 if _is_rt7 else 10):
 			var angle := TAU * float(i) / 10.0 + 0.18
 			var candidate: Vector3 = Vector3(665.0 + cos(angle) * 30.0, 0.0, -25.0 + sin(angle) * 30.0)
 			candidate.y = height_at(candidate.x, candidate.z)
@@ -7864,14 +8341,14 @@ func _build_vegetation() -> void:
 		# building/road clearance test removes candidates in hotel plots,
 		# intersections and driveways while keeping a continuous canopy.
 		var promenade_index := 0
-		for z in range(-390, 391, 45):
+		for z in (range(0) if _is_rt7 else range(-390, 391, 45)):
 			var candidate: Vector3 = Vector3(912.0, height_at(912.0, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(promenade_index) * 0.71, "s": 0.84 + float(promenade_index % 3) * 0.07, "type": "oak"})
 				extra_tree_count += 1
 			promenade_index += 1
 		var boulevard_index := 0
-		for z in range(-380, 386, 55):
+		for z in (range(0) if _is_rt7 else range(-380, 386, 55)):
 			for x in [738.0, 782.0]:
 				var candidate := Vector3(x, height_at(x, float(z)), float(z))
 				if _is_position_clear(candidate, 2.0, 4.0):
@@ -7882,7 +8359,7 @@ func _build_vegetation() -> void:
 		# Deterministic hillside woodland.  Candidates are rejected on
 		# roads, landmarks, steep/underwater terrain and building plots.
 		var hill_ix := 0
-		for base_x in range(970, 1241, 28):
+		for base_x in (range(0) if _is_rt7 else range(970, 1241, 28)):
 			var hill_iz := 0
 			for base_z in range(-470, 471, 32):
 				var jitter_x := (_hash01(hill_ix * 13 + 7, hill_iz * 17 + 3) - 0.5) * 18.0
@@ -7977,7 +8454,7 @@ func _build_vegetation() -> void:
 						"s": 0.88,
 					})
 					extra_bush_count += 1
-		for i in 12:
+		for i in (0 if _is_rt7 else 12):
 			var angle := TAU * float(i) / 12.0 + 0.12
 			var candidate := Vector3(665.0 + cos(angle) * 22.0, 0.0, -25.0 + sin(angle) * 22.0)
 			candidate.y = height_at(candidate.x, candidate.z)
@@ -8023,7 +8500,7 @@ func _build_vegetation() -> void:
 	var palms: Array = data.get("palms", []).duplicate()
 	var extra_palm_count := 0
 	var beach_palm_index := 0
-	for palm_z in range(-420, 421, 42):
+	for palm_z in (range(0) if _is_rt7 else range(-420, 421, 42)):
 		var palm_x := 950.0 + float(beach_palm_index % 3) * 9.0
 		var palm_candidate := Vector3(palm_x, height_at(palm_x, float(palm_z)), float(palm_z))
 		if palm_candidate.y > 0.7 and _is_position_clear(palm_candidate, 2.5, 5.0) and String(get_surface_at(palm_candidate).get("kind", "")) != "water":
@@ -9533,6 +10010,15 @@ func _build_reflection_probes() -> void:
 		{"centre": Vector3(712.0, 0.0, -118.0), "height": 86.0, "size": Vector3(320.0, 205.0, 320.0), "capture": 30.0, "tall": true},
 		{"centre": Vector3(762.0, 0.0, 188.0), "height": 58.0, "size": Vector3(320.0, 160.0, 320.0), "capture": 24.0, "tall": true},
 	]
+	if _is_rt7:
+		probe_specs = [
+			{"centre": Vector3(0.0, 0.0, -120.0), "height": 90.0, "size": Vector3(760.0, 220.0, 760.0), "capture": 30.0, "tall": true},
+			{"centre": Vector3(-2450.0, 0.0, 0.0), "height": 62.0, "size": Vector3(640.0, 170.0, 900.0), "capture": 24.0, "tall": true},
+			{"centre": Vector3(-1200.0, 0.0, 0.0), "height": 44.0, "size": Vector3(560.0, 120.0, 560.0), "capture": 20.0, "tall": false},
+			{"centre": Vector3(1650.0, 0.0, -1600.0), "height": 48.0, "size": Vector3(760.0, 130.0, 900.0), "capture": 22.0, "tall": false},
+			{"centre": Vector3(300.0, 0.0, 1300.0), "height": 46.0, "size": Vector3(760.0, 130.0, 520.0), "capture": 20.0, "tall": false},
+			{"centre": Vector3(0.0, 0.0, 2350.0), "height": 44.0, "size": Vector3(900.0, 120.0, 640.0), "capture": 20.0, "tall": false},
+		]
 	var tall_probe_count := 0
 	for spec in probe_specs:
 		var centre: Vector3 = spec.get("centre", Vector3.ZERO)
