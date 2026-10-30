@@ -6780,9 +6780,9 @@ def build_afv():
     rbox("afv_rear", 0, 3.6, 1.5, 3.3, 1.4, 0.45, green, rotation=(math.radians(-40), 0, 0))
     for sx in (-1.35, 1.35):
         box("afv_track", sx, 0, 0.62, 1.05, 7.7, 1.15, dark)
-        box("afv_skirt", sx * 1.68, 0, 1.25, 0.18, 7.3, 0.75, green)
+        box("afv_skirt", sx * 1.444, 0, 1.25, 0.18, 7.3, 0.75, green)
         for wy in (-2.9, -1.45, 0.0, 1.45, 2.9):
-            cyl("afv_wheel", sx * 1.62, wy, 0.56, 0.53, 0.3, green, vertices=10, rotation=(0, math.radians(90), 0))
+            cyl("afv_wheel", sx * 1.274, wy, 0.56, 0.53, 0.3, green, vertices=10, rotation=(0, math.radians(90), 0))
     box("afv_turret", 0, 0.55, 2.6, 2.35, 3.2, 0.95, green)
     rbox("afv_turret_front", 0, -1.15, 2.55, 2.2, 1.2, 0.8, green, rotation=(math.radians(38), 0, 0))
     cyl("afv_barrel", 0, -3.6, 2.72, 0.16, 4.8, metal, vertices=8, rotation=(math.radians(90), 0, 0))
@@ -6901,6 +6901,9 @@ def _build_midrise(width, depth, floors):
                 box("mid_balcony_door", bx, face_y + sy * 0.12, fz + 1.45, 3.6, 0.2, 2.3, dark_glass)
             for wx in (-width * 0.13, width * 0.13, -width * 0.44, width * 0.44):
                 box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
+        for sx in (-1.0, 1.0):
+            for wy in (-depth * 0.28, 0.0, depth * 0.28):
+                box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
     box("mid_parapet", 0, 0, 1.2 + body_h + 0.4, width + 0.6, depth + 0.6, 0.8, stone)
     box("mid_bulkhead", -width * 0.2, 0, 1.2 + body_h + 1.6, 7, 6, 2.4, plaster)
     box("mid_hvac", width * 0.24, depth * 0.15, 1.2 + body_h + 1.2, 4.2, 3.4, 1.1, metal)
