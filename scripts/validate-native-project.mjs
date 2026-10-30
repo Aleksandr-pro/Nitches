@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.60-native-alpha"'), 'Native project version metadata must match 0.2.60-native-alpha');
-assert(preset.includes('version/code=63'), 'Native 0.2.60 must bump Android versionCode to 63');
-assert(preset.includes('version/name="0.2.60-native-alpha"'), 'Native version name must be 0.2.60-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.60-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.61-native-alpha"'), 'Native project version metadata must match 0.2.61-native-alpha');
+assert(preset.includes('version/code=64'), 'Native 0.2.61 must bump Android versionCode to 64');
+assert(preset.includes('version/name="0.2.61-native-alpha"'), 'Native version name must be 0.2.61-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.61-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.60"') && preset.includes('application/product_version="0.2.60"'), 'Desktop Windows version metadata must match native 0.2.60');
+assert(preset.includes('application/file_version="0.2.61"') && preset.includes('application/product_version="0.2.61"'), 'Desktop Windows version metadata must match native 0.2.61');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1041,10 +1041,10 @@ assert(hudScript.includes('vh * 0.15') && hudScript.includes('Vector2(56.0, 48.0
 for (const marker of ['switch_world', '--native-world=', '_run_desert_smoke_checks', '_desert_screenshot_shots', '"selected_world": "richtown"', 'desert_road_deck_colliders', 'desert_scatter_variants', 'desert_fences_0251']) {
   assert(mainScript.includes(marker), `0.2.47 world-switch marker is missing: ${marker}`);
 }
-for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 50000']) {
+for (const marker of ['signal world_selected(world_id: String)', 'func set_current_world', '_on_world_card_pressed', 'WORLD_CANYON_REQUIRED_CREDITS := 25000']) {
   assert(mainMenuScript.includes(marker), `0.2.47 menu world-selection marker is missing: ${marker}`);
 }
-assert(mainMenuScript.includes('const WORLDS_FREE_FOR_ALL := true'), '0.2.48 temporary free-world flag is missing');
+assert(mainMenuScript.includes('const WORLDS_FREE_FOR_ALL := false'), '0.2.61 progression must switch the temporary free-world flag off');
 assert(mainMenuScript.includes('worlds_free_for_all_0248'), '0.2.48 free-world smoke marker is missing');
 for (const marker of ['_build_desert_pois', '_road_labels_data']) {
   assert(worldMapScript.includes(marker), `0.2.47 world-map desert marker is missing: ${marker}`);
@@ -1132,6 +1132,28 @@ assert(worldMapScript.includes('forest_map_0254'), '0.2.54 forest world-map mark
 assert(loadingScreenScript.includes('ЗЕЛЁНЫЙ ЛЕС'), '0.2.54 forest loading label is missing');
 for (const name of ['gf_meadow.jpg', 'gf_meadow_normal.jpg', 'gf_meadow_roughness.jpg', 'gf_forest_floor.jpg', 'gf_forest_floor_normal.jpg', 'gf_forest_floor_roughness.jpg', 'gf_mud.jpg', 'gf_mud_normal.jpg', 'gf_mud_roughness.jpg', 'gf_rock_gray.jpg', 'gf_rock_gray_normal.jpg', 'gf_rock_gray_roughness.jpg', 'gf_field_soil.jpg', 'gf_field_soil_normal.jpg', 'gf_field_soil_roughness.jpg']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage the forest texture ${name}`);
+}
+
+
+// 0.2.61 online release: purchasable cars/worlds, server accounts,
+// 10 daily quests, multiplayer rooms, fictionalised car names.
+for (const marker of ['START_CREDITS := 15000', 'WORLD_PRICES', 'QUEST_POOL', 'func _buy_car', 'func _buy_world', 'func _daily_quests_view', 'func _setup_net', 'NitchesNetClient', 'NitchesMpClient', 'economy_v']) {
+  assert(mainScript.includes(marker), `0.2.61 progression/online marker is missing in main.gd: ${marker}`);
+}
+for (const marker of ['PANEL_ONLINE := 6', 'signal car_purchase_requested', 'signal account_register_requested', 'signal daily_quest_claim_requested', 'func _build_online_panel', 'func show_admin_data', 'ONLINE_PRIVACY_TEXT', 'ONLINE_WELCOME_TEXT', '_is_car_owned_menu', '_is_world_owned_menu']) {
+  assert(mainMenuScript.includes(marker), `0.2.61 online menu marker is missing: ${marker}`);
+}
+const netClientScript = await readText('scripts/net_client.gd');
+const mpClientScript = await readText('scripts/multiplayer_client.gd');
+assert(netClientScript.includes('class_name NitchesNetClient') && netClientScript.includes('/api/quests/claim') && netClientScript.includes('/api/admin/'), '0.2.61 net client is incomplete');
+assert(mpClientScript.includes('class_name NitchesMpClient') && mpClientScript.includes('WebSocketPeer') && mpClientScript.includes('Label3D'), '0.2.61 multiplayer client is incomplete');
+const serverScript = await readFile('server/src/index.js', 'utf8');
+for (const marker of ['export class RoomDO', '/api/register', 'PBKDF2', 'QUEST_POOL', '/api/admin/grant', 'PRIVACY_HTML']) {
+  assert(serverScript.includes(marker), `0.2.61 server marker is missing: ${marker}`);
+}
+const carCatalogScript61 = await readText('scripts/car_catalog.gd');
+for (const marker of ['Shelbie GT500', 'Audo R8 V10 plus', 'Chevrole Kamaro SS', 'Mercedez-Bens 560 SEL', '"price_cr": 50000', '"price_cr": 95000', '"price_cr": 160000']) {
+  assert(carCatalogScript61.includes(marker), `0.2.61 catalog marker is missing: ${marker}`);
 }
 
 console.log('Native Godot project validation OK');

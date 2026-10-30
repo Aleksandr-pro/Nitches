@@ -622,7 +622,7 @@ func _build_pois() -> void:
                 _add_poi("coast_hotel_south", "Отель побережья — юг", "Отель", x, z, 2)
 
     var spawn: Dictionary = _data.get("spawn", {"x": 760.0, "z": 330.0})
-    _add_poi("spawn", "Старт • Shelby GT500", "Старт", float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)), 1, Vector2(10.0, 8.0))
+    _add_poi("spawn", "Старт • Shelbie GT500", "Старт", float(spawn.get("x", 760.0)), float(spawn.get("z", 330.0)), 1, Vector2(10.0, 8.0))
     _add_poi("boulevard_cafe", "Бульварные кафе", "Кафе", 738.0, 23.0, 2, Vector2(-112.0, -10.0))
 
     if _world != null:
