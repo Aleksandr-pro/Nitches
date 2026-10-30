@@ -88,6 +88,7 @@ test('native HUD and vehicle lifecycle expose parked-only enter/exit behavior', 
   assert.match(main, /_parked_duration >= 0\.35/);
   assert.match(main, /func _exit_vehicle_to_player/);
   assert.match(main, /func _enter_vehicle/);
+  assert.match(main, /look_target\.y = position\.y/);
   assert.match(main, /old_character\.queue_free\(\)/);
   assert.match(hud, /vehicle_mode_requested/);
   assert.match(hud, /driving_controls_hidden_on_foot/);

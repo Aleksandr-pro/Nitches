@@ -2303,7 +2303,9 @@ func _exit_vehicle_to_player(animate: bool = true, bypass_parked_check: bool = f
 	add_child(actor)
 	actor.add_child(character_model)
 	actor.global_position = position + (Vector3.UP * 0.14 if animate else Vector3.ZERO)
-	actor.look_at(car_transform.origin + Vector3.UP * 0.95, Vector3.UP)
+	var look_target := car_transform.origin
+	look_target.y = position.y
+	actor.look_at(look_target, Vector3.UP)
 	_player_character = actor
 	_reset_camera_orbit()
 	_snap_camera = true
