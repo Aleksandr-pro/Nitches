@@ -3679,11 +3679,14 @@ func _water_material() -> ShaderMaterial:
 	_sea_material.resource_name = "sea_surface_pbr"
 	_sea_material.shader = WaterSurfaceShader
 	_sea_material.set_shader_parameter("wave_time", _elapsed)
-	_sea_material.set_shader_parameter("wave_height", 0.16 if (_is_desert or _is_forest) else 0.62)
+	_sea_material.set_shader_parameter("wave_height", 0.22 if _is_forest else (0.16 if _is_desert else 0.62))
 	_sea_material.set_shader_parameter("wind_direction", Vector2(0.82, 0.57))
-	_sea_material.set_shader_parameter("foam_strength", 0.36 if (_is_desert or _is_forest) else 0.66)
-	_sea_material.set_shader_parameter("normal_strength", 0.50 if (_is_desert or _is_forest) else 0.78)
-	_sea_material.set_shader_parameter("reflection_strength", 0.88 if (_is_desert or _is_forest) else 0.82)
+	_sea_material.set_shader_parameter("foam_strength", 0.28 if _is_forest else (0.36 if _is_desert else 0.66))
+	_sea_material.set_shader_parameter("normal_strength", 0.74 if _is_forest else (0.50 if _is_desert else 0.78))
+	# 0.2.56: the forest lake read as a milky sky mirror; lower the
+	# reflection mix and roughen the normals so the deep water colour
+	# carries the surface instead.
+	_sea_material.set_shader_parameter("reflection_strength", 0.58 if _is_forest else (0.88 if _is_desert else 0.82))
 	return _sea_material
 
 
@@ -11132,8 +11135,10 @@ func _build_desert_roads() -> void:
 	var deck_colliders := 0
 	var crown_offsets: Array = [-1.0, -0.42, 0.42, 1.0]
 	var crown_heights: Array = [0.0, 0.045, 0.045, 0.0]
+	var road_ordinal := 0
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
+		road_ordinal += 1
 		var pts := _dz_road_points(road)
 		if pts.size() < 2:
 			continue
@@ -11142,7 +11147,11 @@ func _build_desert_roads() -> void:
 		var surf := String(road.get("surface", "asphalt"))
 		var closed := bool(road.get("closed", false))
 		var tool := asphalt_tool if surf == "asphalt" else gravel_tool
-		var y_off := 0.10 if surf == "asphalt" else 0.07
+		# 0.2.56 flush junctions: wider surface tiers plus a
+		# deterministic 4 mm per-road micro-lift, so overlapping deck
+		# ribbons at crossings always have one clear winner instead of
+		# z-fighting against each other.
+		var y_off := (0.12 if surf == "asphalt" else 0.06) + float(road_ordinal % 8) * 0.004
 		var perps := _dz_point_perps(pts, closed)
 		var cumlen: Array[float] = [0.0]
 		for i in range(1, pts.size()):
@@ -13188,46 +13197,70 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	var rock_mat := _material("gf_rock_gray_mat", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(0.92, 0.92, 0.90), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "gf_rock_gray_roughness.jpg")
 	rock_mat.vertex_color_use_as_albedo = true
 	var bark := Color(0.09, 0.055, 0.030)
+	# 0.2.56 detailed silhouettes: six overlapping needle tiers on
+	# spruce, bent two-piece pine trunks with four umbrella shelves,
+	# banded birch trunks with ovoid five-lobe crowns and branched
+	# six-lobe broadleaf/oak crowns in three alternating tones.
 	var spruce_a := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.2, 0), Vector3(0.42, 2.4, 0.42), bark),
-		_dz_scatter_part(cyl11, Vector3(0, 3.2, 0), Vector3(3.6, 3.6, 3.6), Color(0.018, 0.052, 0.016)),
-		_dz_scatter_part(cyl11, Vector3(0, 5.4, 0), Vector3(2.7, 3.2, 2.7), Color(0.024, 0.064, 0.020)),
-		_dz_scatter_part(cyl11, Vector3(0, 7.4, 0), Vector3(1.8, 2.8, 1.8), Color(0.030, 0.076, 0.024)),
+		_dz_scatter_part(cyl7, Vector3(0, 1.5, 0), Vector3(0.45, 3.0, 0.45), bark),
+		_dz_scatter_part(cyl11, Vector3(0, 2.6, 0), Vector3(4.2, 2.2, 4.2), Color(0.020, 0.066, 0.020)),
+		_dz_scatter_part(cyl11, Vector3(0, 3.9, 0), Vector3(3.6, 2.1, 3.6), Color(0.026, 0.079, 0.024)),
+		_dz_scatter_part(cyl11, Vector3(0, 5.1, 0), Vector3(3.0, 2.0, 3.0), Color(0.023, 0.072, 0.022)),
+		_dz_scatter_part(cyl11, Vector3(0, 6.3, 0), Vector3(2.4, 1.9, 2.4), Color(0.030, 0.086, 0.027)),
+		_dz_scatter_part(cyl11, Vector3(0, 7.5, 0), Vector3(1.8, 1.8, 1.8), Color(0.034, 0.095, 0.030)),
+		_dz_scatter_part(cyl11, Vector3(0, 8.7, 0), Vector3(1.1, 1.7, 1.1), Color(0.040, 0.104, 0.033)),
+		_dz_scatter_part(cyl7, Vector3(0, 9.6, 0), Vector3(0.10, 0.9, 0.10), Color(0.030, 0.078, 0.024)),
 	])
 	var spruce_b := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.3, 0), Vector3(0.38, 2.6, 0.38), bark),
-		_dz_scatter_part(cyl11, Vector3(0, 3.4, 0), Vector3(3.0, 4.0, 3.0), Color(0.016, 0.048, 0.015)),
-		_dz_scatter_part(cyl11, Vector3(0, 5.9, 0), Vector3(2.2, 3.4, 2.2), Color(0.022, 0.060, 0.019)),
-		_dz_scatter_part(cyl11, Vector3(0, 8.1, 0), Vector3(1.4, 3.0, 1.4), Color(0.028, 0.070, 0.022)),
+		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.40, 3.2, 0.40), bark),
+		_dz_scatter_part(cyl11, Vector3(0, 2.8, 0), Vector3(3.4, 2.3, 3.4), Color(0.018, 0.060, 0.018)),
+		_dz_scatter_part(cyl11, Vector3(0, 4.1, 0), Vector3(2.9, 2.2, 2.9), Color(0.024, 0.073, 0.022)),
+		_dz_scatter_part(cyl11, Vector3(0, 5.4, 0), Vector3(2.4, 2.1, 2.4), Color(0.021, 0.066, 0.020)),
+		_dz_scatter_part(cyl11, Vector3(0, 6.6, 0), Vector3(1.9, 2.0, 1.9), Color(0.028, 0.080, 0.025)),
+		_dz_scatter_part(cyl11, Vector3(0, 7.8, 0), Vector3(1.4, 1.9, 1.4), Color(0.032, 0.089, 0.028)),
+		_dz_scatter_part(cyl11, Vector3(0, 9.0, 0), Vector3(0.9, 1.8, 0.9), Color(0.038, 0.098, 0.031)),
+		_dz_scatter_part(cyl7, Vector3(0, 9.9, 0), Vector3(0.09, 0.9, 0.09), Color(0.028, 0.072, 0.022)),
 	])
 	var pine_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 2.8, 0), Vector3(0.36, 5.6, 0.36), Color(0.15, 0.085, 0.045)),
-		_dz_scatter_part(cyl11, Vector3(0, 6.3, 0), Vector3(4.8, 1.7, 4.8), Color(0.026, 0.068, 0.020)),
-		_dz_scatter_part(cyl11, Vector3(0.3, 7.5, 0.2), Vector3(3.6, 1.5, 3.6), Color(0.030, 0.074, 0.022)),
-		_dz_scatter_part(cyl11, Vector3(-0.2, 8.5, -0.1), Vector3(2.2, 1.2, 2.2), Color(0.034, 0.080, 0.024)),
+		_dz_scatter_part(cyl7, Vector3(0, 2.6, 0), Vector3(0.38, 5.2, 0.38), Color(0.16, 0.09, 0.045), 0.0, 0.0, 0.04),
+		_dz_scatter_part(cyl7, Vector3(0.35, 6.2, 0.1), Vector3(0.26, 3.2, 0.26), Color(0.14, 0.08, 0.04), 0.0, 0.0, -0.10),
+		_dz_scatter_part(cyl11, Vector3(0, 6.0, 0), Vector3(4.6, 1.5, 4.6), Color(0.030, 0.082, 0.024)),
+		_dz_scatter_part(cyl11, Vector3(0.5, 7.2, 0.3), Vector3(3.8, 1.4, 3.8), Color(0.036, 0.092, 0.027)),
+		_dz_scatter_part(cyl11, Vector3(-0.2, 8.2, -0.2), Vector3(2.8, 1.2, 2.8), Color(0.033, 0.086, 0.026)),
+		_dz_scatter_part(cyl11, Vector3(0.3, 9.1, 0.15), Vector3(1.8, 1.1, 1.8), Color(0.040, 0.100, 0.030)),
 	])
 	var birch_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 2.6, 0), Vector3(0.30, 5.2, 0.30), Color(0.52, 0.53, 0.50)),
-		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.33, 0.22, 0.33), Color(0.06, 0.06, 0.055)),
-		_dz_scatter_part(cyl7, Vector3(0, 3.4, 0), Vector3(0.32, 0.2, 0.32), Color(0.06, 0.06, 0.055)),
-		_dz_scatter_part(sph, Vector3(0, 5.6, 0), Vector3(2.6, 2.2, 2.6), Color(0.090, 0.190, 0.045)),
-		_dz_scatter_part(sph, Vector3(0.5, 6.8, 0.3), Vector3(1.9, 1.7, 1.9), Color(0.110, 0.220, 0.055)),
-		_dz_scatter_part(sph, Vector3(-0.7, 4.9, -0.4), Vector3(1.6, 1.4, 1.6), Color(0.080, 0.170, 0.040)),
+		_dz_scatter_part(cyl7, Vector3(0, 2.8, 0), Vector3(0.30, 5.6, 0.30), Color(0.55, 0.56, 0.53)),
+		_dz_scatter_part(cyl7, Vector3(0, 0.9, 0), Vector3(0.33, 0.16, 0.33), Color(0.07, 0.07, 0.065)),
+		_dz_scatter_part(cyl7, Vector3(0, 2.2, 0), Vector3(0.33, 0.16, 0.33), Color(0.07, 0.07, 0.065)),
+		_dz_scatter_part(cyl7, Vector3(0, 3.6, 0), Vector3(0.32, 0.15, 0.32), Color(0.07, 0.07, 0.065)),
+		_dz_scatter_part(cyl7, Vector3(0, 4.6, 0), Vector3(0.31, 0.14, 0.31), Color(0.07, 0.07, 0.065)),
+		_dz_scatter_part(sph, Vector3(0, 5.4, 0), Vector3(2.4, 2.0, 2.4), Color(0.115, 0.245, 0.058)),
+		_dz_scatter_part(sph, Vector3(0.4, 6.7, 0.2), Vector3(2.0, 1.9, 2.0), Color(0.135, 0.275, 0.068)),
+		_dz_scatter_part(sph, Vector3(-0.5, 4.7, -0.3), Vector3(1.7, 1.6, 1.7), Color(0.100, 0.220, 0.050)),
+		_dz_scatter_part(sph, Vector3(0.9, 5.9, -0.6), Vector3(1.4, 1.3, 1.4), Color(0.125, 0.260, 0.062)),
+		_dz_scatter_part(sph, Vector3(-0.9, 6.2, 0.5), Vector3(1.3, 1.2, 1.3), Color(0.108, 0.232, 0.054)),
 	])
 	var leafy_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.46, 3.2, 0.46), Color(0.10, 0.06, 0.035)),
-		_dz_scatter_part(sph, Vector3(0, 4.6, 0), Vector3(3.2, 2.6, 3.2), Color(0.042, 0.105, 0.028)),
-		_dz_scatter_part(sph, Vector3(0.8, 5.8, 0.4), Vector3(2.4, 2.0, 2.4), Color(0.052, 0.125, 0.035)),
-		_dz_scatter_part(sph, Vector3(-0.9, 5.4, -0.5), Vector3(2.2, 1.8, 2.2), Color(0.038, 0.098, 0.026)),
-		_dz_scatter_part(sph, Vector3(0.2, 4.0, 0.9), Vector3(1.8, 1.5, 1.8), Color(0.046, 0.115, 0.030)),
+		_dz_scatter_part(cyl7, Vector3(0, 1.7, 0), Vector3(0.48, 3.4, 0.48), Color(0.10, 0.06, 0.035)),
+		_dz_scatter_part(cyl7, Vector3(0.7, 3.3, 0.15), Vector3(0.22, 1.9, 0.22), Color(0.09, 0.055, 0.032), 0.0, 0.0, -0.55),
+		_dz_scatter_part(sph, Vector3(0, 4.7, 0), Vector3(3.3, 2.7, 3.3), Color(0.058, 0.150, 0.040)),
+		_dz_scatter_part(sph, Vector3(0.9, 5.8, 0.4), Vector3(2.5, 2.1, 2.5), Color(0.070, 0.175, 0.048)),
+		_dz_scatter_part(sph, Vector3(-1.0, 5.5, -0.5), Vector3(2.3, 1.9, 2.3), Color(0.052, 0.138, 0.036)),
+		_dz_scatter_part(sph, Vector3(0.2, 4.1, 1.0), Vector3(2.0, 1.7, 2.0), Color(0.064, 0.162, 0.044)),
+		_dz_scatter_part(sph, Vector3(-0.3, 4.2, -1.0), Vector3(1.9, 1.6, 1.9), Color(0.056, 0.145, 0.038)),
+		_dz_scatter_part(sph, Vector3(0.4, 6.6, -0.2), Vector3(1.6, 1.4, 1.6), Color(0.074, 0.182, 0.050)),
 	])
 	var oak_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.45, 0), Vector3(0.75, 2.9, 0.75), bark),
-		_dz_scatter_part(cyl7, Vector3(0.9, 3.2, 0.2), Vector3(0.3, 2.0, 0.3), bark, 0.0, 0.0, -0.6),
-		_dz_scatter_part(sph, Vector3(0, 5.0, 0), Vector3(4.6, 2.8, 4.6), Color(0.038, 0.098, 0.026)),
-		_dz_scatter_part(sph, Vector3(1.6, 5.9, 0.6), Vector3(3.4, 2.2, 3.4), Color(0.046, 0.112, 0.030)),
-		_dz_scatter_part(sph, Vector3(-1.7, 5.7, -0.5), Vector3(3.2, 2.1, 3.2), Color(0.034, 0.090, 0.024)),
-		_dz_scatter_part(sph, Vector3(0.3, 4.4, 1.5), Vector3(2.6, 1.9, 2.6), Color(0.042, 0.104, 0.028)),
+		_dz_scatter_part(cyl7, Vector3(0, 1.5, 0), Vector3(0.80, 3.0, 0.80), bark),
+		_dz_scatter_part(cyl7, Vector3(0.95, 3.3, 0.2), Vector3(0.30, 2.1, 0.30), bark, 0.0, 0.0, -0.6),
+		_dz_scatter_part(cyl7, Vector3(-0.9, 3.2, -0.3), Vector3(0.26, 1.9, 0.26), bark, 0.0, 0.0, 0.65),
+		_dz_scatter_part(sph, Vector3(0, 5.2, 0), Vector3(4.8, 2.9, 4.8), Color(0.052, 0.138, 0.036)),
+		_dz_scatter_part(sph, Vector3(1.8, 6.0, 0.7), Vector3(3.4, 2.2, 3.4), Color(0.062, 0.158, 0.042)),
+		_dz_scatter_part(sph, Vector3(-1.9, 5.8, -0.6), Vector3(3.2, 2.1, 3.2), Color(0.047, 0.127, 0.033)),
+		_dz_scatter_part(sph, Vector3(0.4, 4.5, 1.7), Vector3(2.7, 1.9, 2.7), Color(0.058, 0.147, 0.039)),
+		_dz_scatter_part(sph, Vector3(-0.5, 4.6, -1.6), Vector3(2.5, 1.8, 2.5), Color(0.050, 0.133, 0.035)),
+		_dz_scatter_part(sph, Vector3(0.2, 6.8, 0.1), Vector3(2.4, 1.8, 2.4), Color(0.066, 0.166, 0.045)),
 	])
 	var dead_mesh := _dz_scatter_mesh([
 		_dz_scatter_part(cyl7, Vector3(0, 1.9, 0), Vector3(0.45, 3.8, 0.45), Color(0.16, 0.13, 0.10), 0.0, 0.0, 0.06),
@@ -13304,26 +13337,26 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	var rock_medium_meshes: Array = [_dz_rock_mesh(61, Color(0.50, 0.51, 0.50)), _dz_rock_mesh(62, Color(0.55, 0.56, 0.54)), _dz_rock_mesh(63, Color(0.46, 0.47, 0.46))]
 	var rock_large_meshes: Array = [_dz_rock_mesh(71, Color(0.54, 0.55, 0.53)), _dz_rock_mesh(72, Color(0.49, 0.50, 0.49)), _dz_rock_mesh(73, Color(0.58, 0.58, 0.56))]
 	var cfg := {
-		"spruce": {"meshes": [spruce_a, spruce_b], "base": 1.45, "range": 650.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"pine": {"mesh": pine_mesh, "base": 1.5, "range": 650.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"birch": {"mesh": birch_mesh, "base": 1.4, "range": 560.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
-		"leafy": {"mesh": leafy_mesh, "base": 1.4, "range": 600.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"oak": {"mesh": oak_mesh, "base": 1.5, "range": 650.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
-		"dead_tree": {"mesh": dead_mesh, "base": 1.2, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
-		"bush": {"mesh": bush_mesh, "base": 1.0, "range": 240.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
-		"fern": {"mesh": fern_mesh, "base": 1.0, "range": 170.0, "shadow": false, "sink": 0.06},
-		"flower": {"mesh": flower_mesh, "base": 1.0, "range": 150.0, "shadow": false, "sink": 0.02},
-		"mushroom": {"mesh": mushroom_mesh, "base": 1.0, "range": 130.0, "shadow": false, "sink": 0.02},
+		"spruce": {"meshes": [spruce_a, spruce_b], "base": 1.45, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"pine": {"mesh": pine_mesh, "base": 1.5, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"birch": {"mesh": birch_mesh, "base": 1.4, "range": 430.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
+		"leafy": {"mesh": leafy_mesh, "base": 1.4, "range": 450.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"oak": {"mesh": oak_mesh, "base": 1.5, "range": 460.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
+		"dead_tree": {"mesh": dead_mesh, "base": 1.2, "range": 370.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
+		"bush": {"mesh": bush_mesh, "base": 1.0, "range": 200.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
+		"fern": {"mesh": fern_mesh, "base": 1.0, "range": 150.0, "shadow": false, "sink": 0.06},
+		"flower": {"mesh": flower_mesh, "base": 1.0, "range": 130.0, "shadow": false, "sink": 0.02},
+		"mushroom": {"mesh": mushroom_mesh, "base": 1.0, "range": 110.0, "shadow": false, "sink": 0.02},
 		"stump": {"mesh": stump_mesh, "base": 1.0, "range": 260.0, "shadow": true, "sink": 0.05, "collider_r": 0.42, "collider_h": 0.6},
 		"fallen_log": {"mesh": log_mesh, "base": 1.0, "range": 280.0, "shadow": true, "sink": 0.05, "collider_r": 0.55, "collider_h": 0.7},
-		"reed": {"mesh": reed_mesh, "base": 1.0, "range": 240.0, "shadow": false, "sink": 0.18},
-		"hay_bale": {"mesh": hay_mesh, "base": 1.0, "range": 340.0, "shadow": true, "sink": 0.04, "collider_r": 0.8, "collider_h": 1.2},
-		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
-		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
-		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
-		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 240.0, "shadow": false, "sink": 0.16},
-		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
-		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1100.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
+		"reed": {"mesh": reed_mesh, "base": 1.0, "range": 210.0, "shadow": false, "sink": 0.18},
+		"hay_bale": {"mesh": hay_mesh, "base": 1.0, "range": 300.0, "shadow": true, "sink": 0.04, "collider_r": 0.8, "collider_h": 1.2},
+		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 210.0, "shadow": false, "sink": 0.16},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 370.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 900.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
 	}
 	var scatter: Dictionary = _dz_data().get("scatter", {})
 	var total := 0
