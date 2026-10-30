@@ -2465,6 +2465,10 @@ func _update_camera(delta: float, snap: bool) -> void:
 	var speed_ratio := clampf(speed_kmh / maxf(float(_vehicle.get_spec_sheet().get("top_speed_kmh", 210)), 120.0), 0.0, 1.0)
 	var vehicle_transform := _vehicle.get_global_transform_interpolated()
 	var vehicle_position := vehicle_transform.origin
+	if _player_on_foot and _player_character != null and is_instance_valid(_player_character):
+		# Keep both the avatar and car in the parked on-foot camera frame;
+		# centring only on the rear bumper hides the person behind bodywork.
+		vehicle_position = vehicle_position.lerp(_player_character.global_position, 0.45)
 	var raw_follow_yaw := _vehicle_horizontal_yaw(vehicle_transform)
 	if snap or not _camera_smoothing_initialized or delta <= 0.0:
 		_camera_follow_yaw = raw_follow_yaw

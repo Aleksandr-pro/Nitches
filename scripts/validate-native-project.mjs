@@ -109,7 +109,7 @@ const playerCharacter = parseGlbJson(playerCharacterBytes);
 assert(playerCharacterBytes.readUInt32LE(8) === playerCharacterBytes.length, 'Player character GLB total length is invalid');
 assert(playerCharacter.extras?.heightMeters === 1.84 && playerCharacter.extras?.triangleBudget >= 5000 && playerCharacter.extras?.triangleBudget <= 10000, 'Player character GLB must stay within its 1.84m, medium-low-poly asset budget');
 assert(playerCharacter.meshes?.length >= 6 && playerCharacter.materials?.some((material) => material.name === 'Skin') && playerCharacter.materials?.some((material) => material.name === 'Hair - dark brown') && playerCharacter.materials?.some((material) => material.name === 'Trousers - charcoal blue'), 'Player character must include recognizable human anatomy and separate clothing materials');
-for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'look_target.y = position.y', 'Tween.TRANS_BACK', '01a_driver_exit']) {
+for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'look_target.y = position.y', 'vehicle_position = vehicle_position.lerp(_player_character.global_position, 0.45)', 'Tween.TRANS_BACK', '01a_driver_exit']) {
   assert(mainScript.includes(marker), `Native 0.2.63 parked-only character marker is missing: ${marker}`);
 }
 for (const marker of ['vehicle_mode_requested', 'set_vehicle_interaction', 'driving_controls_hidden_on_foot']) {
