@@ -134,6 +134,9 @@ var _screenshot_dir := ""
 var _screenshot_free_camera := false
 var render_quality_state := {}
 var _render_scale := 1.0
+var _perf_governor_level_0330 := 0
+var _perf_governor_good_windows_0330 := 0
+var _perf_governor_state_0330: Dictionary = {"perf_governor_0330": true, "level": 0}
 var _render_quality_accumulated_time := 0.0
 var _render_quality_frames := 0
 var _render_quality_vote_direction := 0
@@ -534,6 +537,37 @@ func _apply_graphics_quality() -> void:
 			detail_scale = 1.7
 			shadow_distance = 230.0
 			particle_scale = 1.0
+	if OS.has_feature("android"):
+		# 0.3.3: the 0.2.44 preset table was desktop-tuned and, worse,
+		# it overwrote the phone's adaptive 0.62 render scale with a
+		# full-resolution 1.0 (balanced) right after startup.  Phones
+		# now get their own budgets and the live adaptive scale is
+		# preserved; models beside the road are untouched — only
+		# switchover distances, shadow reach, far plane and screen
+		# effects shrink.  The performance governor below can still
+		# step further down if a weak device keeps missing frame.
+		match quality:
+			"performance":
+				detail_scale = 0.58
+				shadow_distance = 85.0
+				camera_far = 1200.0
+				particle_scale = 0.18
+			"beauty":
+				detail_scale = 1.25
+				shadow_distance = 180.0
+				camera_far = 2100.0
+				particle_scale = 0.45
+			_:
+				detail_scale = 0.82
+				shadow_distance = 125.0
+				camera_far = 1650.0
+				particle_scale = 0.3
+				shafts = false
+				bokeh = false
+		render_scale = _render_scale
+		_perf_governor_level_0330 = 0
+		_perf_governor_good_windows_0330 = 0
+		get_viewport().mesh_lod_threshold = 6.0
 	if _world != null:
 		_world.set_quality_detail_scale(detail_scale)
 		_world.set_quality_shadow_distance(shadow_distance)
@@ -547,6 +581,8 @@ func _apply_graphics_quality() -> void:
 	_graphics_quality_state = {
 		"graphics_quality_0244": true,
 		"preset": quality,
+		"android_perf_budgets_0330": OS.has_feature("android"),
+		"perf_governor_0330": true,
 		"detail_scale": detail_scale,
 		"shadow_distance": shadow_distance,
 		"camera_far": camera_far,
@@ -1956,9 +1992,10 @@ func _configure_render_quality(initial: bool) -> void:
 		"msaa": int(viewport.msaa_3d),
 		"screen_space_aa": int(viewport.screen_space_aa),
 		"adaptive": is_android,
-		"evaluation_seconds": 2.5,
+		"evaluation_seconds": 1.2,
 		"hysteresis_votes": 2,
-		"min_scale": 0.42,
+		"perf_governor_level_0330": _perf_governor_level_0330,
+		"min_scale": 0.38,
 		"max_scale": 0.80,
 		"mesh_lod_threshold": viewport.mesh_lod_threshold,
 	}
@@ -1969,15 +2006,17 @@ func _update_adaptive_render_quality(delta: float) -> void:
 		return
 	_render_quality_accumulated_time += delta
 	_render_quality_frames += 1
-	# A 2.5-second evaluation window plus a repeated-vote requirement
-	# avoids reallocating the 3D render target on every scenery change.
+	# A 1.2-second evaluation window plus a repeated-vote requirement
+	# avoids reallocating the 3D render target on every scenery change
+	# while still reacting to a sustained collapse within seconds.
 	# The target band is a stable 30-50 FPS rather than chasing 60 on a
-	# phone that measured 8-12 FPS in the 0.2.14 city captures.
-	if _render_quality_accumulated_time < 2.5:
+	# phone that measured 4-9 FPS in the 0.3.2 city.
+	if _render_quality_accumulated_time < 1.2:
 		return
 	var measured_fps := float(_render_quality_frames) / maxf(_render_quality_accumulated_time, 0.001)
 	_render_quality_accumulated_time = 0.0
 	_render_quality_frames = 0
+	_update_performance_governor_0330(measured_fps)
 
 	var desired_direction := 0
 	if measured_fps < 30.0:
@@ -2000,12 +2039,82 @@ func _update_adaptive_render_quality(delta: float) -> void:
 	_render_quality_vote_count = 0
 	var previous_scale := _render_scale
 	if desired_direction < 0:
-		var step := 0.06 if measured_fps < 18.0 else 0.04
-		_render_scale = maxf(0.42, _render_scale - step)
+		var step := 0.10 if measured_fps < 15.0 else (0.07 if measured_fps < 22.0 else 0.045)
+		_render_scale = maxf(0.38, _render_scale - step)
 	else:
 		_render_scale = minf(0.80, _render_scale + 0.04)
 	if not is_equal_approx(previous_scale, _render_scale):
 		_configure_render_quality(false)
+
+
+
+## 0.3.3 performance governor (Android): render-scale adaptation alone
+## could not rescue a 4-9 FPS phone, because the cost was mostly draw
+## submission, shadow reach and far-plane fill.  Four levels scale the
+## *distances* (detail switchover, shadows, camera far, mesh LOD)
+## on top of the user's preset; near-field model quality is never
+## touched, and sustained headroom walks the level back up slowly.
+func _update_performance_governor_0330(measured_fps: float) -> void:
+	if _world == null or _graphics_quality_state.is_empty() or _in_menu or _garage_active or _map_open:
+		return
+	var next_level := _perf_governor_level_0330
+	if measured_fps < 13.0:
+		next_level = mini(3, next_level + 2)
+		_perf_governor_good_windows_0330 = 0
+	elif measured_fps < 22.0:
+		next_level = mini(3, next_level + 1)
+		_perf_governor_good_windows_0330 = 0
+	elif measured_fps < 30.0:
+		_perf_governor_good_windows_0330 = 0
+	elif measured_fps > 48.0:
+		_perf_governor_good_windows_0330 += 1
+		if _perf_governor_good_windows_0330 >= 4 and next_level > 0:
+			next_level -= 1
+			_perf_governor_good_windows_0330 = 0
+	else:
+		_perf_governor_good_windows_0330 = 0
+	_perf_governor_state_0330["measured_fps"] = measured_fps
+	if next_level != _perf_governor_level_0330:
+		_perf_governor_level_0330 = next_level
+		_apply_performance_governor_0330()
+
+
+func _apply_performance_governor_0330() -> void:
+	if _world == null:
+		return
+	var level := _perf_governor_level_0330
+	var detail_factor := float([1.0, 0.78, 0.58, 0.42][level])
+	var shadow_factor := float([1.0, 0.78, 0.58, 0.45][level])
+	var far_cap := float([10000.0, 1500.0, 1150.0, 850.0][level])
+	var base_detail := float(_graphics_quality_state.get("detail_scale", 1.0))
+	var base_shadow := float(_graphics_quality_state.get("shadow_distance", 175.0))
+	var base_far := float(_graphics_quality_state.get("camera_far", 2100.0))
+	var effective_detail := base_detail * detail_factor
+	var effective_shadow := maxf(60.0, base_shadow * shadow_factor)
+	var effective_far := minf(base_far, far_cap)
+	_world.set_quality_detail_scale(effective_detail)
+	_world.set_quality_shadow_distance(effective_shadow)
+	_world.set_skyline_scale(effective_far / 2100.0)
+	if _camera != null:
+		_camera.far = effective_far
+	if _atmosphere_fx != null:
+		var base_particles := float(_graphics_quality_state.get("particle_scale", 0.3))
+		_atmosphere_fx.set_quality(
+			base_particles * detail_factor,
+			bool(_graphics_quality_state.get("shafts", false)) and level == 0,
+			bool(_graphics_quality_state.get("bokeh", false)) and level == 0
+		)
+	var viewport := get_viewport()
+	if viewport != null:
+		viewport.mesh_lod_threshold = float([6.0, 8.0, 11.0, 14.0][level])
+	_perf_governor_state_0330 = {
+		"perf_governor_0330": true,
+		"level": level,
+		"detail_scale": effective_detail,
+		"shadow_distance": effective_shadow,
+		"camera_far": effective_far,
+	}
+	render_quality_state["perf_governor_level_0330"] = level
 
 
 func _create_camera() -> void:
