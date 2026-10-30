@@ -1796,10 +1796,18 @@ func _run_smoke_checks() -> void:
 
 	if _selected_world_id == "desert":
 		_run_desert_smoke_checks(failures)
+		# _finish_smoke() quits(0) silently on success; the PASS line
+		# CI greps for is printed by the RichTown battery, so the
+		# per-world gates must print their own (0.2.55: a passing
+		# forest smoke otherwise looked like a silent failure).
+		if failures.is_empty():
+			print("[native-smoke] PASS world=desert enhancements=%s" % str(_world.get_enhancement_stats()))
 		_finish_smoke(failures)
 		return
 	if _selected_world_id == "greenforest":
 		_run_forest_smoke_checks(failures)
+		if failures.is_empty():
+			print("[native-smoke] PASS world=greenforest enhancements=%s" % str(_world.get_enhancement_stats()))
 		_finish_smoke(failures)
 		return
 
