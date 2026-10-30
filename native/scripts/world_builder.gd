@@ -214,6 +214,9 @@ var _elapsed := 0.0
 var _stream_chunks: Array[Dictionary] = []
 var _collider_cells: Dictionary = {}
 var _active_collider_cells: Dictionary = {}
+var _collider_cell_list: Array[Vector2i] = []
+var _stream_active_collider_shapes := 0
+var _perf_large_stream_chunks_skipped_0330 := 0
 var _streaming_timer := 0.0
 var _streaming_initialized := false
 
@@ -603,10 +606,15 @@ func set_quality_detail_scale(scale: float) -> void:
 			continue
 		var base_begin := float(entry.get("begin", 0.0))
 		var base_end := float(entry.get("end", 0.0))
+		# 0.3.3: Godot measures visibility ranges from the camera to the
+		# centre of the instance AABB, so wide city chunks register a
+		# radius compensation that converts the switch into an
+		# edge-distance test and must not be quality-scaled away.
+		var radius_comp := float(entry.get("radius_comp_0330", 0.0))
 		if base_begin > 0.0:
-			instance.visibility_range_begin = base_begin * _quality_detail_scale
+			instance.visibility_range_begin = base_begin * _quality_detail_scale + radius_comp
 		if base_end > 0.0:
-			instance.visibility_range_end = base_end * _quality_detail_scale
+			instance.visibility_range_end = base_end * _quality_detail_scale + radius_comp
 	_enhancement_stats["quality_detail_scale_0244"] = _quality_detail_scale
 	_enhancement_stats["quality_ranged_instances"] = _quality_ranged_instances.size()
 
@@ -1567,7 +1575,7 @@ func update_streaming(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3
 		_stream_horizontal_half_fov_rad = clampf(horizontal_half_fov_rad, 0.55, 1.45)
 	_stream_focus_pos = focus_pos
 	_streaming_timer += delta
-	if _streaming_initialized and _streaming_timer < 0.2:
+	if _streaming_initialized and _streaming_timer < 0.3:
 		return
 	_streaming_timer = 0.0
 	_streaming_initialized = true
@@ -1586,6 +1594,8 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 	var allow_hide := _elapsed > 2.5
 	var hidden_count := 0
 	var sector_hidden_count := 0
+	var hide_sector_limit_rad := _stream_horizontal_half_fov_rad + STREAM_SECTOR_HIDE_MARGIN_RAD
+	var show_sector_limit_rad := _stream_horizontal_half_fov_rad + STREAM_SECTOR_SHOW_MARGIN_RAD
 	for chunk in _stream_chunks:
 		var node := chunk.get("node") as MultiMeshInstance3D
 		if node == null:
@@ -1593,7 +1603,7 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 		var centre: Vector3 = chunk.get("centre", Vector3.ZERO)
 		var radius := float(chunk.get("radius", 0.0))
 		var is_hidden := bool(chunk.get("hidden", false))
-		if radius > 210.0:
+		if radius > 420.0:
 			if is_hidden:
 				node.visible = true
 				chunk["hidden"] = false
@@ -1609,11 +1619,18 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 		# frustum is deliberately generous: a fast orbit/steering swing
 		# brings a side chunk back through the earlier show margin
 		# before any part of it can reach the screen edge, so the view
-		# direction itself is never degraded or popped.
-		var view_angle := acos(clampf(dot, -1.0, 1.0))
-		var angular_radius := asin(clampf(radius / maxf(dist, 1.0), 0.0, 1.0))
-		var outside_view_sector := view_angle - angular_radius > _stream_horizontal_half_fov_rad + STREAM_SECTOR_HIDE_MARGIN_RAD
-		var safely_in_view_sector := view_angle - angular_radius < _stream_horizontal_half_fov_rad + STREAM_SECTOR_SHOW_MARGIN_RAD
+		# direction itself is never degraded or popped.  0.3.3: only
+		# side/behind candidates (and hidden chunks that may need to
+		# re-appear) pay for acos/asin; a chunk squarely in front of the
+		# car cannot leave the sector, and at collapsed FPS the old
+		# trig-for-every-chunk pass ran on nearly every frame.
+		var outside_view_sector := false
+		var safely_in_view_sector := true
+		if dot < 0.35 or is_hidden:
+			var view_angle := acos(clampf(dot, -1.0, 1.0))
+			var angular_radius := asin(clampf(radius / maxf(dist, 1.0), 0.0, 1.0))
+			outside_view_sector = view_angle - angular_radius > hide_sector_limit_rad
+			safely_in_view_sector = view_angle - angular_radius < show_sector_limit_rad
 		var was_sector_hidden := bool(chunk.get("sector_hidden_0237", false))
 		if allow_hide and not is_hidden and clear > STREAM_HIDE_BEHIND_M and (dot < -0.18 or outside_view_sector):
 			node.visible = false
@@ -1632,29 +1649,38 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 			if bool(chunk.get("sector_hidden_0237", false)):
 				sector_hidden_count += 1
 
+	# 0.3.3: squared distances against a flat cell list.  The old pass
+	# allocated a keys() array, built a Vector2 and took a square root
+	# per occupied cell on every tick, then re-counted every active
+	# cell's shape array; the active total is now maintained as cells
+	# toggle (registration seeds it).
 	var focus_2d := Vector2(focus_pos.x, focus_pos.z)
-	var active_shapes := 0
-	for cell_variant in _collider_cells.keys():
-		var cell := cell_variant as Vector2i
-		var cell_centre := Vector2(
-			_active_aabb.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
-			_active_aabb.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
-		)
-		var cell_dist := cell_centre.distance_to(focus_2d)
+	var active_radius_sq := COLLIDER_ACTIVE_RADIUS_M * COLLIDER_ACTIVE_RADIUS_M
+	var release_radius_sq := COLLIDER_RELEASE_RADIUS_M * COLLIDER_RELEASE_RADIUS_M
+	var aabb_min_x := _active_aabb.position.x
+	var aabb_min_z := _active_aabb.position.z
+	for cell in _collider_cell_list:
+		var cell_dx := aabb_min_x + (float(cell.x) + 0.5) * STREAM_CELL_M - focus_2d.x
+		var cell_dz := aabb_min_z + (float(cell.y) + 0.5) * STREAM_CELL_M - focus_2d.y
+		var cell_dist_sq := cell_dx * cell_dx + cell_dz * cell_dz
 		var was_active := bool(_active_collider_cells.get(cell, true))
 		var want_active := was_active
-		if cell_dist < COLLIDER_ACTIVE_RADIUS_M:
+		if cell_dist_sq < active_radius_sq:
 			want_active = true
-		elif cell_dist > COLLIDER_RELEASE_RADIUS_M:
+		elif cell_dist_sq > release_radius_sq:
 			want_active = false
 		if want_active != was_active or not _active_collider_cells.has(cell):
-			for shape_variant in (_collider_cells[cell] as Array):
+			var shapes := (_collider_cells.get(cell, []) as Array)
+			for shape_variant in shapes:
 				var shape := shape_variant as CollisionShape3D
 				if shape != null:
 					shape.disabled = not want_active
+			if want_active != was_active:
+				if want_active:
+					_stream_active_collider_shapes += shapes.size()
+				else:
+					_stream_active_collider_shapes -= shapes.size()
 			_active_collider_cells[cell] = want_active
-		if want_active:
-			active_shapes += (_collider_cells[cell] as Array).size()
 
 	_stream_sector_hidden_0237 = sector_hidden_count
 	_enhancement_stats["directional_streaming_0230"] = true
@@ -1663,7 +1689,9 @@ func _streaming_tick(cam_pos: Vector3, cam_forward: Vector3, focus_pos: Vector3,
 	_enhancement_stats["streaming_chunks_hidden"] = hidden_count
 	_enhancement_stats["streaming_sector_hidden_0237"] = sector_hidden_count
 	_enhancement_stats["streaming_horizontal_half_fov_0237"] = _stream_horizontal_half_fov_rad
-	_enhancement_stats["streaming_colliders_active"] = active_shapes
+	_enhancement_stats["streaming_colliders_active"] = _stream_active_collider_shapes
+	_enhancement_stats["perf_streaming_0330"] = true
+	_enhancement_stats["perf_large_stream_chunks_skipped_0330"] = _perf_large_stream_chunks_skipped_0330
 
 
 func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
@@ -1673,6 +1701,7 @@ func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 	)
 	if not _collider_cells.has(cell):
 		_collider_cells[cell] = []
+		_collider_cell_list.append(cell)
 		# 0.2.55: seed the streaming state from the spawn focus so
 		# far shapes are created disabled (a free property write
 		# while the body is out of the tree) and the first
@@ -1686,6 +1715,8 @@ func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 		_active_collider_cells[cell] = cell_centre.distance_to(spawn_2d) < COLLIDER_ACTIVE_RADIUS_M
 	collision.disabled = not bool(_active_collider_cells[cell])
 	(_collider_cells[cell] as Array).append(collision)
+	if bool(_active_collider_cells[cell]):
+		_stream_active_collider_shapes += 1
 
 
 func _add_box_collider(center: Vector3, size: Vector3, yaw: float = 0.0) -> void:
@@ -5904,10 +5935,16 @@ func _add_multimesh(
 		instance.custom_aabb = chunk_aabb.grow(1.5) if have_chunk_aabb else _active_aabb
 		var visual_begin := visibility_begin_m
 		var visual_end := visibility_end_m if visibility_end_m >= 0.0 else _multimesh_visual_range(node_name)
+		# 0.3.3 wide-chunk compensation (see set_quality_detail_scale):
+		# ranges are centre distances, so a 620 m city chunk adds its
+		# own AABB radius and the house at the chunk edge nearest the
+		# road still retires at the authored edge distance.
+		var chunk_radius := chunk_aabb.size.length() * 0.5 if have_chunk_aabb else 0.0
+		var radius_comp := chunk_radius if effective_chunk_size_m > 300.0 else 0.0
 		if visual_begin > 0.0:
-			instance.visibility_range_begin = visual_begin
+			instance.visibility_range_begin = visual_begin + radius_comp
 		if visual_end > 0.0:
-			instance.visibility_range_end = visual_end
+			instance.visibility_range_end = visual_end + radius_comp
 		if visual_begin > 0.0 or visual_end > 0.0:
 			# Dithered self-fades soften HLOD handoffs instead of hard pops.
 			instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
@@ -5918,19 +5955,27 @@ func _add_multimesh(
 				"node": instance,
 				"begin": maxf(visual_begin, 0.0),
 				"end": maxf(visual_end, 0.0),
+				"radius_comp_0330": radius_comp,
 			})
 		else:
 			# Skyline geometry keeps generated/imported mesh LODs, but
 			# switches to them earlier than the desktop bias.
 			instance.lod_bias = 0.65
 		parent.add_child(instance)
-		_stream_chunks.append({
-			"node": instance,
-			"centre": chunk_aabb.get_center(),
-			"radius": chunk_aabb.size.length() * 0.5,
-			"hidden": false,
-			"sector_hidden_0237": false,
-		})
+		# 0.3.3: the sector pass never hid very wide chunks (their
+		# bounding sphere always grazes the view cone), so registering
+		# them only burned CPU in every tick.  Frustum culling plus the
+		# compensated visibility range retire them instead.
+		if chunk_radius <= 380.0:
+			_stream_chunks.append({
+				"node": instance,
+				"centre": chunk_aabb.get_center(),
+				"radius": chunk_radius,
+				"hidden": false,
+				"sector_hidden_0237": false,
+			})
+		else:
+			_perf_large_stream_chunks_skipped_0330 += 1
 		_multimesh_chunk_count += 1
 		built_any = true
 
@@ -6039,34 +6084,37 @@ func _batched_model_base_range(path: String) -> float:
 		return 320.0
 	# 0.3.2 low-poly Blender city pack: individually cheap meshes, but
 	# thousands of instances, so detail yields to far-proxy massing.
+	# 0.3.3 trims the switchover a little further out only where the
+	# models are mass-repeated; everything beside the road is
+	# unchanged and the beauty preset can still scale ranges back up.
 	if path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb"):
-		return 340.0
+		return 300.0
 	if path.ends_with("midrise_a.glb") or path.ends_with("midrise_b.glb"):
-		return 280.0
-	if path.ends_with("warehouse_large.glb") or path.ends_with("warehouse_small.glb"):
-		return 320.0
-	if path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
-		return 170.0
-	if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb"):
-		return 210.0
-	if path.ends_with("barn.glb"):
-		return 260.0
-	if path.ends_with("greenhouse.glb"):
 		return 240.0
+	if path.ends_with("warehouse_large.glb") or path.ends_with("warehouse_small.glb"):
+		return 275.0
+	if path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
+		return 145.0
+	if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb"):
+		return 185.0
+	if path.ends_with("barn.glb"):
+		return 220.0
+	if path.ends_with("greenhouse.glb"):
+		return 205.0
 	if path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb"):
-		return 420.0
+		return 360.0
 	if path.ends_with("airliner.glb"):
-		return 550.0
+		return 470.0
 	if path.ends_with("school.glb"):
-		return 650.0
+		return 540.0
 	if path.ends_with("storage_tank.glb") or path.ends_with("silo.glb"):
-		return 420.0
+		return 340.0
 	if path.ends_with("afv.glb"):
-		return 260.0
+		return 200.0
 	if path.ends_with("watchtower.glb"):
-		return 320.0
+		return 260.0
 	if path.ends_with("port_crane.glb"):
-		return 800.0
+		return 680.0
 	return 0.0
 
 
@@ -6136,7 +6184,32 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 	return minf(base_range, architectural_limit)
 
 
+func _is_city_pack_path(path: String) -> bool:
+	return (
+		path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb")
+		or path.ends_with("midrise_a.glb") or path.ends_with("midrise_b.glb")
+		or path.ends_with("warehouse_large.glb") or path.ends_with("warehouse_small.glb")
+		or path.ends_with("container_red.glb") or path.ends_with("container_blue.glb")
+		or path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb")
+		or path.ends_with("barn.glb") or path.ends_with("greenhouse.glb")
+		or path.ends_with("school.glb") or path.ends_with("airport_terminal.glb") or path.ends_with("atc_tower.glb")
+		or path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb") or path.ends_with("airliner.glb")
+		or path.ends_with("cooling_tower.glb") or path.ends_with("reactor.glb") or path.ends_with("chimney.glb")
+		or path.ends_with("radar_station.glb") or path.ends_with("watchtower.glb")
+		or path.ends_with("storage_tank.glb") or path.ends_with("silo.glb") or path.ends_with("afv.glb")
+		or path.ends_with("stadium.glb") or path.ends_with("port_crane.glb")
+	)
+
+
 func _batched_model_chunk_size(path: String) -> float:
+	if _is_city_pack_path(path):
+		# 0.3.3: at 180 m the 0.3.2 city pack created ~4.8k detailed
+		# MultiMesh nodes (sparse houses made one node per material
+		# per house) and phones collapsed to single-digit FPS just
+		# submitting/culling them.  620 m chunks with AABB-radius
+		# range compensation cut that by roughly two thirds while
+		# every near model keeps its exact geometry and materials.
+		return 620.0
 	if path.ends_with("main_tower.glb"):
 		return MULTIMESH_CHUNK_SIZE_M
 	if path.contains("traffic_signal"):
@@ -6407,6 +6480,22 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		# twice as far as in the retired 1 km town, or the skyline
 		# pops in halfway across the map.
 		proxy_end = maxf(proxy_end * 2.0, 2600.0)
+	var proxy_chunk_m := 260.0
+	if _is_rt7 and _is_city_pack_path(path):
+		# 0.3.3: one-to-four-box massing does not need 260 m cells or
+		# a 2.6 km reach on a phone.  Wide proxy chunks (radius-
+		# compensated like the detailed ones) plus per-class caps
+		# keep district silhouettes while retiring sub-pixel boxes.
+		proxy_chunk_m = 820.0
+		var city_proxy_cap := 1500.0
+		if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb") or path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
+			city_proxy_cap = 1050.0
+		elif path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb") or path.ends_with("school.glb"):
+			city_proxy_cap = 1900.0
+		elif path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb") or path.ends_with("airliner.glb") or path.ends_with("port_crane.glb"):
+			city_proxy_cap = 1700.0
+		proxy_end = minf(proxy_end, city_proxy_cap)
+		_enhancement_stats["perf_city_hlod_0330"] = true
 
 	var unit_box := BoxMesh.new()
 	unit_box.size = Vector3.ONE
@@ -6427,7 +6516,7 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 			false,
 			proxy_begin,
 			proxy_end,
-			260.0
+			proxy_chunk_m
 		)
 		if built:
 			proxy_boxes += transforms.size()

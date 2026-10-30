@@ -90,17 +90,17 @@ const [project, preset, mainScene, dataText, mainScript, loadingScreenScript, wo
 assert(project.includes('run/main_scene="res://scenes/main.tscn"'), 'project.godot does not point at the native main scene');
 assert(project.includes('renderer/rendering_method="mobile"'), 'Godot Mobile renderer is not selected');
 assert(project.includes('textures/default_filters/anisotropic_filtering_level=4'), '4x anisotropic filtering is not enabled');
-assert(project.includes('lights_and_shadows/directional_shadow/size.mobile=2048'), '2048px mobile directional shadows are not enabled');
+assert(project.includes('lights_and_shadows/directional_shadow/size.mobile=1024'), '0.3.3 phones must use the 1024px mobile directional shadow budget');
 assert(mainScene.includes('res://scripts/main.gd'), 'main scene is not wired to main.gd');
 
 assert(preset.includes('platform="Android"'), 'Android export preset is missing');
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.2-native-alpha"'), 'Native project version metadata must match 0.3.2-native-alpha');
-assert(preset.includes('version/code=68'), 'Native 0.3.2 must bump Android versionCode to 68');
-assert(preset.includes('version/name="0.3.2-native-alpha"'), 'Native version name must be 0.3.2-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.2-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.3-native-alpha"'), 'Native project version metadata must match 0.3.3-native-alpha');
+assert(preset.includes('version/code=69'), 'Native 0.3.3 must bump Android versionCode to 69');
+assert(preset.includes('version/name="0.3.3-native-alpha"'), 'Native version name must be 0.3.3-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.3-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.2"') && preset.includes('application/product_version="0.3.2"'), 'Desktop Windows version metadata must match native 0.3.2');
+assert(preset.includes('application/file_version="0.3.3"') && preset.includes('application/product_version="0.3.3"'), 'Desktop Windows version metadata must match native 0.3.3');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1234,6 +1234,16 @@ assert(mainScript.includes('city_blender_instances_0320'), '0.3.2 main smoke mus
 for (const cityGlb of ['school.glb', 'airport_terminal.glb', 'atc_tower.glb', 'hangar_large.glb', 'hangar_small.glb', 'airliner.glb', 'cooling_tower.glb', 'reactor.glb', 'chimney.glb', 'radar_station.glb', 'watchtower.glb', 'storage_tank.glb', 'silo.glb', 'afv.glb', 'stadium.glb', 'office_tower_low.glb', 'office_tower_mid.glb', 'office_tower_high.glb', 'midrise_a.glb', 'midrise_b.glb', 'warehouse_large.glb', 'warehouse_small.glb', 'container_red.glb', 'container_blue.glb', 'villa_b.glb', 'townhouse_b.glb', 'barn.glb', 'greenhouse.glb', 'port_crane.glb']) {
   assert(syncScript.includes(cityGlb), `0.3.2 sync must stage ${cityGlb}`);
 }
+
+// 0.3.3: phone performance rescue (wide compensated city chunks,
+// streaming fast paths, Android budgets + FPS governor).
+for (const marker of ['_is_city_pack_path', 'radius_comp_0330', 'perf_streaming_0330', 'perf_city_hlod_0330', '_collider_cell_list', 'return 620.0', 'proxy_chunk_m = 820.0']) {
+  assert(worldScript.includes(marker), `0.3.3 world performance marker is missing: ${marker}`);
+}
+for (const marker of ['_update_performance_governor_0330', '_apply_performance_governor_0330', 'android_perf_budgets_0330', 'perf_governor_level_0330']) {
+  assert(mainScript.includes(marker), `0.3.3 main performance marker is missing: ${marker}`);
+}
+assert(project.includes('shadows/positional_shadow/atlas_size.mobile=1024'), '0.3.3 phones must cap the positional shadow atlas at 1024px');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
