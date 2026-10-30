@@ -13501,12 +13501,12 @@ func _gf_vnoise3(lat: PackedFloat32Array, p: Vector3) -> float:
 	var xs := xf * xf * (3.0 - 2.0 * xf)
 	var ys := yf * yf * (3.0 - 2.0 * yf)
 	var zs := zf * zf * (3.0 - 2.0 * zf)
-	var x0 := posmod(xi, LS)
-	var x1 := posmod(xi + 1, LS)
-	var y0 := posmod(yi, LS) * LS
-	var y1 := posmod(yi + 1, LS) * LS
-	var z0 := posmod(zi, LS) * LS * LS
-	var z1 := posmod(zi + 1, LS) * LS * LS
+	var x0: int = int(posmod(xi, LS))
+	var x1: int = int(posmod(xi + 1, LS))
+	var y0: int = int(posmod(yi, LS)) * LS
+	var y1: int = int(posmod(yi + 1, LS)) * LS
+	var z0: int = int(posmod(zi, LS)) * LS * LS
+	var z1: int = int(posmod(zi + 1, LS)) * LS * LS
 	var c000 := lat[x0 + y0 + z0]
 	var c100 := lat[x1 + y0 + z0]
 	var c010 := lat[x0 + y1 + z0]
@@ -13728,8 +13728,8 @@ func _gf_roadside_grass(buckets: Dictionary, base: float, sink: float) -> int:
 			for side in [-1.0, 1.0]:
 				var off := half_w + rng.randf_range(0.7, 4.6)
 				var along := rng.randf_range(-3.0, 3.0)
-				var px := a.x + perp.x * off * side + dir2.x * along
-				var pz := a.z + perp.y * off * side + dir2.y * along
+				var px: float = a.x + perp.x * off * float(side) + dir2.x * along
+				var pz: float = a.z + perp.y * off * float(side) + dir2.y * along
 				if _gf_in_field(px, pz):
 					continue
 				var gy := height_at(px, pz)
