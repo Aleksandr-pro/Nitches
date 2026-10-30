@@ -13440,7 +13440,7 @@ func _gf_bush_mesh() -> ArrayMesh:
 	for i in range(5):
 		var yaw := TAU * float(i) / 5.0 + rng.randf_range(-0.3, 0.3)
 		var end := Vector3(cos(yaw) * rng.randf_range(0.3, 0.5), rng.randf_range(0.5, 0.8), sin(yaw) * rng.randf_range(0.3, 0.5))
-		twigs.append(_gf_branch_part(branch_prim, Vector3(0.0, 0.0, 0.0), end, 0.035, white))
+		twigs.append(_gf_branch_part(branch_prim, Vector3(0.0, 0.0, 0.0), end, 0.035, Color(0.09, 0.055, 0.030)))
 	var core: Array = [
 		_dz_scatter_part(sph, Vector3(0.0, 0.45, 0.0), Vector3(1.35, 0.78, 1.26), core_col),
 		_dz_scatter_part(sph, Vector3(0.45, 0.6, 0.22), Vector3(0.88, 0.55, 0.82), core_col),
@@ -13451,7 +13451,7 @@ func _gf_bush_mesh() -> ArrayMesh:
 		var dir := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.05, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
 		var centre := Vector3(dir.x * 0.6, 0.56 + dir.y * 0.34, dir.z * 0.6)
 		_gf_add_cluster(cards, centre, 1.05, rng)
-	var mesh := _gf_tree_mesh(twigs, core, cards, null)
+	var mesh := _gf_tree_mesh([], twigs + core, cards, null)
 	return _gf_apply_wind(mesh, "gf_leaf_cluster.png", Color(1.0, 1.0, 1.0), 0.06)
 
 
