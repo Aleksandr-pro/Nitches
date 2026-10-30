@@ -33,6 +33,62 @@ signal leaderboard_requested(by: String)
 signal admin_requested(action: String, payload: Dictionary)
 signal multiplayer_join_requested
 signal multiplayer_leave_requested
+signal wheel_spin_requested
+
+# 0.2.62 wheel-of-fortune view (home screen): draws the prize wheel
+# segments from main's WHEEL_SEGMENTS table (passed via profile view)
+# and rotates via the tweened `angle` property.  Pointer sits at top.
+class WheelView:
+    extends Control
+
+    var segments: Array = []
+    var text_font: Font
+    var angle := 0.0:
+        set(value):
+            angle = value
+            queue_redraw()
+
+    func _draw() -> void:
+        if segments.size() < 2 or size.x < 10.0:
+            return
+        var center := size * 0.5
+        var radius := minf(size.x, size.y) * 0.47
+        var seg := TAU / float(segments.size())
+        var shades := [Color(0.10, 0.12, 0.17), Color(0.17, 0.20, 0.27)]
+        draw_circle(center, radius + 7.0, Color(0.02, 0.03, 0.05))
+        draw_arc(center, radius + 7.0, 0.0, TAU, 48, Color(1.0, 0.58, 0.08), 3.0)
+        for i in segments.size():
+            var data: Dictionary = segments[i]
+            var a0 := angle + seg * float(i)
+            var points := PackedVector2Array()
+            points.append(center)
+            var steps := 10
+            for step in steps + 1:
+                var a := a0 + seg * float(step) / float(steps)
+                points.append(center + Vector2(cos(a), sin(a)) * radius)
+            var col: Color = shades[i % 2]
+            if String(data.get("kind", "cr")) == "spin":
+                col = Color(0.55, 0.30, 0.05)
+            elif int(data.get("cr", 0)) >= 5000:
+                col = Color(0.85, 0.62, 0.10)
+            draw_colored_polygon(points, col)
+            draw_arc(center, radius, a0, a0 + seg, 12, Color(1.0, 1.0, 1.0, 0.22), 2.0)
+            if text_font != null:
+                var mid := a0 + seg * 0.5
+                var text := "+1 СПИН" if String(data.get("kind", "cr")) == "spin" else str(int(data.get("cr", 0)))
+                var text_pos := center + Vector2(cos(mid), sin(mid)) * radius * 0.66
+                draw_set_transform(text_pos, mid + PI * 0.5, Vector2.ONE)
+                draw_string(text_font, Vector2(-55.0, 6.0), text, HORIZONTAL_ALIGNMENT_CENTER, 110.0, 16, Color.WHITE)
+                draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+        draw_circle(center, radius * 0.15, Color(0.03, 0.04, 0.06))
+        draw_arc(center, radius * 0.15, 0.0, TAU, 32, Color(1.0, 0.58, 0.08), 3.0)
+        var pointer := PackedVector2Array([
+            center + Vector2(-14.0, -radius - 4.0),
+            center + Vector2(14.0, -radius - 4.0),
+            center + Vector2(0.0, -radius + 24.0),
+        ])
+        draw_colored_polygon(pointer, Color(1.0, 0.58, 0.08))
+
 
 const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
 const AvatarIconScript := preload("res://scripts/avatar_icon.gd")
@@ -221,6 +277,12 @@ var _store_card_buttons: Dictionary = {}
 var _store_filter_buttons: Dictionary = {}
 var _store_sort_button: Button
 var _store_filter := "all"
+var _store_class_filter := "all"
+var _store_power_filter := "any"
+var _store_owned_filter := "all"
+var _store_class_button: Button
+var _store_power_button: Button
+var _store_owned_button: Button
 var _store_sort := "price"
 var _store_selected_id := "shelby_gt500"
 var _store_hint_label: Label
@@ -257,6 +319,19 @@ var _online_overlay_title: Label
 var _online_overlay_text: Label
 var _online_overlay_primary: Button
 var _online_overlay_mode := ""
+
+# 0.2.62 lightweight menu splash + wheel of fortune.
+var _menu_bg: Control
+var _menu_bg_image: TextureRect
+var _home_wheel_card: Button
+var _home_wheel_subtitle: Label
+var _wheel_overlay: PanelContainer
+var _wheel_view: WheelView
+var _wheel_spins_label: Label
+var _wheel_result_label: Label
+var _wheel_spin_button: Button
+var _wheel_spinning := false
+var _wheel_segments_cache: Array = []
 
 var _world_progress_label: Label
 var _world_detail_label: Label
@@ -364,6 +439,9 @@ func get_smoke_state() -> Dictionary:
         "daily_quests_ui_0261": _online_quests_box != null,
         "account_ui_0261": _online_register_button != null and _online_login_button != null,
         "privacy_ui_0261": _online_overlay != null,
+        "menu_light_bg_0262": _menu_bg != null and _menu_bg_image != null,
+        "wheel_ui_0262": _wheel_overlay != null and _home_wheel_card != null,
+        "store_filters_0262": _store_class_button != null and _store_power_button != null and _store_owned_button != null,
         "worlds_free_for_all_0248": WORLDS_FREE_FOR_ALL,
         "hover_sound_0236": _hover_player != null,
         "panel_transition_018_0236": is_equal_approx(PANEL_TRANSITION_SECONDS, 0.18),
@@ -652,6 +730,27 @@ func _build_ui() -> void:
     bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _root.add_child(bg)
 
+    # 0.2.62: static gameplay splash behind the menu instead of the
+    # live 3D world (main hides the world node in menu): the menu
+    # stopped stuttering on phones and frosted panels blur the photo.
+    _menu_bg = Control.new()
+    _menu_bg.name = "MenuBackground0262"
+    _menu_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _menu_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _root.add_child(_menu_bg)
+    _menu_bg_image = TextureRect.new()
+    _menu_bg_image.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _menu_bg_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    _menu_bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+    _menu_bg_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _menu_bg_image.texture = _menu_background_texture()
+    _menu_bg.add_child(_menu_bg_image)
+    var bg_shade := ColorRect.new()
+    bg_shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+    bg_shade.color = Color(0.0, 0.02, 0.04, 0.30)
+    bg_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _menu_bg.add_child(bg_shade)
+
     var margin := MarginContainer.new()
     margin.set_anchors_preset(Control.PRESET_FULL_RECT)
     margin.add_theme_constant_override("margin_left", 24)
@@ -803,6 +902,8 @@ func _show_panel(index: int) -> void:
         _refresh_store()
     if index == PANEL_ONLINE:
         _refresh_online_panel()
+    if _menu_bg != null:
+        _menu_bg.visible = index != PANEL_GARAGE and index != PANEL_STORE
     panel_changed.emit(index)
     call_deferred("_animate_panel", _panels[index])
 
@@ -1138,6 +1239,14 @@ func _build_home_panel(parent: Node) -> Control:
     _home_class_label.offset_right = -12.0
     _home_class_label.offset_bottom = 38.0
     _home_class_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    _home_wheel_card = _tile("◎ КОЛЕСО УДАЧИ", "бесплатных спинов: 1", COL_ACCENT, Vector2(0.0, 84.0), 20)
+    _home_wheel_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    for child in _home_wheel_card.get_children():
+        if child is Label:
+            _home_wheel_subtitle = child as Label
+    _home_wheel_card.pressed.connect(func() -> void: _show_wheel_overlay())
+    right.add_child(_home_wheel_card)
+    _build_wheel_overlay()
     return vbox.get_parent().get_parent() as Control
 
 
@@ -1552,6 +1661,32 @@ func _build_store_panel(parent: Node) -> Control:
     _store_sort_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _store_sort_button.pressed.connect(_cycle_store_sort)
     catalog.add_child(_store_sort_button)
+    var filters2_row := HBoxContainer.new()
+    filters2_row.add_theme_constant_override("separation", 6)
+    catalog.add_child(filters2_row)
+    _store_class_button = _button("КЛАСС: ВСЕ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _store_class_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _store_class_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _store_class_button.pressed.connect(_cycle_store_class_filter)
+    filters2_row.add_child(_store_class_button)
+    _store_power_button = _button("МОЩНОСТЬ: ЛЮБАЯ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _store_power_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _store_power_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _store_power_button.pressed.connect(_cycle_store_power_filter)
+    filters2_row.add_child(_store_power_button)
+    var filters3_row := HBoxContainer.new()
+    filters3_row.add_theme_constant_override("separation", 6)
+    catalog.add_child(filters3_row)
+    _store_owned_button = _button("НАЛИЧИЕ: ВСЕ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _store_owned_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _store_owned_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _store_owned_button.pressed.connect(_cycle_store_owned_filter)
+    filters3_row.add_child(_store_owned_button)
+    var reset_filters_button := _button("СБРОСИТЬ ФИЛЬТРЫ", COL_BORDER, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    reset_filters_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    reset_filters_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    reset_filters_button.pressed.connect(_reset_store_filters)
+    filters3_row.add_child(reset_filters_button)
     var cards_scroll := ScrollContainer.new()
     cards_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     cards_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1701,6 +1836,12 @@ func _refresh_store() -> void:
         (_store_filter_buttons[key] as Button).button_pressed = String(key) == _store_filter
     if _store_sort_button != null:
         _store_sort_button.text = "СОРТИРОВКА: ЦЕНА ↑" if _store_sort == "price" else ("СОРТИРОВКА: МОЩНОСТЬ ↓" if _store_sort == "power" else "СОРТИРОВКА: ИМЯ А–Я")
+    if _store_class_button != null:
+        _store_class_button.text = "КЛАСС: ВСЕ" if _store_class_filter == "all" else "КЛАСС: %s" % _store_class_filter
+    if _store_power_button != null:
+        _store_power_button.text = "МОЩНОСТЬ: ЛЮБАЯ" if _store_power_filter == "any" else "МОЩНОСТЬ: %s Л.С." % _store_power_filter_label()
+    if _store_owned_button != null:
+        _store_owned_button.text = "НАЛИЧИЕ: %s" % _store_owned_filter_label()
     for child in _store_cards_box.get_children():
         _store_cards_box.remove_child(child)
         child.queue_free()
@@ -1709,7 +1850,7 @@ func _refresh_store() -> void:
     items.sort_custom(_store_sort_less)
     var visible_items: Array[Dictionary] = []
     for item in items:
-        if _store_filter == "all" or String(item.get("type", "")) == _store_filter:
+        if _store_item_matches_filters(item):
             visible_items.append(item)
     var selected_visible := false
     for item in visible_items:
@@ -1717,6 +1858,9 @@ func _refresh_store() -> void:
             selected_visible = true
     if not selected_visible and not visible_items.is_empty():
         _store_selected_id = String(visible_items[0].get("id", "shelby_gt500"))
+    if visible_items.is_empty():
+        var empty_label := _label(_store_cards_box, "Ничего не нашлось по этим фильтрам. Нажмите «Сбросить фильтры».", MIN_FONT_SIZE, COL_MUTED)
+        empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     for item in visible_items:
         var item_id := String(item.get("id", ""))
         var status := _store_item_status(item)
@@ -2133,7 +2277,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.61-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.62-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2371,6 +2515,8 @@ func set_current_world(world_id: String) -> void:
     if world_id != "richtown" and world_id != "desert" and world_id != "greenforest":
         return
     _current_world_id = world_id
+    if _menu_bg_image != null:
+        _menu_bg_image.texture = _menu_background_texture()
     _refresh_world_cards()
     _refresh_car_presentation()
 
@@ -2444,6 +2590,10 @@ func refresh_profile(view: Dictionary) -> void:
         _top_xp_label.text = "ур. %d • XP %d%%" % [level, int(round(xp_progress * 100.0))]
     if _home_goal_label != null:
         _home_goal_label.text = "БЛИЖАЙШАЯ ЦЕЛЬ: до уровня %d осталось %.1f км • баланс CR %s" % [level + 1, float(view.get("xp_to_next_km", 50.0)), _fmt_int(credits)]
+    if _home_wheel_subtitle != null:
+        _home_wheel_subtitle.text = "бесплатных спинов: %d • новый каждый день" % int(view.get("wheel_spins", 0))
+    if _wheel_overlay != null and _wheel_overlay.visible and not _wheel_spinning:
+        _refresh_wheel_overlay_state(int(view.get("wheel_spins", 0)))
     if _top_avatar_icon != null:
         _top_avatar_icon.queue_redraw()
     if _profile_avatar_icon != null:
@@ -3068,3 +3218,238 @@ func show_admin_data(kind: String, data: Dictionary) -> void:
         "feedback_delete":
             online_set_status("Админ: отзыв удалён.")
             admin_requested.emit("feedback", {})
+
+
+# --------------------------------------------------------------------- #
+# 0.2.62: lightweight menu splash, rich store filters, wheel of fortune
+# --------------------------------------------------------------------- #
+
+func _menu_background_texture() -> Texture2D:
+    # Real gameplay screenshots only (project rule): an action shot for
+    # RichTown, the world overview for the desert/forest.
+    return MENU_WORLD_TEXTURE if _current_world_id != "richtown" else MENU_PLAY_TEXTURE
+
+
+func _store_item_owned(item: Dictionary) -> bool:
+    if String(item.get("type", "")) == "cars":
+        return bool(item.get("owned", false))
+    return int(item.get("level", 0)) <= int(_customization.get("tuning_owned_max", 0))
+
+
+func _store_item_matches_filters(item: Dictionary) -> bool:
+    if _store_filter != "all" and String(item.get("type", "")) != _store_filter:
+        return false
+    if _store_class_filter != "all" and String(item.get("class", "")) != _store_class_filter:
+        return false
+    var power := int(item.get("power", 0))
+    if _store_power_filter == "lt350" and power >= 350:
+        return false
+    if _store_power_filter == "mid" and (power < 350 or power > 500):
+        return false
+    if _store_power_filter == "gt500" and power <= 500:
+        return false
+    if _store_owned_filter != "all":
+        var owned := _store_item_owned(item)
+        if _store_owned_filter == "owned" and not owned:
+            return false
+        if _store_owned_filter == "unowned" and owned:
+            return false
+    return true
+
+
+func _store_classes_present() -> Array:
+    var rank := ["D", "C", "B", "A", "S1", "S2", "X"]
+    var seen: Dictionary = {}
+    for item in _store_items():
+        var cls := String(item.get("class", ""))
+        if not cls.is_empty():
+            seen[cls] = true
+    var present: Array = []
+    for cls in rank:
+        if seen.has(cls):
+            present.append(cls)
+    for cls in seen.keys():
+        if not present.has(cls):
+            present.append(cls)
+    return present
+
+
+func _cycle_store_class_filter() -> void:
+    var options: Array = ["all"]
+    options.append_array(_store_classes_present())
+    var idx := options.find(_store_class_filter)
+    _store_class_filter = String(options[(idx + 1) % options.size()])
+    _refresh_store()
+
+
+func _cycle_store_power_filter() -> void:
+    var options := ["any", "lt350", "mid", "gt500"]
+    var idx := options.find(_store_power_filter)
+    _store_power_filter = options[(idx + 1) % options.size()]
+    _refresh_store()
+
+
+func _store_power_filter_label() -> String:
+    match _store_power_filter:
+        "lt350":
+            return "ДО 350"
+        "mid":
+            return "350–500"
+        "gt500":
+            return "500+"
+        _:
+            return "ЛЮБАЯ"
+
+
+func _cycle_store_owned_filter() -> void:
+    var options := ["all", "owned", "unowned"]
+    var idx := options.find(_store_owned_filter)
+    _store_owned_filter = options[(idx + 1) % options.size()]
+    _refresh_store()
+
+
+func _store_owned_filter_label() -> String:
+    match _store_owned_filter:
+        "owned":
+            return "МОИ"
+        "unowned":
+            return "НЕ МОИ"
+        _:
+            return "ВСЕ"
+
+
+func _reset_store_filters() -> void:
+    _store_filter = "all"
+    _store_class_filter = "all"
+    _store_power_filter = "any"
+    _store_owned_filter = "all"
+    _refresh_store()
+
+
+func _wheel_default_segments() -> Array:
+    # Fallback for the first paint before main binds the profile view;
+    # MUST mirror WHEEL_SEGMENTS in main.gd (main stays authoritative
+    # for the actual prize roll).
+    return [
+        {"cr": 200, "kind": "cr"}, {"cr": 750, "kind": "cr"}, {"cr": 300, "kind": "cr"},
+        {"cr": 1500, "kind": "cr"}, {"cr": 250, "kind": "cr"}, {"cr": 500, "kind": "cr"},
+        {"cr": 5000, "kind": "cr"}, {"cr": 400, "kind": "cr"}, {"cr": 1000, "kind": "cr"},
+        {"cr": 0, "kind": "spin"}, {"cr": 600, "kind": "cr"}, {"cr": 2000, "kind": "cr"},
+    ]
+
+
+func _build_wheel_overlay() -> void:
+    _wheel_overlay = PanelContainer.new()
+    _wheel_overlay.name = "WheelOverlay0262"
+    _wheel_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _wheel_overlay.add_theme_stylebox_override("panel", _style(Color(0.002, 0.004, 0.008, 0.95), COL_ACCENT, 10, 2))
+    _wheel_overlay.visible = false
+    if _root != null:
+        _root.add_child(_wheel_overlay)
+    else:
+        add_child(_wheel_overlay)
+    var margin := MarginContainer.new()
+    margin.add_theme_constant_override("margin_left", 24)
+    margin.add_theme_constant_override("margin_right", 24)
+    margin.add_theme_constant_override("margin_top", 18)
+    margin.add_theme_constant_override("margin_bottom", 18)
+    _wheel_overlay.add_child(margin)
+    var vbox := VBoxContainer.new()
+    vbox.add_theme_constant_override("separation", 10)
+    margin.add_child(vbox)
+    var title := _label(vbox, "◎ КОЛЕСО УДАЧИ", 26, Color.WHITE, true)
+    title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _wheel_spins_label = _label(vbox, "", 16, Color(1.0, 0.82, 0.55))
+    _wheel_spins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _wheel_view = WheelView.new()
+    _wheel_view.custom_minimum_size = Vector2(330.0, 330.0)
+    _wheel_view.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    _wheel_view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    _wheel_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _wheel_view.text_font = _body_font
+    _wheel_view.segments = _wheel_default_segments()
+    vbox.add_child(_wheel_view)
+    _wheel_result_label = _label(vbox, "Крутите колесо — выигрывайте CR и дополнительные спины!", 16, COL_TEXT)
+    _wheel_result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _wheel_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 10)
+    vbox.add_child(row)
+    _wheel_spin_button = _button("КРУТИТЬ", COL_ACCENT, Vector2(0.0, MIN_TOUCH_HEIGHT), 18)
+    _wheel_spin_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _wheel_spin_button.pressed.connect(_on_wheel_spin_pressed)
+    row.add_child(_wheel_spin_button)
+    var close_button := _button("ЗАКРЫТЬ", COL_BORDER, Vector2(180.0, MIN_TOUCH_HEIGHT), 17)
+    close_button.pressed.connect(func() -> void: _wheel_overlay.visible = false)
+    row.add_child(close_button)
+
+
+func _refresh_wheel_overlay_state(spins: int) -> void:
+    if _wheel_spins_label != null:
+        _wheel_spins_label.text = "Бесплатных спинов: %d • новый спин каждый день и за уровень" % spins
+    if _wheel_spin_button != null:
+        _wheel_spin_button.text = "КРУТИТЬ (%d)" % spins
+        _wheel_spin_button.disabled = spins <= 0 or _wheel_spinning
+
+
+func _show_wheel_overlay() -> void:
+    if _wheel_overlay == null or _wheel_view == null:
+        return
+    var segments: Array = _profile_view.get("wheel_segments", [])
+    if segments.is_empty():
+        segments = _wheel_default_segments()
+    _wheel_segments_cache = segments.duplicate(true)
+    _wheel_view.segments = _wheel_segments_cache
+    _wheel_view.queue_redraw()
+    if _wheel_result_label != null and not _wheel_spinning:
+        _wheel_result_label.text = "Крутите колесо — выигрывайте CR и дополнительные спины!"
+    _refresh_wheel_overlay_state(int(_profile_view.get("wheel_spins", 0)))
+    var overlay_parent := _wheel_overlay.get_parent()
+    if overlay_parent != null:
+        overlay_parent.move_child(_wheel_overlay, overlay_parent.get_child_count() - 1)
+    _wheel_overlay.visible = true
+
+
+func _on_wheel_spin_pressed() -> void:
+    if _wheel_spinning:
+        return
+    wheel_spin_requested.emit()
+
+
+func show_wheel_result(index: int, prize: Dictionary, spins_left: int) -> void:
+    if _wheel_overlay == null or _wheel_view == null:
+        return
+    if index < 0 or _wheel_segments_cache.is_empty():
+        _wheel_spinning = false
+        if _wheel_result_label != null:
+            _wheel_result_label.text = "Спины закончились. Новый бесплатный спин — каждый день и за каждый уровень водителя!"
+        _refresh_wheel_overlay_state(spins_left)
+        return
+    var seg := TAU / float(_wheel_segments_cache.size())
+    var centre := seg * float(index) + seg * 0.5
+    var desired := fmod(-PI * 0.5 - centre, TAU)
+    if desired < 0.0:
+        desired += TAU
+    var current := fmod(_wheel_view.angle, TAU)
+    if current < 0.0:
+        current += TAU
+    var delta := desired - current
+    if delta < 0.0:
+        delta += TAU
+    var target := _wheel_view.angle + TAU * 5.0 + delta
+    _wheel_spinning = true
+    if _wheel_spin_button != null:
+        _wheel_spin_button.disabled = true
+    if _wheel_result_label != null:
+        _wheel_result_label.text = "Крутится…"
+    var tween := create_tween()
+    tween.tween_property(_wheel_view, "angle", target, 4.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+    tween.tween_callback(func() -> void:
+        _wheel_spinning = false
+        if _wheel_result_label != null:
+            if String(prize.get("kind", "cr")) == "spin":
+                _wheel_result_label.text = "Выпало: +1 бесплатный спин! Крутите ещё!"
+            else:
+                _wheel_result_label.text = "Выпало: +%s CR!" % _fmt_int(int(prize.get("cr", 0)))
+        _refresh_wheel_overlay_state(spins_left)
+    )

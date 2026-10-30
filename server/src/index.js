@@ -23,7 +23,7 @@
 // Passwords: PBKDF2-SHA256, 100k iterations, per-user salt.  Sessions are
 // opaque random tokens stored in D1 (revocable, 30 days).
 
-const SERVER_VERSION = "0.2.61";
+const SERVER_VERSION = "0.2.62";
 const SESSION_TTL_SEC = 30 * 24 * 3600;
 const START_CREDITS = 15000;
 
