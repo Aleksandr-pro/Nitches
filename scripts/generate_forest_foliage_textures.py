@@ -267,6 +267,15 @@ def birch_bark(rng):
     him = Image.new("L", (S, S), 140)
     d = ImageDraw.Draw(img)
     dh = ImageDraw.Draw(him)
+    # subtle horizontal banding (growth-zone tint shifts)
+    for _ in range(26):
+        by = float(rng.random() * S)
+        bh = float(rng.uniform(8.0, 30.0))
+        tone = int(rng.uniform(196, 214))
+
+        def band(x, y, bh=bh, tone=tone):
+            d.rectangle([0, y, S, y + bh], fill=(tone, tone - 2, tone - 10))
+        _wrapped(band, 0.0, by)
     # horizontal lenticel dashes
     for _ in range(950):
         x, y = float(rng.random() * S), float(rng.random() * S)
@@ -307,7 +316,7 @@ def birch_bark(rng):
 
 def pine_bark(rng):
     img = Image.new("RGB", (S, S), (38, 24, 15))
-    him = Image.new("L", (S, S), 84)
+    him = Image.new("L", (S, S), 56)
     d = ImageDraw.Draw(img)
     dh = ImageDraw.Draw(him)
     cell = 78.0
@@ -356,11 +365,105 @@ def pine_bark(rng):
         def stroke(x, y, ln=ln, wd=wd, jx=jx, col=col):
             d.line([(x, y), (x + jx, y + ln)], fill=col, width=wd)
         _wrapped(stroke, x, y)
+    # vertical fibre streaks + resin pockets between the plates
+    for _ in range(650):
+        x, y = float(rng.random() * S), float(rng.random() * S)
+        ln = float(rng.uniform(20.0, 70.0))
+        dark = rng.random() < 0.55
+        col = (28, 17, 9) if dark else _shade(rng, (128, 84, 46), (156, 108, 62))
+        hv = 96 if dark else 196
+
+        def fibre(x, y, ln=ln, col=col, hv=hv):
+            d.line([(x, y), (x + float(rng.uniform(-3.0, 3.0)), y + ln)], fill=col, width=2)
+            dh.line([(x, y), (x, y + ln)], fill=hv, width=2)
+        _wrapped(fibre, x, y)
+    for _ in range(34):
+        x, y = float(rng.random() * S), float(rng.random() * S)
+        rw, rh = float(rng.uniform(2.0, 4.5)), float(rng.uniform(5.0, 9.0))
+
+        def resin(x, y, rw=rw, rh=rh):
+            d.ellipse([x - rw, y - rh, x + rw, y + rh], fill=(40, 23, 12))
+            dh.ellipse([x - rw, y - rh, x + rw, y + rh], fill=150)
+        _wrapped(resin, x, y)
     albedo = np.asarray(img).astype(np.float64) / 255.0
     grain = fractal(rng, beta=1.5, fmax=500.0)
     albedo = clip01(albedo + (grain[..., None] - 0.5) * 0.10)
     height = np.asarray(him).astype(np.float64) / 255.0
     rough = np.full((S, S), 0.92)
+    return albedo, height, rough
+
+
+
+def oak_bark(rng):
+    """Deep vertical furrows: tall grey-brown plates over dark gaps."""
+    img = Image.new("RGB", (S, S), (34, 25, 17))
+    him = Image.new("L", (S, S), 52)
+    d = ImageDraw.Draw(img)
+    dh = ImageDraw.Draw(him)
+    cell_w = 52.0
+    cols = int(S / cell_w) + 2
+    for cx_i in range(cols):
+        y_cursor = -float(rng.uniform(0.0, 90.0))
+        while y_cursor < S + 60:
+            ph = float(rng.uniform(120.0, 230.0))
+            pw = cell_w * float(rng.uniform(0.82, 1.38))
+            cx = cx_i * cell_w + float(rng.uniform(-6.0, 6.0))
+            cy = y_cursor + ph * 0.5
+            pts = []
+            for k in range(8):
+                a = k / 8.0 * math.tau
+                rr = float(rng.uniform(0.66, 1.06))
+                pts.append((cx + math.cos(a) * pw * 0.5 * rr,
+                            cy + math.sin(a) * ph * 0.5 * rr))
+            col = _shade(rng, (74, 56, 40), (104, 82, 58))
+            col_hi = _shade(rng, (110, 88, 62), (134, 108, 78))
+            for ox in (0, -S, S):
+                for oy in (0, -S, S):
+                    p2 = [(x + ox, y + oy) for (x, y) in pts]
+                    d.polygon(p2, fill=col)
+                    dh.polygon(p2, fill=182)
+                    inner = [(cx + (x - cx) * 0.60 + ox,
+                              cy + (y - cy) * 0.66 + oy) for (x, y) in pts]
+                    d.polygon(inner, fill=col_hi)
+                    dh.polygon(inner, fill=210)
+            y_cursor += ph * float(rng.uniform(0.82, 0.95))
+    # wavy vertical furrow lines biting into the gaps
+    for _ in range(230):
+        x = float(rng.random() * S)
+        y = float(rng.random() * S)
+        ln = float(rng.uniform(60.0, 170.0))
+        pts = [(x + float(rng.uniform(-3.0, 3.0)), y + ln * t / 5.0)
+               for t in range(6)]
+
+        def furrow(ox, oy, pts=pts):
+            p2 = [(px + ox, py + oy) for (px, py) in pts]
+            d.line(p2, fill=(26, 19, 12), width=3)
+            dh.line(p2, fill=38, width=4)
+        for ox in (0, -S, S):
+            for oy in (0, -S, S):
+                furrow(ox, oy)
+    # short horizontal cross-cracks
+    for _ in range(150):
+        x, y = float(rng.random() * S), float(rng.random() * S)
+        ln = float(rng.uniform(10.0, 30.0))
+
+        def crack(x, y, ln=ln):
+            d.line([(x, y), (x + ln, y + float(rng.uniform(-2.0, 2.0)))],
+                   fill=(28, 20, 13), width=2)
+            dh.line([(x, y), (x + ln, y)], fill=60, width=3)
+        _wrapped(crack, x, y)
+    # sparse moss stipple in the furrow bottoms
+    for _ in range(200):
+        x, y = float(rng.random() * S), float(rng.random() * S)
+
+        def moss(x, y):
+            d.ellipse([x - 3, y - 2, x + 3, y + 2], fill=(56, 72, 38))
+        _wrapped(moss, x, y)
+    albedo = np.asarray(img).astype(np.float64) / 255.0
+    grain = fractal(rng, beta=1.5, fmax=500.0)
+    albedo = clip01(albedo + (grain[..., None] - 0.5) * 0.09)
+    height = np.asarray(him).astype(np.float64) / 255.0
+    rough = np.full((S, S), 0.95)
     return albedo, height, rough
 
 
@@ -385,9 +488,11 @@ def main():
     save_card("gf_leaf_single.png", single_leaf(rng))
 
     a, h, r = birch_bark(rng)
-    save_set("gf_birch_bark", a, h, r, 2.0)
+    save_set("gf_birch_bark", a, h, r, 2.2, ao_k=1.3)
     a, h, r = pine_bark(rng)
-    save_set("gf_pine_bark", a, h, r, 2.6)
+    save_set("gf_pine_bark", a, h, r, 3.1, ao_k=2.3)
+    a, h, r = oak_bark(rng)
+    save_set("oak_bark", a, h, r, 3.4, ao_k=2.6)
     print("[foliage] done")
 
 
