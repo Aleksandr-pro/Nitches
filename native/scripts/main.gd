@@ -44,6 +44,18 @@ const QUEST_POOL := [
 	{"id": "nitro_20", "metric": "nitro_seconds", "target": 20.0, "reward": 550, "title": "Азот!", "detail": "Использовать нитро 20 секунд", "unit": "с"},
 	{"id": "earn_2000", "metric": "credits_from_driving", "target": 2000.0, "reward": 600, "title": "Заработок", "detail": "Заработать 2000 CR ездой", "unit": "CR"},
 ]
+
+## 0.2.62 wheel of fortune (home screen): +1 free spin per day and
+## +1 per driver level, capped.  Prizes are CR plus one extra-spin
+## slot; average payout ~1000 CR per spin keeps the car/world
+## prices meaningful while giving a daily reason to open the game.
+const WHEEL_SEGMENTS := [
+	{"cr": 200, "kind": "cr"}, {"cr": 750, "kind": "cr"}, {"cr": 300, "kind": "cr"},
+	{"cr": 1500, "kind": "cr"}, {"cr": 250, "kind": "cr"}, {"cr": 500, "kind": "cr"},
+	{"cr": 5000, "kind": "cr"}, {"cr": 400, "kind": "cr"}, {"cr": 1000, "kind": "cr"},
+	{"cr": 0, "kind": "spin"}, {"cr": 600, "kind": "cr"}, {"cr": 2000, "kind": "cr"},
+]
+const WHEEL_SPIN_CAP := 5
 const SETTINGS_PATH := "user://nitches_settings.cfg"
 
 const TIME_MODES: Array[String] = ["day", "sunset", "night"]
@@ -351,6 +363,7 @@ func _bootstrap_create_profile_and_menu() -> void:
 	_menu.admin_requested.connect(_on_admin_requested)
 	_menu.multiplayer_join_requested.connect(_on_multiplayer_join_requested)
 	_menu.multiplayer_leave_requested.connect(_on_multiplayer_leave_requested)
+	_menu.wheel_spin_requested.connect(_on_wheel_spin_requested)
 	_menu.set_current_world(_selected_world_id)
 	_setup_net()
 	_apply_settings(_settings, false)
@@ -944,6 +957,7 @@ func _set_garage_active(active: bool) -> void:
 func _on_menu_panel_changed(panel: int) -> void:
 	# Garage (1) and Store (2) both present the live selected-car studio.
 	_set_garage_active(panel == NativeMainMenu.PANEL_GARAGE or panel == NativeMainMenu.PANEL_STORE)
+	_apply_menu_lightweight()
 
 
 func _on_garage_dragged(relative: Vector2) -> void:
@@ -1000,6 +1014,9 @@ func _load_profile() -> void:
 		"owned_worlds": [],
 		"daily": {},
 		"economy_v": 0,
+		"wheel_spins": 1,
+		"wheel_last_day": "",
+		"wheel_level": 1,
 		"paint_id": "red",
 		"paint_color": "7a0609ff",
 		"wheel_finish": "silver",
@@ -1084,6 +1101,7 @@ func _load_profile() -> void:
 	if _selected_car_id not in (_profile.get("owned_cars", []) as Array):
 		_selected_car_id = NativeCarCatalog.DEFAULT_CAR_ID
 		_profile["selected_car_id"] = _selected_car_id
+	_grant_wheel_spins()
 	_store_active_customization(_active_customization())
 
 
@@ -1195,6 +1213,8 @@ func _profile_view() -> Dictionary:
 		"owned_worlds": (_profile.get("owned_worlds", []) as Array).duplicate(),
 		"world_prices": WORLD_PRICES.duplicate(),
 		"daily_quests": _daily_quests_view(),
+		"wheel_spins": int(_profile.get("wheel_spins", 0)),
+		"wheel_segments": WHEEL_SEGMENTS.duplicate(true),
 		"account": _account_view(),
 		"selected_car_id": _selected_car_id,
 		"car_stats": _car_stats_view(),
@@ -1210,6 +1230,7 @@ func _show_menu() -> void:
 	if _hud != null:
 		_hud.reset_touch_controls()
 	_in_menu = true
+	_apply_menu_lightweight()
 	if _atmosphere_fx != null:
 		_atmosphere_fx.set_active(false)
 	if _vehicle != null:
@@ -1236,6 +1257,7 @@ func _enter_game() -> void:
 		_world_map.hide_map()
 	_map_open = false
 	_in_menu = false
+	_apply_menu_lightweight()
 	if _atmosphere_fx != null:
 		_atmosphere_fx.set_active(true)
 	if _menu != null:
@@ -1805,6 +1827,64 @@ func _on_multiplayer_leave_requested() -> void:
 		_mp.leave_room()
 
 
+## --- 0.2.62 lightweight menu background + wheel of fortune ---
+
+func _apply_menu_lightweight() -> void:
+	# The main menu no longer renders the live 3D world behind its
+	# panels: on phones that made the whole menu stutter.  A static
+	# gameplay splash image in the menu layer replaces it (see
+	# main_menu.gd), the world node is hidden while the menu is up and
+	# the car stays visible only inside the garage studio.  World
+	# streaming also pauses (see _process).  Smoke/screenshot flows
+	# keep the old always-rendered behaviour for CI stability.
+	if _smoke_mode or _screenshot_mode:
+		return
+	if _world != null:
+		_world.visible = not _in_menu
+	if _vehicle != null:
+		_vehicle.visible = (not _in_menu) or _garage_active
+
+
+func _grant_wheel_spins() -> void:
+	# +1 free wheel spin per calendar day and +1 per driver level
+	# (level = 1 + km/50, same formula as the profile view), capped
+	# so spins stay a daily treat instead of a farming strategy.
+	var spins := int(_profile.get("wheel_spins", 0))
+	var today := Time.get_date_string_from_system()
+	if String(_profile.get("wheel_last_day", "")) != today:
+		_profile["wheel_last_day"] = today
+		spins = mini(spins + 1, WHEEL_SPIN_CAP)
+	var level := 1 + int(float(_profile.get("distance_m", 0.0)) / 50000.0)
+	var granted_level := int(_profile.get("wheel_level", 1))
+	if level > granted_level:
+		spins = mini(spins + (level - granted_level), WHEEL_SPIN_CAP)
+		_profile["wheel_level"] = level
+	_profile["wheel_spins"] = spins
+
+
+func _on_wheel_spin_requested() -> void:
+	_grant_wheel_spins()
+	var spins := int(_profile.get("wheel_spins", 0))
+	if spins <= 0:
+		if _menu != null:
+			_menu.show_wheel_result(-1, {}, 0)
+		return
+	_profile["wheel_spins"] = spins - 1
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var index := rng.randi_range(0, WHEEL_SEGMENTS.size() - 1)
+	var prize: Dictionary = WHEEL_SEGMENTS[index]
+	if String(prize.get("kind", "cr")) == "spin":
+		_profile["wheel_spins"] = int(_profile["wheel_spins"]) + 1
+	else:
+		_profile["credits"] = _credits() + int(prize.get("cr", 0))
+	_save_profile()
+	_sync_progress_online()
+	_refresh_menu_profile_and_customization()
+	if _menu != null:
+		_menu.show_wheel_result(index, prize, int(_profile.get("wheel_spins", 0)))
+
+
 func _accumulate_profile(delta: float) -> void:
 	if _vehicle == null or delta <= 0.0:
 		return
@@ -1847,6 +1927,7 @@ func _accumulate_profile(delta: float) -> void:
 	_profile_save_timer += delta
 	if _profile_save_timer >= 5.0:
 		_profile_save_timer = 0.0
+		_grant_wheel_spins()
 		_save_profile()
 
 
@@ -2165,7 +2246,7 @@ func _process(delta: float) -> void:
 	if _is_bootstrapping or _world_switch_in_progress:
 		return
 	_update_adaptive_render_quality(delta)
-	if _world != null and _camera != null and _vehicle != null and not _garage_active:
+	if _world != null and _camera != null and _vehicle != null and not _garage_active and (not _in_menu or _smoke_mode or _screenshot_mode):
 		# 0.2.30 directional streaming retired load behind the
 		# camera; 0.2.37 also retires whole chunks outside the side
 		# of the real horizontal view cone (with a wide margin), so
