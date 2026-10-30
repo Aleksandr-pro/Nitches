@@ -408,7 +408,7 @@ func _queue_forest_build_stages() -> void:
 	# 0.2.55: scatter is built in three slices so one stage never
 	# monopolises a loading frame long enough to trip Android ANR.
 	_add_build_stage("Высаживаем лес: деревья", Callable(self, "_gf_scatter_build").bind(["spruce", "pine", "birch", "leafy", "oak", "dead_tree"]), 2.2)
-	_add_build_stage("Высаживаем лес: подлесок", Callable(self, "_gf_scatter_build").bind(["bush", "fern", "flower", "mushroom", "stump", "fallen_log", "reed"]), 1.0)
+	_add_build_stage("Высаживаем лес: подлесок", Callable(self, "_gf_scatter_build").bind(["bush", "fern", "flower", "mushroom", "stump", "fallen_log", "reed", "grass_tuft"]), 1.0)
 	_add_build_stage("Высаживаем лес: камни и поля", Callable(self, "_gf_scatter_build").bind(["hay_bale", "crop_wheat", "crop_corn", "crop_sunflower", "rock_small", "rock_medium", "rock_large"]), 0.8)
 	_add_build_stage("Добавляем оленей, птиц и дым", Callable(self, "_build_forest_extras"), 0.5)
 	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
@@ -13178,6 +13178,245 @@ func _gf_near_road(px: float, pz: float, limit: float) -> bool:
 	return false
 
 
+# 0.2.57 photoreal-leaning foliage: alpha-cut card materials, card
+# surface packing and per-species tree builders (textured bark trunk
+# + dark crown core + painted leaf/needle cards).
+func _gf_foliage_material(key: String, file: String, tint: Color) -> StandardMaterial3D:
+	var material := _material(key, file, "", tint, 0.92, 0.0, Vector3.ONE, false, "")
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	material.alpha_scissor_threshold = 0.42
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.vertex_color_use_as_albedo = true
+	return material
+
+
+func _gf_cards_surface(cards: Array) -> Array:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for card_variant in cards:
+		var card: Dictionary = card_variant
+		var c := card["c"] as Vector3
+		var r := card["r"] as Vector3
+		var u := card["u"] as Vector3
+		var n := (card["n"] as Vector3).normalized()
+		var col := card["col"] as Color
+		var corners: Array = [c - r - u, c + r - u, c + r + u, c - r + u]
+		var uv_corners: Array = [Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0)]
+		if bool(card.get("flip", false)):
+			uv_corners = [Vector2(1.0, 1.0), Vector2(0.0, 1.0), Vector2(0.0, 0.0), Vector2(1.0, 0.0)]
+		for vi in [0, 1, 2, 0, 2, 3]:
+			verts.append(corners[vi])
+			normals.append(n)
+			colors.append(col)
+			uvs.append(uv_corners[vi])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	return out
+
+
+func _gf_tree_mesh(trunk_parts: Array, core_parts: Array, cards: Array, bark_material: Material, foliage_material: Material) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	if not trunk_parts.is_empty():
+		var trunk_mesh := _dz_scatter_mesh(trunk_parts)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, trunk_mesh.surface_get_arrays(0))
+		if bark_material != null:
+			mesh.surface_set_material(mesh.get_surface_count() - 1, bark_material)
+	if not core_parts.is_empty():
+		var core_mesh := _dz_scatter_mesh(core_parts)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, core_mesh.surface_get_arrays(0))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, _dz_scatter_material)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _gf_cards_surface(cards))
+	mesh.surface_set_material(mesh.get_surface_count() - 1, foliage_material)
+	return mesh
+
+
+func _gf_spruce_mesh(variant: int, bark_material: Material, foliage_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261117 + variant * 131
+	var cyl := _dz_unit_cyl(8, 0.35)
+	var cone := _dz_unit_cyl(9, 0.04)
+	var white := Color(1.0, 1.0, 1.0)
+	var top := 9.7 if variant == 0 else 10.5
+	var trunk: Array = [_dz_scatter_part(cyl, Vector3(0.0, 2.3, 0.0), Vector3(0.52, 4.6, 0.52), white)]
+	var core: Array = []
+	var cards: Array = []
+	var tiers := 6
+	for t in range(tiers):
+		var ft := float(t) / float(tiers - 1)
+		var tier_y := lerpf(2.2, top - 1.2, ft)
+		var tier_r := lerpf(2.1, 0.55, pow(ft, 0.85))
+		core.append(_dz_scatter_part(cone, Vector3(0.0, tier_y + 0.6, 0.0), Vector3(tier_r * 1.5, 2.2, tier_r * 1.5), Color(0.018, 0.048, 0.015)))
+		for si in range(6):
+			var ang := TAU * float(si) / 6.0 + float(t) * 0.52 + rng.randf_range(-0.10, 0.10)
+			var out := Vector3(cos(ang), 0.0, sin(ang))
+			var tangent := Vector3(-out.z, 0.0, out.x)
+			var centre := Vector3(out.x * tier_r * 0.80, tier_y + 0.30, out.z * tier_r * 0.80)
+			var right := out * (tier_r * 0.62)
+			right.y = -tier_r * rng.randf_range(0.20, 0.30)
+			var upv := tangent * (tier_r * 0.37)
+			var b := rng.randf_range(0.72, 1.02) + ft * 0.10
+			cards.append({"c": centre, "r": right, "u": upv, "n": Vector3.UP, "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	core.append(_dz_scatter_part(cone, Vector3(0.0, top - 0.35, 0.0), Vector3(0.6, 1.5, 0.6), Color(0.022, 0.056, 0.018)))
+	return _gf_tree_mesh(trunk, core, cards, bark_material, foliage_material)
+
+
+func _gf_pine_mesh(variant: int, bark_material: Material, foliage_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261301 + variant * 149
+	var cyl := _dz_unit_cyl(8, 0.4)
+	var sph := _dz_unit_sphere(9, 6)
+	var white := Color(1.0, 1.0, 1.0)
+	var lean := 0.05 if variant == 0 else -0.07
+	var trunk: Array = [
+		_dz_scatter_part(cyl, Vector3(0.0, 2.7, 0.0), Vector3(0.44, 5.4, 0.44), white, 0.0, 0.0, lean),
+		_dz_scatter_part(cyl, Vector3(0.42, 6.4, 0.08), Vector3(0.28, 3.4, 0.28), white, 0.0, 0.0, -lean * 1.6),
+	]
+	var core_col := Color(0.022, 0.058, 0.018)
+	var core: Array = [
+		_dz_scatter_part(sph, Vector3(0.25, 7.5, 0.1), Vector3(4.5, 1.35, 4.5), core_col),
+		_dz_scatter_part(sph, Vector3(-0.15, 8.5, -0.1), Vector3(3.1, 1.1, 3.1), core_col),
+	]
+	var cards: Array = []
+	for ring_i in range(2):
+		var ring_y := 7.35 if ring_i == 0 else 8.45
+		var ring_r := 1.75 if ring_i == 0 else 1.10
+		var count := 8 if ring_i == 0 else 6
+		var cx := 0.25 if ring_i == 0 else -0.15
+		for si in range(count):
+			var ang := TAU * float(si) / float(count) + float(ring_i) * 0.4 + rng.randf_range(-0.12, 0.12)
+			var out := Vector3(cos(ang), 0.0, sin(ang))
+			var tangent := Vector3(-out.z, 0.0, out.x)
+			var centre := Vector3(cx + out.x * ring_r, ring_y + rng.randf_range(-0.12, 0.22), out.z * ring_r)
+			var right := out * (ring_r * 0.66)
+			right.y = -ring_r * rng.randf_range(0.08, 0.18)
+			var upv := tangent * (ring_r * 0.52)
+			var b := rng.randf_range(0.78, 1.05)
+			cards.append({"c": centre, "r": right, "u": upv, "n": Vector3.UP, "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	return _gf_tree_mesh(trunk, core, cards, bark_material, foliage_material)
+
+
+func _gf_birch_mesh(variant: int, bark_material: Material, foliage_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261477 + variant * 167
+	var cyl := _dz_unit_cyl(8, 0.45)
+	var sph := _dz_unit_sphere(8, 6)
+	var white := Color(1.0, 1.0, 1.0)
+	var trunk: Array = [
+		_dz_scatter_part(cyl, Vector3(0.0, 3.0, 0.0), Vector3(0.34, 6.0, 0.34), white),
+		_dz_scatter_part(cyl, Vector3(0.55, 5.2, 0.2), Vector3(0.16, 2.4, 0.16), white, 0.0, 0.0, -0.42),
+	]
+	var core_col := Color(0.045, 0.095, 0.028)
+	var crown := Vector3(0.1, 6.0, 0.05)
+	var core: Array = [
+		_dz_scatter_part(sph, crown + Vector3(0.0, -0.5, 0.0), Vector3(2.3, 2.7, 2.3), core_col),
+		_dz_scatter_part(sph, crown + Vector3(0.2, 1.0, 0.1), Vector3(1.8, 2.1, 1.8), core_col),
+	]
+	var cards: Array = []
+	for ci in range(13):
+		var dir := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-0.55, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		var centre := crown + Vector3(dir.x * 1.45, dir.y * 1.85, dir.z * 1.45)
+		var flat := Vector3(dir.x, 0.0, dir.z)
+		flat = flat.normalized() if flat.length_squared() > 0.05 else Vector3.RIGHT
+		var right := Vector3(-flat.z, 0.0, flat.x) * rng.randf_range(0.85, 1.05)
+		var upv := Vector3.UP * rng.randf_range(0.9, 1.15) + flat * rng.randf_range(-0.2, 0.2)
+		var b := rng.randf_range(0.8, 1.08)
+		cards.append({"c": centre, "r": right, "u": upv, "n": (flat + Vector3.UP * 0.35).normalized(), "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	return _gf_tree_mesh(trunk, core, cards, bark_material, foliage_material)
+
+
+func _gf_broadleaf_mesh(variant: int, is_oak: bool, bark_material: Material, foliage_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = (20261653 if is_oak else 20261801) + variant * 181
+	var cyl := _dz_unit_cyl(8, 0.45)
+	var sph := _dz_unit_sphere(8, 6)
+	var white := Color(1.0, 1.0, 1.0)
+	var trunk_w := 0.88 if is_oak else 0.56
+	var trunk: Array = [_dz_scatter_part(cyl, Vector3(0.0, 1.8, 0.0), Vector3(trunk_w, 3.6, trunk_w), white)]
+	trunk.append(_dz_scatter_part(cyl, Vector3(0.75, 3.6, 0.15), Vector3(trunk_w * 0.42, 2.1, trunk_w * 0.42), white, 0.0, 0.0, -0.58))
+	trunk.append(_dz_scatter_part(cyl, Vector3(-0.65, 3.5, -0.25), Vector3(trunk_w * 0.36, 1.9, trunk_w * 0.36), white, 0.0, 0.2, 0.62))
+	if is_oak:
+		trunk.append(_dz_scatter_part(cyl, Vector3(0.1, 3.7, 0.7), Vector3(trunk_w * 0.34, 1.8, trunk_w * 0.34), white, 0.0, -0.55, 0.0))
+	var core_col := Color(0.030, 0.078, 0.022) if is_oak else Color(0.034, 0.088, 0.025)
+	var crown := Vector3(0.0, 5.3, 0.0) if is_oak else Vector3(0.0, 5.0, 0.0)
+	var spread := 2.05 if is_oak else 1.6
+	var core: Array = [
+		_dz_scatter_part(sph, crown + Vector3(0.0, -0.35, 0.0), Vector3(spread * 1.7, spread * 1.25, spread * 1.7), core_col),
+		_dz_scatter_part(sph, crown + Vector3(spread * 0.42, spread * 0.4, spread * 0.18), Vector3(spread * 1.25, spread * 1.0, spread * 1.25), core_col),
+		_dz_scatter_part(sph, crown + Vector3(-spread * 0.45, spread * 0.3, -spread * 0.2), Vector3(spread * 1.15, spread * 0.92, spread * 1.15), core_col),
+	]
+	var cards: Array = []
+	var card_count := 20 if is_oak else 16
+	for ci in range(card_count):
+		var dir := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-0.45, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		var centre := crown + Vector3(dir.x * spread, dir.y * spread * 0.78, dir.z * spread)
+		var ref := Vector3.UP if absf(dir.y) < 0.92 else Vector3.RIGHT
+		var right := ref.cross(dir).normalized() * (spread * rng.randf_range(0.52, 0.66))
+		var upv := dir.cross(right).normalized() * (spread * rng.randf_range(0.52, 0.66))
+		var b := rng.randf_range(0.74, 1.06)
+		cards.append({"c": centre, "r": right, "u": upv, "n": (dir + Vector3.UP * 0.30).normalized(), "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	return _gf_tree_mesh(trunk, core, cards, bark_material, foliage_material)
+
+
+func _gf_bush_mesh(foliage_material: Material) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261999
+	var sph := _dz_unit_sphere(8, 6)
+	var core_col := Color(0.032, 0.082, 0.024)
+	var core: Array = [
+		_dz_scatter_part(sph, Vector3(0.0, 0.45, 0.0), Vector3(1.5, 0.85, 1.4), core_col),
+		_dz_scatter_part(sph, Vector3(0.45, 0.62, 0.22), Vector3(0.95, 0.6, 0.88), core_col),
+		_dz_scatter_part(sph, Vector3(-0.5, 0.55, -0.28), Vector3(0.85, 0.55, 0.8), core_col),
+	]
+	var cards: Array = []
+	for ci in range(6):
+		var dir := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.05, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		var centre := Vector3(dir.x * 0.62, 0.55 + dir.y * 0.32, dir.z * 0.62)
+		var ref := Vector3.UP if absf(dir.y) < 0.92 else Vector3.RIGHT
+		var right := ref.cross(dir).normalized() * 0.62
+		var upv := dir.cross(right).normalized() * 0.62
+		var b := rng.randf_range(0.8, 1.05)
+		cards.append({"c": centre, "r": right, "u": upv, "n": (dir + Vector3.UP * 0.3).normalized(), "col": Color(b, b, b), "flip": rng.randf() < 0.5})
+	return _gf_tree_mesh([], core, cards, null, foliage_material)
+
+
+func _gf_grass_mesh() -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var base_col := Color(0.42, 0.48, 0.38)
+	var top_col := Color(1.0, 1.0, 1.0)
+	for pi in range(3):
+		var ang := float(pi) * PI / 3.0
+		var right := Vector3(cos(ang), 0.0, sin(ang)) * 0.44
+		var down := Vector3(0.0, -0.31, 0.0)
+		var up2 := Vector3(0.0, 0.31, 0.0)
+		var c := Vector3(0.0, 0.31, 0.0)
+		var corners: Array = [c - right + down, c + right + down, c + right + up2, c - right + up2]
+		var uv_corners: Array = [Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0)]
+		var cols: Array = [base_col, base_col, top_col, top_col]
+		for vi in [0, 1, 2, 0, 2, 3]:
+			verts.append(corners[vi])
+			normals.append(Vector3.UP)
+			colors.append(cols[vi])
+			uvs.append(uv_corners[vi])
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = colors
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
+
+
 func _build_forest_scatter() -> void:
 	_gf_scatter_build([])
 
@@ -13197,83 +13436,30 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	var rock_mat := _material("gf_rock_gray_mat", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(0.92, 0.92, 0.90), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "gf_rock_gray_roughness.jpg")
 	rock_mat.vertex_color_use_as_albedo = true
 	var bark := Color(0.09, 0.055, 0.030)
-	# 0.2.56 detailed silhouettes: six overlapping needle tiers on
-	# spruce, bent two-piece pine trunks with four umbrella shelves,
-	# banded birch trunks with ovoid five-lobe crowns and branched
-	# six-lobe broadleaf/oak crowns in three alternating tones.
-	var spruce_a := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.5, 0), Vector3(0.45, 3.0, 0.45), bark),
-		_dz_scatter_part(cyl11, Vector3(0, 2.6, 0), Vector3(4.2, 2.2, 4.2), Color(0.020, 0.066, 0.020)),
-		_dz_scatter_part(cyl11, Vector3(0, 3.9, 0), Vector3(3.6, 2.1, 3.6), Color(0.026, 0.079, 0.024)),
-		_dz_scatter_part(cyl11, Vector3(0, 5.1, 0), Vector3(3.0, 2.0, 3.0), Color(0.023, 0.072, 0.022)),
-		_dz_scatter_part(cyl11, Vector3(0, 6.3, 0), Vector3(2.4, 1.9, 2.4), Color(0.030, 0.086, 0.027)),
-		_dz_scatter_part(cyl11, Vector3(0, 7.5, 0), Vector3(1.8, 1.8, 1.8), Color(0.034, 0.095, 0.030)),
-		_dz_scatter_part(cyl11, Vector3(0, 8.7, 0), Vector3(1.1, 1.7, 1.1), Color(0.040, 0.104, 0.033)),
-		_dz_scatter_part(cyl7, Vector3(0, 9.6, 0), Vector3(0.10, 0.9, 0.10), Color(0.030, 0.078, 0.024)),
-	])
-	var spruce_b := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.40, 3.2, 0.40), bark),
-		_dz_scatter_part(cyl11, Vector3(0, 2.8, 0), Vector3(3.4, 2.3, 3.4), Color(0.018, 0.060, 0.018)),
-		_dz_scatter_part(cyl11, Vector3(0, 4.1, 0), Vector3(2.9, 2.2, 2.9), Color(0.024, 0.073, 0.022)),
-		_dz_scatter_part(cyl11, Vector3(0, 5.4, 0), Vector3(2.4, 2.1, 2.4), Color(0.021, 0.066, 0.020)),
-		_dz_scatter_part(cyl11, Vector3(0, 6.6, 0), Vector3(1.9, 2.0, 1.9), Color(0.028, 0.080, 0.025)),
-		_dz_scatter_part(cyl11, Vector3(0, 7.8, 0), Vector3(1.4, 1.9, 1.4), Color(0.032, 0.089, 0.028)),
-		_dz_scatter_part(cyl11, Vector3(0, 9.0, 0), Vector3(0.9, 1.8, 0.9), Color(0.038, 0.098, 0.031)),
-		_dz_scatter_part(cyl7, Vector3(0, 9.9, 0), Vector3(0.09, 0.9, 0.09), Color(0.028, 0.072, 0.022)),
-	])
-	var pine_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 2.6, 0), Vector3(0.38, 5.2, 0.38), Color(0.16, 0.09, 0.045), 0.0, 0.0, 0.04),
-		_dz_scatter_part(cyl7, Vector3(0.35, 6.2, 0.1), Vector3(0.26, 3.2, 0.26), Color(0.14, 0.08, 0.04), 0.0, 0.0, -0.10),
-		_dz_scatter_part(cyl11, Vector3(0, 6.0, 0), Vector3(4.6, 1.5, 4.6), Color(0.030, 0.082, 0.024)),
-		_dz_scatter_part(cyl11, Vector3(0.5, 7.2, 0.3), Vector3(3.8, 1.4, 3.8), Color(0.036, 0.092, 0.027)),
-		_dz_scatter_part(cyl11, Vector3(-0.2, 8.2, -0.2), Vector3(2.8, 1.2, 2.8), Color(0.033, 0.086, 0.026)),
-		_dz_scatter_part(cyl11, Vector3(0.3, 9.1, 0.15), Vector3(1.8, 1.1, 1.8), Color(0.040, 0.100, 0.030)),
-	])
-	var birch_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 2.8, 0), Vector3(0.30, 5.6, 0.30), Color(0.55, 0.56, 0.53)),
-		_dz_scatter_part(cyl7, Vector3(0, 0.9, 0), Vector3(0.33, 0.16, 0.33), Color(0.07, 0.07, 0.065)),
-		_dz_scatter_part(cyl7, Vector3(0, 2.2, 0), Vector3(0.33, 0.16, 0.33), Color(0.07, 0.07, 0.065)),
-		_dz_scatter_part(cyl7, Vector3(0, 3.6, 0), Vector3(0.32, 0.15, 0.32), Color(0.07, 0.07, 0.065)),
-		_dz_scatter_part(cyl7, Vector3(0, 4.6, 0), Vector3(0.31, 0.14, 0.31), Color(0.07, 0.07, 0.065)),
-		_dz_scatter_part(sph, Vector3(0, 5.4, 0), Vector3(2.4, 2.0, 2.4), Color(0.115, 0.245, 0.058)),
-		_dz_scatter_part(sph, Vector3(0.4, 6.7, 0.2), Vector3(2.0, 1.9, 2.0), Color(0.135, 0.275, 0.068)),
-		_dz_scatter_part(sph, Vector3(-0.5, 4.7, -0.3), Vector3(1.7, 1.6, 1.7), Color(0.100, 0.220, 0.050)),
-		_dz_scatter_part(sph, Vector3(0.9, 5.9, -0.6), Vector3(1.4, 1.3, 1.4), Color(0.125, 0.260, 0.062)),
-		_dz_scatter_part(sph, Vector3(-0.9, 6.2, 0.5), Vector3(1.3, 1.2, 1.3), Color(0.108, 0.232, 0.054)),
-	])
-	var leafy_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.7, 0), Vector3(0.48, 3.4, 0.48), Color(0.10, 0.06, 0.035)),
-		_dz_scatter_part(cyl7, Vector3(0.7, 3.3, 0.15), Vector3(0.22, 1.9, 0.22), Color(0.09, 0.055, 0.032), 0.0, 0.0, -0.55),
-		_dz_scatter_part(sph, Vector3(0, 4.7, 0), Vector3(3.3, 2.7, 3.3), Color(0.058, 0.150, 0.040)),
-		_dz_scatter_part(sph, Vector3(0.9, 5.8, 0.4), Vector3(2.5, 2.1, 2.5), Color(0.070, 0.175, 0.048)),
-		_dz_scatter_part(sph, Vector3(-1.0, 5.5, -0.5), Vector3(2.3, 1.9, 2.3), Color(0.052, 0.138, 0.036)),
-		_dz_scatter_part(sph, Vector3(0.2, 4.1, 1.0), Vector3(2.0, 1.7, 2.0), Color(0.064, 0.162, 0.044)),
-		_dz_scatter_part(sph, Vector3(-0.3, 4.2, -1.0), Vector3(1.9, 1.6, 1.9), Color(0.056, 0.145, 0.038)),
-		_dz_scatter_part(sph, Vector3(0.4, 6.6, -0.2), Vector3(1.6, 1.4, 1.6), Color(0.074, 0.182, 0.050)),
-	])
-	var oak_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(cyl7, Vector3(0, 1.5, 0), Vector3(0.80, 3.0, 0.80), bark),
-		_dz_scatter_part(cyl7, Vector3(0.95, 3.3, 0.2), Vector3(0.30, 2.1, 0.30), bark, 0.0, 0.0, -0.6),
-		_dz_scatter_part(cyl7, Vector3(-0.9, 3.2, -0.3), Vector3(0.26, 1.9, 0.26), bark, 0.0, 0.0, 0.65),
-		_dz_scatter_part(sph, Vector3(0, 5.2, 0), Vector3(4.8, 2.9, 4.8), Color(0.052, 0.138, 0.036)),
-		_dz_scatter_part(sph, Vector3(1.8, 6.0, 0.7), Vector3(3.4, 2.2, 3.4), Color(0.062, 0.158, 0.042)),
-		_dz_scatter_part(sph, Vector3(-1.9, 5.8, -0.6), Vector3(3.2, 2.1, 3.2), Color(0.047, 0.127, 0.033)),
-		_dz_scatter_part(sph, Vector3(0.4, 4.5, 1.7), Vector3(2.7, 1.9, 2.7), Color(0.058, 0.147, 0.039)),
-		_dz_scatter_part(sph, Vector3(-0.5, 4.6, -1.6), Vector3(2.5, 1.8, 2.5), Color(0.050, 0.133, 0.035)),
-		_dz_scatter_part(sph, Vector3(0.2, 6.8, 0.1), Vector3(2.4, 1.8, 2.4), Color(0.066, 0.166, 0.045)),
-	])
+	# 0.2.57 photoreal-leaning trees: textured bark trunks, dark
+	# crown cores and alpha-cut foliage cards (painted leaf/needle
+	# sprays) instead of solid plastic cones and blobs.
+	var bark_oak_mat := _material("gf_bark_oak_mat", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.88, 0.83, 0.78), 1.0, 0.0, Vector3(1.2, 2.2, 1.2), false)
+	var bark_pine_mat := _material("gf_bark_pine_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.95, 0.90, 0.85), 1.0, 0.0, Vector3(1.2, 2.0, 1.2), false, "gf_pine_bark_roughness.jpg")
+	var bark_spruce_mat := _material("gf_bark_spruce_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.60, 0.57, 0.54), 1.0, 0.0, Vector3(1.1, 1.8, 1.1), false, "gf_pine_bark_roughness.jpg")
+	var bark_birch_mat := _material("gf_bark_birch_mat", "gf_birch_bark.jpg", "gf_birch_bark_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3(1.0, 1.6, 1.0), false, "gf_birch_bark_roughness.jpg")
+	var fol_leaf_mat := _gf_foliage_material("gf_foliage_leaf_mat", "gf_leaf_cluster.png", Color(1.0, 1.0, 1.0))
+	var fol_oak_mat := _gf_foliage_material("gf_foliage_oak_mat", "gf_leaf_cluster.png", Color(0.82, 0.88, 0.80))
+	var fol_birch_mat := _gf_foliage_material("gf_foliage_birch_mat", "gf_birch_cluster.png", Color(1.0, 1.0, 1.0))
+	var fol_spruce_mat := _gf_foliage_material("gf_foliage_spruce_mat", "gf_spruce_spray.png", Color(1.0, 1.0, 1.0))
+	var fol_pine_mat := _gf_foliage_material("gf_foliage_pine_mat", "gf_pine_spray.png", Color(1.0, 1.0, 1.0))
+	var spruce_a := _gf_spruce_mesh(0, bark_spruce_mat, fol_spruce_mat)
+	var spruce_b := _gf_spruce_mesh(1, bark_spruce_mat, fol_spruce_mat)
+	var pine_meshes: Array = [_gf_pine_mesh(0, bark_pine_mat, fol_pine_mat), _gf_pine_mesh(1, bark_pine_mat, fol_pine_mat)]
+	var birch_meshes: Array = [_gf_birch_mesh(0, bark_birch_mat, fol_birch_mat), _gf_birch_mesh(1, bark_birch_mat, fol_birch_mat)]
+	var leafy_meshes: Array = [_gf_broadleaf_mesh(0, false, bark_oak_mat, fol_leaf_mat), _gf_broadleaf_mesh(1, false, bark_oak_mat, fol_leaf_mat)]
+	var oak_meshes: Array = [_gf_broadleaf_mesh(0, true, bark_oak_mat, fol_oak_mat), _gf_broadleaf_mesh(1, true, bark_oak_mat, fol_oak_mat)]
 	var dead_mesh := _dz_scatter_mesh([
 		_dz_scatter_part(cyl7, Vector3(0, 1.9, 0), Vector3(0.45, 3.8, 0.45), Color(0.16, 0.13, 0.10), 0.0, 0.0, 0.06),
 		_dz_scatter_part(cyl7, Vector3(0.8, 3.4, 0.1), Vector3(0.18, 2.0, 0.18), Color(0.16, 0.13, 0.10), 0.0, 0.0, -0.85),
 		_dz_scatter_part(cyl7, Vector3(-0.7, 3.0, -0.2), Vector3(0.15, 1.7, 0.15), Color(0.18, 0.15, 0.11), 0.0, 0.35, 0.9),
 	])
-	var bush_mesh := _dz_scatter_mesh([
-		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(1.35, 0.78, 1.25), Color(0.035, 0.090, 0.026)),
-		_dz_scatter_part(sph, Vector3(0.5, 0.6, 0.25), Vector3(0.86, 0.56, 0.8), Color(0.045, 0.110, 0.032)),
-		_dz_scatter_part(sph, Vector3(-0.55, 0.52, -0.3), Vector3(0.78, 0.5, 0.72), Color(0.030, 0.082, 0.024)),
-		_dz_scatter_part(sph, Vector3(0.35, 0.78, -0.2), Vector3(0.13, 0.13, 0.13), Color(0.32, 0.05, 0.04)),
-		_dz_scatter_part(sph, Vector3(-0.3, 0.7, 0.4), Vector3(0.12, 0.12, 0.12), Color(0.32, 0.05, 0.04)),
-	])
+	var bush_card_mesh := _gf_bush_mesh(fol_leaf_mat)
 	var fern_parts: Array = []
 	for fi in range(6):
 		var fang := TAU * float(fi) / 6.0
@@ -13336,14 +13522,16 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	var rock_small_meshes: Array = [_dz_rock_mesh(51, Color(0.52, 0.53, 0.52)), _dz_rock_mesh(52, Color(0.47, 0.48, 0.47)), _dz_rock_mesh(53, Color(0.57, 0.57, 0.55))]
 	var rock_medium_meshes: Array = [_dz_rock_mesh(61, Color(0.50, 0.51, 0.50)), _dz_rock_mesh(62, Color(0.55, 0.56, 0.54)), _dz_rock_mesh(63, Color(0.46, 0.47, 0.46))]
 	var rock_large_meshes: Array = [_dz_rock_mesh(71, Color(0.54, 0.55, 0.53)), _dz_rock_mesh(72, Color(0.49, 0.50, 0.49)), _dz_rock_mesh(73, Color(0.58, 0.58, 0.56))]
+	var grass_mat := _gf_foliage_material("gf_grass_mat", "gf_grass_tuft.png", Color(1.0, 1.0, 1.0))
+	var grass_card_mesh := _gf_grass_mesh()
 	var cfg := {
-		"spruce": {"meshes": [spruce_a, spruce_b], "base": 1.45, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"pine": {"mesh": pine_mesh, "base": 1.5, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"birch": {"mesh": birch_mesh, "base": 1.4, "range": 430.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
-		"leafy": {"mesh": leafy_mesh, "base": 1.4, "range": 450.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
-		"oak": {"mesh": oak_mesh, "base": 1.5, "range": 460.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
-		"dead_tree": {"mesh": dead_mesh, "base": 1.2, "range": 370.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
-		"bush": {"mesh": bush_mesh, "base": 1.0, "range": 200.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
+		"spruce": {"meshes": [spruce_a, spruce_b], "material": null, "base": 1.45, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"pine": {"meshes": pine_meshes, "material": null, "base": 1.5, "range": 470.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"birch": {"meshes": birch_meshes, "material": null, "base": 1.4, "range": 430.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
+		"leafy": {"meshes": leafy_meshes, "material": null, "base": 1.4, "range": 450.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"oak": {"meshes": oak_meshes, "material": null, "base": 1.5, "range": 460.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
+		"dead_tree": {"mesh": dead_mesh, "material": bark_spruce_mat, "base": 1.2, "range": 370.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
+		"bush": {"mesh": bush_card_mesh, "material": null, "base": 1.0, "range": 200.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
 		"fern": {"mesh": fern_mesh, "base": 1.0, "range": 150.0, "shadow": false, "sink": 0.06},
 		"flower": {"mesh": flower_mesh, "base": 1.0, "range": 130.0, "shadow": false, "sink": 0.02},
 		"mushroom": {"mesh": mushroom_mesh, "base": 1.0, "range": 110.0, "shadow": false, "sink": 0.02},
@@ -13354,6 +13542,7 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
 		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
 		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 330.0, "shadow": false, "sink": 0.03},
+		"grass_tuft": {"mesh": grass_card_mesh, "material": grass_mat, "base": 1.0, "range": 85.0, "shadow": false, "sink": 0.03},
 		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 210.0, "shadow": false, "sink": 0.16},
 		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 370.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
 		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 900.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
@@ -13422,6 +13611,7 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	_enhancement_stats["forest_scatter"] = _gf_scatter_total_acc
 	_enhancement_stats["forest_trees"] = _gf_scatter_trees_acc
 	_enhancement_stats["forest_scatter_0254"] = true
+	_enhancement_stats["forest_photoreal_trees_0257"] = true
 
 
 func _build_forest_extras() -> void:

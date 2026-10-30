@@ -35,7 +35,10 @@ def meadow(rng):
     dry = fractal(rng, beta=2.4, fmax=36.0)
     albedo = mix((0.13, 0.30, 0.08), (0.28, 0.47, 0.15), clip01(base * 0.65 + fine * 0.45))
     # sun-dried yellow-green patches break the uniform green carpet
-    albedo = mix(albedo, (0.44, 0.43, 0.17), smoothstep(0.62, 0.92, dry) * 0.55)
+    albedo = mix(albedo, (0.44, 0.43, 0.17), smoothstep(0.60, 0.92, dry) * 0.68)
+    # worn dirt exposures where the sward thins out
+    dirt = fractal(rng, beta=2.2, fmax=60.0)
+    albedo = mix(albedo, (0.23, 0.165, 0.095), smoothstep(0.68, 0.95, dirt) * smoothstep(0.45, 0.15, base) * 0.55)
     # dark damp hollows
     albedo = mix(albedo, (0.07, 0.18, 0.06), smoothstep(0.30, 0.05, base) * 0.45)
     # per-pixel blade grain so the carpet does not blur into one wash
@@ -44,7 +47,7 @@ def meadow(rng):
     height = fine * 0.55 + base * 0.45
     # dense blade clumps
     albedo, height, _ = add_stones(
-        rng, albedo, height, 5200, 1.1, 2.8,
+        rng, albedo, height, 9200, 1.0, 2.4,
         [(0.20, 0.42, 0.11), (0.27, 0.50, 0.15), (0.16, 0.34, 0.09), (0.38, 0.48, 0.18)],
         bump_amp=0.08, angular=True)
     # scattered tiny flower flecks (white / yellow / violet)
@@ -68,10 +71,12 @@ def forest_floor(rng):
     height = fine * 0.7 + base * 0.3
     # fallen leaf litter flecks
     albedo, height, _ = add_stones(
-        rng, albedo, height, 2600, 2.2, 5.5,
+        rng, albedo, height, 4700, 2.0, 5.2,
         [(0.38, 0.24, 0.10), (0.45, 0.30, 0.13), (0.30, 0.20, 0.09), (0.50, 0.36, 0.16)],
         bump_amp=0.10, angular=True)
-    rough = np.full((S, S), 0.97)
+    # damp near-black pockets under the litter
+    albedo = mix(albedo, (0.055, 0.045, 0.03), smoothstep(0.34, 0.08, base) * 0.45)
+    rough = np.full((S, S), 0.97) - smoothstep(0.55, 0.88, moss) * 0.09
     return albedo, height, rough
 
 
@@ -87,9 +92,10 @@ def mud(rng):
     pm = smoothstep(0.62, 0.85, puddle)
     height = height * (1.0 - pm * 0.75) + 0.35 * pm
     rough = np.full((S, S), 0.82)
-    rough = rough * (1.0 - pm) + 0.18 * pm
+    rough = rough * (1.0 - pm) + 0.12 * pm
+    albedo = mix(albedo, (0.075, 0.06, 0.045), pm * 0.55)
     albedo, height, _ = add_stones(
-        rng, albedo, height, 500, 2.0, 6.0,
+        rng, albedo, height, 850, 2.0, 6.0,
         [(0.30, 0.28, 0.26), (0.36, 0.33, 0.29)], bump_amp=0.14, angular=True)
     return albedo, height, rough
 
@@ -108,8 +114,10 @@ def rock_gray(rng):
     # fractures: thin dark ridges of a high-frequency field
     frac_src = fractal(rng, beta=1.5, fmax=300.0)
     frac = smoothstep(0.46, 0.50, frac_src) * (1.0 - smoothstep(0.50, 0.54, frac_src))
-    albedo = mix(albedo, (0.12, 0.125, 0.13), frac * 0.65)
-    height = height - frac * 0.35
+    albedo = mix(albedo, (0.12, 0.125, 0.13), frac * 0.82)
+    height = height - frac * 0.52
+    # pale lichen dusting on the high facets
+    albedo = mix(albedo, (0.56, 0.58, 0.49), smoothstep(0.72, 0.96, facet) * smoothstep(0.55, 0.85, base) * 0.28)
     # moss creeps into the low, damp parts of the height field
     moss = fractal(rng, beta=2.4, fmax=55.0)
     albedo = mix(albedo, (0.13, 0.26, 0.10), smoothstep(0.58, 0.90, moss) * smoothstep(0.55, 0.25, base) * 0.65)
@@ -128,7 +136,7 @@ def field_soil(rng):
     albedo = mix(albedo, (0.20, 0.38, 0.12), shoots * 0.55)
     height = rows * 0.65 + base * 0.35
     albedo, height, _ = add_stones(
-        rng, albedo, height, 1500, 2.5, 8.0,
+        rng, albedo, height, 2300, 2.5, 8.0,
         [(0.30, 0.21, 0.12), (0.36, 0.26, 0.15), (0.26, 0.18, 0.10)],
         bump_amp=0.18, angular=True)
     rough = np.full((S, S), 0.95)
@@ -138,13 +146,13 @@ def field_soil(rng):
 def main():
     rng = np.random.default_rng(SEED)
     a, h, r = meadow(rng)
-    save_set("gf_meadow", a, h, r, 1.8)
+    save_set("gf_meadow", a, h, r, 2.3)
     a, h, r = forest_floor(rng)
     save_set("gf_forest_floor", a, h, r, 2.2)
     a, h, r = mud(rng)
     save_set("gf_mud", a, h, r, 1.6)
     a, h, r = rock_gray(rng)
-    save_set("gf_rock_gray", a, h, r, 2.6)
+    save_set("gf_rock_gray", a, h, r, 3.1)
     a, h, r = field_soil(rng)
     save_set("gf_field_soil", a, h, r, 2.2)
     print("[forest-textures] done")
