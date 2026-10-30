@@ -281,6 +281,7 @@ func build_world_step() -> Dictionary:
 	var stage_label := String(stage.get("label", "Строим мир"))
 	var stage_weight := float(stage.get("weight", 1.0))
 	var callable_variant: Variant = stage.get("callable", Callable())
+	var stage_started_msec := Time.get_ticks_msec()
 	if callable_variant is Callable:
 		var stage_callable: Callable = callable_variant
 		if stage_callable.is_valid():
@@ -289,6 +290,11 @@ func build_world_step() -> Dictionary:
 			build_error = "Native world build stage is missing: %s" % stage_label
 	elif build_error.is_empty():
 		build_error = "Native world build stage is invalid: %s" % stage_label
+	# 0.2.54 diagnostics: one timing line per completed build stage.
+	# The GreenForest smoke timed out at 600 s in CI and the same wall
+	# looked like a mid-loading crash on a phone; these lines land in
+	# CI annotations/logcat and keep stage costs visible forever.
+	print("[native-build] world=%s stage \"%s\" %d ms" % [world_id, stage_label, Time.get_ticks_msec() - stage_started_msec])
 	_build_stage_index += 1
 	_build_completed_weight += maxf(stage_weight, 0.01)
 	if _build_stage_index >= _build_stages.size() and not is_built:

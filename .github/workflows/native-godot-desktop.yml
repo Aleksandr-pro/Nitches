@@ -126,7 +126,7 @@ jobs:
             echo "Native source smoke reported a fatal runtime problem" >&2
             exit 1
           fi
-          timeout 600 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+          timeout 240 "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
             -- --native-smoke --native-world=greenforest 2>&1 | tee "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
           grep -F "[native-smoke] PASS" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"
           if grep -E "SCRIPT ERROR|\[native-smoke\] FAIL|Native world data is missing|Native world failed to build" "$RUNNER_TEMP/native-logs/source-smoke-forest.log"; then
@@ -179,6 +179,7 @@ jobs:
           summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
           markers = (
               "[native] RichTown build stats:",
+              "[native-build]",
               "[native-smoke]",
               "SCRIPT ERROR",
               "ERROR:",
@@ -206,7 +207,7 @@ jobs:
                   for line in selected:
                       if "[native-smoke] FAIL" in line or "SCRIPT ERROR" in line or "Native world" in line:
                           print(f"::error title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
-                      elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line:
+                      elif "[native-smoke] PASS" in line or "[native] RichTown build stats:" in line or "[native-build]" in line:
                           print(f"::notice title=Native desktop smoke {log_path.name}::{annotation_escape(line[:900])}")
           PY
 
