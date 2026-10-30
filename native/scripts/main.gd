@@ -1796,10 +1796,18 @@ func _run_smoke_checks() -> void:
 
 	if _selected_world_id == "desert":
 		_run_desert_smoke_checks(failures)
+		# _finish_smoke() quits(0) silently on success; the PASS line
+		# CI greps for is printed by the RichTown battery, so the
+		# per-world gates must print their own (0.2.55: a passing
+		# forest smoke otherwise looked like a silent failure).
+		if failures.is_empty():
+			print("[native-smoke] PASS world=desert enhancements=%s" % str(_world.get_enhancement_stats()))
 		_finish_smoke(failures)
 		return
 	if _selected_world_id == "greenforest":
 		_run_forest_smoke_checks(failures)
+		if failures.is_empty():
+			print("[native-smoke] PASS world=greenforest enhancements=%s" % str(_world.get_enhancement_stats()))
 		_finish_smoke(failures)
 		return
 
@@ -2696,7 +2704,7 @@ func _run_forest_smoke_checks(failures: Array[String]) -> void:
 	var mud_surface := _world.get_surface_at(Vector3(1250.0, _world.height_at(1250.0, 2750.0) + 0.5, 2750.0))
 	if String(mud_surface.get("kind", "")) != "mud":
 		failures.append("swamp mud surface is misclassified: %s" % str(mud_surface))
-	var field_surface := _world.get_surface_at(Vector3(1900.0, _world.height_at(1900.0, 3480.0) + 0.5, 3480.0))
+	var field_surface := _world.get_surface_at(Vector3(1580.0, _world.height_at(1580.0, 3120.0) + 0.5, 3120.0))
 	if String(field_surface.get("kind", "")) != "field":
 		failures.append("field surface is misclassified: %s" % str(field_surface))
 	var found_gravel := false

@@ -29,6 +29,8 @@ var _is_forest := false
 var _gf_field_rects: Array[Rect2] = []
 var _gf_lake_y := 0.0
 var _gf_bird_flocks: Array[Dictionary] = []
+var _gf_scatter_total_acc := 0
+var _gf_scatter_trees_acc := 0
 var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
@@ -146,6 +148,7 @@ var build_error := ""
 var is_built := false
 var _build_stages: Array[Dictionary] = []
 var _build_stage_index := 0
+var _build_profile_parts: Array[String] = []
 var _build_completed_weight := 0.0
 var _build_total_weight := 1.0
 var _build_started := false
@@ -250,6 +253,7 @@ func begin_build_world() -> void:
 	_load_data()
 	_build_stages.clear()
 	_build_stage_index = 0
+	_build_profile_parts.clear()
 	_build_completed_weight = 0.0
 	_build_total_weight = 0.0
 	if data.is_empty():
@@ -271,6 +275,7 @@ func begin_build_world() -> void:
 
 func build_world_step() -> Dictionary:
 	if is_built:
+		_attach_collision_root()
 		return get_build_progress_state()
 	if not _build_started:
 		begin_build_world()
@@ -281,6 +286,7 @@ func build_world_step() -> Dictionary:
 	var stage_label := String(stage.get("label", "Строим мир"))
 	var stage_weight := float(stage.get("weight", 1.0))
 	var callable_variant: Variant = stage.get("callable", Callable())
+	var stage_started_msec := Time.get_ticks_msec()
 	if callable_variant is Callable:
 		var stage_callable: Callable = callable_variant
 		if stage_callable.is_valid():
@@ -289,6 +295,15 @@ func build_world_step() -> Dictionary:
 			build_error = "Native world build stage is missing: %s" % stage_label
 	elif build_error.is_empty():
 		build_error = "Native world build stage is invalid: %s" % stage_label
+	# 0.2.54 diagnostics: cumulative build profile after every stage.
+	# The GreenForest smoke timed out at 600 s in CI and the same wall
+	# looked like a mid-loading crash on a phone.  The last flushed
+	# line always lists every completed stage with its cost, even if
+	# the process is killed inside the next stage.
+	_build_profile_parts.append("%s=%dms" % [stage_label, Time.get_ticks_msec() - stage_started_msec])
+	print("[native-build] world=%s profile %s" % [world_id, "; ".join(PackedStringArray(_build_profile_parts))])
+	if is_built:
+		_attach_collision_root()
 	_build_stage_index += 1
 	_build_completed_weight += maxf(stage_weight, 0.01)
 	if _build_stage_index >= _build_stages.size() and not is_built:
@@ -390,7 +405,11 @@ func _queue_forest_build_stages() -> void:
 	_add_build_stage("Заполняем озеро и реку", Callable(self, "_build_forest_water"), 0.5)
 	_add_build_stage("Прокладываем дороги и мосты", Callable(self, "_build_desert_roads"), 4.0)
 	_add_build_stage("Строим посёлок, ферму и лесопилку", Callable(self, "_build_desert_structures"), 3.0)
-	_add_build_stage("Высаживаем лес", Callable(self, "_build_forest_scatter"), 4.0)
+	# 0.2.55: scatter is built in three slices so one stage never
+	# monopolises a loading frame long enough to trip Android ANR.
+	_add_build_stage("Высаживаем лес: деревья", Callable(self, "_gf_scatter_build").bind(["spruce", "pine", "birch", "leafy", "oak", "dead_tree"]), 2.2)
+	_add_build_stage("Высаживаем лес: подлесок", Callable(self, "_gf_scatter_build").bind(["bush", "fern", "flower", "mushroom", "stump", "fallen_log", "reed"]), 1.0)
+	_add_build_stage("Высаживаем лес: камни и поля", Callable(self, "_gf_scatter_build").bind(["hay_bale", "crop_wheat", "crop_corn", "crop_sunflower", "rock_small", "rock_medium", "rock_large"]), 0.8)
 	_add_build_stage("Добавляем оленей, птиц и дым", Callable(self, "_build_forest_extras"), 0.5)
 	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
 	_add_build_stage("Собираем модели леса", Callable(self, "_flush_batched_models"), 2.0)
@@ -1447,7 +1466,19 @@ func _create_collision_root() -> void:
 	_collision_root.name = "WorldColliders"
 	_collision_root.collision_layer = 1
 	_collision_root.collision_mask = 0
-	add_child(_collision_root)
+	# 0.2.55: the body deliberately stays OUT of the tree while the
+	# world builds.  Adding CollisionShape3D children to a live
+	# in-space StaticBody costs more per shape the more shapes the
+	# body already has (measured 2.3 ms -> 12 ms per add across a
+	# 19k-shape build), which made the GreenForest scatter stages
+	# take ~110 s and killed loading on Android.  Out of tree, shape
+	# adds are plain node operations; _attach_collision_root() puts
+	# the finished body into the space once, at build completion.
+
+
+func _attach_collision_root() -> void:
+	if _collision_root != null and _collision_root.get_parent() == null:
+		add_child(_collision_root)
 
 
 
@@ -1570,6 +1601,18 @@ func _register_collider(collision: CollisionShape3D, centre: Vector3) -> void:
 	)
 	if not _collider_cells.has(cell):
 		_collider_cells[cell] = []
+		# 0.2.55: seed the streaming state from the spawn focus so
+		# far shapes are created disabled (a free property write
+		# while the body is out of the tree) and the first
+		# _streaming_tick does not rewrite `disabled` on every
+		# shape of a huge body (that pass alone cost 55 s).
+		var cell_centre := Vector2(
+			_active_aabb.position.x + (float(cell.x) + 0.5) * STREAM_CELL_M,
+			_active_aabb.position.z + (float(cell.y) + 0.5) * STREAM_CELL_M
+		)
+		var spawn_2d := Vector2(spawn_transform.origin.x, spawn_transform.origin.z)
+		_active_collider_cells[cell] = cell_centre.distance_to(spawn_2d) < COLLIDER_ACTIVE_RADIUS_M
+	collision.disabled = not bool(_active_collider_cells[cell])
 	(_collider_cells[cell] as Array).append(collision)
 
 
@@ -13098,7 +13141,39 @@ func _gf_structure_kind(kind: String, o: Vector3, basis: Basis, w: float, d: flo
 	return true
 
 
+func _gf_near_road(px: float, pz: float, limit: float) -> bool:
+	# Exact uncapped near-road test over the 3x3 road-grid
+	# neighbourhood.  _road_clearance_xz() caps its answer at
+	# ROAD_GRID_QUERY_CLEARANCE_M (10 m), so the 0.2.54 test
+	# `clearance < 22` was true for EVERY tree and the scatter stage
+	# tried to create 37.5k physics colliders: CI timed out at 600 s
+	# and Android killed the app mid-loading.  True roadside trees
+	# within 22 m number ~6.9k (verified against the data).
+	var centre := _road_grid_cell(px, pz)
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var candidates: Array = _road_segment_grid.get(Vector2i(centre.x + dx, centre.y + dz), [])
+			for index_variant in candidates:
+				var i := int(index_variant)
+				var a: Vector3 = _road_segment_starts[i]
+				var b: Vector3 = _road_segment_ends[i]
+				var ab := Vector2(b.x - a.x, b.z - a.z)
+				var ap := Vector2(px - a.x, pz - a.z)
+				var length_squared := ab.length_squared()
+				var dist := ap.length()
+				if length_squared > 0.0001:
+					var t := clampf(ap.dot(ab) / length_squared, 0.0, 1.0)
+					dist = ap.distance_to(ab * t)
+				if dist - float(_road_segment_half_widths[i]) < limit:
+					return true
+	return false
+
+
 func _build_forest_scatter() -> void:
+	_gf_scatter_build([])
+
+
+func _gf_scatter_build(kinds_filter: Array) -> void:
 	var root := Node3D.new()
 	root.name = "ForestScatter"
 	add_child(root)
@@ -13255,6 +13330,8 @@ func _build_forest_scatter() -> void:
 	var trees := 0
 	for kind_variant in cfg.keys():
 		var kind := String(kind_variant)
+		if not kinds_filter.is_empty() and not kinds_filter.has(kind):
+			continue
 		var conf: Dictionary = cfg[kind]
 		var items: Array = scatter.get(kind, [])
 		if items.is_empty():
@@ -13286,7 +13363,7 @@ func _build_forest_scatter() -> void:
 				trees += 1
 			if collider_r > 0.0:
 				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
-			elif is_tree and _road_clearance_xz(pos) < 22.0:
+			elif is_tree and _gf_near_road(px, pz, 22.0):
 				# Only roadside trees need physics; deep forest stays
 				# collider-free so the streaming grid stays light.
 				_add_cylinder_collider(Vector3(px, pos.y + 1.5 * sc, pz), 0.34 * sc, 3.0 * sc)
@@ -13307,8 +13384,10 @@ func _build_forest_scatter() -> void:
 						if ti % kind_meshes.size() == vi:
 							sub.append(bucket_xforms[ti])
 					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "GfScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
-	_enhancement_stats["forest_scatter"] = total
-	_enhancement_stats["forest_trees"] = trees
+	_gf_scatter_total_acc += total
+	_gf_scatter_trees_acc += trees
+	_enhancement_stats["forest_scatter"] = _gf_scatter_total_acc
+	_enhancement_stats["forest_trees"] = _gf_scatter_trees_acc
 	_enhancement_stats["forest_scatter_0254"] = true
 
 
@@ -13320,14 +13399,18 @@ func _build_forest_extras() -> void:
 	# clearings (static poses, one collider each).
 	var deer_count := 0
 	for group_variant in _dz_data().get("deerGroups", []):
-		var group: Array = group_variant
-		for deer_variant in group:
-			var deer: Array = deer_variant
-			if deer.size() < 3:
-				continue
-			var dx := float(deer[0])
-			var dz := float(deer[1])
-			var dyaw := float(deer[2])
+		# Data ships herd centres {x, z, count}; expand them into
+		# individual deer deterministically around the centre.
+		var group: Dictionary = group_variant
+		var gx := _f(group, "x")
+		var gz := _f(group, "z")
+		var group_count := int(group.get("count", 3))
+		for di in range(group_count):
+			var ang := _hash01(int(gx) + di * 17, int(gz) + di * 29) * TAU
+			var rad := 4.0 + _hash01(int(gx) + di * 31, int(gz) + di * 13) * 16.0
+			var dx := gx + cos(ang) * rad
+			var dz := gz + sin(ang) * rad
+			var dyaw := _hash01(int(dx) * 3 + di * 7, int(dz) * 7 + di) * TAU
 			var o := Vector3(dx, height_at(dx, dz), dz)
 			var dbasis := Basis(Vector3.UP, dyaw)
 			var graze := int(absf(dx) * 3.0 + absf(dz) * 7.0) % 3 == 0
