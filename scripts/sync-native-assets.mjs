@@ -14,6 +14,7 @@ const destinationRoot = 'native/assets';
 
 const modelCopies = [
   ['public/assets/models/cars/mustang/mustang.glb', 'vehicles/mustang.glb', 'mustang'],
+  ['src/assets/models/characters/nitches_player.glb', 'characters/nitches_player.glb'],
   ['src/assets/models/cars/audi_r8_v10_plus.glb', 'vehicles/audi_r8_v10_plus.glb'],
   ['src/assets/models/cars/chevrolet_camaro_ss.glb', 'vehicles/chevrolet_camaro_ss.glb'],
   ['src/assets/models/cars/mercedes_benz_560_sel.glb', 'vehicles/mercedes_benz_560_sel.glb'],

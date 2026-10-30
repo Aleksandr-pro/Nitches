@@ -18,6 +18,7 @@ signal menu_requested
 signal sound_toggle_requested
 signal map_requested
 signal ignition_requested
+signal vehicle_mode_requested
 
 const MinimapScript := preload("res://scripts/minimap.gd")
 const SteeringWheelScript := preload("res://scripts/steering_wheel.gd")
@@ -46,6 +47,9 @@ var _view_button: Button
 var _sound_button: Button
 var _pause_button: Button
 var _reset_button: Button
+var _vehicle_mode_button: Button
+var _vehicle_mode_ready := false
+var _player_on_foot := false
 var _performance_label: Label
 var _district_label: Label
 var _reverse_label: Label
@@ -120,15 +124,41 @@ func apply_control_preferences(control_type: String, wheel_size_multiplier: floa
     _control_type = control_type if control_type in ["wheel", "tilt", "arrows"] else "wheel"
     _wheel_size_multiplier = clampf(wheel_size_multiplier, 0.75, 1.25)
     if _wheel != null:
-        _wheel.visible = _control_type != "arrows"
-        _wheel.set_input_enabled(_control_type == "wheel")
+        _wheel.visible = not _player_on_foot and _control_type != "arrows"
+        _wheel.set_input_enabled(not _player_on_foot and _control_type == "wheel")
     if _steer_left_button != null:
-        _steer_left_button.visible = _control_type == "arrows"
+        _steer_left_button.visible = not _player_on_foot and _control_type == "arrows"
     if _steer_right_button != null:
-        _steer_right_button.visible = _control_type == "arrows"
+        _steer_right_button.visible = not _player_on_foot and _control_type == "arrows"
     if _tilt_label != null:
-        _tilt_label.visible = _control_type == "tilt"
+        _tilt_label.visible = not _player_on_foot and _control_type == "tilt"
+    if _gas_pedal != null:
+        _gas_pedal.visible = not _player_on_foot
+    if _brake_pedal != null:
+        _brake_pedal.visible = not _player_on_foot
+    if _nitro_button != null:
+        _nitro_button.visible = not _player_on_foot
+    if _drift_button != null:
+        _drift_button.visible = not _player_on_foot
+    if _ignition_button != null:
+        _ignition_button.visible = not _player_on_foot
     _layout_hud()
+
+
+func set_vehicle_interaction(can_change_mode: bool, player_on_foot: bool) -> void:
+    if can_change_mode == _vehicle_mode_ready and player_on_foot == _player_on_foot:
+        return
+    if player_on_foot and not _player_on_foot:
+        reset_touch_controls()
+    _vehicle_mode_ready = can_change_mode
+    _player_on_foot = player_on_foot
+    if _vehicle_mode_button != null:
+        _vehicle_mode_button.visible = can_change_mode
+        _vehicle_mode_button.text = "ЗА РУЛЬ" if player_on_foot else "ВЫЙТИ"
+        _vehicle_mode_button.tooltip_text = "Вернуться на водительское место" if player_on_foot else "Выйти из машины (только на стоянке)"
+    if _reset_button != null:
+        _reset_button.visible = not player_on_foot
+    apply_control_preferences(_control_type, _wheel_size_multiplier)
 
 
 func set_developer_mode(enabled: bool) -> void:
@@ -245,6 +275,12 @@ func _build_ui() -> void:
     _reset_button = _make_icon_button("↺", 27)
     _reset_button.name = "ResetCarButton"
     _reset_button.pressed.connect(func() -> void: reset_requested.emit())
+
+    _vehicle_mode_button = _make_icon_button("ВЫЙТИ", 16, 18)
+    _vehicle_mode_button.name = "VehicleModeButton"
+    _vehicle_mode_button.tooltip_text = "Выйти из машины"
+    _vehicle_mode_button.visible = false
+    _vehicle_mode_button.pressed.connect(func() -> void: vehicle_mode_requested.emit())
 
     _district_label = Label.new()
     _district_label.name = "DistrictNotice"
@@ -364,7 +400,9 @@ func _layout_hud() -> void:
     _place(_district_label, Rect2(minimap_rect.position + Vector2(0.0, minimap_d + 8.0 + ignition_d + 5.0), Vector2(minimap_d, 32.0)))
 
     var reset_size := clampf(vh * 0.09, 56.0, 72.0)
-    _place(_reset_button, Rect2(Vector2(minimap_rect.end.x + gap, margin_y), Vector2(reset_size, reset_size)))
+    var reset_position := Vector2(minimap_rect.end.x + gap, margin_y)
+    _place(_reset_button, Rect2(reset_position, Vector2(reset_size, reset_size)))
+    _place(_vehicle_mode_button, Rect2(Vector2(reset_position.x, reset_position.y + reset_size + 8.0), Vector2(maxf(reset_size, 108.0), 52.0)))
 
     var gauge_d := clampf(vh * 0.22, 112.0, 240.0)
     var gauge_rect := Rect2(Vector2(vw - margin_x - gauge_d, margin_y), Vector2(gauge_d, gauge_d))
@@ -530,6 +568,10 @@ func get_smoke_state() -> Dictionary:
         "ignition_button": _ignition_button.get_smoke_state() if _ignition_button != null else {},
         "ignition_under_minimap": _ignition_button != null and _minimap != null and _ignition_button.position.y >= _minimap.position.y + _minimap.size.y,
         "ignition_same_size_as_drift": ignition_diameter > 0.0 and absf(ignition_diameter - drift_diameter) <= 0.5,
+        "vehicle_mode_button": {"created": _vehicle_mode_button != null, "visible": _vehicle_mode_button.visible if _vehicle_mode_button != null else false, "text": _vehicle_mode_button.text if _vehicle_mode_button != null else "", "rect": Rect2(_vehicle_mode_button.position, _vehicle_mode_button.size) if _vehicle_mode_button != null else Rect2()},
+        "player_on_foot": _player_on_foot,
+        "driving_controls_hidden_on_foot": _player_on_foot and (_gas_pedal == null or not _gas_pedal.visible) and (_brake_pedal == null or not _brake_pedal.visible) and (_wheel == null or not _wheel.visible) and (_ignition_button == null or not _ignition_button.visible),
+        "driving_controls_visible": not _player_on_foot and _gas_pedal != null and _gas_pedal.visible and _brake_pedal != null and _brake_pedal.visible and _ignition_button != null and _ignition_button.visible,
         "safe_area_3pct_4pct": true,
         "viewport_size": viewport_size,
         "dashboard_gauge": _gauge.get_smoke_state() if _gauge != null else {},

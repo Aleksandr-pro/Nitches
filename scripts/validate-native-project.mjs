@@ -97,10 +97,24 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.2.62-native-alpha"'), 'Native project version metadata must match 0.2.62-native-alpha');
-assert(preset.includes('version/code=65'), 'Native 0.2.62 must bump Android versionCode to 65');
-assert(preset.includes('version/name="0.2.62-native-alpha"'), 'Native version name must be 0.2.62-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.2.62-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.2.63-native-alpha"'), 'Native project version metadata must match 0.2.63-native-alpha');
+assert(preset.includes('version/code=66'), 'Native 0.2.63 must bump Android versionCode to 66');
+assert(preset.includes('version/name="0.2.63-native-alpha"'), 'Native version name must be 0.2.63-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.2.63-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.2.63"') && preset.includes('application/product_version="0.2.63"'), 'Desktop file/product versions must match native 0.2.63');
+assert(syncScript.includes("'src/assets/models/characters/nitches_player.glb', 'characters/nitches_player.glb'"), 'Native asset sync must stage the player character GLB');
+assert(mainScript.includes('PlayerCharacterScene := preload("res://assets/characters/nitches_player.glb")'), 'Native game must preload the staged player character');
+const playerCharacterBytes = await readFile('src/assets/models/characters/nitches_player.glb');
+const playerCharacter = parseGlbJson(playerCharacterBytes);
+assert(playerCharacterBytes.readUInt32LE(8) === playerCharacterBytes.length, 'Player character GLB total length is invalid');
+assert(playerCharacter.extras?.heightMeters === 1.84 && playerCharacter.extras?.triangleBudget >= 5000 && playerCharacter.extras?.triangleBudget <= 10000, 'Player character GLB must stay within its 1.84m, medium-low-poly asset budget');
+assert(playerCharacter.meshes?.length >= 6 && playerCharacter.materials?.some((material) => material.name === 'Skin') && playerCharacter.materials?.some((material) => material.name === 'Hair - dark brown') && playerCharacter.materials?.some((material) => material.name === 'Trousers - charcoal blue'), 'Player character must include recognizable human anatomy and separate clothing materials');
+for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'Tween.TRANS_BACK', '01a_driver_exit']) {
+  assert(mainScript.includes(marker), `Native 0.2.63 parked-only character marker is missing: ${marker}`);
+}
+for (const marker of ['vehicle_mode_requested', 'set_vehicle_interaction', 'driving_controls_hidden_on_foot']) {
+  assert(hudScript.includes(marker), `Native 0.2.63 parked-only HUD marker is missing: ${marker}`);
+}
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +173,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.2.62"') && preset.includes('application/product_version="0.2.62"'), 'Desktop Windows version metadata must match native 0.2.62');
+assert(preset.includes('application/file_version="0.2.63"') && preset.includes('application/product_version="0.2.63"'), 'Desktop Windows version metadata must match native 0.2.63');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -258,7 +272,7 @@ for (const marker of ['sail_cottage_estates_0239', 'sail_cottage_models_0239', '
 for (const marker of ['class_name NativeSteeringWheel', 'steering_changed', 'MAX_LOCK_DEGREES', 'CENTERING_RATE_PER_SEC', 'set_touch_steering', 'touch_steering_wheel_0232', 'class_name NativeWorldMap', 'world_map_0232', 'map_requested', 'world_map_requested', 'map_toggle', 'DISTRICT_NAMES', 'ROAD_LABELS', '_select_poi_at', '_set_zoom_factor', 'get_park_map_entries']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.32 steering-wheel/world-map marker is missing: ${marker}`);
 }
-assert(hudScript.includes('_control_type == "arrows"') && hudScript.includes('_wheel.visible = _control_type != "arrows"'), 'Native 0.2.33 HUD must default to the steering wheel and expose arrows only as a settings alternative');
+assert(hudScript.includes('_control_type == "arrows"') && hudScript.includes('_wheel.visible = not _player_on_foot and _control_type != "arrows"'), 'Native 0.2.33 HUD must default to the steering wheel, expose arrows only as a settings alternative, and hide controls on foot');
 for (const marker of ['get_global_transform_interpolated', 'PHYSICS_INTERPOLATION_MODE_OFF', 'reset_physics_interpolation', 'responsive_steering', 'ramp_digital_steering', 'shape_steering_input', 'CONTACT_PATCH_SAMPLES', 'TYRE_RELAXATION_LENGTH_M', 'free_orbit_0231', 'InputEventScreenDrag', 'InputEventMouseMotion', 'JOY_AXIS_RIGHT_X']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.31 anti-jitter/steering/free-camera marker is missing: ${marker}`);
 }
