@@ -609,17 +609,17 @@ for _rid, _dense in roads_dense.items():
                         continue
                     _op = roads_dense[_orid][_oi]
                     _d = float(np.hypot(_op[0] - _p[0], _op[1] - _p[1]))
-                    if _d < 14.0 and (_best is None or _d < _best[0]):
+                    if _d < 18.0 and (_best is None or _d < _best[0]):
                         _best = (_d, float(road_profiles[_orid][_oi]),
                                  _surf_by_id[_orid])
         if _best is None:
             continue
         _d, _other_h, _other_surf = _best
-        _t = min(1.0, max(0.0, (14.0 - _d) / 10.0))
+        _t = min(1.0, max(0.0, (18.0 - _d) / 14.0))
         _w = _t * _t * (3.0 - 2.0 * _t)
         if _surf_by_id[_rid] == "asphalt" and _other_surf != "asphalt":
             _w *= 0.15
-        _delta = float(np.clip((_other_h - _prof[_i]) * _w, -1.2, 1.2))
+        _delta = float(np.clip((_other_h - _prof[_i]) * _w, -2.2, 2.2))
         if _delta != 0.0:
             _prof[_i] += _delta
             _harmonised_points += 1
@@ -628,6 +628,158 @@ for _rid, _dense in roads_dense.items():
     flatten_jobs[_rid] = (_job[0], _job[1], _prof, _job[3], _job[4],
                           _job[5])
 print(f"[forest] junction harmonisation: {_harmonised_points} points")
+
+# Crossing reconciliation (0.2.57): plan crossings on steep slopes
+# can leave the two profiles tens of metres apart after independent
+# grade limiting; the capped harmonisation above cannot close those
+# gaps and the lower road ends with a wall across its deck (the
+# birch tracks crossing the ring shelf climbed 20 m in 12 m).  Force
+# agreed heights at true crossings with long approach ramps;
+# asphalt keeps most of its height, dirt takes the long climb.
+_closed_by_id = {r[0]: bool(r[6]) for r in ROAD_DEFS}
+_prio_by_surf = {"asphalt": 3.0, "gravel": 1.0}
+
+
+def _surf_prio(_rid):
+    return _prio_by_surf.get(_surf_by_id[_rid], 0.6)
+
+
+_recon = {}
+for _rid, _dense in roads_dense.items():
+    _s_cum = flatten_jobs[_rid][1]
+    _protected = (list(bridge_s_ranges.get(_rid, []))
+                  + list(tunnel_s_ranges.get(_rid, [])))
+    for _i, _p in enumerate(_dense):
+        if _in_protected(float(_s_cum[_i]), _protected, 30.0):
+            continue
+        _kx, _kz = int(_p[0] // 16), int(_p[1] // 16)
+        _best = None
+        for _gx in (_kx - 1, _kx, _kx + 1):
+            for _gz in (_kz - 1, _kz, _kz + 1):
+                for (_orid, _oi) in _jgrid.get((_gx, _gz), ()):
+                    if _orid == _rid:
+                        continue
+                    _op = roads_dense[_orid][_oi]
+                    _d = float(np.hypot(_op[0] - _p[0], _op[1] - _p[1]))
+                    if _d < 5.0 and (_best is None or _d < _best[0]):
+                        _best = (_d, _orid,
+                                 float(road_profiles[_orid][_oi]))
+        if _best is None:
+            continue
+        _mine = float(road_profiles[_rid][_i])
+        if abs(_best[2] - _mine) <= 2.5:
+            continue
+        _wa, _wb = _surf_prio(_rid), _surf_prio(_best[1])
+        _agreed = (_mine * _wa + _best[2] * _wb) / (_wa + _wb)
+        _recon.setdefault(_rid, []).append(
+            (float(_s_cum[_i]), _agreed))
+_recon_applied = 0
+for _rid, _pts in _recon.items():
+    _prof = road_profiles[_rid].copy()
+    _s_cum = flatten_jobs[_rid][1]
+    _total = float(_s_cum[-1])
+    _closed_r = _closed_by_id.get(_rid, False)
+    _pts.sort()
+    _clusters = []
+    for (_sc, _ah) in _pts:
+        if _clusters and _sc - _clusters[-1][0][-1] < 40.0:
+            _clusters[-1][0].append(_sc)
+            _clusters[-1][1].append(_ah)
+        else:
+            _clusters.append(([_sc], [_ah]))
+    for (_ss, _aa) in _clusters:
+        _s0 = float(np.mean(_ss))
+        _target = float(np.median(_aa))
+        for _i in range(len(_prof)):
+            _ds = abs(float(_s_cum[_i]) - _s0)
+            if _closed_r:
+                _ds = min(_ds, _total - _ds)
+            if _ds < 130.0:
+                _w = 1.0 - float(smoothstep(12.0, 130.0, _ds))
+                _prof[_i] += (_target - _prof[_i]) * _w
+        _recon_applied += 1
+    for _ in range(2):
+        _prev = np.roll(_prof, 1)
+        _next = np.roll(_prof, -1)
+        if not _closed_r:
+            _prev[0] = _prof[0]
+            _next[-1] = _prof[-1]
+        _prof = 0.25 * _prev + 0.5 * _prof + 0.25 * _next
+    road_profiles[_rid] = _prof
+    _job = flatten_jobs[_rid]
+    flatten_jobs[_rid] = (_job[0], _job[1], _prof, _job[3], _job[4],
+                          _job[5])
+print(f"[forest] crossing reconciliation: {_recon_applied} crossings")
+
+# Water-margin lift (0.2.57): no road profile may dip towards the
+# water anywhere near the lake, swamp or river arms.  Player footage
+# showed dirt tracks fording 1.6 m under the river surface and the
+# riverbank road running below water level.  The lift is distance-
+# ramped so approaches stay smooth; tunnel interiors are exempt.
+_rgrid = {}
+for (_rdense, _rwy) in RIVERS:
+    for _i in range(len(_rdense)):
+        _rp = (float(_rdense[_i][0]), float(_rdense[_i][1]),
+               float(_rwy[_i]))
+        _rgrid.setdefault((int(_rp[0] // 32), int(_rp[1] // 32)),
+                          []).append(_rp)
+
+
+def _water_floor(x, z):
+    best = None
+    dl = math.hypot((x - LAKE_X) / LAKE_RX, (z - LAKE_Z) / LAKE_RZ)
+    if dl < 1.14:
+        best = (LAKE_Y + 0.6, 1.0 - float(smoothstep(1.0, 1.14, dl)))
+    ds = math.hypot((x - SWAMP_X) / SWAMP_RX, (z - SWAMP_Z) / SWAMP_RZ)
+    if ds < 1.16 and (best is None or SWAMP_Y + 0.55 > best[0]):
+        best = (SWAMP_Y + 0.55,
+                1.0 - float(smoothstep(1.0, 1.16, ds)))
+    kx, kz = int(x // 32), int(z // 32)
+    nearest = None
+    for gx in (kx - 1, kx, kx + 1):
+        for gz in (kz - 1, kz, kz + 1):
+            for (rx, rz, rwy) in _rgrid.get((gx, gz), ()):
+                dd = math.hypot(rx - x, rz - z)
+                if dd < 30.0 and (nearest is None or dd < nearest[0]):
+                    nearest = (dd, rwy)
+    if nearest is not None:
+        fy = nearest[1] + 0.65
+        if best is None or fy > best[0]:
+            best = (fy, 1.0 - float(smoothstep(10.0, 28.0,
+                                               nearest[0])))
+    return best
+
+
+_lifted_points = 0
+for _rid, _dense in roads_dense.items():
+    _prof = road_profiles[_rid].copy()
+    _s_cum = flatten_jobs[_rid][1]
+    _tun = list(tunnel_s_ranges.get(_rid, []))
+    _changed = False
+    for _i, _p in enumerate(_dense):
+        if _in_protected(float(_s_cum[_i]), _tun, 12.0):
+            continue
+        _fl = _water_floor(float(_p[0]), float(_p[1]))
+        if _fl is None:
+            continue
+        _fy, _w = _fl
+        if _prof[_i] < _fy and _w > 0.01:
+            _prof[_i] += (_fy - _prof[_i]) * _w
+            _changed = True
+            _lifted_points += 1
+    if _changed:
+        for _ in range(2):
+            _prev = np.roll(_prof, 1)
+            _next = np.roll(_prof, -1)
+            if not _closed_by_id.get(_rid, False):
+                _prev[0] = _prof[0]
+                _next[-1] = _prof[-1]
+            _prof = 0.25 * _prev + 0.5 * _prof + 0.25 * _next
+    road_profiles[_rid] = _prof
+    _job = flatten_jobs[_rid]
+    flatten_jobs[_rid] = (_job[0], _job[1], _prof, _job[3], _job[4],
+                          _job[5])
+print(f"[forest] water-margin lift: {_lifted_points} points")
 
 # Terrain flattening for every road (was inline in the profile loop).
 for (rid, _name, _ctrl, _width, _lanes, _surf, _closed, _spd) in ROAD_DEFS:
@@ -662,6 +814,35 @@ for (rid, _name, _ctrl, _width, _lanes, surf, _closed, _spd) in ROAD_DEFS:
         return fn
 
     _polyline_local_op_s(H, dense, half_w + falloff + STEP, make_fn2(), s_cum)
+
+# Final corridor clamp (0.2.57): after every flatten pass, guarantee
+# terrain never pokes through a road deck.  Later roads used to
+# re-raise earlier corridors with their falloff skirts (a 5.4 m hill
+# buried the ring bridge at 800,880).  min() only ever lowers cells,
+# so bridge spans keep their carved riverbeds; tunnels are exempt.
+for (rid, _name, _ctrl, _width, _lanes, _surf, _closed, _spd) in ROAD_DEFS:
+    dense, s_cum, prof, half_w, falloff, skip_ranges = flatten_jobs[rid]
+    _tun_ranges = list(tunnel_s_ranges.get(rid, []))
+
+    def make_clamp(prof=prof, s_cum=s_cum, half_w=half_w,
+                   tun_ranges=_tun_ranges):
+        def fn(sub, dist, s):
+            target = np.interp(s, s_cum, prof) - 0.04
+            w = 1.0 - smoothstep(half_w + 1.2, half_w + 4.0, dist)
+            for (a, b) in tun_ranges:
+                w = np.where((s > a - 8.0) & (s < b + 8.0), 0.0, w)
+            # Shave-only cap: where another road's corridor crosses
+            # this one at a divergent height (mountain plan crossings)
+            # the terrain belongs to the higher road; never trench
+            # more than 6 m towards this road's profile.
+            capped = np.where(sub - target <= 6.0,
+                              np.minimum(sub, target), sub)
+            return sub * (1.0 - w) + capped * w
+        return fn
+
+    _polyline_local_op_s(H, dense, half_w + 4.0 + STEP, make_clamp(),
+                         s_cum)
+print("[forest] corridor clamp applied")
 
 roads_out = []
 road_samples_by_id = {}
@@ -1042,6 +1223,53 @@ scatter_data["pine"].append([ISLAND_X, ISLAND_Z, 1.7, 0.7])
 scatter_data["pine"].append([ISLAND_X + 26.0, ISLAND_Z + 14.0, 0.9, 2.4])
 scatter_data["oak"].append([1900.0, 2150.0, 2.7, 1.1])
 
+# Grass tufts (0.2.57): geometric ground cover in the Forza style —
+# ambient meadow/clearing tufts plus a dedicated road-verge pass so
+# every roadside reads alive at driving distance.
+def _grass_ok(x, z):
+    if lake_d(x, z) < 1.02 or river_dist_at(x, z) < 6.0:
+        return False
+    if slope_at(x, z) > 0.55:
+        return False
+    if lake_d(x, z) < 1.30 and height_at(x, z) < LAKE_Y + 0.30:
+        return False
+    if swamp_d(x, z) < 1.05 and height_at(x, z) < SWAMP_Y + 0.30:
+        return False
+    return True
+
+
+def _grass_zone(x, z):
+    if not _grass_ok(x, z) or in_fields(x, z, 1.0):
+        return False
+    table = {"meadow": 0.95, "farm": 0.45, "grove": 0.38,
+             "birch": 0.34, "dark": 0.14, "hills": 0.28,
+             "sawmill": 0.30, "swamp": 0.18}
+    return rng.random() < table.get(zone_of(x, z), 0.0)
+
+
+_grass_pts = scatter(24000, _grass_zone, along_ratio=0.35,
+                     min_road_dist=7.0)
+_width_by_id = {r[0]: float(r[3]) for r in ROAD_DEFS}
+for _rid, _dense in roads_dense.items():
+    _hw = _width_by_id[_rid] * 0.5
+    for _i in range(1, len(_dense), 3):
+        if rng.random() > 0.42:
+            continue
+        _a, _b = _dense[_i - 1], _dense[_i]
+        _d = _b - _a
+        _n = float(np.linalg.norm(_d))
+        if _n < 1e-6:
+            continue
+        _perp = np.array([-_d[1], _d[0]]) / _n
+        _side = 1.0 if rng.random() < 0.5 else -1.0
+        _off = _side * (_hw + float(rng.uniform(1.1, 3.4)))
+        _x = float(_b[0] + _perp[0] * _off)
+        _z = float(_b[1] + _perp[1] * _off)
+        if 30.0 < _x < SIZE - 30.0 and 30.0 < _z < SIZE - 30.0 \
+                and _grass_ok(_x, _z):
+            _grass_pts.append((_x, _z))
+scatter_data["grass_tuft"] = mk_instances(_grass_pts, 0.8, 1.6)
+
 print("[forest] scatter totals:", {k: len(v) for k, v in scatter_data.items()})
 
 # --- exact scatter road audit (prefiltered by the distance raster) --
@@ -1054,6 +1282,8 @@ def _gf_scatter_margin(kind, scale):
         return 1.15
     if kind in ("fallen_log", "hay_bale", "bush"):
         return 1.05
+    if kind == "grass_tuft":
+        return 0.55
     if kind == "reed":
         return 0.90
     return 0.80
