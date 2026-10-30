@@ -74,11 +74,35 @@ def save_jpg(name, arr):
     print("wrote", name)
 
 
-def save_set(prefix, albedo, height, rough, normal_strength=2.2):
+def _box_blur_wrap(a, radius):
+    """Separable box blur with wrapped edges (keeps tiles seamless)."""
+    if radius <= 0:
+        return a
+    k = 2 * radius + 1
+    ap = np.pad(a, radius, mode="wrap")
+    cs = np.cumsum(ap, axis=1)
+    cs = np.pad(cs, ((0, 0), (1, 0)), mode="constant")
+    a = (cs[:, k:] - cs[:, :-k]) / k
+    cs = np.cumsum(a, axis=0)
+    cs = np.pad(cs, ((1, 0), (0, 0)), mode="constant")
+    return (cs[k:, :] - cs[:-k, :]) / k
+
+
+def cavity_ao(height, k=2.0, radius=7):
+    """Cheap baked AO: crevices below the local average height darken."""
+    blur = _box_blur_wrap(height, radius)
+    return clip01(1.0 - clip01((blur - height) * k))
+
+
+def save_set(prefix, albedo, height, rough, normal_strength=2.2,
+             ao_k=None, ao_radius=7):
     save_jpg(f"{prefix}.jpg", albedo)
     save_jpg(f"{prefix}_normal.jpg", normal_from_height(height, normal_strength))
     if rough is not None:
         save_jpg(f"{prefix}_roughness.jpg", np.stack([rough] * 3, axis=-1))
+    if ao_k is not None:
+        ao = cavity_ao(height, ao_k, ao_radius)
+        save_jpg(f"{prefix}_ao.jpg", np.stack([ao] * 3, axis=-1))
 
 
 def add_stones(rng, albedo, height, count, rmin, rmax, palette, bump_amp=0.22, angular=True):

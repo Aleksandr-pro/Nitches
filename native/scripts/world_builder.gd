@@ -1830,6 +1830,16 @@ func _texture(file_name: String) -> Texture2D:
 	return texture
 
 
+func _apply_ao(material: StandardMaterial3D, file: String, strength: float) -> void:
+	# 0.2.60: baked cavity AO maps (crevices/furrows) — the cheap
+	# depth cue from the ground-cover spec on top of normal maps.
+	var tex := _texture(file)
+	if tex != null:
+		material.ao_enabled = true
+		material.ao_texture = tex
+		material.ao_light_affect = strength
+
+
 func _material(
 	key: String,
 	albedo_file: String = "",
@@ -1980,14 +1990,18 @@ func _terrain_material(kind: String) -> Material:
 	match kind:
 		"gf_meadow":
 			material = _material("terrain_gf_meadow", "gf_meadow.jpg", "gf_meadow_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_meadow_roughness.jpg")
+			_apply_ao(material, "gf_meadow_ao.jpg", 0.45)
 		"gf_forest_floor":
 			material = _material("terrain_gf_floor", "gf_forest_floor.jpg", "gf_forest_floor_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_forest_floor_roughness.jpg")
+			_apply_ao(material, "gf_forest_floor_ao.jpg", 0.55)
 		"gf_mud":
 			material = _material("terrain_gf_mud", "gf_mud.jpg", "gf_mud_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3.ONE, false, "gf_mud_roughness.jpg")
 		"gf_field":
 			material = _material("terrain_gf_field", "gf_field_soil.jpg", "gf_field_soil_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_field_soil_roughness.jpg")
 		"gf_rock":
 			material = _material("terrain_gf_rock", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(1.0, 1.0, 0.99), 1.0, 0.0, Vector3(0.055, 0.055, 0.055), true, "gf_rock_gray_roughness.jpg")
+			_apply_ao(material, "gf_rock_gray_ao.jpg", 0.6)
+			material.normal_scale = 1.3
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"dune":
@@ -13269,13 +13283,44 @@ func _gf_add_cluster(cards: Array, centre: Vector3, size: float, rng: RandomNumb
 		cards.append({"c": centre, "r": right, "u": upv, "n": (flat + Vector3.UP * 0.45).normalized(), "col": Color(b, b, b), "flip": rng.randf() < 0.5})
 
 
+func _gf_add_roots(parts: Array, prim: Mesh, trunk_r: float, rng: RandomNumberGenerator) -> void:
+	# 0.2.60: buttress roots — tapered cylinders running from the
+	# trunk flare out and down into the soil, so the tree is
+	# planted instead of sitting on a disc.
+	var white := Color(1.0, 1.0, 1.0)
+	for k in range(5):
+		var ang := TAU * float(k) / 5.0 + rng.randf_range(-0.3, 0.3)
+		var dirv := Vector3(cos(ang), 0.0, sin(ang))
+		var top_p := dirv * (trunk_r * 0.55) + Vector3(0.0, 0.62, 0.0)
+		var toe_p := dirv * (trunk_r * rng.randf_range(2.0, 2.6)) + Vector3(0.0, -0.3, 0.0)
+		parts.append(_gf_branch_part(prim, top_p, toe_p, trunk_r * 0.44, white))
+
+
+func _gf_crown_shell(cards: Array, core: Array, core_prim: Mesh, center: Vector3, radii: Vector3, count: int, size: float, rng: RandomNumberGenerator, core_col: Color, with_core: bool) -> void:
+	# 0.2.60: one continuous crown mass over the treetop. Clusters
+	# are sampled on an ellipsoid shell (biased toward the top), so
+	# the silhouette reads as a whole crown; branch-tip clusters
+	# stay as outer detail and small dark cores give depth inside.
+	for i in range(count):
+		var yaw := rng.randf() * TAU
+		var vy := rng.randf_range(-0.18, 1.0)
+		var ring := sqrt(maxf(1.0 - vy * vy, 0.0))
+		var dirv := Vector3(cos(yaw) * ring, vy, sin(yaw) * ring)
+		var depth := rng.randf_range(0.72, 1.0)
+		var shell_pos := center + Vector3(dirv.x * radii.x, dirv.y * radii.y, dirv.z * radii.z) * depth
+		_gf_add_cluster(cards, shell_pos, size * rng.randf_range(0.9, 1.15), rng)
+		if with_core and i % 3 == 1:
+			var cpos := center + Vector3(dirv.x * radii.x, dirv.y * radii.y, dirv.z * radii.z) * (depth * 0.6)
+			core.append(_dz_scatter_part(core_prim, cpos, Vector3(size * 0.5, size * 0.42, size * 0.5), core_col))
+
+
 # 0.2.58 branching skeletons: real trunk -> primary -> secondary
 # branch cylinders with foliage clusters at the branch ends, so the
 # woody structure reads through the crown instead of a round blob.
 func _gf_broadleaf_mesh(variant: int, is_oak: bool, bark_material: Material, foliage_file: String, foliage_tint: Color) -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = (20261653 if is_oak else 20261801) + variant * 181
-	var branch_prim := _dz_unit_cyl(6, 0.62)
+	var branch_prim := _dz_unit_cyl(7, 0.62)
 	var core_prim := _dz_unit_sphere(6, 4)
 	var white := Color(1.0, 1.0, 1.0)
 	var trunk_r := 0.42 if is_oak else 0.27
@@ -13287,8 +13332,11 @@ func _gf_broadleaf_mesh(variant: int, is_oak: bool, bark_material: Material, fol
 	var p_base := Vector3(0.0, -0.2, 0.0)
 	var p_mid := Vector3(rng.randf_range(-0.14, 0.14), trunk_h * 0.55, rng.randf_range(-0.14, 0.14))
 	var collar := Vector3(rng.randf_range(-0.2, 0.2), trunk_h, rng.randf_range(-0.2, 0.2))
-	parts.append(_gf_branch_part(branch_prim, p_base, p_mid, trunk_r, white))
-	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.72, white))
+	var p_low := Vector3(rng.randf_range(-0.1, 0.1), trunk_h * 0.3, rng.randf_range(-0.1, 0.1))
+	parts.append(_gf_branch_part(branch_prim, p_base, p_low, trunk_r, white))
+	parts.append(_gf_branch_part(branch_prim, p_low, p_mid, trunk_r * 0.84, white))
+	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.68, white))
+	_gf_add_roots(parts, branch_prim, trunk_r, rng)
 	parts.append(_dz_scatter_part(branch_prim, Vector3(0.0, 0.28, 0.0), Vector3(trunk_r * 3.1, 0.75, trunk_r * 3.1), white))
 	var prim_count := (5 if is_oak else 4) + variant
 	var reach := rng.randf_range(2.1, 2.7) if is_oak else rng.randf_range(1.7, 2.3)
@@ -13317,6 +13365,9 @@ func _gf_broadleaf_mesh(variant: int, is_oak: bool, bark_material: Material, fol
 	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.3, white))
 	_gf_add_cluster(cards, lead_end + Vector3.UP * cluster * 0.2, cluster * 1.05, rng)
 	core.append(_dz_scatter_part(core_prim, lead_end, Vector3(cluster * 0.6, cluster * 0.5, cluster * 0.6), core_col))
+	var crown_center := collar + Vector3(0.0, reach * 0.82, 0.0)
+	var crown_radii := Vector3(reach * 1.22, reach * 0.70, reach * 1.22) if is_oak else Vector3(reach * 1.02, reach * 0.82, reach * 1.02)
+	_gf_crown_shell(cards, core, core_prim, crown_center, crown_radii, (7 if is_oak else 6) + variant, cluster, rng, core_col, true)
 	var mesh := _gf_tree_mesh(parts, core, cards, bark_material)
 	return _gf_apply_wind(mesh, foliage_file, foliage_tint, 0.08)
 
@@ -13335,6 +13386,22 @@ func _gf_birch_mesh(variant: int, bark_material: Material) -> ArrayMesh:
 	var collar := Vector3(rng.randf_range(-0.25, 0.25), trunk_h, rng.randf_range(-0.25, 0.25))
 	parts.append(_gf_branch_part(branch_prim, p_base, p_mid, trunk_r, white))
 	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.7, white))
+	_gf_add_roots(parts, branch_prim, trunk_r * 0.9, rng)
+	if variant == 1:
+		# Birches often grow as a clump: a second thinner stem leans
+		# out of the same root crown with its own small top.
+		var sb := Vector3(0.16, -0.2, 0.08)
+		var sm := Vector3(0.38, trunk_h * 0.42, 0.2)
+		var scollar := Vector3(0.72, trunk_h * 0.8, 0.36)
+		parts.append(_gf_branch_part(branch_prim, sb, sm, trunk_r * 0.68, white))
+		parts.append(_gf_branch_part(branch_prim, sm, scollar, trunk_r * 0.5, white))
+		for j in range(3):
+			var syaw := rng.randf() * TAU
+			var selev := rng.randf_range(0.75, 1.1)
+			var sdir := Vector3(cos(syaw) * cos(selev), sin(selev), sin(syaw) * cos(selev))
+			var send2 := scollar + sdir * rng.randf_range(1.5, 2.0)
+			parts.append(_gf_branch_part(branch_prim, scollar, send2, trunk_r * 0.26, white))
+			_gf_add_cluster(cards, send2 + Vector3.UP * 0.22, 1.45, rng)
 	for i in range(5 + variant):
 		var from := p_mid.lerp(collar, rng.randf_range(0.15, 0.9))
 		var yaw := TAU * float(i) / 5.0 + rng.randf_range(-0.35, 0.35)
@@ -13350,6 +13417,7 @@ func _gf_birch_mesh(variant: int, bark_material: Material) -> ArrayMesh:
 	var lead_end := collar + Vector3(rng.randf_range(-0.2, 0.2), rng.randf_range(1.4, 1.9), rng.randf_range(-0.2, 0.2))
 	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.4, white))
 	_gf_add_cluster(cards, lead_end + Vector3.UP * 0.25, 1.6, rng)
+	_gf_crown_shell(cards, [], branch_prim, collar + Vector3(0.0, 1.0, 0.0), Vector3(1.15, 1.45, 1.15), 5 + variant, 1.5, rng, Color(0.034, 0.088, 0.025), false)
 	var mesh := _gf_tree_mesh(parts, [], cards, bark_material)
 	return _gf_apply_wind(mesh, "gf_birch_cluster.png", Color(1.0, 1.0, 1.0), 0.09)
 
@@ -13369,8 +13437,11 @@ func _gf_pine_mesh(variant: int, bark_material: Material) -> ArrayMesh:
 	var p_base := Vector3(0.0, -0.2, 0.0)
 	var p_mid := Vector3(lean * 0.5, trunk_h * 0.55, rng.randf_range(-0.12, 0.12))
 	var collar := Vector3(lean, trunk_h, rng.randf_range(-0.15, 0.15))
-	parts.append(_gf_branch_part(branch_prim, p_base, p_mid, trunk_r, white))
-	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.68, white))
+	var p_low := Vector3(lean * 0.25, trunk_h * 0.3, rng.randf_range(-0.08, 0.08))
+	parts.append(_gf_branch_part(branch_prim, p_base, p_low, trunk_r, white))
+	parts.append(_gf_branch_part(branch_prim, p_low, p_mid, trunk_r * 0.84, white))
+	parts.append(_gf_branch_part(branch_prim, p_mid, collar, trunk_r * 0.66, white))
+	_gf_add_roots(parts, branch_prim, trunk_r, rng)
 	parts.append(_dz_scatter_part(branch_prim, Vector3(0.0, 0.26, 0.0), Vector3(trunk_r * 3.0, 0.7, trunk_r * 3.0), white))
 	var core_col := Color(0.022, 0.058, 0.018)
 	core.append(_dz_scatter_part(core_prim, collar + Vector3(0.0, 0.55, 0.0), Vector3(2.2, 1.0, 2.2), core_col))
@@ -13390,6 +13461,7 @@ func _gf_pine_mesh(variant: int, bark_material: Material) -> ArrayMesh:
 	var lead_end := collar + Vector3(lean * 0.3, rng.randf_range(1.2, 1.7), 0.0)
 	parts.append(_gf_branch_part(branch_prim, collar, lead_end, trunk_r * 0.32, white))
 	_gf_add_cluster(cards, lead_end + Vector3.UP * 0.3, 2.0, rng)
+	_gf_crown_shell(cards, core, core_prim, collar + Vector3(0.0, 0.8, 0.0), Vector3(2.25, 0.8, 2.25), 6 + variant, 2.0, rng, core_col, true)
 	var mesh := _gf_tree_mesh(parts, core, cards, bark_material)
 	return _gf_apply_wind(mesh, "gf_pine_spray.png", Color(1.0, 1.0, 1.0), 0.065)
 
@@ -13403,6 +13475,8 @@ func _gf_spruce_mesh(variant: int, bark_material: Material) -> ArrayMesh:
 	var white := Color(1.0, 1.0, 1.0)
 	var top := 9.7 if variant == 0 else 10.5
 	var trunk: Array = [_dz_scatter_part(cyl, Vector3(0.0, 2.3, 0.0), Vector3(0.52, 4.6, 0.52), white)]
+	trunk.append(_dz_scatter_part(cyl, Vector3(0.0, 0.24, 0.0), Vector3(0.85, 0.6, 0.85), white))
+	_gf_add_roots(trunk, branch_prim, 0.26, rng)
 	var core: Array = []
 	var cards: Array = []
 	var tiers := 7
@@ -13651,18 +13725,21 @@ func _gf_rock_cluster_mesh(seed_i: int) -> ArrayMesh:
 
 
 func _gf_grass_blades_mesh(seed_i: int) -> ArrayMesh:
-	# 0.2.59: real geometry grass — 30 curved, tapering blades per
-	# tuft instead of flat alpha cards. Two segments per blade so the
-	# wind shader height mask bends them smoothly; colour comes from
-	# the shader root-to-tip gradient, so no texture is needed.
+	# 0.2.60 second grass pass: two blade kinds per tuft — wide
+	# meadow blades with a fake centre crease (split normals, no
+	# extra triangles) plus taller thin seed-head stalks, so a tuft
+	# has a real uneven silhouette instead of a uniform brush.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9100 + seed_i * 37
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
 	var uvs := PackedVector2Array()
-	var wscales := [1.0, 0.62, 0.05]
+	var blade_rows: Array = [[0.0, 1.0], [0.5, 0.62], [1.0, 0.05]]
+	var stalk_rows: Array = [[0.0, 0.42], [0.55, 0.34], [0.84, 1.5], [1.0, 0.14]]
 	for blade in range(30):
+		var is_stalk := blade >= 24
+		var rows_spec: Array = stalk_rows if is_stalk else blade_rows
 		var ra := rng.randf_range(0.0, TAU)
 		var rr := sqrt(rng.randf()) * 0.5
 		var root := Vector3(cos(ra) * rr, 0.0, sin(ra) * rr)
@@ -13670,27 +13747,33 @@ func _gf_grass_blades_mesh(seed_i: int) -> ArrayMesh:
 		var right := Vector3(cos(yaw), 0.0, sin(yaw))
 		var fwd := Vector3(-sin(yaw), 0.0, cos(yaw))
 		var lean := fwd.rotated(Vector3.UP, rng.randf_range(-0.8, 0.8))
-		var h := rng.randf_range(0.5, 0.95)
-		var w := rng.randf_range(0.045, 0.075)
-		var bend := rng.randf_range(0.10, 0.30)
+		var h := rng.randf_range(1.05, 1.35) if is_stalk else rng.randf_range(0.5, 0.95)
+		var w := rng.randf_range(0.030, 0.042) if is_stalk else rng.randf_range(0.045, 0.075)
+		var bend := rng.randf_range(0.06, 0.16) if is_stalk else rng.randf_range(0.10, 0.30)
 		var nrm := (fwd * 0.6 + Vector3.UP * 0.8).normalized()
+		# Split normals fake the centre fold of a real blade.
+		var n_left := nrm.rotated(Vector3.UP, -0.5)
+		var n_right := nrm.rotated(Vector3.UP, 0.5)
 		var rows: Array = []
-		for row in range(3):
-			var tt := float(row) * 0.5
+		for spec_variant in rows_spec:
+			var spec: Array = spec_variant
+			var tt := float(spec[0])
+			var ws := float(spec[1])
 			var centre := root + Vector3.UP * (tt * h) + lean * (bend * tt * tt)
-			rows.append([centre - right * w * 0.5 * float(wscales[row]), centre + right * w * 0.5 * float(wscales[row])])
-		for seg in range(2):
+			rows.append([centre - right * w * 0.5 * ws, centre + right * w * 0.5 * ws, tt])
+		for seg in range(rows.size() - 1):
 			var a0: Vector3 = rows[seg][0]
 			var b0: Vector3 = rows[seg][1]
 			var a1: Vector3 = rows[seg + 1][0]
 			var b1: Vector3 = rows[seg + 1][1]
+			var t0 := float(rows[seg][2])
+			var t1 := float(rows[seg + 1][2])
 			var vseq: Array = [a0, b0, b1, a0, b1, a1]
-			var useq: Array = [Vector2(0.0, float(seg) * 0.5), Vector2(1.0, float(seg) * 0.5),
-				Vector2(1.0, float(seg + 1) * 0.5), Vector2(0.0, float(seg) * 0.5),
-				Vector2(1.0, float(seg + 1) * 0.5), Vector2(0.0, float(seg + 1) * 0.5)]
+			var nseq: Array = [n_left, n_right, n_right, n_left, n_right, n_left]
+			var useq: Array = [Vector2(0.0, t0), Vector2(1.0, t0), Vector2(1.0, t1), Vector2(0.0, t0), Vector2(1.0, t1), Vector2(0.0, t1)]
 			for k in range(6):
 				verts.append(vseq[k])
-				normals.append(nrm)
+				normals.append(nseq[k])
 				colors.append(Color.WHITE)
 				uvs.append(useq[k])
 	var out: Array = []
@@ -13702,6 +13785,42 @@ func _gf_grass_blades_mesh(seed_i: int) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
 	return mesh
+
+
+func _gf_slope_rocks(buckets: Dictionary, base: float, sink: float, collider_r: float, collider_h: float) -> int:
+	# 0.2.60: outcrop clusters embedded in steep slopes — real rock
+	# meshes breaking out of the hillside instead of rock texture
+	# alone. Sampled deterministically at build time; road, field
+	# and lowland guards keep them out of the driving space.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261160
+	var added := 0
+	for _attempt in range(2600):
+		if added >= 380:
+			break
+		var px := rng.randf_range(60.0, 3940.0)
+		var pz := rng.randf_range(60.0, 3940.0)
+		var gy := height_at(px, pz)
+		if gy < 10.5:
+			continue
+		var sx: float = absf(height_at(px + 6.0, pz) - height_at(px - 6.0, pz)) / 12.0
+		var sz: float = absf(height_at(px, pz + 6.0) - height_at(px, pz - 6.0)) / 12.0
+		var slope := maxf(sx, sz)
+		if slope < 0.55 or slope > 1.7:
+			continue
+		if _gf_in_field(px, pz):
+			continue
+		if _gf_near_road(px, pz, 16.0):
+			continue
+		var sc := base * rng.randf_range(0.75, 1.5)
+		var pos := Vector3(px, gy - sink - 0.3 * sc, pz)
+		var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+		if not buckets.has(key):
+			buckets[key] = []
+		(buckets[key] as Array).append(make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * sc))
+		_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+		added += 1
+	return added
 
 
 func _gf_roadside_grass(buckets: Dictionary, base: float, sink: float) -> int:
@@ -13726,7 +13845,7 @@ func _gf_roadside_grass(buckets: Dictionary, base: float, sink: float) -> int:
 			dir2 = dir2.normalized()
 			var perp := Vector2(-dir2.y, dir2.x)
 			for side in [-1.0, 1.0]:
-				var off := half_w + rng.randf_range(0.7, 4.6)
+				var off := half_w + rng.randf_range(0.6, 6.0)
 				var along := rng.randf_range(-3.0, 3.0)
 				var px: float = a.x + perp.x * off * float(side) + dir2.x * along
 				var pz: float = a.z + perp.y * off * float(side) + dir2.y * along
@@ -13763,14 +13882,25 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	var sph := _dz_unit_sphere(10, 7)
 	var rock_mat := _material("gf_rock_gray_mat", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(0.92, 0.92, 0.90), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "gf_rock_gray_roughness.jpg")
 	rock_mat.vertex_color_use_as_albedo = true
+	_apply_ao(rock_mat, "gf_rock_gray_ao.jpg", 0.65)
+	rock_mat.normal_scale = 1.35
 	var bark := Color(0.09, 0.055, 0.030)
 	# 0.2.57 photoreal-leaning trees: textured bark trunks, dark
 	# crown cores and alpha-cut foliage cards (painted leaf/needle
 	# sprays) instead of solid plastic cones and blobs.
-	var bark_oak_mat := _material("gf_bark_oak_mat", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.88, 0.83, 0.78), 1.0, 0.0, Vector3(1.2, 2.2, 1.2), false)
+	var bark_oak_mat := _material("gf_bark_oak_mat", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.88, 0.83, 0.78), 1.0, 0.0, Vector3(1.2, 2.2, 1.2), false, "oak_bark_roughness.jpg")
 	var bark_pine_mat := _material("gf_bark_pine_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.95, 0.90, 0.85), 1.0, 0.0, Vector3(1.2, 2.0, 1.2), false, "gf_pine_bark_roughness.jpg")
 	var bark_spruce_mat := _material("gf_bark_spruce_mat", "gf_pine_bark.jpg", "gf_pine_bark_normal.jpg", Color(0.60, 0.57, 0.54), 1.0, 0.0, Vector3(1.1, 1.8, 1.1), false, "gf_pine_bark_roughness.jpg")
 	var bark_birch_mat := _material("gf_bark_birch_mat", "gf_birch_bark.jpg", "gf_birch_bark_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3(1.0, 1.6, 1.0), false, "gf_birch_bark_roughness.jpg")
+	# 0.2.60: per-species bark depth — baked furrow AO + stronger normals
+	_apply_ao(bark_oak_mat, "oak_bark_ao.jpg", 0.7)
+	bark_oak_mat.normal_scale = 1.25
+	_apply_ao(bark_pine_mat, "gf_pine_bark_ao.jpg", 0.65)
+	bark_pine_mat.normal_scale = 1.2
+	_apply_ao(bark_spruce_mat, "gf_pine_bark_ao.jpg", 0.65)
+	bark_spruce_mat.normal_scale = 1.2
+	_apply_ao(bark_birch_mat, "gf_birch_bark_ao.jpg", 0.5)
+	bark_birch_mat.normal_scale = 1.1
 	var spruce_a := _gf_spruce_mesh(0, bark_spruce_mat)
 	var spruce_b := _gf_spruce_mesh(1, bark_spruce_mat)
 	var pine_meshes: Array = [_gf_pine_mesh(0, bark_pine_mat), _gf_pine_mesh(1, bark_pine_mat)]
@@ -13918,6 +14048,8 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 				_foliage_points.append(pos)
 		if kind == "grass_tuft":
 			total += _gf_roadside_grass(buckets, base, sink)
+		if kind == "rock_large":
+			total += _gf_slope_rocks(buckets, base, sink, collider_r, collider_h)
 		var kind_meshes: Array = conf.get("meshes", [])
 		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
 		for key_variant in buckets.keys():
@@ -13938,6 +14070,7 @@ func _gf_scatter_build(kinds_filter: Array) -> void:
 	_enhancement_stats["forest_scatter_0254"] = true
 	_enhancement_stats["forest_photoreal_trees_0257"] = true
 	_enhancement_stats["forest_ground_cover_0259"] = true
+	_enhancement_stats["forest_canopy_0260"] = true
 
 
 func _build_forest_extras() -> void:
