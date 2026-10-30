@@ -1,6 +1,6 @@
 {
   "name": "nitches-server",
-  "version": "0.2.62",
+  "version": "0.3.1",
   "private": true,
   "description": "Nitches game server: accounts, daily quests, economy sync, multiplayer rooms (Cloudflare Workers + D1 + Durable Objects)",
   "type": "module",

@@ -26,6 +26,7 @@ const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1
 var world_id := "richtown"
 var _is_desert := false
 var _is_forest := false
+var _is_rt7 := false
 var _gf_field_rects: Array[Rect2] = []
 var _gf_lake_y := 0.0
 var _gf_bird_flocks: Array[Dictionary] = []
@@ -189,6 +190,9 @@ var _flat_shadow_free_instances_0237 := 0
 var _stream_horizontal_half_fov_rad := 1.05
 var _stream_sector_hidden_0237 := 0
 var _pending_batched_models: Dictionary = {}
+var _generic_box_batches: Dictionary = {}
+var _generic_gable_batches: Dictionary = {}
+var _generic_batch_instances := 0
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
 var _reflection_probes: Array[ReflectionProbe] = []
@@ -255,6 +259,15 @@ func begin_build_world() -> void:
 	_is_forest = world_id == "greenforest"
 	_active_aabb = DESERT_AABB if (_is_desert or _is_forest) else WORLD_AABB
 	_load_data()
+	_is_rt7 = not _is_desert and not _is_forest and String(data.get("layout", "")) == "richtown7"
+	if _is_rt7:
+		var bounds_rt7: Dictionary = data.get("bounds", {})
+		var min_x_rt7 := _f(bounds_rt7, "minX", -3500.0)
+		var min_z_rt7 := _f(bounds_rt7, "minZ", -3500.0)
+		_active_aabb = AABB(
+			Vector3(min_x_rt7, -20.0, min_z_rt7),
+			Vector3(_f(bounds_rt7, "maxX", 3500.0) - min_x_rt7, 420.0, _f(bounds_rt7, "maxZ", 3500.0) - min_z_rt7)
+		)
 	_build_stages.clear()
 	_build_stage_index = 0
 	_build_profile_parts.clear()
@@ -353,7 +366,36 @@ func _queue_emergency_build_stages() -> void:
 	_add_build_stage("Завершаем аварийный мир", Callable(self, "_finish_emergency_build"), 0.5)
 
 
+func _queue_rt7_build_stages() -> void:
+	# 0.3.0 RichTown 7x7: generic data-driven stages only.  The legacy
+	# 1x1 km authored passes (Sail Island resort, boulevard corridor,
+	# authored parks, district infill, skyline backdrop) are skipped
+	# because their coordinates belong to the retired layout; they
+	# return district by district in later rebuild stages.
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Проверяем здания у дорог", Callable(self, "_sanitize_canonical_buildings_0237"), 1.5)
+	_add_build_stage("Проверяем бассейны и участки", Callable(self, "_sanitize_canonical_pools_0237"), 0.8)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Строим ландшафт RichTown 7×7", Callable(self, "_build_desert_terrain"), 4.0)
+	_add_build_stage("Заполняем море и канал", Callable(self, "_build_water_and_pools"), 1.0)
+	_add_build_stage("Прокладываем дороги", Callable(self, "_build_roads"), 4.0)
+	_add_build_stage("Возводим здания", Callable(self, "_build_buildings"), 4.0)
+	_add_build_stage("Строим достопримечательности", Callable(self, "_build_landmarks"), 2.0)
+	_add_build_stage("Высаживаем деревья и пальмы", Callable(self, "_build_vegetation"), 3.0)
+	_add_build_stage("Ставим уличные фонари", Callable(self, "_build_street_lamps"), 1.0)
+	_add_build_stage("Расставляем скамейки", Callable(self, "_build_benches"), 0.5)
+	_add_build_stage("Собираем модели города", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы мира", Callable(self, "_build_world_bounds"), 0.5)
+	_add_build_stage("Финализируем RichTown 7×7", Callable(self, "_finish_richtown_build"), 1.0)
+
+
 func _queue_richtown_build_stages() -> void:
+	if _is_rt7:
+		_queue_rt7_build_stages()
+		return
 	_add_build_stage("Подготавливаем остров Паруса", Callable(self, "_expand_sail_island_0237"), 1.0)
 	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
 	_add_build_stage("Индексируем дороги", Callable(self, "_build_road_surface_index"), 1.0)
@@ -429,9 +471,14 @@ func _finish_emergency_build() -> void:
 
 
 func _finish_richtown_build() -> void:
+	if _is_rt7:
+		_enhancement_stats["richtown7_0300"] = true
+		_enhancement_stats["richtown7_terrain_chunks"] = int(_enhancement_stats.get("desert_terrain_chunks", 0))
+		_enhancement_stats["richtown7_world_km"] = 7.0
+		_enhancement_stats["model_lod_budget_0300"] = true
 	_enhancement_stats["near_field_lod_0243"] = true
 	_enhancement_stats["tree_detail_end_m"] = 105.0
-	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["palm_detail_end_m"] = 105.0
 	_enhancement_stats["shrub_detail_end_m"] = 90.0
 	_enhancement_stats["range_fade_mode"] = "dithered_self"
 	_enhancement_stats["wet_asphalt_streaks_0243"] = true
@@ -674,6 +721,8 @@ func _set_skyline_time(mode: String) -> void:
 func get_park_rects() -> Array:
 	if _is_desert:
 		return [Rect2(3030.0, 3180.0, 640.0, 640.0)]
+	if _is_rt7:
+		return [_zone_rect("parkCentral"), _zone_rect("parkSunset"), _zone_rect("parkHills")]
 	var rects: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -688,6 +737,12 @@ func get_park_map_entries() -> Array:
 		return [{"id": "oasis", "label": "Оазис", "rect": Rect2(3030.0, 3180.0, 640.0, 640.0)}]
 	if _is_forest:
 		return [{"id": "meadows", "label": "Центральные луга", "rect": Rect2(1150.0, 1250.0, 1400.0, 1300.0)}]
+	if _is_rt7:
+		return [
+			{"id": "parkCentral", "label": "Центральный парк", "rect": _zone_rect("parkCentral")},
+			{"id": "parkSunset", "label": "Парк Сансет", "rect": _zone_rect("parkSunset")},
+			{"id": "parkHills", "label": "Парк Rich Hills", "rect": _zone_rect("parkHills")},
+		]
 	var entries: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -699,9 +754,21 @@ func get_park_map_entries() -> Array:
 	return entries
 
 
+func _zone_rect(zone_name: String) -> Rect2:
+	var zones: Dictionary = data.get("zones", {})
+	var zone: Dictionary = zones.get(zone_name, {})
+	if zone.is_empty():
+		return Rect2()
+	var min_x := _f(zone, "minX")
+	var min_z := _f(zone, "minZ")
+	return Rect2(min_x, min_z, _f(zone, "maxX") - min_x, _f(zone, "maxZ") - min_z)
+
+
 func _is_in_park(x: float, z: float, pad: float = 0.0) -> bool:
 	if _is_desert:
 		return false
+	if _is_rt7:
+		return _in_zone(x, z, "parkCentral") or _in_zone(x, z, "parkSunset") or _in_zone(x, z, "parkHills")
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
 		var rect: Rect2 = spec.get("rect", Rect2())
@@ -2057,6 +2124,11 @@ func _create_asphalt_material() -> ShaderMaterial:
 	material.set_shader_parameter("wet_roughness", 0.48)
 	material.set_shader_parameter("puddle_roughness", 0.16)
 	material.set_shader_parameter("bump_strength", 0.62)
+	if _is_rt7:
+		# Point the fresh-charcoal hero-avenue mask at the new
+		# Central Avenue instead of the retired X=760 boulevard.
+		material.set_shader_parameter("hero_avenue_x", 0.0)
+		material.set_shader_parameter("hero_avenue_half_z", 3200.0)
 	_asphalt_material = material
 	_enhancement_stats["asphalt_shader"] = true
 	_enhancement_stats["asphalt_textures"] = has_textures
@@ -3104,6 +3176,20 @@ func _prop_material(material_name: String) -> Material:
 			return foliage
 		"nh_bark":
 			return _material("plant_bark", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.82, 0.72, 0.62), 1.0)
+		"CityWhitePaint":
+			return _material("city_white_paint", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.90, 0.91, 0.92), 0.58, 0.06)
+		"CityAccentRed":
+			return _material("city_accent_red", "", "", Color(0.58, 0.09, 0.07), 0.52, 0.18)
+		"CityAccentBlue":
+			return _material("city_accent_blue", "", "", Color(0.07, 0.26, 0.52), 0.52, 0.18)
+		"CityArmyGreen":
+			return _material("city_army_green", "", "", Color(0.17, 0.21, 0.11), 0.80, 0.06)
+		"CityBarnRed":
+			return _material("city_barn_red", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.16, 0.11), 0.84, 0.0)
+		"CitySignYellow":
+			return _material("city_sign_yellow", "", "", Color(0.82, 0.60, 0.06), 0.55, 0.10)
+		"CityFieldGreen":
+			return _material("city_field_green", "user_grass.jpg", "user_grass_normal.jpg", Color(0.50, 0.78, 0.40), 1.0, 0.0)
 		_:
 			return _create_concrete_material("prop_fallback_shader", Color(0.70, 0.70, 0.69), 0.93, 0.78, 0.55, 0.45)
 
@@ -3364,6 +3450,9 @@ func _canonical_building_footprint_0237(building: Dictionary) -> Vector2:
 		return Vector2(35.96, 27.01)
 	if model == "glass_tower":
 		return Vector2(34.00, 34.00)
+	if CITY_MODELS_0320.has(model):
+		# 0.3.2: exported w/d already equal the GLB envelope.
+		return Vector2(w, d)
 	if kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
 		return Vector2(18.87, 16.37)
 	if kind == "rt-hotel" and h > 38.0 and w >= 33.0 and w <= 36.0 and d >= 25.0 and d <= 28.0:
@@ -3544,6 +3633,28 @@ func _hash01(ix: int, iz: int) -> float:
 	return value - floor(value)
 
 
+## 0.3.0 RichTown 7x7 splat rules, driven entirely by the exported
+## zone rectangles (sea/beach/dunes/downtown/port/parks).
+func _rt7_terrain_class(x: float, z: float, h: float, slope: float) -> String:
+	if (_in_zone(x, z, "sea") or _in_zone(x, z, "marina")) and h < 0.5:
+		return "sand"
+	if _in_zone(x, z, "beach") and h < 3.6:
+		return "sand"
+	if _in_zone(x, z, "dunes"):
+		return "sand"
+	if _is_in_park(x, z):
+		return "grass"
+	if _in_zone(x, z, "rtPlaza"):
+		return "plaza"
+	if _in_zone(x, z, "drift") or _in_zone(x, z, "mallParking") or _in_zone(x, z, "port"):
+		return "concrete"
+	if slope > 0.36:
+		return "rock"
+	if _in_zone(x, z, "downtown"):
+		return "concrete"
+	return "grass"
+
+
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
 	if _is_forest:
 		# GreenForest splat: grey rock on cliffs/summits, ploughed soil
@@ -3585,6 +3696,8 @@ func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int
 		if _in_zone(x, z, "quarry") and slope < 0.22:
 			return "gravel"
 		return "packed"
+	if _is_rt7:
+		return _rt7_terrain_class(x, z, h, slope)
 	if _is_in_park(x, z):
 		return "grass"
 	var in_focus_promenade := z >= -100.0 and z <= 52.0 and ((x >= 682.0 and x <= 744.0) or (x >= 776.0 and x <= 790.0))
@@ -3745,21 +3858,35 @@ func _pool_material() -> StandardMaterial3D:
 	return material
 
 
+## 0.3.0: one animated water plane per exported water rectangle
+## (western sea + canal on the 7x7 map).
+func _add_water_plane(parent: Node, rect: Rect2, node_name: String, subdivide_w: int, subdivide_d: int) -> void:
+	if rect.size.x <= 1.0 or rect.size.y <= 1.0:
+		return
+	var mesh := PlaneMesh.new()
+	mesh.size = rect.size
+	mesh.subdivide_width = subdivide_w
+	mesh.subdivide_depth = subdivide_d
+	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.04, rect.position.y + rect.size.y * 0.5)
+	var inst := _mesh_instance(parent, mesh, _water_material(), make_transform(centre), node_name, false)
+	inst.custom_aabb = AABB(Vector3(rect.position.x, -2.0, rect.position.y), Vector3(rect.size.x, 5.0, rect.size.y))
+
+
 func _build_water_and_pools() -> void:
 	var water_root := Node3D.new()
 	water_root.name = "Water"
 	add_child(water_root)
 
-	var sea_mesh := PlaneMesh.new()
-	sea_mesh.size = Vector2(760.0, 1040.0)
-	# The denser grid carries the low-frequency geometric swell smoothly;
-	# fine ripples/normals are evaluated per fragment in water_surface.gdshader.
-	sea_mesh.subdivide_width = 96
-	sea_mesh.subdivide_depth = 132
-	var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
-	# The sea plane only exists east of the shoreline; WORLD_AABB forced
-	# its 45k vertices through the vertex shader even when looking inland.
-	sea.custom_aabb = AABB(Vector3(-382.0, -2.0, -522.0), Vector3(764.0, 5.0, 1044.0))
+	if _is_rt7:
+		_add_water_plane(water_root, _zone_rect("sea"), "Sea", 40, 220)
+		_add_water_plane(water_root, _zone_rect("marina"), "Canal", 200, 3)
+	else:
+		var sea_mesh := PlaneMesh.new()
+		sea_mesh.size = Vector2(760.0, 1040.0)
+		sea_mesh.subdivide_width = 96
+		sea_mesh.subdivide_depth = 132
+		var sea := _mesh_instance(water_root, sea_mesh, _water_material(), make_transform(Vector3(1145.0, 0.04, 0.0)), "SeaAndMarina", false)
+		sea.custom_aabb = AABB(Vector3(-382.0, -2.0, -522.0), Vector3(764.0, 5.0, 1044.0))
 
 	var pools: Array = data.get("pools", [])
 	if pools.is_empty():
@@ -3957,6 +4084,44 @@ func _build_roads() -> void:
 	_build_bridge_guardrails(roads_root)
 
 
+func _rt7_junction_candidates() -> Array[Dictionary]:
+	# 0.3.0: derive junction pads from the exported network itself.
+	# Every road is a block-length segment, so real junctions are the
+	# shared endpoints where a mostly-vertical and a mostly-horizontal
+	# carriageway meet; pad widths follow the widest arm on each axis.
+	var clusters: Dictionary = {}
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 2:
+			continue
+		var width := _f(road, "widthM", 12.0)
+		for end_index in [0, samples.size() - 1]:
+			var p := _sample_point(samples[end_index])
+			var neighbour_index := 1 if end_index == 0 else samples.size() - 2
+			var q := _sample_point(samples[neighbour_index])
+			var is_vertical := absf(q.z - p.z) >= absf(q.x - p.x)
+			var key := Vector2i(roundi(p.x), roundi(p.z))
+			if not clusters.has(key):
+				clusters[key] = {"x": p.x, "z": p.z, "vw": 0.0, "hw": 0.0}
+			var cluster: Dictionary = clusters[key]
+			if is_vertical:
+				cluster["vw"] = maxf(float(cluster["vw"]), width)
+			else:
+				cluster["hw"] = maxf(float(cluster["hw"]), width)
+	var out: Array[Dictionary] = []
+	for key_variant in clusters.keys():
+		var cluster: Dictionary = clusters[key_variant]
+		if float(cluster["vw"]) > 0.0 and float(cluster["hw"]) > 0.0:
+			out.append({
+				"x": float(cluster["x"]),
+				"z": float(cluster["z"]),
+				"width": float(cluster["vw"]),
+				"cross_width": float(cluster["hw"]),
+			})
+	return out
+
+
 func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) -> void:
 	# The exported ribbons deliberately overlap inside junction boxes. A
 	# 13 mm proud asphalt pad hides coplanar depth fighting and gives each
@@ -3964,59 +4129,66 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 	# flattened there by _build_road_mesh(). Lane paint stops before the
 	# pad, so the pad never covers a crosswalk or stop line.
 	var transforms: Array[Transform3D] = []
-	var vertical_roads := [
-		{"x": 560.0, "width": 11.0},
-		{"x": 760.0, "width": 22.0},
-		{"x": 930.0, "width": 24.0},
-	]
-	var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+	var candidates: Array[Dictionary] = []
+	if _is_rt7:
+		candidates = _rt7_junction_candidates()
+	else:
+		var vertical_roads := [
+			{"x": 560.0, "width": 11.0},
+			{"x": 760.0, "width": 22.0},
+			{"x": 930.0, "width": 24.0},
+		]
+		var cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+		for vertical_variant in vertical_roads:
+			var vertical: Dictionary = vertical_variant
+			for z_variant in cross_z:
+				var legacy_z := float(z_variant)
+				candidates.append({
+					"x": float(vertical.get("x", 760.0)),
+					"z": legacy_z,
+					"width": float(vertical.get("width", 12.0)),
+					"cross_width": 16.0 if absf(legacy_z - 225.0) <= 0.1 else 13.0,
+				})
 	var rejected_fake_junctions := 0
-	for vertical_variant in vertical_roads:
-		var vertical: Dictionary = vertical_variant
-		var center_x := float(vertical.get("x", 760.0))
-		var width := float(vertical.get("width", 12.0))
-		for z_variant in cross_z:
-			var center_z := float(z_variant)
-			var cross_width := 16.0 if absf(center_z - 225.0) <= 0.1 else 13.0
-			var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), width * 0.5, cross_width * 0.5)
-			if not _junction_has_both_axes(arms):
-				rejected_fake_junctions += 1
-				continue
-			var y := height_at(center_x, center_z) + ROAD_SURFACE_OFFSET_M + 0.007
-			# Build the pad as the union of the two carriageway
-			# strips that actually exist.  One full rectangle filled
-			# the missing quadrant of L-corners with an asphalt patch
-			# on sand/grass.  The horizontal strip is 1 mm higher so
-			# the intentional central overlap cannot z-fight.
-			var half_width := width * 0.5
-			var cross_half := cross_width * 0.5
-			var z_min := -cross_half if bool(arms.get("z_minus", false)) else 0.0
-			var z_max := cross_half if bool(arms.get("z_plus", false)) else 0.0
-			transforms.append(make_transform(
-				Vector3(center_x, y, center_z + (z_min + z_max) * 0.5),
-				0.0,
-				Vector3(width + 0.04, 0.012, z_max - z_min + 0.04)
-			))
-			var x_min := -half_width if bool(arms.get("x_minus", false)) else 0.0
-			var x_max := half_width if bool(arms.get("x_plus", false)) else 0.0
-			transforms.append(make_transform(
-				Vector3(center_x + (x_min + x_max) * 0.5, y + 0.001, center_z),
-				0.0,
-				Vector3(x_max - x_min + 0.04, 0.012, cross_width + 0.04)
-			))
-	# 0.2.38 Sail Island entry: the 10 m causeway meets the closed
-	# 9 m oval at its westernmost point (1140,80), where the loop
-	# tangent is north-south.  The city-grid loop above cannot see
-	# that T-junction, so the two ribbons simply overlapped with
-	# coplanar patches at the seam.  One pad over the exact union
-	# box (loop width x causeway width) gives the entry a single
-	# asphalt surface; its height follows the loop samples, which
-	# are registered 0.10 m above the reshaped island plateau.
-	transforms.append(make_transform(
-		Vector3(1140.0, height_at(1140.0, 80.0) + 0.202, 80.0),
-		0.0,
-		Vector3(9.04, 0.012, 10.04)
-	))
+	for cand_variant in candidates:
+		var cand: Dictionary = cand_variant
+		var center_x := float(cand.get("x", 0.0))
+		var center_z := float(cand.get("z", 0.0))
+		var width := float(cand.get("width", 12.0))
+		var cross_width := float(cand.get("cross_width", 13.0))
+		var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), width * 0.5, cross_width * 0.5)
+		if not _junction_has_both_axes(arms):
+			rejected_fake_junctions += 1
+			continue
+		var y := height_at(center_x, center_z) + ROAD_SURFACE_OFFSET_M + 0.007
+		# Build the pad as the union of the two carriageway strips that
+		# actually exist.  One full rectangle filled the missing quadrant
+		# of L-corners with an asphalt patch on sand/grass.  The horizontal
+		# strip is 1 mm higher so the intentional central overlap cannot
+		# z-fight.
+		var half_width := width * 0.5
+		var cross_half := cross_width * 0.5
+		var z_min := -cross_half if bool(arms.get("z_minus", false)) else 0.0
+		var z_max := cross_half if bool(arms.get("z_plus", false)) else 0.0
+		transforms.append(make_transform(
+			Vector3(center_x, y, center_z + (z_min + z_max) * 0.5),
+			0.0,
+			Vector3(width + 0.04, 0.012, z_max - z_min + 0.04)
+		))
+		var x_min := -half_width if bool(arms.get("x_minus", false)) else 0.0
+		var x_max := half_width if bool(arms.get("x_plus", false)) else 0.0
+		transforms.append(make_transform(
+			Vector3(center_x + (x_min + x_max) * 0.5, y + 0.001, center_z),
+			0.0,
+			Vector3(x_max - x_min + 0.04, 0.012, cross_width + 0.04)
+		))
+	if not _is_rt7:
+		# 0.2.38 Sail Island entry pad (retired 1 km layout only).
+		transforms.append(make_transform(
+			Vector3(1140.0, height_at(1140.0, 80.0) + 0.202, 80.0),
+			0.0,
+			Vector3(9.04, 0.012, 10.04)
+		))
 	var pad_mesh := BoxMesh.new()
 	pad_mesh.size = Vector3.ONE
 	pad_mesh.material = asphalt_material
@@ -4036,6 +4208,10 @@ func _build_intersection_pads(parent: Node, asphalt_material: ShaderMaterial) ->
 ## Quadrant arms are probed against the road-surface index, so T-junctions
 ## only receive returns on the side where both carriageways actually run.
 func _build_rounded_intersection_returns(parent: Node, asphalt_material: ShaderMaterial) -> void:
+	if _is_rt7:
+		# 0.3.0: kerb-return specs are authored for the retired 1 km grid;
+		# data-driven returns arrive with the stage-8 roadside pass.
+		return
 	var specs: Array[Dictionary] = []
 	var vertical_roads := [
 		{"x": 560.0, "width": 11.0},
@@ -5065,66 +5241,88 @@ func _build_road_details(parent: Node) -> void:
 	var signal_long_transforms: Array[Transform3D] = []
 	var signal_count := 0
 	var rejected_signal_approaches := 0
-	var signal_verticals := [
-		{"x": 560.0, "width": 11.0},
-		{"x": 760.0, "width": 22.0},
-		{"x": 930.0, "width": 24.0},
-	]
-	var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
-	for vertical_variant in signal_verticals:
-		var vertical: Dictionary = vertical_variant
-		var center_x := float(vertical.get("x", 760.0))
-		var vertical_width := float(vertical.get("width", 12.0))
+	var signal_candidates: Array[Dictionary] = []
+	if _is_rt7:
+		# 0.3.0: signalised junctions come from the exported network:
+		# an arterial (24 m+) meeting at least a 12 m street.  Bridge
+		# approaches qualify through the 12 m canal-bank roads, which
+		# also keeps the short mast-arm models in use there.
+		for cand_variant in _rt7_junction_candidates():
+			var cand: Dictionary = cand_variant
+			var w_v := float(cand.get("width", 0.0))
+			var w_h := float(cand.get("cross_width", 0.0))
+			if minf(w_v, w_h) >= 12.0 and maxf(w_v, w_h) >= 24.0:
+				signal_candidates.append(cand)
+	else:
+		var signal_verticals := [
+			{"x": 560.0, "width": 11.0},
+			{"x": 760.0, "width": 22.0},
+			{"x": 930.0, "width": 24.0},
+		]
+		var signal_cross_z := [-430.0, -300.0, -250.0, -110.0, 60.0, 225.0, 430.0]
+		for vertical_variant in signal_verticals:
+			var vertical: Dictionary = vertical_variant
+			for z_variant in signal_cross_z:
+				var legacy_z := float(z_variant)
+				signal_candidates.append({
+					"x": float(vertical.get("x", 760.0)),
+					"z": legacy_z,
+					"width": float(vertical.get("width", 12.0)),
+					"cross_width": 16.0 if absf(legacy_z - 225.0) < 0.1 else 13.0,
+				})
+	for cand_variant in signal_candidates:
+		var cand: Dictionary = cand_variant
+		var center_x := float(cand.get("x", 0.0))
+		var center_z := float(cand.get("z", 0.0))
+		var vertical_width := float(cand.get("width", 12.0))
 		var vertical_half := vertical_width * 0.5
-		for z_variant in signal_cross_z:
-			var center_z := float(z_variant)
-			var cross_width := 16.0 if absf(center_z - 225.0) < 0.1 else 13.0
-			var cross_half := cross_width * 0.5
-			var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
-			if not _junction_has_both_axes(arms):
-				rejected_signal_approaches += 4
+		var cross_width := float(cand.get("cross_width", 13.0))
+		var cross_half := cross_width * 0.5
+		var arms := _junction_arm_mask(Vector3(center_x, 0.0, center_z), vertical_half, cross_half)
+		if not _junction_has_both_axes(arms):
+			rejected_signal_approaches += 4
+			continue
+		var approaches := [
+			{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
+			{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
+			{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
+			{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
+		]
+		for approach_variant in approaches:
+			var approach: Dictionary = approach_variant
+			var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
+			var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
+			var is_long := bool(approach.get("long", false))
+			if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
+				rejected_signal_approaches += 1
 				continue
-			var approaches := [
-				{"head": Vector2(vertical_width * 0.25, -(cross_half + 1.0)), "arm_dir": Vector2(-1.0, 0.0), "yaw": PI, "long": vertical_width >= 17.0, "approach_arm": "z_minus"},
-				{"head": Vector2(-vertical_width * 0.25, cross_half + 1.0), "arm_dir": Vector2(1.0, 0.0), "yaw": 0.0, "long": vertical_width >= 17.0, "approach_arm": "z_plus"},
-				{"head": Vector2(vertical_half + 1.0, cross_width * 0.25), "arm_dir": Vector2(0.0, -1.0), "yaw": PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_plus"},
-				{"head": Vector2(-(vertical_half + 1.0), -cross_width * 0.25), "arm_dir": Vector2(0.0, 1.0), "yaw": -PI * 0.5, "long": cross_width >= 16.0, "approach_arm": "x_minus"},
-			]
-			for approach_variant in approaches:
-				var approach: Dictionary = approach_variant
-				var head_offset: Vector2 = approach.get("head", Vector2.ZERO)
-				var arm_dir: Vector2 = approach.get("arm_dir", Vector2.RIGHT)
-				var is_long := bool(approach.get("long", false))
-				if not bool(arms.get(String(approach.get("approach_arm", "")), false)):
-					rejected_signal_approaches += 1
-					continue
-				# The far/only Blender signal head is 4.18 m from the
-				# short pole and 6.68 m from the long pole.
-				var head_reach := 6.68 if is_long else 4.18
-				var pole_offset: Vector2 = head_offset - arm_dir * head_reach
-				var pole_x := center_x + pole_offset.x
-				var pole_z := center_z + pole_offset.y
-				var pole_point := Vector3(pole_x, 0.0, pole_z)
-				var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
-				# The pole belongs on the corner footway; the suspended
-				# head belongs over the approach it serves.  This also
-				# rejects any stale hard-coded corner swallowed by a
-				# widened side street or diagonal link road.
-				if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
-					rejected_signal_approaches += 1
-					continue
-				var ground_y := height_at(pole_x, pole_z) + 0.14
-				var signal_transform := make_transform(
-					Vector3(pole_x, ground_y, pole_z),
-					float(approach.get("yaw", 0.0)),
-					Vector3.ONE
-				)
-				if is_long:
-					signal_long_transforms.append(signal_transform)
-				else:
-					signal_short_transforms.append(signal_transform)
-				_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
-				signal_count += 1
+			# The far/only Blender signal head is 4.18 m from the
+			# short pole and 6.68 m from the long pole.
+			var head_reach := 6.68 if is_long else 4.18
+			var pole_offset: Vector2 = head_offset - arm_dir * head_reach
+			var pole_x := center_x + pole_offset.x
+			var pole_z := center_z + pole_offset.y
+			var pole_point := Vector3(pole_x, 0.0, pole_z)
+			var head_point := Vector3(center_x + head_offset.x, 0.0, center_z + head_offset.y)
+			# The pole belongs on the corner footway; the suspended
+			# head belongs over the approach it serves.  This also
+			# rejects any stale hard-coded corner swallowed by a
+			# widened side street or diagonal link road.
+			if not _is_pole_clear_of_road(pole_point, 0.40) or _road_clearance_xz(head_point) > -0.50:
+				rejected_signal_approaches += 1
+				continue
+			var ground_y := height_at(pole_x, pole_z) + 0.14
+			var signal_transform := make_transform(
+				Vector3(pole_x, ground_y, pole_z),
+				float(approach.get("yaw", 0.0)),
+				Vector3.ONE
+			)
+			if is_long:
+				signal_long_transforms.append(signal_transform)
+			else:
+				signal_short_transforms.append(signal_transform)
+			_add_cylinder_collider(Vector3(pole_x, ground_y + 2.95, pole_z), 0.14, 5.90)
+			signal_count += 1
 
 
 	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
@@ -5201,7 +5399,7 @@ func _build_bridge_guardrails(parent: Node) -> void:
 	for road_variant in data.get("roads", []):
 		var road: Dictionary = road_variant
 		var road_id := String(road.get("id", ""))
-		if not bridge_ids.has(road_id):
+		if not bridge_ids.has(road_id) and not road_id.contains("bridge"):
 			continue
 		var samples: Array = road.get("samples", [])
 		if samples.size() < 2:
@@ -5329,6 +5527,54 @@ func _get_gable_mesh() -> ArrayMesh:
 	return _gable_mesh
 
 
+## 0.3.0: generic massing buildings are unit boxes.  On the 7x7 map
+## there are ~450 of them; emitting one MeshInstance per part cost
+## ~1000 nodes before frustum culling even started.  The rt7 path
+## batches every part by material into chunked MultiMeshes (same
+## meshes, same materials, same colliders), collapsing the generic
+## city into a handful of draw calls per 320 m cell.
+func _add_generic_box(parent: Node, size: Vector3, center: Vector3, material: Material, yaw: float, node_name: String) -> void:
+	if not _is_rt7:
+		_add_box(parent, size, center, material, yaw, node_name)
+		return
+	if not _generic_box_batches.has(material):
+		_generic_box_batches[material] = []
+	(_generic_box_batches[material] as Array).append(make_transform(center, yaw, size))
+	_generic_batch_instances += 1
+
+
+func _add_generic_gable(parent: Node, transform_value: Transform3D, material: Material) -> void:
+	if not _is_rt7:
+		_mesh_instance(parent, _get_gable_mesh(), material, transform_value, "GableRoof")
+		return
+	if not _generic_gable_batches.has(material):
+		_generic_gable_batches[material] = []
+	(_generic_gable_batches[material] as Array).append(transform_value)
+	_generic_batch_instances += 1
+
+
+func _flush_generic_batches(parent: Node) -> void:
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var batch_count := 0
+	for material_variant in _generic_box_batches.keys():
+		var transforms: Array = _generic_box_batches[material_variant]
+		if transforms.is_empty():
+			continue
+		if _add_multimesh(parent, unit_box, material_variant as Material, transforms, "GenericBuildings", true, 0.0, 0.0, 320.0):
+			batch_count += 1
+	for material_variant in _generic_gable_batches.keys():
+		var transforms: Array = _generic_gable_batches[material_variant]
+		if transforms.is_empty():
+			continue
+		if _add_multimesh(parent, _get_gable_mesh(), material_variant as Material, transforms, "GenericGableRoofs", true, 0.0, 0.0, 320.0):
+			batch_count += 1
+	_enhancement_stats["generic_building_batches_0300"] = batch_count
+	_enhancement_stats["generic_building_batch_instances_0300"] = _generic_batch_instances
+	_generic_box_batches.clear()
+	_generic_gable_batches.clear()
+
+
 func _add_generic_building(parent: Node, item: Dictionary) -> void:
 	var position_value := _item_position(item)
 	var yaw := _f(item, "rotY")
@@ -5347,7 +5593,7 @@ func _add_generic_building(parent: Node, item: Dictionary) -> void:
 		for i in 3:
 			var tier_height := float(heights[i])
 			var tier_size: Vector2 = base_sizes[i]
-			_add_box(
+			_add_generic_box(
 				parent,
 				Vector3(tier_size.x, tier_height, tier_size.y),
 				Vector3(position_value.x, y_cursor + tier_height * 0.5, position_value.z),
@@ -5357,13 +5603,13 @@ func _add_generic_building(parent: Node, item: Dictionary) -> void:
 			)
 			y_cursor += tier_height
 	else:
-		_add_box(parent, Vector3(w, h, d), position_value + Vector3(0.0, h * 0.5 - 0.25, 0.0), material, yaw, "Building")
+		_add_generic_box(parent, Vector3(w, h, d), position_value + Vector3(0.0, h * 0.5 - 0.25, 0.0), material, yaw, "Building")
 
 	if roof_h > 0.25:
 		var roof_transform := make_transform(position_value + Vector3(0.0, h - 0.20, 0.0), yaw, Vector3(w + 0.9, roof_h, d + 0.9))
-		_mesh_instance(parent, _get_gable_mesh(), _roof_material(true), roof_transform, "GableRoof")
+		_add_generic_gable(parent, roof_transform, _roof_material(true))
 	else:
-		_add_box(parent, Vector3(w + 0.55, 0.42, d + 0.55), position_value + Vector3(0.0, h - 0.02, 0.0), _roof_material(false), yaw, "RoofSlab")
+		_add_generic_box(parent, Vector3(w + 0.55, 0.42, d + 0.55), position_value + Vector3(0.0, h - 0.02, 0.0), _roof_material(false), yaw, "RoofSlab")
 
 	_add_box_collider(position_value + Vector3(0.0, h * 0.5, 0.0), Vector3(w, h + roof_h, d), yaw)
 
@@ -5791,6 +6037,36 @@ func _batched_model_base_range(path: String) -> float:
 		return 220.0
 	if path.ends_with("park_pergola.glb"):
 		return 320.0
+	# 0.3.2 low-poly Blender city pack: individually cheap meshes, but
+	# thousands of instances, so detail yields to far-proxy massing.
+	if path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb"):
+		return 340.0
+	if path.ends_with("midrise_a.glb") or path.ends_with("midrise_b.glb"):
+		return 280.0
+	if path.ends_with("warehouse_large.glb") or path.ends_with("warehouse_small.glb"):
+		return 320.0
+	if path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
+		return 170.0
+	if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb"):
+		return 210.0
+	if path.ends_with("barn.glb"):
+		return 260.0
+	if path.ends_with("greenhouse.glb"):
+		return 240.0
+	if path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb"):
+		return 420.0
+	if path.ends_with("airliner.glb"):
+		return 550.0
+	if path.ends_with("school.glb"):
+		return 650.0
+	if path.ends_with("storage_tank.glb") or path.ends_with("silo.glb"):
+		return 420.0
+	if path.ends_with("afv.glb"):
+		return 260.0
+	if path.ends_with("watchtower.glb"):
+		return 320.0
+	if path.ends_with("port_crane.glb"):
+		return 800.0
 	return 0.0
 
 
@@ -5836,7 +6112,10 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 	elif path.ends_with("glass_tower.glb"):
 		architectural_limit = 240.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
-		return 130.0
+		# 0.3.0: 13-17k-triangle fronds retire at 105 m (far proxy from
+		# 82 m); near-field quality is untouched, avenue views drop
+		# several hundred thousand palm triangles per frame.
+		return 105.0
 	if key.contains("fruit"):
 		return minf(architectural_limit, 220.0)
 	if key.contains("leafdry"):
@@ -5894,7 +6173,7 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 	var trunk_transforms: Array = []
 	for transform_variant in transforms:
 		trunk_transforms.append((transform_variant as Transform3D) * trunk_local)
-	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 105.0, 850.0, 260.0)
+	_add_multimesh(parent, trunk, _prop_material("PalmTrunk"), trunk_transforms, "%sFarProxyTrunk" % node_name, false, 82.0, 850.0, 260.0)
 
 	var crown := SphereMesh.new()
 	crown.radius = 0.5
@@ -5913,7 +6192,7 @@ func _add_palm_far_proxy(parent: Node, path: String, transforms: Array, node_nam
 		crown_transforms,
 		"%sFarProxyCrown" % node_name,
 		false,
-		105.0,
+		82.0,
 		850.0,
 		260.0
 	)
@@ -5997,8 +6276,137 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 			{"size": Vector3(49.20, 0.55, 33.20), "center": Vector3(0.0, 16.48, -1.0), "material": _prop_material("MuseumWhite"), "name": "Roof"},
 			{"size": Vector3(31.00, 2.30, 10.00), "center": Vector3(0.0, 17.90, -1.0), "material": _prop_material("MuseumTravertine"), "name": "Lantern"},
 		]
+	elif path.ends_with("office_tower_low.glb"):
+		specs = [
+			{"size": Vector3(36.00, 6.00, 36.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(26.00, 32.00, 26.00), "center": Vector3(0.0, 22.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(27.00, 4.00, 27.00), "center": Vector3(0.0, 40.00, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("office_tower_mid.glb"):
+		proxy_end = 1250.0
+		specs = [
+			{"size": Vector3(36.00, 6.00, 36.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(26.00, 40.00, 26.00), "center": Vector3(0.0, 26.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(22.00, 18.00, 22.00), "center": Vector3(0.0, 55.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Upper"},
+			{"size": Vector3(23.00, 4.00, 23.00), "center": Vector3(0.0, 66.00, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("office_tower_high.glb"):
+		proxy_end = 1500.0
+		specs = [
+			{"size": Vector3(38.00, 6.00, 38.00), "center": Vector3(0.0, 3.00, 0.0), "material": _prop_material("TowerStone"), "name": "Podium"},
+			{"size": Vector3(28.00, 58.00, 28.00), "center": Vector3(0.0, 35.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Shaft"},
+			{"size": Vector3(23.00, 28.00, 23.00), "center": Vector3(0.0, 78.00, 0.0), "material": _prop_material("TowerGlass"), "name": "Upper"},
+			{"size": Vector3(24.00, 5.00, 24.00), "center": Vector3(0.0, 94.50, 0.0), "material": _prop_material("TowerStone"), "name": "Crown"},
+		]
+	elif path.ends_with("midrise_a.glb"):
+		specs = [
+			{"size": Vector3(32.00, 21.70, 24.00), "center": Vector3(0.0, 12.05, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(33.00, 0.80, 25.00), "center": Vector3(0.0, 23.30, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("midrise_b.glb"):
+		specs = [
+			{"size": Vector3(28.00, 31.00, 22.00), "center": Vector3(0.0, 16.70, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(29.00, 0.80, 23.00), "center": Vector3(0.0, 32.60, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("warehouse_large.glb"):
+		specs = [
+			{"size": Vector3(76.00, 9.50, 32.00), "center": Vector3(0.0, 4.75, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(77.00, 3.40, 33.00), "center": Vector3(0.0, 11.20, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("warehouse_small.glb"):
+		specs = [
+			{"size": Vector3(46.00, 7.00, 24.00), "center": Vector3(0.0, 3.50, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(47.00, 3.00, 25.00), "center": Vector3(0.0, 8.50, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("container_red.glb"):
+		specs = [
+			{"size": Vector3(12.20, 2.60, 2.45), "center": Vector3(0.0, 1.35, 0.0), "material": _prop_material("CityAccentRed"), "name": "Mass"},
+		]
+	elif path.ends_with("container_blue.glb"):
+		specs = [
+			{"size": Vector3(12.20, 2.60, 2.45), "center": Vector3(0.0, 1.35, 0.0), "material": _prop_material("CityAccentBlue"), "name": "Mass"},
+		]
+	elif path.ends_with("villa_b.glb"):
+		specs = [
+			{"size": Vector3(17.00, 7.40, 13.00), "center": Vector3(0.0, 3.70, 0.0), "material": _prop_material("VillaPlaster"), "name": "Mass"},
+			{"size": Vector3(17.60, 0.50, 13.60), "center": Vector3(0.0, 7.65, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("townhouse_b.glb"):
+		specs = [
+			{"size": Vector3(18.30, 6.90, 15.00), "center": Vector3(0.0, 3.45, 0.0), "material": _prop_material("TownPlaster"), "name": "Mass"},
+			{"size": Vector3(18.87, 2.40, 11.50), "center": Vector3(0.0, 8.10, 0.0), "material": _prop_material("TownRoof"), "name": "Roof"},
+		]
+	elif path.ends_with("barn.glb"):
+		specs = [
+			{"size": Vector3(30.00, 7.00, 14.00), "center": Vector3(0.0, 3.50, 0.0), "material": _prop_material("CityBarnRed"), "name": "Mass"},
+			{"size": Vector3(31.00, 3.20, 15.00), "center": Vector3(0.0, 8.60, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("greenhouse.glb"):
+		specs = [
+			{"size": Vector3(44.00, 0.80, 14.00), "center": Vector3(0.0, 0.40, 0.0), "material": _prop_material("ConcreteLight"), "name": "Base"},
+			{"size": Vector3(43.00, 4.60, 13.00), "center": Vector3(0.0, 3.10, 0.0), "material": _prop_material("PropsGlass"), "name": "Shell"},
+		]
+	elif path.ends_with("hangar_large.glb"):
+		proxy_end = 1300.0
+		specs = [
+			{"size": Vector3(44.00, 11.00, 57.00), "center": Vector3(0.0, 5.50, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(45.60, 4.50, 58.60), "center": Vector3(0.0, 13.25, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("hangar_small.glb"):
+		specs = [
+			{"size": Vector3(30.00, 7.50, 39.00), "center": Vector3(0.0, 3.75, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(31.60, 3.40, 40.60), "center": Vector3(0.0, 9.20, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("airliner.glb"):
+		proxy_end = 1400.0
+		specs = [
+			{"size": Vector3(4.20, 4.20, 44.00), "center": Vector3(0.0, 4.40, 0.0), "material": _prop_material("CityWhitePaint"), "name": "Fuselage"},
+			{"size": Vector3(36.00, 0.50, 5.50), "center": Vector3(0.0, 3.75, -2.40), "material": _prop_material("PropsMetal"), "name": "Wing"},
+			{"size": Vector3(0.50, 5.50, 5.00), "center": Vector3(0.0, 8.50, -18.00), "material": _prop_material("CityAccentBlue"), "name": "Fin"},
+		]
+	elif path.ends_with("school.glb"):
+		proxy_end = 1300.0
+		specs = [
+			{"size": Vector3(64.00, 12.00, 18.00), "center": Vector3(0.0, 6.35, -16.00), "material": _prop_material("FacadeAccent"), "name": "Main"},
+			{"size": Vector3(34.00, 9.00, 20.00), "center": Vector3(0.0, 4.85, -34.00), "material": _prop_material("FacadeAccent"), "name": "Gym"},
+			{"size": Vector3(76.00, 0.30, 40.00), "center": Vector3(0.0, 0.25, 24.00), "material": _prop_material("CityFieldGreen"), "name": "Field"},
+		]
+	elif path.ends_with("storage_tank.glb"):
+		specs = [
+			{"size": Vector3(22.00, 12.50, 22.00), "center": Vector3(0.0, 6.25, 0.0), "material": _prop_material("CityWhitePaint"), "name": "Mass"},
+			{"size": Vector3(21.00, 1.80, 21.00), "center": Vector3(0.0, 13.40, 0.0), "material": _prop_material("PropsMetal"), "name": "Roof"},
+		]
+	elif path.ends_with("silo.glb"):
+		specs = [
+			{"size": Vector3(12.00, 15.00, 12.00), "center": Vector3(0.0, 7.50, 0.0), "material": _prop_material("PropsMetal"), "name": "Mass"},
+			{"size": Vector3(12.40, 3.00, 12.40), "center": Vector3(0.0, 16.50, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("afv.glb"):
+		specs = [
+			{"size": Vector3(3.50, 2.20, 7.70), "center": Vector3(0.0, 1.10, 0.0), "material": _prop_material("CityArmyGreen"), "name": "Hull"},
+			{"size": Vector3(2.35, 0.95, 3.20), "center": Vector3(0.0, 2.60, -0.55), "material": _prop_material("CityArmyGreen"), "name": "Turret"},
+		]
+	elif path.ends_with("watchtower.glb"):
+		specs = [
+			{"size": Vector3(3.40, 10.30, 3.40), "center": Vector3(0.0, 5.15, 0.0), "material": _prop_material("PropsWood"), "name": "Post"},
+			{"size": Vector3(5.20, 2.90, 5.20), "center": Vector3(0.0, 11.75, 0.0), "material": _prop_material("PropsWood"), "name": "Cab"},
+			{"size": Vector3(5.90, 1.40, 5.90), "center": Vector3(0.0, 13.90, 0.0), "material": _prop_material("RoofDark"), "name": "Roof"},
+		]
+	elif path.ends_with("port_crane.glb"):
+		proxy_end = 1800.0
+		specs = [
+			{"size": Vector3(20.50, 30.00, 1.70), "center": Vector3(0.0, 15.00, -7.00), "material": _prop_material("CitySignYellow"), "name": "PortalA"},
+			{"size": Vector3(20.50, 30.00, 1.70), "center": Vector3(0.0, 15.00, 7.00), "material": _prop_material("CitySignYellow"), "name": "PortalB"},
+			{"size": Vector3(15.00, 1.60, 11.00), "center": Vector3(0.0, 32.20, 0.0), "material": _prop_material("PropsMetal"), "name": "Deck"},
+			{"size": Vector3(1.70, 24.00, 2.00), "center": Vector3(0.0, 44.00, 20.00), "material": _prop_material("CitySignYellow"), "name": "Jib"},
+		]
 	if specs.is_empty():
 		return
+	if _is_rt7:
+		# 0.3.0: 7 km sightlines need far massing to survive roughly
+		# twice as far as in the retired 1 km town, or the skyline
+		# pops in halfway across the map.
+		proxy_end = maxf(proxy_end * 2.0, 2600.0)
 
 	var unit_box := BoxMesh.new()
 	unit_box.size = Vector3.ONE
@@ -6157,6 +6565,27 @@ func _hero_exported_position(position_value: Vector3, yaw: float) -> Vector3:
 	return position_value
 
 
+## 0.3.2 low-poly Blender city pack: district archetypes that replace the
+## procedural massing boxes.  Every entry is a fixed-scale GLB whose
+## exported w/d/h in the world JSON equal the measured model envelope,
+## so placements are never stretched and colliders stay exact.
+const CITY_MODELS_0320 := {
+	"office_tower_low": "office_tower_low.glb",
+	"office_tower_mid": "office_tower_mid.glb",
+	"office_tower_high": "office_tower_high.glb",
+	"midrise_a": "midrise_a.glb",
+	"midrise_b": "midrise_b.glb",
+	"warehouse_large": "warehouse_large.glb",
+	"warehouse_small": "warehouse_small.glb",
+	"container_red": "container_red.glb",
+	"container_blue": "container_blue.glb",
+	"villa_b": "villa_b.glb",
+	"townhouse_b": "townhouse_b.glb",
+	"barn": "barn.glb",
+	"greenhouse": "greenhouse.glb",
+}
+
+
 func _build_buildings() -> void:
 	var buildings_root := Node3D.new()
 	buildings_root.name = "Buildings"
@@ -6180,6 +6609,8 @@ func _build_buildings() -> void:
 	var cottage_palm_transforms: Array[Transform3D] = []
 	var cottage_podium_transforms: Array[Transform3D] = []
 	var cottage_collider_count := 0
+	var city_items: Dictionary = {}
+	var city_transforms: Dictionary = {}
 
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
@@ -6251,6 +6682,21 @@ func _build_buildings() -> void:
 				Vector3.ZERO
 			))
 			_add_box_collider(position_value + Vector3(0.0, 36.45, 0.0), Vector3(34.00, 72.90, 34.00), yaw)
+		elif CITY_MODELS_0320.has(model):
+			# 0.3.2 fixed-scale Blender archetype (see CITY_MODELS_0320).
+			# Containers stack a second box when the exported height
+			# describes a two-high stack.
+			var city_path := "res://assets/props/%s" % String(CITY_MODELS_0320[model])
+			if not city_transforms.has(city_path):
+				city_items[city_path] = []
+				city_transforms[city_path] = []
+			(city_items[city_path] as Array).append(building)
+			var city_transform := _centered_model_transform(position_value, yaw, Vector3.ONE, Vector3.ZERO)
+			(city_transforms[city_path] as Array).append(city_transform)
+			var city_height := h + roof_h
+			if model.begins_with("container") and city_height > 4.0:
+				(city_transforms[city_path] as Array).append(city_transform * Transform3D(Basis.IDENTITY, Vector3(0.0, 2.72, 0.0)))
+			_add_box_collider(position_value + Vector3(0.0, city_height * 0.5, 0.0), Vector3(w, city_height, d), yaw)
 		elif kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total_height <= 13.0:
 			# Building Model No.2 is likewise one finished architectural
 			# design: a semi-detached townhouse pair measuring exactly
@@ -6339,6 +6785,19 @@ func _build_buildings() -> void:
 	if not cottage_palm_built:
 		for item in cottage_palm_items:
 			_add_generic_building(buildings_root, item)
+	# 0.3.2: submit the Blender city archetypes (generic massing remains
+	# only as a missing-file fallback).
+	var city_blender_instances := 0
+	for city_path_variant in city_transforms.keys():
+		var city_path := String(city_path_variant)
+		var city_node := "City032_%s" % city_path.get_file().trim_suffix(".glb")
+		if _add_batched_model(buildings_root, city_path, city_transforms[city_path], city_node):
+			city_blender_instances += (city_items[city_path] as Array).size()
+		else:
+			for item in city_items[city_path]:
+				_add_generic_building(buildings_root, item)
+	_enhancement_stats["city_blender_instances_0320"] = city_blender_instances
+	_enhancement_stats["city_blender_models_0320"] = city_transforms.size()
 	var cottage_podium_box := BoxMesh.new()
 	cottage_podium_box.size = Vector3.ONE
 	var cottage_podiums_built := _add_multimesh(
@@ -6464,6 +6923,9 @@ func _build_buildings() -> void:
 ## clears roads, exported buildings, terrain slope and every other
 ## infill parcel. Anything smaller keeps the textured facade fallback
 ## instead of stretching doors, floor heights and the pitched roof.
+	if _is_rt7:
+		_flush_generic_batches(buildings_root)
+
 func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
 	var centre := Vector2(_f(item, "x"), _f(item, "z"))
 	for footprint_variant in [Vector2(18.87, 16.37), Vector2(16.37, 18.87)]:
@@ -7298,6 +7760,44 @@ func _build_landmarks() -> void:
 				_add_cylinder(root, r - 3.0, 0.25, pos + Vector3(0.0, 0.95, 0.0), _pool_material(), 0.0, 36)
 				_add_box(root, Vector3(7.0, 15.0, 7.0), pos + Vector3(-16.0, 7.5, 0.0), hotel)
 				_add_cylinder_collider(pos + Vector3(0.0, 1.0, 0.0), r, 2.0)
+			"rt7-stadium":
+				# 0.3.2: elliptical Blender bowl (lathe shell, red seat
+				# tiers, roof ring, ribs, four floodlight pylons).
+				var stadium_built := _add_batched_model(root, "res://assets/props/stadium.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032Stadium")
+				if not stadium_built:
+					var stadium_wall := CylinderMesh.new()
+					stadium_wall.top_radius = 0.5
+					stadium_wall.bottom_radius = 0.5
+					stadium_wall.height = 1.0
+					stadium_wall.radial_segments = 48
+					_mesh_instance(root, stadium_wall, marble, make_transform(pos + Vector3(0.0, h * 0.5, 0.0), 0.0, Vector3(r * 2.0, h, r * 1.6923)), "StadiumWall")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(r * 2.0 - 8.0, h, r * 1.6923 - 8.0))
+				_enhancement_stats["rt7_stadium_0300"] = true
+			"rt7-cable-bridge":
+				# Twin pylons just outside the deck edges with stay cables
+				# fanning to the deck.  The drivable surface is the bridge
+				# road itself; pos.y is the canal bed.
+				for sx in [-17.5, 17.5]:
+					_add_box(root, Vector3(2.6, h, 3.4), pos + Vector3(sx, h * 0.5 - 4.0, 0.0), concrete, 0.0, "CablePylon")
+					_add_box_collider(pos + Vector3(sx, h * 0.5 - 4.0, 0.0), Vector3(2.6, h, 3.4))
+				_add_box(root, Vector3(37.6, 2.2, 3.0), pos + Vector3(0.0, h - 6.0, 0.0), concrete, 0.0, "CablePylonBeam")
+				var cable_mesh := BoxMesh.new()
+				cable_mesh.size = Vector3(0.22, 0.22, 1.0)
+				for sx in [-17.5, 17.5]:
+					for anchor_z in [-95.0, -70.0, -45.0, -22.0, 22.0, 45.0, 70.0, 95.0]:
+						var top := Vector3(pos.x + sx, h - 6.0, pos.z)
+						var deck_y := 3.7 + 3.8 * cos(anchor_z * PI / 240.0)
+						var deck := Vector3(pos.x + sx * 0.92, deck_y, pos.z + anchor_z)
+						var mid := (top + deck) * 0.5
+						var cable_basis := Basis.looking_at((deck - top).normalized(), Vector3.UP).scaled(Vector3(1.0, 1.0, top.distance_to(deck)))
+						_mesh_instance(root, cable_mesh, metal, Transform3D(cable_basis, mid), "StayCable")
+				_enhancement_stats["rt7_cable_bridge_0300"] = true
+			"rt7-bridge-pier":
+				_add_cylinder(root, 2.2, 11.0, pos + Vector3(-6.0, 3.4, 0.0), concrete, 0.0, 14)
+				_add_cylinder(root, 2.2, 11.0, pos + Vector3(6.0, 3.4, 0.0), concrete, 0.0, 14)
+				_add_box(root, Vector3(20.0, 1.6, 4.2), pos + Vector3(0.0, 8.2, 0.0), concrete, 0.0, "BridgePierBeam")
 			"rt-lifeguard":
 				for sx in [-1.0, 1.0]:
 					for sz in [-1.0, 1.0]:
@@ -7305,6 +7805,171 @@ func _build_landmarks() -> void:
 				_add_box(root, Vector3(3.4, 2.4, 3.2), pos + Vector3(0.0, 4.4, 0.0), wood)
 				_mesh_instance(root, _get_gable_mesh(), _roof_material(true), make_transform(pos + Vector3(0.0, 5.55, 0.0), 0.0, Vector3(4.2, 1.2, 4.0)), "LifeguardRoof")
 				_add_box_collider(pos + Vector3(0.0, 3.0, 0.0), Vector3(3.6, 6.0, 3.6))
+			"rt7-school":
+				# 0.3.2 district school as a fixed-scale Blender GLB:
+				# main block with clock tower, two wings, gym, entrance
+				# canopy, flag and fenced sports field.
+				var school_yaw := _f(item, "rotY")
+				var school_built := _add_batched_model(root, "res://assets/props/school.glb", [_centered_model_transform(pos, school_yaw, Vector3.ONE, Vector3.ZERO)], "City032School")
+				if not school_built:
+					_add_box(root, Vector3(64.0, 12.0, 50.0), pos + Vector3(0.0, 6.0, -12.0), sand, school_yaw, "SchoolFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				var school_basis := Basis(Vector3.UP, school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 6.0, 0.0) + school_basis * Vector3(0.0, 0.0, -16.0), Vector3(64.0, 12.0, 18.0), school_yaw)
+				_add_box_collider(pos + Vector3(0.0, 4.5, 0.0) + school_basis * Vector3(0.0, 0.0, -34.0), Vector3(34.0, 9.0, 20.0), school_yaw)
+				_enhancement_stats["rt7_schools_0310"] = int(_enhancement_stats.get("rt7_schools_0310", 0)) + 1
+			"rt7-terminal":
+				# 0.3.2 airport terminal GLB: 380 m hall, roof towers,
+				# four gate fingers with jet bridges, landside canopy.
+				var term_yaw := _f(item, "rotY")
+				var term_built := _add_batched_model(root, "res://assets/props/airport_terminal.glb", [_centered_model_transform(pos, term_yaw, Vector3.ONE, Vector3.ZERO)], "City032Terminal")
+				if not term_built:
+					_add_box(root, Vector3(380.0, 24.0, 64.0), pos + Vector3(0.0, 12.0, 0.0), glass, term_yaw, "TerminalFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, 12.0, 0.0), Vector3(380.0, 24.0, 64.0), term_yaw)
+				_enhancement_stats["rt7_airport_0310"] = true
+			"rt7-atc":
+				# 0.3.2 control tower GLB (tapered shaft, glass cab).
+				var atc_h := maxf(h, 22.0)
+				var atc_built := _add_batched_model(root, "res://assets/props/atc_tower.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Atc")
+				if not atc_built:
+					_add_cylinder(root, 3.1, atc_h - 7.0, pos + Vector3(0.0, (atc_h - 7.0) * 0.5 + 2.0, 0.0), concrete, 0.0, 16, "AtcShaft")
+					_add_cylinder(root, 6.2, 4.6, pos + Vector3(0.0, atc_h - 2.3, 0.0), glass, 0.0, 20, "AtcCab")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, atc_h * 0.5, 0.0), 3.4, atc_h)
+			"rt7-hangar":
+				# 0.3.2 aircraft hangar GLBs (large airfield / small
+				# maintenance), wide door facing +Z at yaw 0.
+				var hang_yaw := _f(item, "rotY")
+				var hang_r := maxf(r, 8.0)
+				var hang_h := maxf(h, 8.0)
+				var hang_len := hang_r * 2.6
+				var hangar_path := "res://assets/props/hangar_large.glb" if hang_r >= 18.0 else "res://assets/props/hangar_small.glb"
+				var hangar_built := _add_batched_model(root, hangar_path, [_centered_model_transform(pos, hang_yaw, Vector3.ONE, Vector3.ZERO)], "City032Hangar")
+				if not hangar_built:
+					_add_box(root, Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), pos + Vector3(0.0, hang_h * 0.31, 0.0), sand, hang_yaw, "HangarFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, hang_h * 0.31, 0.0), Vector3(hang_r * 2.0, hang_h * 0.62, hang_len), hang_yaw)
+				_enhancement_stats["rt7_hangars_0310"] = int(_enhancement_stats.get("rt7_hangars_0310", 0)) + 1
+			"rt7-plane":
+				# 0.3.2 parked airliner GLB (fuselage, swept wings,
+				# twin engines, gear).  Nose faces +Z at yaw 0.
+				var plane_yaw := _f(item, "rotY")
+				var plane_built := _add_batched_model(root, "res://assets/props/airliner.glb", [_centered_model_transform(pos, plane_yaw, Vector3.ONE, Vector3.ZERO)], "City032Airliner")
+				if not plane_built:
+					_add_box(root, Vector3(4.2, 4.2, 42.0), pos + Vector3(0.0, 4.4, 0.0), marble, plane_yaw, "PlaneFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, 3.5, 0.0), Vector3(6.0, 7.0, 40.0), plane_yaw)
+				_enhancement_stats["rt7_planes_0310"] = int(_enhancement_stats.get("rt7_planes_0310", 0)) + 1
+			"rt7-cooling":
+				# 0.3.2 hyperboloid cooling tower GLB (lathe shell,
+				# open inlet on V-columns, basin, rim walkway).
+				var cool_r := maxf(r, 18.0)
+				var cool_h := maxf(h, 40.0)
+				var cool_built := _add_batched_model(root, "res://assets/props/cooling_tower.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032CoolingTower")
+				if not cool_built:
+					_add_cylinder(root, cool_r, cool_h, pos + Vector3(0.0, cool_h * 0.5, 0.0), concrete, 0.0, 36, "CoolingFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, cool_h * 0.5, 0.0), cool_r * 0.92, cool_h)
+				_enhancement_stats["rt7_cooling_towers_0310"] = int(_enhancement_stats.get("rt7_cooling_towers_0310", 0)) + 1
+				_enhancement_stats["rt7_npp_0310"] = true
+			"rt7-reactor":
+				# 0.3.2 reactor containment GLB (cylinder + dome,
+				# polar crane ring, annex, pipes and vents).
+				var reac_r := maxf(r, 12.0) * 0.85
+				var reac_h := maxf(h, 24.0)
+				var reac_built := _add_batched_model(root, "res://assets/props/reactor.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Reactor")
+				if not reac_built:
+					_add_cylinder(root, reac_r, reac_h * 0.62, pos + Vector3(0.0, reac_h * 0.31, 0.0), concrete, 0.0, 28, "ReactorFallback")
+					_add_sphere(root, reac_r, reac_r * 1.05, pos + Vector3(0.0, reac_h * 0.62, 0.0), marble, "ReactorDomeFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, reac_h * 0.35, 0.0), reac_r, reac_h * 0.7)
+				_enhancement_stats["rt7_reactors_0310"] = int(_enhancement_stats.get("rt7_reactors_0310", 0)) + 1
+			"rt7-chimney":
+				# 0.3.2 130 m stack GLB with red aviation bands.
+				var chim_h := maxf(h, 60.0)
+				var chim_r := maxf(r, 4.0)
+				var chim_built := _add_batched_model(root, "res://assets/props/chimney.glb", [_centered_model_transform(pos, 0.0, Vector3.ONE, Vector3.ZERO)], "City032Chimney")
+				if not chim_built:
+					_add_cylinder(root, chim_r, chim_h, pos + Vector3(0.0, chim_h * 0.5, 0.0), concrete, 0.0, 24, "ChimneyFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, chim_h * 0.5, 0.0), chim_r, chim_h)
+			"rt7-tank":
+				# 0.3.2 storage tank / farm silo GLBs, scaled to the
+				# exported radius/height so farm silos stay slender.
+				var tank_r := maxf(r, 3.0)
+				var tank_h := maxf(h, 4.0)
+				var tank_is_silo := tank_h >= tank_r * 2.2
+				var tank_path := "res://assets/props/silo.glb" if tank_is_silo else "res://assets/props/storage_tank.glb"
+				var tank_scale := Vector3(tank_r / 6.4, tank_h / 18.5, tank_r / 6.4) if tank_is_silo else Vector3(tank_r / 11.0, tank_h / 14.4, tank_r / 11.0)
+				var tank_built := _add_batched_model(root, tank_path, [_centered_model_transform(pos, _f(item, "rotY"), tank_scale, Vector3.ZERO)], "City032Tank")
+				if not tank_built:
+					_add_cylinder(root, tank_r, tank_h, pos + Vector3(0.0, tank_h * 0.5, 0.0), marble, 0.0, 24, "TankFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, tank_h * 0.5, 0.0), tank_r, tank_h)
+			"rt7-radar":
+				# 0.3.2 radar station GLB (radome, rotating bar array,
+				# equipment huts).
+				var rad_r := maxf(r, 5.0)
+				var rad_h := maxf(h, 10.0)
+				var radar_built := _add_batched_model(root, "res://assets/props/radar_station.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Radar")
+				if not radar_built:
+					_add_sphere(root, rad_r, rad_r * 1.5, pos + Vector3(0.0, rad_h * 0.55 + rad_r * 0.35, 0.0), marble, "RadarFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_cylinder_collider(pos + Vector3(0.0, rad_h * 0.3, 0.0), rad_r * 0.6, rad_h * 0.6)
+				_enhancement_stats["rt7_milbase_0310"] = true
+			"rt7-watchtower":
+				# 0.3.2 watchtower GLB (braced legs, cab, searchlight).
+				var wt_h := maxf(h, 9.0)
+				var wt_built := _add_batched_model(root, "res://assets/props/watchtower.glb", [_centered_model_transform(pos, _f(item, "rotY"), Vector3.ONE, Vector3.ZERO)], "City032Watchtower")
+				if not wt_built:
+					_add_box(root, Vector3(4.8, 2.7, 4.8), pos + Vector3(0.0, wt_h * 0.72 + 1.35, 0.0), wood, 0.0, "WatchtowerFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, wt_h * 0.4, 0.0), Vector3(4.4, wt_h * 0.8, 4.4))
+				_enhancement_stats["rt7_watchtowers_0310"] = int(_enhancement_stats.get("rt7_watchtowers_0310", 0)) + 1
+			"rt7-helipad":
+				var pad_r := maxf(r, 8.0)
+				_add_cylinder(root, pad_r, 0.22, pos + Vector3(0.0, 0.11, 0.0), concrete, 0.0, 28, "Helipad")
+				_add_cylinder(root, pad_r * 0.8, 0.26, pos + Vector3(0.0, 0.13, 0.0), metal, 0.0, 28, "HelipadInner")
+				for hpx in [-1.7, 1.7]:
+					_add_box(root, Vector3(0.85, 0.1, 5.2), pos + Vector3(hpx, 0.3, 0.0), marble, 0.0, "HelipadH")
+				_add_box(root, Vector3(2.6, 0.1, 0.85), pos + Vector3(0.0, 0.3, 0.0), marble, 0.0, "HelipadHBar")
+			"rt7-afv":
+				# 0.3.2 parked armoured vehicle GLB.  The model nose
+				# faces +Z, the retired primitive faced +X, hence the
+				# quarter turn that preserves exported placements.
+				var afv_yaw := _f(item, "rotY")
+				var afv_built := _add_batched_model(root, "res://assets/props/afv.glb", [_centered_model_transform(pos, afv_yaw + PI * 0.5, Vector3.ONE, Vector3.ZERO)], "City032Afv")
+				if not afv_built:
+					_add_box(root, Vector3(7.4, 1.6, 3.2), pos + Vector3(0.0, 1.2, 0.0), metal, afv_yaw, "AfvFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				_add_box_collider(pos + Vector3(0.0, 1.6, 0.0), Vector3(7.6, 3.2, 3.5), afv_yaw)
+				_enhancement_stats["rt7_afv_0310"] = int(_enhancement_stats.get("rt7_afv_0310", 0)) + 1
+			"rt7-crane":
+				# 0.3.2 portainer crane GLB on the canal quay: portal
+				# legs on rails, A-frame, raised jib, hanging load.
+				var crane_yaw := _f(item, "rotY")
+				var crane_built := _add_batched_model(root, "res://assets/props/port_crane.glb", [_centered_model_transform(pos, crane_yaw, Vector3.ONE, Vector3.ZERO)], "City032PortCrane")
+				if not crane_built:
+					_add_box(root, Vector3(20.0, 30.0, 16.0), pos + Vector3(0.0, 15.0, 0.0), metal, crane_yaw, "CraneFallback")
+				else:
+					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
+				var crane_basis := Basis(Vector3.UP, crane_yaw)
+				for leg_side in [-9.0, 9.0]:
+					_add_box_collider(pos + Vector3(0.0, 15.0, 0.0) + crane_basis * Vector3(leg_side, 0.0, 0.0), Vector3(2.2, 30.0, 15.7), crane_yaw)
+				_enhancement_stats["rt7_cranes_0320"] = int(_enhancement_stats.get("rt7_cranes_0320", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
@@ -7842,7 +8507,7 @@ func _build_vegetation() -> void:
 
 		# Plaza ring: mature oaks frame the fountain instead of leaving the
 		# exported six distant hill trees as the city's only broadleaf trees.
-		for i in 10:
+		for i in (0 if _is_rt7 else 10):
 			var angle := TAU * float(i) / 10.0 + 0.18
 			var candidate: Vector3 = Vector3(665.0 + cos(angle) * 30.0, 0.0, -25.0 + sin(angle) * 30.0)
 			candidate.y = height_at(candidate.x, candidate.z)
@@ -7864,14 +8529,14 @@ func _build_vegetation() -> void:
 		# building/road clearance test removes candidates in hotel plots,
 		# intersections and driveways while keeping a continuous canopy.
 		var promenade_index := 0
-		for z in range(-390, 391, 45):
+		for z in (range(0) if _is_rt7 else range(-390, 391, 45)):
 			var candidate: Vector3 = Vector3(912.0, height_at(912.0, float(z)), float(z))
 			if _is_position_clear(candidate, 2.0, 4.0):
 				trees.append({"x": candidate.x, "y": candidate.y, "z": candidate.z, "rotY": float(promenade_index) * 0.71, "s": 0.84 + float(promenade_index % 3) * 0.07, "type": "oak"})
 				extra_tree_count += 1
 			promenade_index += 1
 		var boulevard_index := 0
-		for z in range(-380, 386, 55):
+		for z in (range(0) if _is_rt7 else range(-380, 386, 55)):
 			for x in [738.0, 782.0]:
 				var candidate := Vector3(x, height_at(x, float(z)), float(z))
 				if _is_position_clear(candidate, 2.0, 4.0):
@@ -7882,7 +8547,7 @@ func _build_vegetation() -> void:
 		# Deterministic hillside woodland.  Candidates are rejected on
 		# roads, landmarks, steep/underwater terrain and building plots.
 		var hill_ix := 0
-		for base_x in range(970, 1241, 28):
+		for base_x in (range(0) if _is_rt7 else range(970, 1241, 28)):
 			var hill_iz := 0
 			for base_z in range(-470, 471, 32):
 				var jitter_x := (_hash01(hill_ix * 13 + 7, hill_iz * 17 + 3) - 0.5) * 18.0
@@ -7977,7 +8642,7 @@ func _build_vegetation() -> void:
 						"s": 0.88,
 					})
 					extra_bush_count += 1
-		for i in 12:
+		for i in (0 if _is_rt7 else 12):
 			var angle := TAU * float(i) / 12.0 + 0.12
 			var candidate := Vector3(665.0 + cos(angle) * 22.0, 0.0, -25.0 + sin(angle) * 22.0)
 			candidate.y = height_at(candidate.x, candidate.z)
@@ -8023,7 +8688,7 @@ func _build_vegetation() -> void:
 	var palms: Array = data.get("palms", []).duplicate()
 	var extra_palm_count := 0
 	var beach_palm_index := 0
-	for palm_z in range(-420, 421, 42):
+	for palm_z in (range(0) if _is_rt7 else range(-420, 421, 42)):
 		var palm_x := 950.0 + float(beach_palm_index % 3) * 9.0
 		var palm_candidate := Vector3(palm_x, height_at(palm_x, float(palm_z)), float(palm_z))
 		if palm_candidate.y > 0.7 and _is_position_clear(palm_candidate, 2.5, 5.0) and String(get_surface_at(palm_candidate).get("kind", "")) != "water":
@@ -9533,6 +10198,15 @@ func _build_reflection_probes() -> void:
 		{"centre": Vector3(712.0, 0.0, -118.0), "height": 86.0, "size": Vector3(320.0, 205.0, 320.0), "capture": 30.0, "tall": true},
 		{"centre": Vector3(762.0, 0.0, 188.0), "height": 58.0, "size": Vector3(320.0, 160.0, 320.0), "capture": 24.0, "tall": true},
 	]
+	if _is_rt7:
+		probe_specs = [
+			{"centre": Vector3(0.0, 0.0, -120.0), "height": 90.0, "size": Vector3(760.0, 220.0, 760.0), "capture": 30.0, "tall": true},
+			{"centre": Vector3(-2450.0, 0.0, 0.0), "height": 62.0, "size": Vector3(640.0, 170.0, 900.0), "capture": 24.0, "tall": true},
+			{"centre": Vector3(-1200.0, 0.0, 0.0), "height": 44.0, "size": Vector3(560.0, 120.0, 560.0), "capture": 20.0, "tall": false},
+			{"centre": Vector3(1650.0, 0.0, -1600.0), "height": 48.0, "size": Vector3(760.0, 130.0, 900.0), "capture": 22.0, "tall": false},
+			{"centre": Vector3(300.0, 0.0, 1300.0), "height": 46.0, "size": Vector3(760.0, 130.0, 520.0), "capture": 20.0, "tall": false},
+			{"centre": Vector3(0.0, 0.0, 2350.0), "height": 44.0, "size": Vector3(900.0, 120.0, 640.0), "capture": 20.0, "tall": false},
+		]
 	var tall_probe_count := 0
 	for spec in probe_specs:
 		var centre: Vector3 = spec.get("centre", Vector3.ZERO)
