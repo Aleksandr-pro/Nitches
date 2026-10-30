@@ -25,6 +25,10 @@ const WORLD_AABB := AABB(Vector3(500.0, -20.0, -540.0), Vector3(1040.0, 420.0, 1
 ## terrain culling) must use instead of the RichTown constant.
 var world_id := "richtown"
 var _is_desert := false
+var _is_forest := false
+var _gf_field_rects: Array[Rect2] = []
+var _gf_lake_y := 0.0
+var _gf_bird_flocks: Array[Dictionary] = []
 var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
@@ -217,7 +221,7 @@ func _process(delta: float) -> void:
 			fmod(_elapsed * speed * 0.63, 1.0),
 			0.0
 		)
-	if _is_desert:
+	if _is_desert or _is_forest:
 		_dz_animate(delta)
 
 
@@ -241,7 +245,8 @@ func begin_build_world() -> void:
 		return
 	_build_started = true
 	_is_desert = world_id == "desert"
-	_active_aabb = DESERT_AABB if _is_desert else WORLD_AABB
+	_is_forest = world_id == "greenforest"
+	_active_aabb = DESERT_AABB if (_is_desert or _is_forest) else WORLD_AABB
 	_load_data()
 	_build_stages.clear()
 	_build_stage_index = 0
@@ -256,6 +261,8 @@ func begin_build_world() -> void:
 		_terrain = data.get("terrain", {})
 		if _is_desert:
 			_queue_desert_build_stages()
+		elif _is_forest:
+			_queue_forest_build_stages()
 		else:
 			_queue_richtown_build_stages()
 	if _build_total_weight <= 0.0:
@@ -372,6 +379,25 @@ func _queue_desert_build_stages() -> void:
 	_add_build_stage("Закрываем границы котловины", Callable(self, "_build_desert_bounds"), 0.5)
 	_add_build_stage("Рисуем дальние месы", Callable(self, "_build_desert_skyline"), 1.0)
 	_add_build_stage("Финализируем Пустынный каньон", Callable(self, "_finish_desert_build"), 1.0)
+
+
+func _queue_forest_build_stages() -> void:
+	_add_build_stage("Выбираем точку старта", Callable(self, "_compute_spawn_transform"), 0.3)
+	_add_build_stage("Индексируем лесные дороги", Callable(self, "_build_road_surface_index"), 1.0)
+	_add_build_stage("Готовим физику мира", Callable(self, "_create_collision_root"), 0.3)
+	_add_build_stage("Настраиваем небо и освещение", Callable(self, "_build_environment"), 1.0)
+	_add_build_stage("Формируем холмы и долины", Callable(self, "_build_forest_terrain"), 4.0)
+	_add_build_stage("Заполняем озеро и реку", Callable(self, "_build_forest_water"), 0.5)
+	_add_build_stage("Прокладываем дороги и мосты", Callable(self, "_build_desert_roads"), 4.0)
+	_add_build_stage("Строим посёлок, ферму и лесопилку", Callable(self, "_build_desert_structures"), 3.0)
+	_add_build_stage("Высаживаем лес", Callable(self, "_build_forest_scatter"), 4.0)
+	_add_build_stage("Добавляем оленей, птиц и дым", Callable(self, "_build_forest_extras"), 0.5)
+	_add_build_stage("Ставим гоночные маркеры", Callable(self, "_build_desert_game_markers"), 1.0)
+	_add_build_stage("Собираем модели леса", Callable(self, "_flush_batched_models"), 2.0)
+	_add_build_stage("Настраиваем отражения", Callable(self, "_build_forest_reflection_probes"), 1.0)
+	_add_build_stage("Закрываем границы леса", Callable(self, "_build_forest_bounds"), 0.5)
+	_add_build_stage("Рисуем дальние хребты", Callable(self, "_build_forest_skyline"), 1.0)
+	_add_build_stage("Финализируем Зелёный лес", Callable(self, "_finish_forest_build"), 1.0)
 
 
 func _finish_emergency_build() -> void:
@@ -637,6 +663,8 @@ func get_park_rects() -> Array:
 func get_park_map_entries() -> Array:
 	if _is_desert:
 		return [{"id": "oasis", "label": "Оазис", "rect": Rect2(3030.0, 3180.0, 640.0, 640.0)}]
+	if _is_forest:
+		return [{"id": "meadows", "label": "Центральные луга", "rect": Rect2(1150.0, 1250.0, 1400.0, 1300.0)}]
 	var entries: Array = []
 	for spec_variant in PARK_SPECS:
 		var spec: Dictionary = spec_variant
@@ -1052,17 +1080,21 @@ func _is_position_clear(point: Vector3, building_padding: float, minimum_road_cl
 func get_surface_at(world_position: Vector3) -> Dictionary:
 	var clearance := _road_clearance_xz(world_position)
 	if clearance <= 0.0:
-		if _is_desert and _road_surface_kind_at(world_position) == "gravel":
+		if (_is_desert or _is_forest) and _road_surface_kind_at(world_position) == "gravel":
 			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
 		return {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
 	if clearance <= 2.05:
+		if _is_forest:
+			return {"kind": "dirt", "label": "ГРУНТ", "mu": 0.68, "rolling_resistance": 0.060}
 		if _is_desert:
 			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		return {"kind": "sidewalk", "label": "БЕТОН", "mu": 0.93, "rolling_resistance": 0.021}
 
 	var h := height_at(world_position.x, world_position.z)
 	var is_water := false
-	if _is_desert:
+	if _is_forest:
+		is_water = _in_zone(world_position.x, world_position.z, "gfLake") and world_position.y < 15.3
+	elif _is_desert:
 		is_water = _in_zone(world_position.x, world_position.z, "oasisLake") and world_position.y < 27.4
 	else:
 		is_water = ((_in_zone(world_position.x, world_position.z, "sea") or _in_zone(world_position.x, world_position.z, "marina")) and h < 0.45) or world_position.y < 0.18
@@ -1088,8 +1120,16 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		"gravel":
 			return {"kind": "gravel", "label": "ГРАВИЙ", "mu": 0.80, "rolling_resistance": 0.045}
-		"rock":
+		"rock", "gf_rock":
 			return {"kind": "rock", "label": "КАМЕНЬ", "mu": 0.74, "rolling_resistance": 0.052}
+		"gf_meadow":
+			return {"kind": "grass", "label": "ТРАВА", "mu": 0.62, "rolling_resistance": 0.078}
+		"gf_forest_floor":
+			return {"kind": "forest_floor", "label": "ПОДСТИЛКА", "mu": 0.58, "rolling_resistance": 0.090}
+		"gf_mud":
+			return {"kind": "mud", "label": "ГРЯЗЬ", "mu": 0.42, "rolling_resistance": 0.140}
+		"gf_field":
+			return {"kind": "field", "label": "ПОЛЕ", "mu": 0.55, "rolling_resistance": 0.100}
 		"concrete":
 			return {"kind": "concrete", "label": "БЕТОН", "mu": 0.89, "rolling_resistance": 0.024}
 		"plaza":
@@ -1330,7 +1370,7 @@ func set_time_of_day(mode: String) -> void:
 
 func _load_data() -> void:
 	build_error = ""
-	var data_path := DESERT_DATA_PATH if world_id == "desert" else WORLD_DATA_PATH
+	var data_path := DESERT_DATA_PATH if world_id == "desert" else (FOREST_DATA_PATH if world_id == "greenforest" else WORLD_DATA_PATH)
 	if not FileAccess.file_exists(data_path):
 		build_error = "Native world data is missing from the exported game: %s" % data_path
 		push_error(build_error)
@@ -1890,6 +1930,16 @@ func _terrain_material(kind: String) -> Material:
 		)
 	var material: StandardMaterial3D
 	match kind:
+		"gf_meadow":
+			material = _material("terrain_gf_meadow", "gf_meadow.jpg", "gf_meadow_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_meadow_roughness.jpg")
+		"gf_forest_floor":
+			material = _material("terrain_gf_floor", "gf_forest_floor.jpg", "gf_forest_floor_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_forest_floor_roughness.jpg")
+		"gf_mud":
+			material = _material("terrain_gf_mud", "gf_mud.jpg", "gf_mud_normal.jpg", Color(1.0, 1.0, 1.0), 0.85, 0.0, Vector3.ONE, false, "gf_mud_roughness.jpg")
+		"gf_field":
+			material = _material("terrain_gf_field", "gf_field_soil.jpg", "gf_field_soil_normal.jpg", Color(1.0, 1.0, 1.0), 1.0, 0.0, Vector3.ONE, false, "gf_field_soil_roughness.jpg")
+		"gf_rock":
+			material = _material("terrain_gf_rock", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(1.0, 1.0, 0.99), 1.0, 0.0, Vector3(0.055, 0.055, 0.055), true, "gf_rock_gray_roughness.jpg")
 		"sand":
 			material = _material("terrain_sand", "user_sand_rippled.jpg", "user_sand_rippled_normal.jpg", Color(0.88, 0.78, 0.58), 0.98)
 		"dune":
@@ -3433,6 +3483,22 @@ func _hash01(ix: int, iz: int) -> float:
 
 
 func _terrain_class(x: float, z: float, h: float, slope: float, ix: int, iz: int) -> String:
+	if _is_forest:
+		# GreenForest splat: grey rock on cliffs/summits, ploughed soil
+		# on the authored field rectangles, wet mud in the swamp and on
+		# lake shores, needle floor under the forest zones, meadow
+		# grass everywhere else.
+		if slope > 0.34 or h > 136.0:
+			return "gf_rock"
+		if _gf_in_field(x, z):
+			return "gf_field"
+		if _in_zone(x, z, "swamp"):
+			return "gf_mud"
+		if h < 15.6 and _in_zone(x, z, "gfLake"):
+			return "gf_mud"
+		if _in_zone(x, z, "darkForest") or _in_zone(x, z, "hills") or _in_zone(x, z, "birchGrove") or _in_zone(x, z, "sawmill") or _in_zone(x, z, "cliff"):
+			return "gf_forest_floor"
+		return "gf_meadow"
 	if _is_desert:
 		# Desert splat (spec: asphalt/gravel handled by roads, the other
 		# four layers live here): salt pan, red rock, soft dune sand and
@@ -3570,11 +3636,11 @@ func _water_material() -> ShaderMaterial:
 	_sea_material.resource_name = "sea_surface_pbr"
 	_sea_material.shader = WaterSurfaceShader
 	_sea_material.set_shader_parameter("wave_time", _elapsed)
-	_sea_material.set_shader_parameter("wave_height", 0.16 if _is_desert else 0.62)
+	_sea_material.set_shader_parameter("wave_height", 0.16 if (_is_desert or _is_forest) else 0.62)
 	_sea_material.set_shader_parameter("wind_direction", Vector2(0.82, 0.57))
-	_sea_material.set_shader_parameter("foam_strength", 0.36 if _is_desert else 0.66)
-	_sea_material.set_shader_parameter("normal_strength", 0.50 if _is_desert else 0.78)
-	_sea_material.set_shader_parameter("reflection_strength", 0.88 if _is_desert else 0.82)
+	_sea_material.set_shader_parameter("foam_strength", 0.36 if (_is_desert or _is_forest) else 0.66)
+	_sea_material.set_shader_parameter("normal_strength", 0.50 if (_is_desert or _is_forest) else 0.78)
+	_sea_material.set_shader_parameter("reflection_strength", 0.88 if (_is_desert or _is_forest) else 0.82)
 	return _sea_material
 
 
@@ -10748,6 +10814,7 @@ func _build_world_bounds() -> void:
 # --------------------------------------------------------------------------- #
 
 const DESERT_DATA_PATH := "res://data/desert_native.json"
+const FOREST_DATA_PATH := "res://data/greenforest_native.json"
 const DESERT_AABB := AABB(Vector3(0.0, -20.0, 0.0), Vector3(4000.0, 500.0, 4000.0))
 const DZ_CHUNK_M := 256.0
 
@@ -10784,6 +10851,11 @@ func _build_desert_world() -> Dictionary:
 
 
 func _dz_data() -> Dictionary:
+	# 0.2.54: the desert build path (roads, bridges, merged structures,
+	# game markers) is data-driven; GreenForest ships the same schema
+	# under its own key and reuses all of it.
+	if _is_forest:
+		return data.get("forest", {})
 	return data.get("desert", {})
 
 
@@ -11221,7 +11293,18 @@ func _dz_build_bridges(root: Node) -> void:
 
 
 func _dz_build_tunnel(root: Node) -> void:
-	var tunnel: Dictionary = _dz_data().get("tunnel", {})
+	# 0.2.54: worlds may declare several tunnels (`tunnels` list);
+	# the desert's single `tunnel` dict remains the fallback.
+	var tunnel_list: Array = _dz_data().get("tunnels", [])
+	if tunnel_list.is_empty():
+		var single: Dictionary = _dz_data().get("tunnel", {})
+		if not single.is_empty():
+			tunnel_list = [single]
+	for tunnel_variant in tunnel_list:
+		_dz_build_one_tunnel(root, tunnel_variant)
+
+
+func _dz_build_one_tunnel(root: Node, tunnel: Dictionary) -> void:
 	if tunnel.is_empty():
 		return
 	var road := _dz_find_road(String(tunnel.get("road", "")))
@@ -11259,6 +11342,7 @@ func _dz_build_tunnel(root: Node) -> void:
 		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 2.1, p.z), Vector3(width + 10.4, 3.6, 2.6), yaw)
 		_dz_box("dz_rock", Vector3(p.x, p.y + opening_h + 5.0, p.z), Vector3(width + 5.0, 2.6, 2.2), yaw + 0.04)
 	_enhancement_stats["desert_tunnel"] = true
+	_enhancement_stats["forest_tunnels_built"] = int(_enhancement_stats.get("forest_tunnels_built", 0)) + 1
 
 
 # --- merged static geometry ---------------------------------------------------
@@ -11311,6 +11395,21 @@ func _dz_material(key: String) -> Material:
 			return _material("dz_tunnel_roof", "rock.jpg", "rock_normal.jpg", Color(0.55, 0.40, 0.32), 1.0)
 		"dz_rock":
 			return _material("dz_rock", "rock.jpg", "rock_normal.jpg", Color(0.68, 0.45, 0.34), 1.0)
+		"gf_waterfall":
+			var wf := _material("gf_waterfall", "", "", Color(0.78, 0.89, 0.96, 0.55), 0.15)
+			wf.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			wf.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			return wf
+		"gf_tractor_green":
+			return _material("gf_tractor_green", "brushed_metal.jpg", "brushed_metal_normal.jpg", Color(0.16, 0.34, 0.14), 0.45, 0.55)
+		"gf_tractor_red":
+			return _material("gf_tractor_red", "brushed_metal.jpg", "brushed_metal_normal.jpg", Color(0.44, 0.12, 0.10), 0.45, 0.55)
+		"gf_deer":
+			return _material("gf_deer", "cafe_linen.jpg", "cafe_linen_normal.jpg", Color(0.48, 0.34, 0.21), 0.95)
+		"gf_deer_belly":
+			return _material("gf_deer_belly", "cafe_linen.jpg", "cafe_linen_normal.jpg", Color(0.68, 0.58, 0.44), 0.95)
+		"gf_bird":
+			return _material("gf_bird", "", "", Color(0.10, 0.10, 0.12), 0.9)
 		"dz_glass":
 			var glass := _material("dz_glass", "", "", Color(0.10, 0.15, 0.19), 0.12, 0.9)
 			return glass
@@ -11711,6 +11810,8 @@ func _dz_structure(anim_root: Node3D, s: Dictionary) -> void:
 	var gy := _dz_footprint_y(x, z, w, d, yaw) if kind in big_kinds else _dz_ground_y(x, z, 0.04)
 	var o := Vector3(x, gy, z)
 	var hash_pick := int(absf(x) * 3.0 + absf(z) * 7.0) % 3
+	if _is_forest and _gf_structure_kind(kind, o, basis, w, d, h, hash_pick):
+		return
 	match kind:
 		"gas_station":
 			_dz_building(o, basis, yaw, w, d, h, "dz_plaster", "dz_roof_metal", false)
@@ -12679,6 +12780,7 @@ func _build_desert_skyline() -> void:
 
 
 func _dz_animate(delta: float) -> void:
+	_gf_animate_birds()
 	if _dz_pumpjack_pivots.is_empty() and _dz_rotors.is_empty() and _dz_beacon_material == null:
 		return
 	for entry in _dz_pumpjack_pivots:
@@ -12693,3 +12795,671 @@ func _dz_animate(delta: float) -> void:
 		_dz_beacon_material.emission_energy_multiplier = 3.2 if fmod(_elapsed, 1.6) < 0.18 else 0.12
 	if _dz_flare_material != null:
 		_dz_flare_material.emission_energy_multiplier = 2.9 + sin(_elapsed * 11.0) * 0.45 + sin(_elapsed * 23.7) * 0.25
+
+
+# --- GreenForest (0.2.54) -------------------------------------------------
+# Third world.  Roads/bridges/tunnels/merged structures/game markers
+# reuse the data-driven desert path above through _dz_data(); the
+# functions below are the forest-specific terrain splat, water,
+# vegetation scatter, authored structure kinds and living details.
+
+func _gf_in_field(x: float, z: float) -> bool:
+	for rect in _gf_field_rects:
+		if rect.has_point(Vector2(x, z)):
+			return true
+	return false
+
+
+func _build_forest_terrain() -> void:
+	_gf_field_rects.clear()
+	for field_variant in _dz_data().get("fields", []):
+		var field: Dictionary = field_variant
+		var fw := _f(field, "w", 100.0)
+		var fd := _f(field, "d", 100.0)
+		_gf_field_rects.append(Rect2(_f(field, "x") - fw * 0.5, _f(field, "z") - fd * 0.5, fw, fd))
+	var lake: Dictionary = _dz_data().get("lake", {})
+	_gf_lake_y = _f(lake, "y", 14.0)
+	_build_desert_terrain()
+	_enhancement_stats["forest_terrain_chunks"] = int(_enhancement_stats.get("desert_terrain_chunks", 0))
+	_enhancement_stats["greenforest_world_0254"] = true
+
+
+func _build_forest_water() -> void:
+	var root := Node3D.new()
+	root.name = "Water"
+	add_child(root)
+	var lake: Dictionary = _dz_data().get("lake", {})
+	var lake_x := _f(lake, "x", 3050.0)
+	var lake_z := _f(lake, "z", 2200.0)
+	var lake_y := _f(lake, "y", 14.0)
+	var lake_rx := _f(lake, "rx", 450.0)
+	var lake_rz := _f(lake, "rz", 400.0)
+	var lake_mesh := CylinderMesh.new()
+	lake_mesh.top_radius = 1.0
+	lake_mesh.bottom_radius = 1.0
+	lake_mesh.height = 0.24
+	lake_mesh.radial_segments = 72
+	lake_mesh.rings = 1
+	_mesh_instance(root, lake_mesh, _water_material(),
+		make_transform(Vector3(lake_x, lake_y - 0.12, lake_z), 0.0, Vector3(lake_rx + 12.0, 1.0, lake_rz + 12.0)),
+		"ForestLake", false)
+	# Swamp sheet: terrain humps poke through it as boggy islets.
+	var swamp: Dictionary = _dz_data().get("swamp", {})
+	if not swamp.is_empty():
+		var swamp_mesh := CylinderMesh.new()
+		swamp_mesh.top_radius = 1.0
+		swamp_mesh.bottom_radius = 1.0
+		swamp_mesh.height = 0.18
+		swamp_mesh.radial_segments = 48
+		_mesh_instance(root, swamp_mesh, _water_material(),
+			make_transform(Vector3(_f(swamp, "x"), _f(swamp, "y", 8.9) - 0.08, _f(swamp, "z")), 0.0,
+				Vector3(_f(swamp, "rx", 370.0), 1.0, _f(swamp, "rz", 285.0))),
+			"ForestSwamp", false)
+	# River ribbons follow the generator's stored water heights.
+	var river_segments := 0
+	for river_variant in _dz_data().get("river", []):
+		var river: Array = river_variant
+		if river.size() < 2:
+			continue
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var pts: Array[Vector3] = []
+		for p_variant in river:
+			var p: Array = p_variant
+			if p.size() < 3:
+				continue
+			pts.append(Vector3(float(p[0]), float(p[2]), float(p[1])))
+		for i in range(pts.size() - 1):
+			var a := pts[i]
+			var b := pts[i + 1]
+			var dir := Vector2(b.x - a.x, b.z - a.z).normalized()
+			var perp := Vector2(-dir.y, dir.x) * 5.5
+			var v0 := Vector3(a.x - perp.x, a.y, a.z - perp.y)
+			var v1 := Vector3(a.x + perp.x, a.y, a.z + perp.y)
+			var v2 := Vector3(b.x + perp.x, b.y, b.z + perp.y)
+			var v3 := Vector3(b.x - perp.x, b.y, b.z - perp.y)
+			for vertex in [v0, v1, v2, v0, v2, v3]:
+				tool.set_uv(Vector2(vertex.x / 9.0, vertex.z / 9.0))
+				tool.add_vertex(vertex)
+			river_segments += 1
+		tool.generate_normals()
+		var river_mesh := tool.commit()
+		if river_mesh != null:
+			_mesh_instance(root, river_mesh, _water_material(), Transform3D.IDENTITY, "ForestRiver", false)
+	_enhancement_stats["forest_lake"] = true
+	_enhancement_stats["forest_river_segments"] = river_segments
+
+
+func _build_forest_reflection_probes() -> void:
+	_reflection_probes.clear()
+	var root := Node3D.new()
+	root.name = "ReflectionProbes"
+	add_child(root)
+	var specs := [
+		["Village", 3600.0, 2150.0, 26.0],
+		["Lake", 3050.0, 2200.0, 24.0],
+		["Farm", 2050.0, 3450.0, 26.0],
+		["DarkForest", 650.0, 2000.0, 30.0],
+		["Summit", 1850.0, 350.0, 34.0],
+		["Sawmill", 920.0, 3520.0, 26.0],
+	]
+	for spec_variant in specs:
+		var spec: Array = spec_variant
+		var label := String(spec[0])
+		var px := float(spec[1])
+		var pz := float(spec[2])
+		var ph := float(spec[3])
+		var probe := ReflectionProbe.new()
+		probe.name = "Probe" + label
+		probe.size = Vector3(340.0, 130.0, 340.0)
+		probe.position = Vector3(px, height_at(px, pz) + ph, pz)
+		probe.origin_offset = Vector3(0.0, ph * 0.5 - ph, 0.0)
+		probe.box_projection = true
+		probe.enable_shadows = false
+		probe.intensity = 0.68
+		probe.max_distance = 240.0
+		probe.mesh_lod_threshold = 0.65
+		probe.ambient_mode = ReflectionProbe.AMBIENT_ENVIRONMENT
+		probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		probe.cull_mask = (1 << 19) - 1
+		probe.blend_distance = 60.0
+		root.add_child(probe)
+		_reflection_probes.append(probe)
+	_enhancement_stats["reflection_probes"] = _reflection_probes.size()
+	_enhancement_stats["reflection_probe_mode"] = "once_box_projected_cell_grid"
+	_enhancement_stats["reflection_probe_update_budget_ms"] = 1.2
+	_enhancement_stats["reflection_probe_stagger"] = "per_4_cells"
+
+
+func _build_forest_bounds() -> void:
+	# Hills reach ~158 m; the lowest drivable ground is the river
+	# bed (~9 m), so the safety floor sits just under y=1.
+	_add_box_collider(Vector3(-3.0, 95.0, 2000.0), Vector3(6.0, 230.0, 4012.0))
+	_add_box_collider(Vector3(4003.0, 95.0, 2000.0), Vector3(6.0, 230.0, 4012.0))
+	_add_box_collider(Vector3(2000.0, 95.0, -3.0), Vector3(4012.0, 230.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 95.0, 4003.0), Vector3(4012.0, 230.0, 6.0))
+	_add_box_collider(Vector3(2000.0, 0.0, 2000.0), Vector3(4080.0, 2.0, 4080.0))
+
+
+func _build_forest_skyline() -> void:
+	if _skyline_root == null:
+		_skyline_root = Node3D.new()
+		_skyline_root.name = "DistantSkyline"
+		add_child(_skyline_root)
+	# Forested far ridges: tapered frustums in two mossy greens with
+	# local (not world) triplanar mapping, tangential to the horizon
+	# ring like the desert mesas, plus a nearer spruce-spike ring.
+	var mat := _material("gf_far_ridge_local", "gf_forest_floor.jpg", "gf_forest_floor_normal.jpg", Color(0.30, 0.42, 0.24), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat.uv1_world_triplanar = false
+	var mat_light := _material("gf_far_ridge_local_light", "gf_meadow.jpg", "gf_meadow_normal.jpg", Color(0.38, 0.50, 0.28), 1.0, 0.0, Vector3(26.0, 7.0, 26.0), true)
+	mat_light.uv1_world_triplanar = false
+	var base_mesh := _dz_unit_cyl(9, 0.66)
+	var cap_mesh := _dz_unit_cyl(9, 0.84)
+	var spike_mesh := _dz_unit_cyl(7, 0.03)
+	var spike_mat := _material("gf_far_spruce", "", "", Color(0.10, 0.20, 0.10), 1.0)
+	var count := 0
+	for i in range(22):
+		var ang := TAU * float(i) / 22.0 + _hash01(i * 3 + 1, 7) * 0.18
+		var radius := 1780.0 + _hash01(i * 5 + 2, 11) * 280.0
+		var w := 620.0 + _hash01(i * 7 + 3, 13) * 560.0
+		var depth := 300.0 + _hash01(i * 13 + 4, 19) * 180.0
+		var hgt := 110.0 + _hash01(i * 11 + 5, 17) * 90.0
+		var base_h := hgt * 0.78
+		var cap_h := hgt * 0.30
+		var yaw := -ang + (_hash01(i * 17 + 6, 23) - 0.5) * 0.10
+		var base_pos := Vector3(cos(ang) * radius, base_h * 0.5 - 22.0, sin(ang) * radius)
+		var inst := _mesh_instance(_skyline_root, base_mesh, mat if i % 2 == 0 else mat_light, make_transform(base_pos, yaw, Vector3(depth, base_h, w)), "FarRidge", false)
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var cap_pos := Vector3(base_pos.x, base_h - 22.0 + cap_h * 0.5 - 5.0, base_pos.z)
+		var cap := _mesh_instance(_skyline_root, cap_mesh, mat_light if i % 2 == 0 else mat, make_transform(cap_pos, yaw + 0.04, Vector3(depth * 0.72, cap_h, w * 0.62)), "FarRidgeCap", false)
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		count += 2
+		for si in range(3):
+			var sang := ang + (float(si) - 1.0) * 0.055
+			var sradius := radius - 260.0 - _hash01(i * 31 + si, 41) * 120.0
+			var sh := 130.0 + _hash01(i * 37 + si, 43) * 90.0
+			var spike_pos := Vector3(cos(sang) * sradius, sh * 0.5 - 26.0, sin(sang) * sradius)
+			var spike := _mesh_instance(_skyline_root, spike_mesh, spike_mat, make_transform(spike_pos, sang, Vector3(95.0, sh, 95.0)), "FarSpruce", false)
+			spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			count += 1
+	set_skyline_origin(spawn_transform.origin)
+	_set_skyline_time(time_of_day)
+	_enhancement_stats["skyline_layers"] = 1
+	_enhancement_stats["skyline_assets"] = count
+	_enhancement_stats["forest_skyline_0254"] = true
+
+
+func _finish_forest_build() -> void:
+	_enhancement_stats["greenforest_world_0254"] = true
+	_enhancement_stats["near_field_lod_0243"] = true
+	_enhancement_stats["tree_detail_end_m"] = 105.0
+	_enhancement_stats["palm_detail_end_m"] = 130.0
+	_enhancement_stats["shrub_detail_end_m"] = 90.0
+	_enhancement_stats["range_fade_mode"] = "dithered_self"
+	set_time_of_day("day")
+	var collider_total := 0
+	for cell_variant in _collider_cells.keys():
+		collider_total += (_collider_cells[cell_variant] as Array).size()
+	_enhancement_stats["streaming_colliders_total"] = collider_total
+	_enhancement_stats["streaming_collider_cells"] = _collider_cells.size()
+	_build_foliage_grid()
+	_streaming_tick(spawn_transform.origin, -spawn_transform.basis.z, spawn_transform.origin, Vector3.ZERO)
+	is_built = true
+
+
+func _gf_structure_kind(kind: String, o: Vector3, basis: Basis, w: float, d: float, h: float, hash_pick: int) -> bool:
+	# Forest-only structure kinds; returns false so shared kinds fall
+	# through to the desert catalogue in _dz_structure.
+	match kind:
+		"silo":
+			_dz_lcyl("dz_metal", o, basis, Vector3(0.0, h * 0.5, 0.0), w * 0.5, h, 0.0, 0.0, 0.0, 0.92, 14)
+			_dz_lcyl("dz_roof_metal", o, basis, Vector3(0.0, h + w * 0.22, 0.0), w * 0.54, w * 0.44, 0.0, 0.0, 0.0, 0.05, 14)
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(w * 0.52, h * 0.5, 0.0), Vector3(0.18, h, 0.5))
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.25, d * 0.7), Vector3(w * 0.8, 0.5, d * 0.6))
+			_add_cylinder_collider(o + basis * Vector3(0.0, 2.2, 0.0), w * 0.52, 4.4)
+		"greenhouse":
+			var gh := 2.9
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.18, 0.0), Vector3(w + 0.6, 0.36, d + 0.6))
+			for px in [-0.5, 0.5]:
+				_dz_lbox("dz_glass", o, basis, Vector3(px * w, gh * 0.55, 0.0), Vector3(0.12, gh * 1.1, d))
+				_dz_lbox("dz_white", o, basis, Vector3(px * w, gh + 0.35, 0.0), Vector3(0.2, 0.24, d))
+			for pz in [-0.5, -0.17, 0.17, 0.5]:
+				_dz_lbox("dz_white", o, basis, Vector3(0.0, gh * 0.55, pz * d), Vector3(w, gh * 1.1, 0.14))
+			var roof_pitch := 0.62
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_glass", o, basis, Vector3(sx * w * 0.25, gh + w * 0.16, 0.0), Vector3(w * 0.62, 0.1, d), 0.0, 0.0, sx * roof_pitch)
+			_dz_lbox("dz_white", o, basis, Vector3(0.0, gh + w * 0.30, 0.0), Vector3(0.28, 0.22, d))
+			_dz_lbox("gf_deer_belly", o, basis, Vector3(0.0, 0.55, 0.0), Vector3(w * 0.7, 0.4, d * 0.8))
+			_add_box_collider(o + basis * Vector3(0.0, 1.2, 0.0), Vector3(w, 2.4, d), atan2(-basis.z.x, -basis.z.z))
+		"tractor":
+			var paint := "gf_tractor_green" if hash_pick % 2 == 0 else "gf_tractor_red"
+			_dz_lbox(paint, o, basis, Vector3(0.0, 1.05, -0.9), Vector3(1.15, 0.85, 2.2))
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.55, 0.4), Vector3(1.3, 0.5, 3.4))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 2.0, 0.85), Vector3(1.35, 1.25, 1.3))
+			_dz_lbox(paint, o, basis, Vector3(0.0, 2.72, 0.85), Vector3(1.5, 0.18, 1.5))
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.42, 1.85, -1.5), 0.07, 1.1)
+			for tx in [-0.85, 0.85]:
+				_dz_lcyl("dz_metal_dark", o, basis, Vector3(tx, 0.78, 1.35), 0.78, 0.42, 0.0, 0.0, PI * 0.5, 1.0, 12)
+				_dz_lcyl("dz_yellow", o, basis, Vector3(tx * 1.06, 0.78, 1.35), 0.36, 0.46, 0.0, 0.0, PI * 0.5, 1.0, 10)
+				_dz_lcyl("dz_metal_dark", o, basis, Vector3(tx * 0.88, 0.45, -1.55), 0.45, 0.3, 0.0, 0.0, PI * 0.5, 1.0, 10)
+			_add_box_collider(o + basis * Vector3(0.0, 1.0, 0.0), Vector3(1.9, 2.0, 4.0), atan2(-basis.z.x, -basis.z.z))
+		"log_stack":
+			var layers := [4, 3, 2]
+			for li in range(layers.size()):
+				var count: int = layers[li]
+				for ci in range(count):
+					var lx := (float(ci) - float(count - 1) * 0.5) * 0.62
+					_dz_lcyl("dz_wood", o, basis, Vector3(lx, 0.32 + float(li) * 0.54, 0.0), 0.30, d, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			_add_box_collider(o + basis * Vector3(0.0, 0.9, 0.0), Vector3(w, 1.8, d), atan2(-basis.z.x, -basis.z.z))
+		"log_truck":
+			_dz_lbox("dz_metal_dark", o, basis, Vector3(0.0, 0.95, 0.0), Vector3(2.2, 0.5, d))
+			_dz_lbox("dz_orange", o, basis, Vector3(0.0, 1.7, -d * 0.38), Vector3(2.2, 1.5, 1.9))
+			_dz_lbox("dz_glass", o, basis, Vector3(0.0, 2.05, -d * 0.38 - 0.6), Vector3(2.0, 0.7, 0.8))
+			for li in range(3):
+				for ci in range(3 - (1 if li == 2 else 0)):
+					var lx := (float(ci) - 1.0) * 0.66 + (0.33 if li == 2 else 0.0)
+					_dz_lcyl("dz_wood", o, basis, Vector3(lx, 1.55 + float(li) * 0.56, d * 0.12), 0.31, d * 0.62, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			for wz in [-d * 0.36, d * 0.30, d * 0.42]:
+				for wx in [-1.05, 1.05]:
+					_dz_lcyl("dz_metal_dark", o, basis, Vector3(wx, 0.52, wz), 0.52, 0.34, 0.0, 0.0, PI * 0.5, 1.0, 10)
+			_add_box_collider(o + basis * Vector3(0.0, 1.2, 0.0), Vector3(2.4, 2.4, d), atan2(-basis.z.x, -basis.z.z))
+		"sawmill_hall":
+			var post_h := 4.6
+			for px in [-0.5, 0.5]:
+				for pz in [-0.5, 0.0, 0.5]:
+					_dz_lbox("dz_wood_dark", o, basis, Vector3(px * w, post_h * 0.5, pz * d), Vector3(0.42, post_h, 0.42))
+			var rp := 0.34
+			for sx in [-1.0, 1.0]:
+				_dz_lbox("dz_roof_metal", o, basis, Vector3(sx * w * 0.26, post_h + w * 0.075, 0.0), Vector3(w * 0.62, 0.16, d + 1.2), 0.0, 0.0, sx * rp)
+			_dz_lbox("dz_concrete", o, basis, Vector3(0.0, 0.12, 0.0), Vector3(w + 1.0, 0.24, d + 1.0))
+			_dz_lbox("dz_yellow", o, basis, Vector3(-w * 0.2, 1.0, 0.0), Vector3(1.2, 1.6, d * 0.5))
+			_dz_lcyl("dz_metal", o, basis, Vector3(-w * 0.2, 1.9, -d * 0.1), 0.75, 0.1, 0.0, 0.0, PI * 0.5, 1.0, 16)
+			_dz_lcyl("dz_wood", o, basis, Vector3(w * 0.18, 0.85, 0.0), 0.34, d * 0.55, 0.0, PI * 0.5, 0.0, 0.96, 9)
+			_add_box_collider(o + basis * Vector3(-w * 0.5, 2.0, 0.0), Vector3(0.6, 4.0, d), atan2(-basis.z.x, -basis.z.z))
+			_add_box_collider(o + basis * Vector3(w * 0.5, 2.0, 0.0), Vector3(0.6, 4.0, d), atan2(-basis.z.x, -basis.z.z))
+		"lighthouse":
+			_dz_lcyl("dz_white", o, basis, Vector3(0.0, h * 0.42, 0.0), w * 0.5, h * 0.84, 0.0, 0.0, 0.0, 0.68, 12)
+			_dz_lcyl("dz_sign_red", o, basis, Vector3(0.0, h * 0.55, 0.0), w * 0.42, h * 0.16, 0.0, 0.0, 0.0, 0.96, 12)
+			_dz_lcyl("dz_metal_dark", o, basis, Vector3(0.0, h * 0.86, 0.0), w * 0.44, 0.35, 0.0, 0.0, 0.0, 1.0, 12)
+			_dz_lcyl("dz_lamp", o, basis, Vector3(0.0, h * 0.94, 0.0), w * 0.3, h * 0.12, 0.0, 0.0, 0.0, 1.0, 10)
+			_dz_lcyl("dz_roof_red", o, basis, Vector3(0.0, h * 1.05, 0.0), w * 0.42, h * 0.12, 0.0, 0.0, 0.0, 0.05, 10)
+			_add_cylinder_collider(o + basis * Vector3(0.0, 2.4, 0.0), w * 0.52, 4.8)
+		"waterfall":
+			# Rock cleft + translucent falling sheet + foam pool.
+			_dz_lbox("dz_rock", o, basis, Vector3(-w * 0.42, h * 0.45, d * 0.18), Vector3(w * 0.4, h * 0.9, d * 0.7), 0.06)
+			_dz_lbox("dz_rock", o, basis, Vector3(w * 0.42, h * 0.45, d * 0.18), Vector3(w * 0.4, h * 0.9, d * 0.7), -0.05)
+			_dz_lbox("dz_rock", o, basis, Vector3(0.0, h * 0.92, d * 0.3), Vector3(w * 0.7, h * 0.2, d * 0.5))
+			_dz_lbox("gf_waterfall", o, basis, Vector3(0.0, h * 0.48, 0.0), Vector3(w * 0.34, h * 0.9, 0.5), 0.0, -0.10, 0.0)
+			_dz_lcyl("gf_waterfall", o, basis, Vector3(0.0, 0.35, -d * 0.22), w * 0.34, 0.7, 0.0, 0.0, 0.0, 1.0, 12)
+			_add_box_collider(o + basis * Vector3(-w * 0.42, 2.5, d * 0.18), Vector3(w * 0.4, 5.0, d * 0.7), atan2(-basis.z.x, -basis.z.z))
+			_add_box_collider(o + basis * Vector3(w * 0.42, 2.5, d * 0.18), Vector3(w * 0.4, 5.0, d * 0.7), atan2(-basis.z.x, -basis.z.z))
+		_:
+			return false
+	return true
+
+
+func _build_forest_scatter() -> void:
+	var root := Node3D.new()
+	root.name = "ForestScatter"
+	add_child(root)
+	if _dz_scatter_material == null:
+		_dz_scatter_material = StandardMaterial3D.new()
+		_dz_scatter_material.vertex_color_use_as_albedo = true
+		_dz_scatter_material.roughness = 0.95
+		_dz_scatter_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var cyl7 := _dz_unit_cyl(7, 0.4)
+	var cyl11 := _dz_unit_cyl(11, 0.05)
+	var sph := _dz_unit_sphere(10, 7)
+	var rock_mat := _material("gf_rock_gray_mat", "gf_rock_gray.jpg", "gf_rock_gray_normal.jpg", Color(0.92, 0.92, 0.90), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true, "gf_rock_gray_roughness.jpg")
+	rock_mat.vertex_color_use_as_albedo = true
+	var bark := Color(0.09, 0.055, 0.030)
+	var spruce_a := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.2, 0), Vector3(0.42, 2.4, 0.42), bark),
+		_dz_scatter_part(cyl11, Vector3(0, 3.2, 0), Vector3(3.6, 3.6, 3.6), Color(0.018, 0.052, 0.016)),
+		_dz_scatter_part(cyl11, Vector3(0, 5.4, 0), Vector3(2.7, 3.2, 2.7), Color(0.024, 0.064, 0.020)),
+		_dz_scatter_part(cyl11, Vector3(0, 7.4, 0), Vector3(1.8, 2.8, 1.8), Color(0.030, 0.076, 0.024)),
+	])
+	var spruce_b := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.3, 0), Vector3(0.38, 2.6, 0.38), bark),
+		_dz_scatter_part(cyl11, Vector3(0, 3.4, 0), Vector3(3.0, 4.0, 3.0), Color(0.016, 0.048, 0.015)),
+		_dz_scatter_part(cyl11, Vector3(0, 5.9, 0), Vector3(2.2, 3.4, 2.2), Color(0.022, 0.060, 0.019)),
+		_dz_scatter_part(cyl11, Vector3(0, 8.1, 0), Vector3(1.4, 3.0, 1.4), Color(0.028, 0.070, 0.022)),
+	])
+	var pine_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 2.8, 0), Vector3(0.36, 5.6, 0.36), Color(0.15, 0.085, 0.045)),
+		_dz_scatter_part(cyl11, Vector3(0, 6.3, 0), Vector3(4.8, 1.7, 4.8), Color(0.026, 0.068, 0.020)),
+		_dz_scatter_part(cyl11, Vector3(0.3, 7.5, 0.2), Vector3(3.6, 1.5, 3.6), Color(0.030, 0.074, 0.022)),
+		_dz_scatter_part(cyl11, Vector3(-0.2, 8.5, -0.1), Vector3(2.2, 1.2, 2.2), Color(0.034, 0.080, 0.024)),
+	])
+	var birch_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 2.6, 0), Vector3(0.30, 5.2, 0.30), Color(0.52, 0.53, 0.50)),
+		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.33, 0.22, 0.33), Color(0.06, 0.06, 0.055)),
+		_dz_scatter_part(cyl7, Vector3(0, 3.4, 0), Vector3(0.32, 0.2, 0.32), Color(0.06, 0.06, 0.055)),
+		_dz_scatter_part(sph, Vector3(0, 5.6, 0), Vector3(2.6, 2.2, 2.6), Color(0.090, 0.190, 0.045)),
+		_dz_scatter_part(sph, Vector3(0.5, 6.8, 0.3), Vector3(1.9, 1.7, 1.9), Color(0.110, 0.220, 0.055)),
+		_dz_scatter_part(sph, Vector3(-0.7, 4.9, -0.4), Vector3(1.6, 1.4, 1.6), Color(0.080, 0.170, 0.040)),
+	])
+	var leafy_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.6, 0), Vector3(0.46, 3.2, 0.46), Color(0.10, 0.06, 0.035)),
+		_dz_scatter_part(sph, Vector3(0, 4.6, 0), Vector3(3.2, 2.6, 3.2), Color(0.042, 0.105, 0.028)),
+		_dz_scatter_part(sph, Vector3(0.8, 5.8, 0.4), Vector3(2.4, 2.0, 2.4), Color(0.052, 0.125, 0.035)),
+		_dz_scatter_part(sph, Vector3(-0.9, 5.4, -0.5), Vector3(2.2, 1.8, 2.2), Color(0.038, 0.098, 0.026)),
+		_dz_scatter_part(sph, Vector3(0.2, 4.0, 0.9), Vector3(1.8, 1.5, 1.8), Color(0.046, 0.115, 0.030)),
+	])
+	var oak_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.45, 0), Vector3(0.75, 2.9, 0.75), bark),
+		_dz_scatter_part(cyl7, Vector3(0.9, 3.2, 0.2), Vector3(0.3, 2.0, 0.3), bark, 0.0, 0.0, -0.6),
+		_dz_scatter_part(sph, Vector3(0, 5.0, 0), Vector3(4.6, 2.8, 4.6), Color(0.038, 0.098, 0.026)),
+		_dz_scatter_part(sph, Vector3(1.6, 5.9, 0.6), Vector3(3.4, 2.2, 3.4), Color(0.046, 0.112, 0.030)),
+		_dz_scatter_part(sph, Vector3(-1.7, 5.7, -0.5), Vector3(3.2, 2.1, 3.2), Color(0.034, 0.090, 0.024)),
+		_dz_scatter_part(sph, Vector3(0.3, 4.4, 1.5), Vector3(2.6, 1.9, 2.6), Color(0.042, 0.104, 0.028)),
+	])
+	var dead_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 1.9, 0), Vector3(0.45, 3.8, 0.45), Color(0.16, 0.13, 0.10), 0.0, 0.0, 0.06),
+		_dz_scatter_part(cyl7, Vector3(0.8, 3.4, 0.1), Vector3(0.18, 2.0, 0.18), Color(0.16, 0.13, 0.10), 0.0, 0.0, -0.85),
+		_dz_scatter_part(cyl7, Vector3(-0.7, 3.0, -0.2), Vector3(0.15, 1.7, 0.15), Color(0.18, 0.15, 0.11), 0.0, 0.35, 0.9),
+	])
+	var bush_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(sph, Vector3(0, 0.42, 0), Vector3(1.35, 0.78, 1.25), Color(0.035, 0.090, 0.026)),
+		_dz_scatter_part(sph, Vector3(0.5, 0.6, 0.25), Vector3(0.86, 0.56, 0.8), Color(0.045, 0.110, 0.032)),
+		_dz_scatter_part(sph, Vector3(-0.55, 0.52, -0.3), Vector3(0.78, 0.5, 0.72), Color(0.030, 0.082, 0.024)),
+		_dz_scatter_part(sph, Vector3(0.35, 0.78, -0.2), Vector3(0.13, 0.13, 0.13), Color(0.32, 0.05, 0.04)),
+		_dz_scatter_part(sph, Vector3(-0.3, 0.7, 0.4), Vector3(0.12, 0.12, 0.12), Color(0.32, 0.05, 0.04)),
+	])
+	var fern_parts: Array = []
+	for fi in range(6):
+		var fang := TAU * float(fi) / 6.0
+		fern_parts.append(_dz_scatter_part(cyl11, Vector3(cos(fang) * 0.22, 0.34, sin(fang) * 0.22), Vector3(0.15, 0.85, 0.44), Color(0.028, 0.095, 0.028), -fang, cos(fang) * 0.72, sin(fang) * 0.72))
+	fern_parts.append(_dz_scatter_part(cyl11, Vector3(0, 0.4, 0), Vector3(0.14, 0.8, 0.4), Color(0.034, 0.110, 0.032)))
+	var fern_mesh := _dz_scatter_mesh(fern_parts)
+	var flower_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.26, 0), Vector3(0.05, 0.52, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0, 0.58, 0), Vector3(0.17, 0.17, 0.17), Color(0.55, 0.34, 0.02)),
+		_dz_scatter_part(cyl7, Vector3(0.28, 0.22, 0.14), Vector3(0.05, 0.44, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.28, 0.5, 0.14), Vector3(0.15, 0.15, 0.15), Color(0.62, 0.62, 0.57)),
+		_dz_scatter_part(cyl7, Vector3(-0.24, 0.2, -0.1), Vector3(0.05, 0.4, 0.05), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(-0.24, 0.46, -0.1), Vector3(0.14, 0.14, 0.14), Color(0.24, 0.14, 0.38)),
+	])
+	var mushroom_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.18, 0), Vector3(0.12, 0.36, 0.12), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(0, 0.4, 0), Vector3(0.44, 0.2, 0.44), Color(0.34, 0.09, 0.04)),
+		_dz_scatter_part(cyl7, Vector3(0.3, 0.13, 0.18), Vector3(0.09, 0.26, 0.09), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(0.3, 0.29, 0.18), Vector3(0.3, 0.14, 0.3), Color(0.30, 0.08, 0.035)),
+		_dz_scatter_part(cyl7, Vector3(-0.26, 0.1, -0.14), Vector3(0.08, 0.2, 0.08), Color(0.42, 0.36, 0.26)),
+		_dz_scatter_part(sph, Vector3(-0.26, 0.22, -0.14), Vector3(0.24, 0.11, 0.24), Color(0.38, 0.12, 0.05)),
+	])
+	var stump_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.27, 0), Vector3(0.85, 0.55, 0.85), Color(0.20, 0.135, 0.08)),
+		_dz_scatter_part(sph, Vector3(0, 0.55, 0), Vector3(0.78, 0.1, 0.78), Color(0.36, 0.27, 0.18)),
+	])
+	var log_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.26, 0), Vector3(0.5, 4.8, 0.5), Color(0.14, 0.09, 0.05), 0.0, PI * 0.5, 0.0),
+		_dz_scatter_part(sph, Vector3(0.05, 0.52, -0.8), Vector3(0.45, 0.18, 1.6), Color(0.05, 0.11, 0.035)),
+		_dz_scatter_part(cyl7, Vector3(0.35, 0.5, 1.2), Vector3(0.12, 0.8, 0.12), Color(0.14, 0.09, 0.05), 0.0, 0.0, -0.7),
+	])
+	var reed_parts: Array = []
+	for ri in range(6):
+		var rang := TAU * float(ri) / 6.0
+		reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.3, 0.75, sin(rang) * 0.3), Vector3(0.08, 1.55, 0.08), Color(0.07, 0.16, 0.05), 0.0, cos(rang) * 0.16, sin(rang) * 0.16))
+		if ri % 2 == 0:
+			reed_parts.append(_dz_scatter_part(cyl7, Vector3(cos(rang) * 0.38, 1.52, sin(rang) * 0.38), Vector3(0.09, 0.36, 0.09), Color(0.20, 0.12, 0.05), 0.0, cos(rang) * 0.16, sin(rang) * 0.16))
+	var reed_mesh := _dz_scatter_mesh(reed_parts)
+	var hay_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl11, Vector3(0, 0.75, 0), Vector3(1.5, 1.25, 1.5), Color(0.46, 0.33, 0.10), 0.0, PI * 0.5, 0.0),
+	])
+	var wheat_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.57, 0), Vector3(0.34, 1.15, 0.34), Color(0.44, 0.32, 0.09)),
+		_dz_scatter_part(cyl7, Vector3(0.45, 0.5, 0.28), Vector3(0.3, 1.0, 0.3), Color(0.48, 0.35, 0.10)),
+		_dz_scatter_part(cyl7, Vector3(-0.4, 0.53, -0.22), Vector3(0.31, 1.06, 0.31), Color(0.41, 0.29, 0.08)),
+	])
+	var corn_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.95, 0), Vector3(0.09, 1.9, 0.09), Color(0.05, 0.13, 0.035)),
+		_dz_scatter_part(cyl11, Vector3(0, 1.15, 0), Vector3(0.55, 0.95, 0.55), Color(0.055, 0.14, 0.038)),
+		_dz_scatter_part(cyl7, Vector3(0.5, 0.85, 0.3), Vector3(0.08, 1.7, 0.08), Color(0.05, 0.13, 0.035)),
+		_dz_scatter_part(cyl11, Vector3(0.5, 1.05, 0.3), Vector3(0.48, 0.85, 0.48), Color(0.05, 0.13, 0.035)),
+	])
+	var sunflower_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(cyl7, Vector3(0, 0.85, 0), Vector3(0.08, 1.7, 0.08), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.12, 1.78, 0), Vector3(0.56, 0.56, 0.16), Color(0.56, 0.37, 0.03), 0.0, 0.0, 0.35),
+		_dz_scatter_part(sph, Vector3(0.16, 1.78, 0.02), Vector3(0.34, 0.34, 0.18), Color(0.18, 0.10, 0.03), 0.0, 0.0, 0.35),
+		_dz_scatter_part(cyl7, Vector3(0.55, 0.75, 0.35), Vector3(0.07, 1.5, 0.07), Color(0.05, 0.12, 0.03)),
+		_dz_scatter_part(sph, Vector3(0.64, 1.56, 0.35), Vector3(0.46, 0.46, 0.14), Color(0.56, 0.37, 0.03), 0.0, 0.0, 0.3),
+	])
+	var rock_small_meshes: Array = [_dz_rock_mesh(51, Color(0.52, 0.53, 0.52)), _dz_rock_mesh(52, Color(0.47, 0.48, 0.47)), _dz_rock_mesh(53, Color(0.57, 0.57, 0.55))]
+	var rock_medium_meshes: Array = [_dz_rock_mesh(61, Color(0.50, 0.51, 0.50)), _dz_rock_mesh(62, Color(0.55, 0.56, 0.54)), _dz_rock_mesh(63, Color(0.46, 0.47, 0.46))]
+	var rock_large_meshes: Array = [_dz_rock_mesh(71, Color(0.54, 0.55, 0.53)), _dz_rock_mesh(72, Color(0.49, 0.50, 0.49)), _dz_rock_mesh(73, Color(0.58, 0.58, 0.56))]
+	var cfg := {
+		"spruce": {"meshes": [spruce_a, spruce_b], "base": 1.45, "range": 650.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"pine": {"mesh": pine_mesh, "base": 1.5, "range": 650.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"birch": {"mesh": birch_mesh, "base": 1.4, "range": 560.0, "shadow": true, "sink": 0.10, "tree": true, "foliage_every": 14},
+		"leafy": {"mesh": leafy_mesh, "base": 1.4, "range": 600.0, "shadow": true, "sink": 0.12, "tree": true, "foliage_every": 14},
+		"oak": {"mesh": oak_mesh, "base": 1.5, "range": 650.0, "shadow": true, "sink": 0.15, "tree": true, "foliage_every": 8},
+		"dead_tree": {"mesh": dead_mesh, "base": 1.2, "range": 430.0, "shadow": true, "sink": 0.06, "collider_r": 0.30, "collider_h": 2.6},
+		"bush": {"mesh": bush_mesh, "base": 1.0, "range": 240.0, "shadow": false, "sink": 0.14, "foliage_every": 8},
+		"fern": {"mesh": fern_mesh, "base": 1.0, "range": 170.0, "shadow": false, "sink": 0.06},
+		"flower": {"mesh": flower_mesh, "base": 1.0, "range": 150.0, "shadow": false, "sink": 0.02},
+		"mushroom": {"mesh": mushroom_mesh, "base": 1.0, "range": 130.0, "shadow": false, "sink": 0.02},
+		"stump": {"mesh": stump_mesh, "base": 1.0, "range": 260.0, "shadow": true, "sink": 0.05, "collider_r": 0.42, "collider_h": 0.6},
+		"fallen_log": {"mesh": log_mesh, "base": 1.0, "range": 280.0, "shadow": true, "sink": 0.05, "collider_r": 0.55, "collider_h": 0.7},
+		"reed": {"mesh": reed_mesh, "base": 1.0, "range": 240.0, "shadow": false, "sink": 0.18},
+		"hay_bale": {"mesh": hay_mesh, "base": 1.0, "range": 340.0, "shadow": true, "sink": 0.04, "collider_r": 0.8, "collider_h": 1.2},
+		"crop_wheat": {"mesh": wheat_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
+		"crop_corn": {"mesh": corn_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
+		"crop_sunflower": {"mesh": sunflower_mesh, "base": 1.15, "range": 380.0, "shadow": false, "sink": 0.03},
+		"rock_small": {"meshes": rock_small_meshes, "material": rock_mat, "base": 0.55, "range": 240.0, "shadow": false, "sink": 0.16},
+		"rock_medium": {"meshes": rock_medium_meshes, "material": rock_mat, "base": 1.15, "range": 430.0, "shadow": true, "sink": 0.22, "collider_r": 0.62, "collider_h": 1.6},
+		"rock_large": {"meshes": rock_large_meshes, "material": rock_mat, "base": 2.7, "range": 1100.0, "shadow": true, "sink": 0.45, "collider_r": 1.35, "collider_h": 2.4},
+	}
+	var scatter: Dictionary = _dz_data().get("scatter", {})
+	var total := 0
+	var trees := 0
+	for kind_variant in cfg.keys():
+		var kind := String(kind_variant)
+		var conf: Dictionary = cfg[kind]
+		var items: Array = scatter.get(kind, [])
+		if items.is_empty():
+			continue
+		var buckets: Dictionary = {}
+		var base := float(conf.get("base", 1.0))
+		var sink := float(conf.get("sink", 0.05))
+		var collider_r := float(conf.get("collider_r", 0.0))
+		var collider_h := float(conf.get("collider_h", 2.0))
+		var is_tree := bool(conf.get("tree", false))
+		var foliage_every := int(conf.get("foliage_every", 0))
+		var item_index := 0
+		for item_variant in items:
+			var item: Array = item_variant
+			item_index += 1
+			if item.size() < 4:
+				continue
+			var px := float(item[0])
+			var pz := float(item[1])
+			var sc := float(item[2]) * base
+			var pyaw := float(item[3])
+			var pos := Vector3(px, height_at(px, pz) - sink, pz)
+			var key := "%d,%d" % [int(floor(px / DZ_CHUNK_M)), int(floor(pz / DZ_CHUNK_M))]
+			if not buckets.has(key):
+				buckets[key] = []
+			(buckets[key] as Array).append(make_transform(pos, pyaw, Vector3.ONE * sc))
+			total += 1
+			if is_tree:
+				trees += 1
+			if collider_r > 0.0:
+				_add_cylinder_collider(Vector3(px, pos.y + collider_h * 0.5, pz), collider_r * sc, collider_h * sc)
+			elif is_tree and _road_clearance_xz(pos) < 22.0:
+				# Only roadside trees need physics; deep forest stays
+				# collider-free so the streaming grid stays light.
+				_add_cylinder_collider(Vector3(px, pos.y + 1.5 * sc, pz), 0.34 * sc, 3.0 * sc)
+			elif kind == "rock_small" and sc > 0.70:
+				_add_cylinder_collider(Vector3(px, pos.y + 0.35 * sc, pz), 0.30 * sc, 0.7 * sc)
+			if foliage_every > 0 and item_index % foliage_every == 0:
+				_foliage_points.append(pos)
+		var kind_meshes: Array = conf.get("meshes", [])
+		var kind_mat: Material = conf.get("material", _dz_scatter_material) as Material
+		for key_variant in buckets.keys():
+			var bucket_xforms: Array = buckets[key_variant]
+			if kind_meshes.is_empty():
+				_dz_emit_multimesh(root, conf["mesh"] as Mesh, kind_mat, bucket_xforms, "GfScatter_" + kind, float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+			else:
+				for vi in range(kind_meshes.size()):
+					var sub: Array = []
+					for ti in range(bucket_xforms.size()):
+						if ti % kind_meshes.size() == vi:
+							sub.append(bucket_xforms[ti])
+					_dz_emit_multimesh(root, kind_meshes[vi] as Mesh, kind_mat, sub, "GfScatter_" + kind + "_v" + str(vi), float(conf.get("range", 300.0)), bool(conf.get("shadow", false)))
+	_enhancement_stats["forest_scatter"] = total
+	_enhancement_stats["forest_trees"] = trees
+	_enhancement_stats["forest_scatter_0254"] = true
+
+
+func _build_forest_extras() -> void:
+	var root := Node3D.new()
+	root.name = "ForestExtras"
+	add_child(root)
+	# Deer herds: merged low-poly animals grazing the meadows and
+	# clearings (static poses, one collider each).
+	var deer_count := 0
+	for group_variant in _dz_data().get("deerGroups", []):
+		var group: Array = group_variant
+		for deer_variant in group:
+			var deer: Array = deer_variant
+			if deer.size() < 3:
+				continue
+			var dx := float(deer[0])
+			var dz := float(deer[1])
+			var dyaw := float(deer[2])
+			var o := Vector3(dx, height_at(dx, dz), dz)
+			var dbasis := Basis(Vector3.UP, dyaw)
+			var graze := int(absf(dx) * 3.0 + absf(dz) * 7.0) % 3 == 0
+			_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.02, 0.0), Vector3(0.52, 0.62, 1.35))
+			_dz_lbox("gf_deer_belly", o, dbasis, Vector3(0.0, 0.78, 0.05), Vector3(0.46, 0.3, 1.1))
+			if graze:
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 0.95, -0.85), Vector3(0.2, 0.62, 0.2), 0.0, 0.85, 0.0)
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 0.62, -1.15), Vector3(0.26, 0.3, 0.5), 0.0, 0.5, 0.0)
+			else:
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.45, -0.75), Vector3(0.2, 0.65, 0.2), 0.0, -0.35, 0.0)
+				_dz_lbox("gf_deer", o, dbasis, Vector3(0.0, 1.72, -1.02), Vector3(0.26, 0.3, 0.52))
+				if int(absf(dx) * 5.0 + absf(dz)) % 2 == 0:
+					for ax in [-0.12, 0.12]:
+						_dz_lbox("dz_sign_cream", o, dbasis, Vector3(ax, 2.05, -0.95), Vector3(0.06, 0.45, 0.06), 0.0, 0.3, ax * 2.4)
+			for lx in [-0.18, 0.18]:
+				for lz in [-0.5, 0.5]:
+					_dz_lbox("gf_deer", o, dbasis, Vector3(lx, 0.38, lz), Vector3(0.11, 0.76, 0.11))
+			_dz_lbox("gf_deer_belly", o, dbasis, Vector3(0.0, 1.12, 0.72), Vector3(0.16, 0.3, 0.1), 0.0, 0.4, 0.0)
+			_add_cylinder_collider(o + dbasis * Vector3(0.0, 0.9, 0.0), 0.55, 1.8)
+			deer_count += 1
+	var deer_chunks := _dz_flush_merge(root)
+	_enhancement_stats["forest_deer"] = deer_count
+	_enhancement_stats["forest_deer_chunks"] = deer_chunks
+	# Bird flocks: three V-formations circling the lake, meadows and
+	# summit; animated in _gf_animate_birds from _dz_animate.
+	_gf_bird_flocks.clear()
+	var bird_mesh := _dz_scatter_mesh([
+		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0, 0), Vector3(1.5, 0.05, 0.34), Color(0.08, 0.08, 0.10)),
+		_dz_scatter_part(_dz_unit_box(), Vector3(0, 0, 0.05), Vector3(0.22, 0.1, 0.85), Color(0.10, 0.10, 0.12)),
+	])
+	var bird_mat := _dz_material("gf_bird")
+	var flock_specs := [
+		[3050.0, 2200.0, 62.0, 340.0, 0.055],
+		[1900.0, 1900.0, 74.0, 420.0, 0.045],
+		[1850.0, 420.0, 196.0, 380.0, 0.05],
+	]
+	for fi in range(flock_specs.size()):
+		var spec: Array = flock_specs[fi]
+		var flock := Node3D.new()
+		flock.name = "BirdFlock%d" % fi
+		root.add_child(flock)
+		for bi in range(7):
+			var bird := MeshInstance3D.new()
+			bird.mesh = bird_mesh
+			bird.material_override = bird_mat
+			bird.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var row := float((bi + 1) / 2)
+			var side := 1.0 if bi % 2 == 0 else -1.0
+			if bi == 0:
+				side = 0.0
+				row = 0.0
+			bird.position = Vector3(side * row * 3.2, -row * 0.5, row * 3.4)
+			flock.add_child(bird)
+		_gf_bird_flocks.append({
+			"node": flock,
+			"cx": float(spec[0]), "cz": float(spec[1]),
+			"h": float(spec[2]), "r": float(spec[3]),
+			"speed": float(spec[4]), "phase": float(fi) * 2.1,
+		})
+	_enhancement_stats["forest_bird_flocks"] = _gf_bird_flocks.size()
+	# Chimney smoke over the village and farmsteads.
+	var smoke_count := 0
+	for point_variant in _dz_data().get("smokePoints", []):
+		var point: Array = point_variant
+		if point.size() < 2:
+			continue
+		var sx := float(point[0])
+		var sz := float(point[1])
+		var process := ParticleProcessMaterial.new()
+		process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		process.emission_sphere_radius = 0.3
+		process.direction = Vector3(0.0, 1.0, 0.0)
+		process.spread = 10.0
+		process.initial_velocity_min = 1.1
+		process.initial_velocity_max = 1.9
+		process.gravity = Vector3(0.35, 0.55, 0.0)
+		process.damping_min = 0.1
+		process.damping_max = 0.4
+		process.scale_min = 0.8
+		process.scale_max = 2.2
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.82, 0.83, 0.85, 0.0))
+		ramp.set_color(1, Color(0.82, 0.83, 0.85, 0.0))
+		ramp.add_point(0.15, Color(0.82, 0.83, 0.85, 0.34))
+		ramp.add_point(0.7, Color(0.84, 0.85, 0.87, 0.16))
+		var ramp_texture := GradientTexture1D.new()
+		ramp_texture.gradient = ramp
+		ramp_texture.width = 32
+		process.color_ramp = ramp_texture
+		var smoke_mat := StandardMaterial3D.new()
+		smoke_mat.albedo_color = Color.WHITE
+		smoke_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		smoke_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		smoke_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		smoke_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		smoke_mat.vertex_color_use_as_albedo = true
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.6, 1.6)
+		quad.material = smoke_mat
+		var emitter := GPUParticles3D.new()
+		emitter.name = "ChimneySmoke"
+		emitter.amount = 22
+		emitter.lifetime = 4.2
+		emitter.randomness = 0.7
+		emitter.local_coords = false
+		emitter.process_material = process
+		emitter.draw_pass_1 = quad
+		emitter.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		emitter.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		emitter.visibility_aabb = AABB(Vector3(-14.0, -2.0, -14.0), Vector3(28.0, 26.0, 28.0))
+		emitter.position = Vector3(sx, height_at(sx, sz) + 6.4, sz)
+		emitter.emitting = true
+		root.add_child(emitter)
+		smoke_count += 1
+	_enhancement_stats["forest_smoke_points"] = smoke_count
+	_enhancement_stats["forest_extras_0254"] = true
+
+
+func _gf_animate_birds() -> void:
+	for entry in _gf_bird_flocks:
+		var flock := entry["node"] as Node3D
+		if flock == null or not is_instance_valid(flock):
+			continue
+		var ang := _elapsed * float(entry["speed"]) + float(entry["phase"])
+		var r := float(entry["r"])
+		flock.position = Vector3(
+			float(entry["cx"]) + cos(ang) * r,
+			float(entry["h"]) + sin(_elapsed * 0.23 + float(entry["phase"])) * 3.0,
+			float(entry["cz"]) + sin(ang) * r)
+		flock.rotation.y = -ang
+		var flap := sin(_elapsed * 7.0 + float(entry["phase"])) * 0.35
+		for bi in range(flock.get_child_count()):
+			var bird := flock.get_child(bi) as Node3D
+			if bird != null:
+				bird.rotation.z = flap if bi % 2 == 0 else -flap

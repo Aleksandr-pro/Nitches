@@ -220,6 +220,8 @@ var _richtown_card: Button
 var _desert_card: Button
 var _desert_card_subtitle: Label
 var _desert_lock_icon: Control
+var _forest_card: Button
+var _forest_card_subtitle: Label
 var _world_title_label: Label
 var _paint_options: Array[Dictionary] = [
     {"id": "red", "name": "Красный", "color": Color(0.48, 0.025, 0.035)},
@@ -310,6 +312,7 @@ func get_smoke_state() -> Dictionary:
         "achievement_cards_0236": _achievement_card_count,
         "locked_world_conditions_0236": _world_progress_label != null and _world_detail_label != null,
         "desert_world_0247": _desert_card != null,
+        "forest_world_0254": _forest_card != null,
         "current_world_id": _current_world_id,
         "desert_unlocked_0247": _desert_unlocked(),
         "worlds_free_for_all_0248": WORLDS_FREE_FOR_ALL,
@@ -1899,6 +1902,13 @@ func _build_worlds_panel(parent: Node) -> Control:
     _desert_card.add_child(_desert_lock_icon)
     _desert_card.pressed.connect(func() -> void: _on_world_card_pressed("desert"))
     locked_column.add_child(_desert_card)
+    _forest_card = _tile("ЗЕЛЁНЫЙ ЛЕС", "бесплатно • открыт • 4×4 км • озеро • холмы • ферма", Color(0.30, 0.55, 0.28), Vector2(0.0, 106.0), 21)
+    _forest_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    for child in _forest_card.get_children():
+        if child is Label:
+            _forest_card_subtitle = child as Label
+    _forest_card.pressed.connect(func() -> void: _on_world_card_pressed("greenforest"))
+    locked_column.add_child(_forest_card)
 
     var detail_panel := _panel_box(vbox)
     detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2044,7 +2054,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.2.53-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.2.54-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2258,7 +2268,7 @@ func _update_world_progress() -> void:
 ## card asks main to rebuild the world and then starts driving there.
 func _world_display_name(world_id: String = "") -> String:
     var id := world_id if not world_id.is_empty() else _current_world_id
-    return "ПУСТЫННЫЙ КАНЬОН" if id == "desert" else "RICHTOWN"
+    return "ПУСТЫННЫЙ КАНЬОН" if id == "desert" else ("ЗЕЛЁНЫЙ ЛЕС" if id == "greenforest" else "RICHTOWN")
 
 
 func _desert_unlocked() -> bool:
@@ -2276,7 +2286,7 @@ func _on_world_card_pressed(world_id: String) -> void:
 
 
 func set_current_world(world_id: String) -> void:
-    if world_id != "richtown" and world_id != "desert":
+    if world_id != "richtown" and world_id != "desert" and world_id != "greenforest":
         return
     _current_world_id = world_id
     _refresh_world_cards()
@@ -2287,14 +2297,19 @@ func _richtown_detail_text() -> String:
     return "Открытый прибрежный город: центральный деловой район и главная башня, мечеть, опера и бульвары с кафе, центральный парк, набережная, порт и Остров-Пальма. Полноэкранная карта строит маршрут по настоящим дорогам, показывает районы и точки интереса, а быстрый переход переносит выбранный автомобиль к выбранному месту."
 
 
+func _forest_detail_text() -> String:
+    return "Открытый лесной мир 4×4 км: густой тёмный лес и хвойные холмы с серпантином и смотровой площадкой, центральные луга со скоростной прямой, большое озеро с дамбой, островом и посёлком на восточном берегу, река с водопадом, болото с гатью, фермерская долина с полями, мельницей и теплицами, лесопилка и скалистый утёс с тоннелем и мостом над ущельем. Около 55 км дорог: асфальтовое кольцо, грунтовки и лесные тропы. Трава, подстилка, грязь и полевая земля держат машину по-разному — после дождя у воды особенно скользко."
+
+
 func _desert_detail_text() -> String:
     return "Открытая пустынная котловина 4×4 км: городок Дюны со стартом на главной улице, 55 км дорог кольцом и тропами, каньоны и серпантин у северных мез, карьер с техникой, нефтяное поле с качалками, солончак для рекордов скорости, море дюн, ветроферма и оазис с озером и пальмами. Асфальт, гравий, утрамбованный песок, соль и дюны держат машину по-разному — следите за сцеплением и пылью из-под колёс."
 
 
 func _refresh_world_cards() -> void:
     var desert := _current_world_id == "desert"
+    var forest := _current_world_id == "greenforest"
     if _richtown_card != null:
-        _set_picture_card(_richtown_card, MENU_WORLD_TEXTURE, "RICHTOWN" + ("" if desert else " • ТЕКУЩИЙ МИР"), "игровой обзор города • побережье • Остров-Пальма")
+        _set_picture_card(_richtown_card, MENU_WORLD_TEXTURE, "RICHTOWN" + ("" if (desert or forest) else " • ТЕКУЩИЙ МИР"), "игровой обзор города • побережье • Остров-Пальма")
     if _desert_card != null:
         var unlocked := _desert_unlocked()
         _desert_card.disabled = not unlocked
@@ -2311,8 +2326,12 @@ func _refresh_world_cards() -> void:
                 _desert_card_subtitle.text = "бесплатно • открыт • 4×4 км • каньоны • солончак • оазис" if WORLDS_FREE_FOR_ALL else "открыт • 4×4 км • каньоны • солончак • оазис"
     if _world_title_label != null:
         _world_title_label.text = "%s — ТЕКУЩИЙ МИР" % _world_display_name()
+    if _forest_card != null:
+        _forest_card.text = "ЗЕЛЁНЫЙ ЛЕС" + (" • ТЕКУЩИЙ" if forest else "")
+        if _forest_card_subtitle != null:
+            _forest_card_subtitle.text = "ТЕКУЩИЙ МИР • 4×4 км • озеро • холмы • ферма" if forest else "бесплатно • открыт • 4×4 км • озеро • холмы • ферма"
     if _world_detail_label != null:
-        _world_detail_label.text = _desert_detail_text() if desert else _richtown_detail_text()
+        _world_detail_label.text = _forest_detail_text() if forest else (_desert_detail_text() if desert else _richtown_detail_text())
     if _world_map_button != null:
         _world_map_button.text = "⌖  ОТКРЫТЬ КАРТУ: %s" % _world_display_name()
 
