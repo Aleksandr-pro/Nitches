@@ -67,8 +67,8 @@ def leaf_cluster(rng, dark, mid, light, leaf_len, leaf_wid, fill_dark):
     d = ImageDraw.Draw(img)
     ox, oy = SS * 0.5, SS * 0.97
     branches = []
-    for i in range(9):
-        ang = -math.pi / 2.0 + (i - 4) * 0.30 + float(rng.uniform(-0.08, 0.08))
+    for i in range(11):
+        ang = -math.pi / 2.0 + (i - 5) * 0.27 + float(rng.uniform(-0.08, 0.08))
         pts = [(ox, oy)]
         x, y = ox, oy
         a = ang
@@ -95,7 +95,7 @@ def leaf_cluster(rng, dark, mid, light, leaf_len, leaf_wid, fill_dark):
     for pts, _a in branches:
         for pi in range(1, len(pts)):
             bx, by = pts[pi]
-            for _ in range(11):
+            for _ in range(16):
                 ja = float(rng.random() * math.tau)
                 jr = float(rng.uniform(0.0, SS * 0.085))
                 x, y = bx + math.cos(ja) * jr, by + math.sin(ja) * jr
@@ -126,7 +126,7 @@ def spruce_spray(rng):
             t = i / 24.0
             d_ang = math.atan2(pts[i + 1][1] - y, pts[i + 1][0] - x)
             seg = SS * 0.9 / 24.0
-            steps = max(2, int(seg / 7.0))
+            steps = max(2, int(seg / 5.0))
             for s_i in range(steps):
                 fx = x + math.cos(d_ang) * seg * (s_i / steps)
                 fy = y + math.sin(d_ang) * seg * (s_i / steps)
@@ -175,15 +175,65 @@ def pine_spray(rng):
     return img.resize((CARD, CARD), Image.LANCZOS)
 
 
+def fern_frond(rng):
+    img = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    dark, mid, light = (16, 48, 16), (30, 84, 26), (66, 132, 48)
+    ox, oy = SS * 0.5, SS * 0.99
+    for fi in range(7):
+        ang = -math.pi / 2.0 + (fi - 3) * 0.34 + float(rng.uniform(-0.05, 0.05))
+        length = SS * float(rng.uniform(0.62, 0.88))
+        droop = float(rng.uniform(0.25, 0.5))
+        pts = []
+        for si in range(21):
+            tt = si / 20.0
+            x = ox + math.cos(ang) * length * tt
+            y = oy + math.sin(ang) * length * tt + droop * length * tt * tt
+            pts.append((x, y))
+        d.line(pts, fill=(52, 66, 30, 255), width=5)
+        for si in range(2, 21):
+            tt = si / 20.0
+            x, y = pts[si]
+            tang = math.atan2(pts[si][1] - pts[si - 1][1],
+                              pts[si][0] - pts[si - 1][0])
+            plen = SS * 0.085 * math.sin(math.pi * (0.12 + 0.8 * tt)) \
+                * (1.0 - tt * 0.55)
+            for side in (-1.0, 1.0):
+                la = tang + side * 0.95
+                for li in range(5):
+                    lt = (li + 1) / 5.0
+                    lx = x + math.cos(la) * plen * lt
+                    ly = y + math.sin(la) * plen * lt
+                    r = SS * 0.012 * (1.0 - lt * 0.45)
+                    col = _shade(rng, dark, mid) if li < 3 else _shade(rng, mid, light)
+                    d.ellipse([lx - r, ly - r * 0.55, lx + r, ly + r * 0.55],
+                              fill=col + (255,))
+                d.line([(x, y), (x + math.cos(la) * plen,
+                                 y + math.sin(la) * plen)],
+                       fill=(44, 72, 30, 255), width=3)
+    return img.resize((CARD, CARD), Image.LANCZOS)
+
+
+def single_leaf(rng):
+    sz = 256
+    img = Image.new("RGBA", (sz, sz), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.line([(sz * 0.5, sz * 0.98), (sz * 0.5, sz * 0.80)],
+           fill=(84, 64, 34, 255), width=7)
+    _leaf(d, sz * 0.5, sz * 0.46, -math.pi / 2.0, sz * 0.86, sz * 0.30,
+          (44, 96, 30), (86, 148, 54), (140, 190, 96))
+    return img
+
+
 def grass_tuft(rng):
     img = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     base = (SS * 0.5, SS * 1.0)
-    for _ in range(88):
+    for _ in range(124):
         spread = float(rng.uniform(-0.62, 0.62))
         h = SS * float(rng.uniform(0.42, 0.82))
         bend = spread * SS * 0.22 + float(rng.uniform(-0.03, 0.03)) * SS
-        bx = base[0] + float(rng.uniform(-0.09, 0.09)) * SS
+        bx = base[0] + float(rng.uniform(-0.13, 0.13)) * SS
         tip = (bx + math.sin(spread) * h * 0.55 + bend, SS - math.cos(spread) * h)
         midp = (bx + math.sin(spread) * h * 0.26 + bend * 0.35,
                 SS - math.cos(spread) * h * 0.52)
@@ -324,13 +374,15 @@ def main():
 
     save_card("gf_leaf_cluster.png", leaf_cluster(
         rng, (16, 42, 12), (34, 84, 24), (92, 152, 54),
-        SS * 0.052, SS * 0.020, 200))
+        SS * 0.041, SS * 0.016, 330))
     save_card("gf_birch_cluster.png", leaf_cluster(
         rng, (34, 74, 22), (66, 124, 40), (140, 190, 88),
-        SS * 0.036, SS * 0.015, 260))
+        SS * 0.030, SS * 0.013, 350))
     save_card("gf_spruce_spray.png", spruce_spray(rng))
     save_card("gf_pine_spray.png", pine_spray(rng))
     save_card("gf_grass_tuft.png", grass_tuft(rng))
+    save_card("gf_fern_frond.png", fern_frond(rng))
+    save_card("gf_leaf_single.png", single_leaf(rng))
 
     a, h, r = birch_bark(rng)
     save_set("gf_birch_bark", a, h, r, 2.0)
