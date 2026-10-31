@@ -8349,8 +8349,9 @@ func _build_rt7_stage6_0315(root: Node3D) -> void:
 	var quay_t: Array[Transform3D] = []
 	var bollard_t: Array[Transform3D] = []
 	var bridge_axes: Array[float] = [-1500.0, -400.0, 0.0, 700.0, 1200.0, 1800.0]
-	for side_sign in [-1.0, 1.0]:
-		var wall_z := 1600.0 + side_sign * 32.0
+	for side_i in 2:
+		var side_sign: float = -1.0 if side_i == 0 else 1.0
+		var wall_z: float = 1600.0 + side_sign * 32.0
 		var seg_i := 0
 		while seg_i < 20:
 			var seg_x := -2560.0 + 240.0 * float(seg_i) + 118.0
