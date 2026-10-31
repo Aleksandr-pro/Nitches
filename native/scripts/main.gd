@@ -1995,7 +1995,7 @@ func _configure_render_quality(initial: bool) -> void:
 		"evaluation_seconds": 1.2,
 		"hysteresis_votes": 2,
 		"perf_governor_level_0330": _perf_governor_level_0330,
-		"min_scale": 0.38,
+		"min_scale": 0.34,
 		"max_scale": 0.80,
 		"mesh_lod_threshold": viewport.mesh_lod_threshold,
 	}
@@ -2040,7 +2040,7 @@ func _update_adaptive_render_quality(delta: float) -> void:
 	var previous_scale := _render_scale
 	if desired_direction < 0:
 		var step := 0.10 if measured_fps < 15.0 else (0.07 if measured_fps < 22.0 else 0.045)
-		_render_scale = maxf(0.38, _render_scale - step)
+		_render_scale = maxf(0.34, _render_scale - step)
 	else:
 		_render_scale = minf(0.80, _render_scale + 0.04)
 	if not is_equal_approx(previous_scale, _render_scale):
@@ -2050,7 +2050,7 @@ func _update_adaptive_render_quality(delta: float) -> void:
 
 ## 0.3.3 performance governor (Android): render-scale adaptation alone
 ## could not rescue a 4-9 FPS phone, because the cost was mostly draw
-## submission, shadow reach and far-plane fill.  Four levels scale the
+## submission, shadow reach and far-plane fill.  Five levels scale the
 ## *distances* (detail switchover, shadows, camera far, mesh LOD)
 ## on top of the user's preset; near-field model quality is never
 ## touched, and sustained headroom walks the level back up slowly.
@@ -2059,10 +2059,10 @@ func _update_performance_governor_0330(measured_fps: float) -> void:
 		return
 	var next_level := _perf_governor_level_0330
 	if measured_fps < 13.0:
-		next_level = mini(3, next_level + 2)
+		next_level = mini(4, next_level + 2)
 		_perf_governor_good_windows_0330 = 0
 	elif measured_fps < 22.0:
-		next_level = mini(3, next_level + 1)
+		next_level = mini(4, next_level + 1)
 		_perf_governor_good_windows_0330 = 0
 	elif measured_fps < 30.0:
 		_perf_governor_good_windows_0330 = 0
@@ -2083,9 +2083,9 @@ func _apply_performance_governor_0330() -> void:
 	if _world == null:
 		return
 	var level := _perf_governor_level_0330
-	var detail_factor := float([1.0, 0.78, 0.58, 0.42][level])
-	var shadow_factor := float([1.0, 0.78, 0.58, 0.45][level])
-	var far_cap := float([10000.0, 1500.0, 1150.0, 850.0][level])
+	var detail_factor := float([1.0, 0.78, 0.58, 0.42, 0.30][level])
+	var shadow_factor := float([1.0, 0.78, 0.58, 0.45, 0.36][level])
+	var far_cap := float([10000.0, 1500.0, 1150.0, 850.0, 650.0][level])
 	var base_detail := float(_graphics_quality_state.get("detail_scale", 1.0))
 	var base_shadow := float(_graphics_quality_state.get("shadow_distance", 175.0))
 	var base_far := float(_graphics_quality_state.get("camera_far", 2100.0))
@@ -2106,7 +2106,7 @@ func _apply_performance_governor_0330() -> void:
 		)
 	var viewport := get_viewport()
 	if viewport != null:
-		viewport.mesh_lod_threshold = float([6.0, 8.0, 11.0, 14.0][level])
+		viewport.mesh_lod_threshold = float([6.0, 8.0, 11.0, 14.0, 18.0][level])
 	_perf_governor_state_0330 = {
 		"perf_governor_0330": true,
 		"level": level,
@@ -3316,7 +3316,7 @@ func _run_rt7_world_smoke_checks(failures: Array[String], stats: Dictionary) -> 
 		failures.append("0.3.0 chunked terrain is incomplete: %s" % str(enh))
 	if int(enh.get("intersection_pads", 0)) < 150:
 		failures.append("0.3.0 data-driven junction pads are incomplete: %s" % str(enh))
-	if int(enh.get("city_blender_instances_0320", 0)) < 700 or int(enh.get("city_blender_models_0320", 0)) < 10 or int(enh.get("city_landmark_glb_0320", 0)) < 40 or int(enh.get("rt7_cranes_0320", 0)) < 3:
+	if int(enh.get("city_blender_instances_0320", 0)) < 700 or int(enh.get("city_blender_models_0320", 0)) < 16 or int(enh.get("city_landmark_glb_0320", 0)) < 40 or int(enh.get("rt7_cranes_0320", 0)) < 3 or int(enh.get("generic_building_batch_instances_0300", 0)) > 0:
 		failures.append("0.3.2 Blender city pack is incomplete: city=%d models=%d landmark_glb=%d cranes=%d generic_left=%d" % [int(enh.get("city_blender_instances_0320", 0)), int(enh.get("city_blender_models_0320", 0)), int(enh.get("city_landmark_glb_0320", 0)), int(enh.get("rt7_cranes_0320", 0)), int(enh.get("generic_building_batch_instances_0300", 0))])
 	if not bool(enh.get("rt7_stadium_0300", false)) or not bool(enh.get("rt7_cable_bridge_0300", false)):
 		failures.append("0.3.0 stadium/cable-bridge landmarks are missing: %s" % str(enh))

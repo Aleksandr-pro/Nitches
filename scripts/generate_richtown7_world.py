@@ -612,6 +612,8 @@ CITY_MODEL_SET = {
     "midrise_a", "midrise_b", "warehouse_large", "warehouse_small",
     "container_red", "container_blue", "villa_b", "townhouse_b",
     "barn", "greenhouse",
+    # 0.3.5: the last three generic massing boxes become Blender models.
+    "shopping_mall", "turbine_hall_long", "turbine_hall_short",
 }
 
 # Downtown blocks: one or two towers per 200 m block.
@@ -676,7 +678,7 @@ for hx, hz, w, d, h in hotels:
 add_building(-2450, -470, 37, 41, 68, "rt-hotel", "hotelTower", model="office_tower_mid", rot_y=math.pi / 2.0)
 
 # Mall + multi-storey parking handled as landmark; mall itself is a building.
-add_building(-1200, -200, 230, 130, 18, "rt-mall", "userMarble")
+add_building(-1200, -200, 230, 130, 18, "rt-mall", "userMarble", model="shopping_mall")
 
 # Marina residential (hero podium blocks + townhouses).
 for i, mz in enumerate(range(-1250, -449, 160)):
@@ -862,8 +864,8 @@ add_building(-620, -1780, 77, 34, 13.4, "warehouse", "userStone", model="warehou
 add_building(-420, -1930, 47, 28, 10.4, "warehouse", "userPlaster", model="warehouse_small")
 
 # --- 0.3.1 NPP halls/offices/switchyard (towers are landmarks) ---
-add_building(-1960, 2470, 42, 170, 26, "warehouse", "userStone")
-add_building(-1960, 2730, 42, 110, 20, "warehouse", "userPlaster")
+add_building(-1960, 2470, 42, 170, 26, "warehouse", "userStone", model="turbine_hall_long")
+add_building(-1960, 2730, 42, 110, 20, "warehouse", "userPlaster", model="turbine_hall_short")
 add_building(-2140, 2885, 35, 28, 25.7, "rt-tower", "sandTower", model="midrise_a")
 add_building(-1800, 2400, 77, 34, 13.4, "warehouse", "userStone", model="warehouse_large", rot_y=math.pi / 2.0)
 add_building(-1800, 2800, 77, 34, 13.4, "warehouse", "userPlaster", model="warehouse_large", rot_y=math.pi / 2.0)
