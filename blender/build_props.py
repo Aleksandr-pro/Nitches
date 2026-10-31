@@ -6968,6 +6968,14 @@ def _build_hangar(width, length, wall_h, roof_h):
         box("hangar_side_vent", sx * (width / 2.0 + 0.20), length * 0.28, wall_h * 0.45, 0.30, 3.2, 1.4, frame)
     for vy in (-length * 0.28, 0.0, length * 0.28):
         cyl("hangar_vent", 0, vy, wall_h + roof_h - 0.4, 1.05, 1.6, clad, vertices=8)
+    # 0.3.14: portal surround around the sliding door + rails edging the
+    # side glazing band so neither reads as pasted-on planes.
+    for post_x in (-(width * 0.37 + 0.35), width * 0.37 + 0.35):
+        box("hangar_door_post0314", post_x, door_y, wall_h * 0.42, 0.7, 0.7, wall_h * 0.84, frame)
+    box("hangar_door_header0314", 0, door_y, wall_h * 0.82 + 0.35, width * 0.74 + 2.1, 0.7, 0.7, frame)
+    for sx in (-1.0, 1.0):
+        for rail_z in (wall_h * 0.72 - 0.95, wall_h * 0.72 + 0.95):
+            box("hangar_glass_rail0314", sx * (width / 2.0 + 0.20), 0, rail_z, 0.3, length * 0.66, 0.22, clad)
 
 
 def build_hangar_large():
@@ -7633,6 +7641,8 @@ def _build_turbine_hall(length, height):
     # High ribbon glazing and the plant-blue stripe.
     for sx in (-20.05, 20.05):
         panel("turbine_ribbon", sx + (0.175 if sx > 0.0 else -0.175), 0, height - 6.0, length - 10.0, 3.0, glass, "right" if sx > 0.0 else "left")
+        for rail_dz in (-1.65, 1.65):
+            box("turbine_ribbon_rail0314", sx + (0.28 if sx > 0.0 else -0.28), 0, height - 6.0 + rail_dz, 0.25, length - 10.0, 0.3, metal)
         panel("turbine_stripe", sx + (0.15 if sx > 0.0 else -0.15), 0, 7.5, length - 6.0, 1.0, blue, "right" if sx > 0.0 else "left")
     for sy in (-(half - 0.95), half - 0.95):
         panel("turbine_stripe", 0, sy + (0.15 if sy > 0.0 else -0.15), 7.5, 36.0, 1.0, blue, "back" if sy > 0.0 else "front")
@@ -7683,6 +7693,8 @@ def _build_container(material):
     for hinge_z in (0.65, 2.2):
         for hinge_y in (-1.12, 1.12):
             box("cont_hinge", 6.25, hinge_y, hinge_z, 0.18, 0.28, 0.42, metal)
+    for ry in (-0.6, 0.0, 0.6):
+        box("cont_rear_rib0314", -6.16, ry, 1.42, 0.14, 0.4, 2.3, material)
     panel("cont_data_plate", 6.315, -0.6, 1.95, 0.75, 0.50, MATS["CityWhitePaint"], "right")
 
 
@@ -7740,6 +7752,15 @@ def build_villa_b():
     for py in (1.2, 5.6):
         box("villab_pergola_cross", 6.0, py, 3.52, 6.4, 0.24, 0.22, wood)
     box("villab_roof_vent", 2.2, 2.2, 7.42, 1.6, 1.2, 0.5, dark)
+    # 0.3.14 lived-in detail (TZ stage 5): tilted solar array on the garage
+    # roof, AC outdoor units on the side/rear walls and a satellite dish
+    # on the upper roof slab (top z=9.1).
+    rbox("villab_solar0314", 6.4, -2.6, 4.42, 4.6, 2.6, 0.10, dark, rotation=(math.radians(20), 0, 0))
+    box("villab_solar_post0314", 6.4, -1.45, 4.35, 4.4, 0.12, 0.7, wood)
+    box("villab_ac0314", 4.07, 1.5, 0.55, 0.38, 0.95, 0.7, MATS["TownGarage"])
+    panel("villab_acfan0314", 4.27, 1.5, 0.55, 0.7, 0.5, dark, "right")
+    box("villab_ac0314", -5.0, 3.77, 0.55, 0.95, 0.38, 0.7, MATS["TownGarage"])
+    panel("villab_acfan0314", -5.0, 3.97, 0.55, 0.7, 0.5, dark, "back")
 
 
 def build_townhouse_b():
@@ -7771,6 +7792,14 @@ def build_townhouse_b():
         box("townb_rear_door", ux + 2.0, 4.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"] if ux < 0 else MATS["TownDoorAccent"])
         for rear_wx in (-2.4, 0.4):
             win_recess_0312("townb_rear_win", ux + rear_wx, 4.30, 5.5, 1.5, 1.7, glass, trim, "back", depth=0.22, frame_w=0.12)
+        # 0.3.14 lived-in detail (TZ stage 5): wheelie bins against the front
+        # wall (free strip + beside the bay) and a side-wall AC outdoor unit.
+        for _bin_x in (ux + 0.22, ux - 4.05):
+            box("townb_bin0314", _bin_x, -6.65, 0.5, 0.55, 0.6, 1.0, MATS["TownGarage"])
+            box("townb_bin_lid0314", _bin_x, -6.65, 1.04, 0.6, 0.65, 0.08, trim)
+        _side0314 = -1.0 if ux < 0.0 else 1.0
+        box("townb_ac0314", _side0314 * 9.3, -2.0, 0.5, 0.35, 0.9, 0.65, MATS["TownGarage"])
+        panel("townb_ac_grille0314", _side0314 * 9.49, -2.0, 0.5, 0.7, 0.45, glass, "right" if _side0314 > 0.0 else "left")
     box("townb_door_l", -1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"])
     box("townb_door_r", 1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoorAccent"])
     for porch_light_x in (-1.95, 1.95):
@@ -7793,8 +7822,7 @@ def build_barn():
     box("barn_loft", -15.25, 0, 7.6, 0.3, 2.2, 2.0, white)
     panel("barn_loft_glass", -15.5, 0, 7.6, 1.7, 1.5, MATS["WindowGlassDark"], "left")
     for wx in (-9.0, -3.0, 3.0, 9.0):
-        panel("barn_win", wx, -7.23, 4.2, 1.5, 1.6, white, "front")
-        panel("barn_win_glass", wx, -7.275, 4.2, 1.2, 1.3, MATS["WindowGlassDark"], "front")
+        win_recess_0312("barn_win", wx, -7.0, 4.2, 1.5, 1.6, MATS["WindowGlassDark"], white, "front", depth=0.24, frame_w=0.15)
     box("barn_leanto", -2, 8.4, 1.7, 17, 3.4, 3.4, red)
     rbox("barn_leanto_roof", -2, 8.6, 3.6, 17.6, 4.4, 0.3, dark, rotation=(math.radians(10), 0, 0))
     box("barn_ridge_cap", 0, 0, 10.42, 31.6, 0.5, 0.25, dark)
