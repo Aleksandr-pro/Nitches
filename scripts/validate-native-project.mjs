@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.11-native-alpha"'), 'Native project version metadata must match 0.3.11-native-alpha');
-assert(preset.includes('version/code=77'), 'Native 0.3.11 must bump Android versionCode to 77');
-assert(preset.includes('version/name="0.3.11-native-alpha"'), 'Native version name must be 0.3.11-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.11-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.12-native-alpha"'), 'Native project version metadata must match 0.3.12-native-alpha');
+assert(preset.includes('version/code=78'), 'Native 0.3.12 must bump Android versionCode to 78');
+assert(preset.includes('version/name="0.3.12-native-alpha"'), 'Native version name must be 0.3.12-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.12-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.11"') && preset.includes('application/product_version="0.3.11"'), 'Desktop Windows version metadata must match native 0.3.11');
+assert(preset.includes('application/file_version="0.3.12"') && preset.includes('application/product_version="0.3.12"'), 'Desktop Windows version metadata must match native 0.3.12');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1353,13 +1353,13 @@ const modelBudgets038 = {
   'cottage_courtyard.glb': [11_500, 17],
   'cottage_dune.glb': [9_800, 17],
   'cottage_palm.glb': [9_200, 16],
-  'midrise_b.glb': [2_300, 8],
+  'midrise_b.glb': [2_450, 8],
   'stadium.glb': [2_350, 7],
   'container_blue.glb': [620, 4],
   'container_red.glb': [620, 4],
   'office_tower_mid.glb': [520, 7],
   'office_tower_high.glb': [640, 8],
-  'warehouse_small.glb': [760, 6],
+  'warehouse_small.glb': [830, 6],
 };
 for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(modelBudgets038)) {
   const modelBytes038 = await readFile(`src/assets/models/props/${model038}`);
@@ -1392,7 +1392,7 @@ for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(mode
 // townhouse_b wall-backed glass becomes panels on the old outer
 // faces, round timber/plaster posts become square posts, and the
 // school gains a name band and roof plant.
-for (const marker of ['panel("hero_window_frame"', 'panel("villa_window_frame"', 'wquad(frame, 0.0, 0.083', 'backing_out + 0.030', 'sphere("tower_flag_finial"', '_build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True)', 'panel("mall_storefront"', 'panel("school_win_front"', 'school_sign', 'panel("term_glass_upper"', 'panel("villab_glass"', 'panel("townb_window"']) {
+for (const marker of ['panel("hero_window_frame"', 'panel("villa_window_frame"', 'wquad(frame, 0.0, 0.083', 'backing_out + 0.030', 'sphere("tower_flag_finial"', '_build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True)', 'panel("mall_storefront"', 'panel("school_win_front"', 'school_sign', 'panel("term_glass_upper"', 'win_recess_0312("villab_glass"', 'win_recess_0312("townb_window"']) {
   assert(blenderScript.includes(marker), `0.3.9 Blender marker is missing: ${marker}`);
 }
 const modelBudgets039 = {
@@ -1400,12 +1400,12 @@ const modelBudgets039 = {
   'hero_building.glb': [22_500, 18],
   'townhouse.glb': [17_500, 22],
   'villa.glb': [12_600, 19],
-  'midrise_a.glb': [1_700, 8],
+  'midrise_a.glb': [1_820, 8],
   'shopping_mall.glb': [2_200, 9],
   'school.glb': [1_600, 11],
   'airport_terminal.glb': [1_150, 5],
-  'villa_b.glb': [520, 8],
-  'townhouse_b.glb': [500, 9],
+  'villa_b.glb': [640, 8],
+  'townhouse_b.glb': [780, 9],
 };
 for (const [model039, [triangleCap039, expectedParts039]] of Object.entries(modelBudgets039)) {
   const modelBytes039 = await readFile(`src/assets/models/props/${model039}`);
@@ -1528,6 +1528,43 @@ const tunnelLamp0311 = data.lamps.some((lamp0311) => lamp0311.x > 1480 && lamp03
 assert(!tunnelLamp0311, '0.3.11 Roses tunnel tube must stay free of street lamps');
 const basinBuilding0311 = data.buildings.some((b0311) => b0311.x > -3010 && b0311.x < -2660 && Math.abs(b0311.z) > 600 && Math.abs(b0311.z) < 1100);
 assert(!basinBuilding0311, '0.3.11 marina basins must stay free of buildings');
+
+// 0.3.12: realism pass - world-density UV bake + recessed windows.
+// The mass-city materials (PropsMetal, RoofDark, FacadeMain/Accent,
+// CityWhitePaint, container accents...) run tiling photo textures
+// with uv1_scale == 1 and no triplanar, so the old per-face 0..1 box
+// UVs stretched one texture repeat over whole roofs/walls.  The
+// Blender export now rewrites those UVs from model-space metres
+// (dominant-axis projection, near-cardinal objects only), villa_b /
+// townhouse_b windows become recessed frames with real returns, the
+// midrises gain facade piers and the warehouses dock headers.  Part
+// counts and the detail-node budget are frozen; raised caps above
+// carry the extra triangles inside the audited worst-frame gate.
+for (const marker of ['_bake_world_uv_density_0312', '_UV_DENSITY_TILES_0312', 'win_recess_0312', 'mid_pier0312', 'wh_dock_header0312']) {
+  assert(blenderScript.includes(marker), `0.3.12 Blender marker is missing: ${marker}`);
+}
+{
+  const uvBytes0312 = await readFile('src/assets/models/props/warehouse_large.glb');
+  const uvJson0312 = parseGlbJson(uvBytes0312);
+  const jsonLen0312 = uvBytes0312.readUInt32LE(12);
+  const binStart0312 = 20 + jsonLen0312 + 8;
+  const matIdx0312 = (uvJson0312.materials ?? []).findIndex((m) => m.name === 'PropsMetal');
+  assert(matIdx0312 >= 0, '0.3.12 warehouse_large lost its PropsMetal cladding');
+  let uvMax0312 = 0;
+  for (const mesh0312 of uvJson0312.meshes ?? []) {
+    for (const prim0312 of mesh0312.primitives ?? []) {
+      if (prim0312.material !== matIdx0312) continue;
+      const acc0312 = uvJson0312.accessors[prim0312.attributes.TEXCOORD_0];
+      const bv0312 = uvJson0312.bufferViews[acc0312.bufferView];
+      const start0312 = binStart0312 + (bv0312.byteOffset ?? 0) + (acc0312.byteOffset ?? 0);
+      const view0312 = new DataView(uvBytes0312.buffer, uvBytes0312.byteOffset + start0312, acc0312.count * 8);
+      for (let i0312 = 0; i0312 < acc0312.count * 2; i0312 += 1) {
+        uvMax0312 = Math.max(uvMax0312, Math.abs(view0312.getFloat32(i0312 * 4, true)));
+      }
+    }
+  }
+  assert(uvMax0312 > 5.0, `0.3.12 warehouse PropsMetal UVs are not world-density baked (max |uv| = ${uvMax0312})`);
+}
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
