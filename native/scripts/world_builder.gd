@@ -8296,6 +8296,15 @@ func _build_landmarks() -> void:
 					_add_box(root, Vector3(3.2, 1.2, 11.0), pos + Vector3(0.0, 0.6, 0.0), marble, yacht_yaw, "YachtFallback0311")
 				_add_box_collider(pos + Vector3(0.0, 0.8, 0.0), Vector3(3.6, 2.2, 12.5), yacht_yaw)
 				_enhancement_stats["rt7_yachts_0311"] = int(_enhancement_stats.get("rt7_yachts_0311", 0)) + 1
+			"rt7-barge":
+				# 0.3.15 moored canal cargo barge (Blender GLB);
+				# placement Y carries the 1.55 m draft.
+				var barge_yaw := _f(item, "rotY")
+				var barge_built := _add_batched_model(root, "res://assets/props/barge.glb", [_centered_model_transform(pos, barge_yaw, Vector3.ONE, Vector3.ZERO)], "CanalBarge0315")
+				if not barge_built:
+					_add_box(root, Vector3(8.6, 2.6, 55.0), pos + Vector3(0.0, 1.3, 0.0), metal, barge_yaw, "BargeFallback0315")
+				_add_box_collider(pos + Vector3(0.0, 1.2, 0.0), Vector3(9.2, 3.0, 56.0), barge_yaw)
+				_enhancement_stats["rt7_barges_0315"] = int(_enhancement_stats.get("rt7_barges_0315", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
@@ -8312,6 +8321,94 @@ func _build_landmarks() -> void:
 	_add_multimesh(root, s34_box, _terrain_material("grass"), s34_grass_t, "Stage34Green0311", false, -1.0, 900.0, 260.0)
 	_add_multimesh(root, s34_box, gold, s34_gold_t, "Stage34Flags0311", false, -1.0, 520.0, 260.0)
 	_enhancement_stats["rt7_stage34_batches_0311"] = 8
+	_build_rt7_stage6_0315(root)
+
+
+## 0.3.15 TZ stage 6: canal quay walls with mooring bollards and the
+## farm field patches from the world data.  Five chunked MultiMesh
+## batches on top of the landmark pass (quay concrete, bollard metal,
+## soil, meadow, crop rows); the moored barges/cranes/silos of the
+## stage ride the landmark model batches above.
+func _build_rt7_stage6_0315(root: Node3D) -> void:
+	if not _is_rt7:
+		return
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = Vector3.ONE
+	var cyl_mesh := CylinderMesh.new()
+	cyl_mesh.top_radius = 0.5
+	cyl_mesh.bottom_radius = 0.5
+	cyl_mesh.height = 1.0
+	cyl_mesh.radial_segments = 8
+	var concrete := _terrain_material("concrete")
+	var metal := _prop_material("PropsMetal")
+
+	# Canal quay: wall + coping segments along both waterlines
+	# (channel centre z=1600; engineered profile from the generator:
+	# bed at -1.9, waterline 0.04 near |dz| 30, so the wall spans the
+	# slope from bed to coping at y=1.5).
+	var quay_t: Array[Transform3D] = []
+	var bollard_t: Array[Transform3D] = []
+	var bridge_axes: Array[float] = [-1500.0, -400.0, 0.0, 700.0, 1200.0, 1800.0]
+	for side_sign in [-1.0, 1.0]:
+		var wall_z := 1600.0 + side_sign * 32.0
+		var seg_i := 0
+		while seg_i < 20:
+			var seg_x := -2560.0 + 240.0 * float(seg_i) + 118.0
+			quay_t.append(make_transform(Vector3(seg_x, -0.2, wall_z), 0.0, Vector3(236.0, 3.4, 1.7)))
+			quay_t.append(make_transform(Vector3(seg_x, 1.62, wall_z), 0.0, Vector3(236.0, 0.28, 2.3)))
+			seg_i += 1
+		var bol_i := 0
+		while bol_i < 197:
+			var bol_x := -2548.0 + 24.0 * float(bol_i)
+			var near_bridge := false
+			for axis_x in bridge_axes:
+				if absf(bol_x - axis_x) < 20.0:
+					near_bridge = true
+			if not near_bridge:
+				bollard_t.append(make_transform(Vector3(bol_x, 1.95, 1600.0 + side_sign * 30.9), 0.0, Vector3(0.64, 0.85, 0.64)))
+			bol_i += 1
+	_add_multimesh(root, box_mesh, concrete, quay_t, "CanalQuay0315", true, -1.0, 1400.0, 320.0)
+	_add_multimesh(root, cyl_mesh, metal, bollard_t, "CanalBollards0315", false, -1.0, 420.0, 260.0)
+	_enhancement_stats["rt7_canal_quay_0315"] = quay_t.size()
+	_enhancement_stats["rt7_canal_bollards_0315"] = bollard_t.size()
+
+	# Farm fields from data["fields"]: flat patch per field, ridge
+	# rows on the crop fields.  Patches hug the authored ground Y;
+	# the farm plain is flat enough for a 0.22 m slab.
+	var soil_mat := _material("rt7_field_soil_0315", "gf_field_soil.jpg", "gf_field_soil_normal.jpg", Color(0.88, 0.76, 0.62), 1.0, 0.0, Vector3(0.16, 0.16, 0.16), true)
+	var meadow_mat := _material("rt7_field_meadow_0315", "user_grass.jpg", "user_grass_normal.jpg", Color(0.55, 0.80, 0.42), 1.0, 0.0, Vector3(0.20, 0.20, 0.20), true)
+	var row_mat := _prop_material("CityFieldGreen")
+	var soil_t: Array[Transform3D] = []
+	var meadow_t: Array[Transform3D] = []
+	var row_t: Array[Transform3D] = []
+	var field_count := 0
+	for field_variant in data.get("fields", []):
+		var field: Dictionary = field_variant
+		var fpos := _item_position(field)
+		var fw := _f(field, "w", 100.0)
+		var fd := _f(field, "d", 70.0)
+		var fyaw := _f(field, "rotY")
+		var fkind := String(field.get("kind", "crop"))
+		var patch_t := make_transform(fpos + Vector3(0.0, 0.02, 0.0), fyaw, Vector3(fw, 0.22, fd))
+		if fkind == "meadow":
+			meadow_t.append(patch_t)
+		else:
+			soil_t.append(patch_t)
+		if fkind == "crop":
+			var fbasis := Basis(Vector3.UP, fyaw)
+			var rows := int(fd / 2.6)
+			var row_i := 0
+			while row_i < rows:
+				var local_z := -fd * 0.5 + 1.4 + 2.6 * float(row_i)
+				var row_pos: Vector3 = fpos + fbasis * Vector3(0.0, 0.0, local_z) + Vector3(0.0, 0.18, 0.0)
+				row_t.append(make_transform(row_pos, fyaw, Vector3(fw - 3.0, 0.34, 1.1)))
+				row_i += 1
+		field_count += 1
+	_add_multimesh(root, box_mesh, soil_mat, soil_t, "FarmFieldSoil0315", false, -1.0, 2200.0, 420.0)
+	_add_multimesh(root, box_mesh, meadow_mat, meadow_t, "FarmFieldMeadow0315", false, -1.0, 2200.0, 420.0)
+	_add_multimesh(root, box_mesh, row_mat, row_t, "FarmFieldRows0315", false, -1.0, 520.0, 320.0)
+	_enhancement_stats["rt7_fields_0315"] = field_count
+	_enhancement_stats["rt7_field_rows_0315"] = row_t.size()
 
 
 ## 0.2.37 Sail Island resort landscaping.  Terrain, loop road, villas

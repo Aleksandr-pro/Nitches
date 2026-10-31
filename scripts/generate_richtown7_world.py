@@ -1327,6 +1327,98 @@ print(f"Courtyards 0.3.14: hedge_bushes={yard_bushes0314} yard_trees={yard_trees
 
 print(f"Scatter: palms={len(palms)} trees={len(trees)} bushes={len(bushes)} lamps={len(lamps)} benches={len(benches)} pools={len(pools)}")
 
+# ---------------------------------------------------------------------------
+# 0.3.15 (TZ stage 6): canal port terminal, moored barges, farm
+# fields and silos.  Append-only like the 0.3.14 courtyards: nothing
+# downstream consumes the seeded RNG, so every pre-0.3.15 placement
+# stays byte-identical (buildings/landmarks only ever grow by append).
+# ---------------------------------------------------------------------------
+
+# Organised container-terminal rows in the free lanes between the
+# 0.3.0 warehouse rows and container scatter (grid + occupancy test
+# turns the gaps into readable terminal stacks).
+terminal0315 = 0
+for row_z0315 in (2225.0, 2325.0, 2425.0, 2525.0):
+    tx0315 = -1400.0
+    while tx0315 < 900.0 and terminal0315 < 90:
+        if clear_of_roads(tx0315, row_z0315, 8.0) and spot_free(tx0315, row_z0315, 9.0):
+            add_building(tx0315, row_z0315, 12.5, 2.7, RNG.choice([2.8, 5.6]), "rt-container", "userStone",
+                         model=RNG.choice(["container_red", "container_blue"]),
+                         rot_y=0.0, tint=round(RNG.uniform(0.55, 1.25), 3))
+            terminal0315 += 1
+        tx0315 += 14.5
+
+# Three more quay cranes join the 0.3.2 line (800 m rhythm kept).
+for cx0315 in (-1600, -800, 800):
+    landmarks.append({"kind": "rt7-crane", "x": cx0315, "z": 1785, "h": 57, "r": 14,
+                      "rotY": math.pi, "y": round(ground(cx0315, 1785), 3)})
+    _occ_register(cx0315, 1785, 16.0)
+
+# Moored cargo barges along both canal walls (north = port side;
+# y carries the 1.55 m draft below the 0.04 waterline).
+for bx0315 in (-1900.0, -1250.0, -700.0, 250.0, 950.0, 1450.0, 2000.0):
+    landmarks.append({"kind": "rt7-barge", "x": bx0315, "z": 1626.0, "h": 0, "r": 0,
+                      "rotY": math.pi / 2.0, "y": -1.55})
+for bx0315 in (-1000.0, 450.0, 1550.0):
+    landmarks.append({"kind": "rt7-barge", "x": bx0315, "z": 1574.0, "h": 0, "r": 0,
+                      "rotY": -math.pi / 2.0, "y": -1.55})
+
+# Farm silo pairs + a port fuel-tank row (the rt7-tank runtime picks
+# silo vs storage-tank proportions from the h/r ratio).
+for sx0315, sz0315 in ((1500, 2400), (1516, 2400), (1850, 2050), (1866, 2050)):
+    if spot_free(sx0315, sz0315, 13.0):
+        landmarks.append({"kind": "rt7-tank", "x": sx0315, "z": sz0315, "h": 17, "r": 6,
+                          "rotY": 0.0, "y": round(ground(sx0315, sz0315), 3)})
+        _occ_register(sx0315, sz0315, 10.0)
+for fx0315 in (-1400, -1352, -1304):
+    if spot_free(fx0315, 2980, 15.0):
+        landmarks.append({"kind": "rt7-tank", "x": fx0315, "z": 2980, "h": 9, "r": 11,
+                          "rotY": 0.0, "y": round(ground(fx0315, 2980), 3)})
+        _occ_register(fx0315, 2980, 16.0)
+
+
+# Farm fields inside the farm road grid.  The orchard block
+# (x1260..2260, z2680..3020) is excluded by the cell list; candidates
+# are rejected on building footprints, tank landmarks and roads.
+def _field_free0315(cx, cz, w, d):
+    for b in buildings:
+        bw = b["w"] if abs(math.sin(b["rotY"])) < 0.5 else b["d"]
+        bd = b["d"] if abs(math.sin(b["rotY"])) < 0.5 else b["w"]
+        if abs(cx - b["x"]) < (w + bw) * 0.5 + 6.0 and abs(cz - b["z"]) < (d + bd) * 0.5 + 6.0:
+            return False
+    for lm in landmarks:
+        if lm["kind"] == "rt7-tank" and abs(cx - lm["x"]) < w * 0.5 + 14.0 and abs(cz - lm["z"]) < d * 0.5 + 14.0:
+            return False
+    for gx in (cx - w * 0.5 + 5.0, cx, cx + w * 0.5 - 5.0):
+        for gz in (cz - d * 0.5 + 5.0, cz, cz + d * 0.5 - 5.0):
+            if not clear_of_roads(gx, gz, 4.0):
+                return False
+    return True
+
+
+fields = []
+_field_cells0315 = [
+    (1226.0, 1774.0, 1746.0, 1974.0),
+    (1826.0, 2274.0, 1746.0, 1974.0),
+    (1226.0, 1774.0, 2026.0, 2574.0),
+    (1826.0, 2274.0, 2026.0, 2574.0),
+    (1226.0, 1774.0, 3040.0, 3170.0),
+    (1826.0, 2274.0, 3040.0, 3170.0),
+]
+for (cx0_15, cx1_15, cz0_15, cz1_15) in _field_cells0315:
+    _fx15 = cx0_15 + 75.0
+    while _fx15 < cx1_15 - 60.0:
+        _fz15 = cz0_15 + 52.0
+        while _fz15 < cz1_15 - 40.0:
+            if _field_free0315(_fx15, _fz15, 128.0, 83.0):
+                fields.append({"x": round(_fx15, 2), "y": round(ground(_fx15, _fz15), 3),
+                               "z": round(_fz15, 2), "rotY": 0.0,
+                               "w": 128.0, "d": 83.0,
+                               "kind": RNG.choice(["crop", "crop", "soil", "meadow"])})
+            _fz15 += 105.0
+        _fx15 += 150.0
+print(f"Stage6 0.3.15: terminal_containers={terminal0315} fields={len(fields)}")
+
 # --------------------------------------------------------------------------
 # Zones / districts / spawn / stats
 # --------------------------------------------------------------------------
@@ -1413,6 +1505,7 @@ data = {
     "palms": palms,
     "lamps": lamps,
     "benches": benches,
+    "fields": fields,
     "stats": {
         "terrainVertices": N * N,
         "roadEdges": len(roads),
@@ -1430,6 +1523,7 @@ data = {
         "palms": len(palms),
         "lamps": len(lamps),
         "benches": len(benches),
+        "fields": len(fields),
     },
 }
 
