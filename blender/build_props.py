@@ -6813,16 +6813,18 @@ def build_atc_tower():
     glass = MATS["FacadeGlass"]
     metal = MATS["PropsMetal"]
     box("atc_base", 0, 0, 2.5, 15, 15, 5, MATS["FacadeAccent"])
-    box("atc_base_door", 0, -7.6, 1.8, 3.4, 0.3, 3.4, MATS["WindowFrame"])
+    panel("atc_base_door", 0, -7.75, 1.8, 3.4, 3.4, MATS["WindowFrame"], "front")
     cone("atc_shaft", 0, 0, 22, 4.4, 2.9, 34, concrete, vertices=16)
-    cyl("atc_collar", 0, 0, 39.4, 3.6, 1.6, metal, vertices=16)
+    cyl("atc_collar", 0, 0, 39.4, 3.6, 1.6, metal, vertices=12)
     cyl("atc_cab", 0, 0, 43.2, 6.2, 4.6, glass, vertices=18)
     for i in range(10):
         a = 2.0 * math.pi * i / 10.0
         rbox("atc_mullion", math.cos(a) * 6.25, math.sin(a) * 6.25, 43.2, 0.35, 0.35, 4.6, metal, rotation=(0, 0, a))
-    cone("atc_roof", 0, 0, 46.2, 7.1, 6.2, 1.2, metal, vertices=18)
+    cone("atc_roof", 0, 0, 46.2, 7.1, 6.2, 1.2, metal, vertices=14)
     cyl("atc_antenna", 0, 0, 50.2, 0.16, 7, metal, vertices=8)
     box("atc_beacon", 0, 0, 47.3, 0.7, 0.7, 0.7, MATS["CityAccentRed"])
+    # 0.3.10: base window band (was a blank plinth face).
+    panel("atc_base_windows", 0, -7.56, 3.6, 9.0, 1.1, glass, "front")
 
 
 def _build_hangar(width, length, wall_h, roof_h):
@@ -6837,17 +6839,17 @@ def _build_hangar(width, length, wall_h, roof_h):
     door_y = -length / 2.0 - 0.35
     box("hangar_door", 0, door_y, wall_h * 0.42, width * 0.74, 0.6, wall_h * 0.8, frame)
     for rail_z in (0.22, 0.48, 0.74):
-        box("hangar_door_rail", 0, door_y - 0.25, wall_h * rail_z, width * 0.74, 0.25, 0.35, clad)
-    box("hangar_door_seam", 0, door_y - 0.32, wall_h * 0.42, 0.4, 0.2, wall_h * 0.8, clad)
+        panel("hangar_door_rail", 0, door_y - 0.375, wall_h * rail_z, width * 0.74, 0.35, clad, "front")
+    panel("hangar_door_seam", 0, door_y - 0.42, wall_h * 0.42, 0.4, wall_h * 0.8, clad, "front")
     for seam_x in (-0.30, -0.15, 0.15, 0.30):
-        box("hangar_door_leaf", width * seam_x, door_y - 0.38, wall_h * 0.42, 0.28, 0.16, wall_h * 0.8, clad)
+        panel("hangar_door_leaf", width * seam_x, door_y - 0.46, wall_h * 0.42, 0.28, wall_h * 0.8, clad, "front")
     box("hangar_skylight", 0, 0, wall_h + roof_h + 0.02, 2.2, length * 0.70, 0.18, glass)
     for sx in (-1.0, 1.0):
-        box("hangar_side_glass", sx * (width / 2.0 + 0.18), 0, wall_h * 0.72, 0.35, length * 0.66, 1.7, glass)
+        panel("hangar_side_glass", sx * (width / 2.0 + 0.355), 0, wall_h * 0.72, length * 0.66, 1.7, glass, "right" if sx > 0.0 else "left")
         box("hangar_personnel", sx * (width / 2.0 + 0.2), -length * 0.3, 1.6, 0.35, 2.2, 3.2, frame)
         box("hangar_side_vent", sx * (width / 2.0 + 0.20), length * 0.28, wall_h * 0.45, 0.30, 3.2, 1.4, frame)
     for vy in (-length * 0.28, 0.0, length * 0.28):
-        cyl("hangar_vent", 0, vy, wall_h + roof_h - 0.4, 1.05, 1.6, clad, vertices=10)
+        cyl("hangar_vent", 0, vy, wall_h + roof_h - 0.4, 1.05, 1.6, clad, vertices=8)
 
 
 def build_hangar_large():
@@ -6875,8 +6877,8 @@ def build_airliner():
         box("plane_stripe", sx * 1.98, 0.5, 5.15, 0.1, 28, 0.85, blue)
         rbox("plane_wing", sx * 9.6, 2.4, 3.75, 19, 4.4, 0.42, metal, rotation=(0, 0, sx * 0.40))
         rbox("plane_winglet", sx * 18.4, 6.1, 4.6, 0.35, 2.2, 1.9, blue, rotation=(0, 0, sx * 0.40))
-        cyl("plane_engine", sx * 6.8, -0.8, 2.65, 1.05, 4.6, white, vertices=12, rotation=(math.radians(90), 0, 0))
-        cyl("plane_intake", sx * 6.8, -3.15, 2.65, 0.88, 0.35, frame, vertices=12, rotation=(math.radians(90), 0, 0))
+        cyl("plane_engine", sx * 6.8, -0.8, 2.65, 1.05, 4.6, white, vertices=10, rotation=(math.radians(90), 0, 0))
+        cyl("plane_intake", sx * 6.8, -3.15, 2.65, 0.88, 0.35, frame, vertices=10, rotation=(math.radians(90), 0, 0))
         box("plane_pylon", sx * 6.8, -0.4, 3.6, 0.4, 2.6, 1.1, metal)
         rbox("plane_tailplane", sx * 3.4, 19.8, 6.3, 7.5, 2.6, 0.35, metal, rotation=(0, 0, sx * 0.35))
         cyl("plane_gear_leg", sx * 2.3, 2.5, 1.35, 0.3, 2.5, metal, vertices=8)
@@ -6895,9 +6897,9 @@ def build_cooling_tower():
         (26.2, 71.0), (26.8, 83.0), (28.5, 92.5), (29.6, 95.5), (30.4, 98.0),
     ]
     _ct_lathe("cooling_shell", profile, concrete, segments=36)
-    cyl("cooling_throat", 0, 0, 91.5, 26.5, 1.2, MATS["WindowFrame"], vertices=32)
-    cyl("cooling_basin", 0, 0, 0.6, 42.0, 1.2, concrete, vertices=36)
-    cyl("cooling_ring_beam", 0, 0, 8.6, 38.8, 1.6, concrete, vertices=36)
+    cyl("cooling_throat", 0, 0, 91.5, 26.5, 1.2, MATS["WindowFrame"], vertices=24)
+    cyl("cooling_basin", 0, 0, 0.6, 42.0, 1.2, concrete, vertices=28)
+    cyl("cooling_ring_beam", 0, 0, 8.6, 38.8, 1.6, concrete, vertices=28)
     for i in range(16):
         a = 2.0 * math.pi * i / 16.0
         cx = math.cos(a) * 38.2
@@ -6909,35 +6911,35 @@ def build_cooling_tower():
 def build_reactor():
     concrete = MATS["ConcreteLight"]
     metal = MATS["PropsMetal"]
-    cyl("reactor_block", 0, 0, 15, 22, 30, concrete, vertices=26)
-    cyl("reactor_ring", 0, 0, 30.4, 23, 1.8, metal, vertices=26)
-    sphere("reactor_dome", 0, 0, 31.5, 44, 44, 19, MATS["CityWhitePaint"])
+    cyl("reactor_block", 0, 0, 15, 22, 30, concrete, vertices=22)
+    cyl("reactor_ring", 0, 0, 30.4, 23, 1.8, metal, vertices=22)
+    sphere("reactor_dome", 0, 0, 31.5, 44, 44, 19, MATS["CityWhitePaint"], segments=20, ring_count=12)
     cyl("reactor_vent", -15, 9, 35, 1.6, 13, metal, vertices=10)
     box("reactor_aux", 33.5, 0, 6.5, 19, 17, 13, MATS["FacadeAccent"])
     box("reactor_aux_roof", 33.5, 0, 13.5, 20, 18, 0.9, MATS["RoofDark"])
-    box("reactor_aux_glass", 33.5, -8.7, 8.5, 15, 0.3, 3.4, MATS["WindowGlassDark"])
+    panel("reactor_aux_glass", 33.5, -8.85, 8.5, 15, 3.4, MATS["WindowGlassDark"], "front")
     tube_between("reactor_pipe_a", (19, -3, 19), (26, -3, 12), 1.15, 1.15, metal, vertices=10)
     tube_between("reactor_pipe_b", (19, 4, 15), (26, 4, 9), 0.9, 0.9, metal, vertices=10)
-    cyl("reactor_tank_small", 12, -19, 4, 4.5, 8, metal, vertices=14)
+    cyl("reactor_tank_small", 12, -19, 4, 4.5, 8, metal, vertices=12)
 
 
 def build_chimney():
     concrete = MATS["ConcreteLight"]
-    cyl("chimney_plinth", 0, 0, 1, 9.5, 2, concrete, vertices=20)
-    cone("chimney_stack", 0, 0, 65, 7.2, 4.0, 130, concrete, vertices=20)
+    cyl("chimney_plinth", 0, 0, 1, 9.5, 2, concrete, vertices=16)
+    cone("chimney_stack", 0, 0, 65, 7.2, 4.0, 130, concrete, vertices=16)
     for band_z in (78.0, 99.0, 119.0):
         band_r = 7.2 - 3.2 * (band_z / 130.0)
-        cyl("chimney_band", 0, 0, band_z, band_r * 1.04, 7.5, MATS["CityAccentRed"], vertices=20)
-    cyl("chimney_rim", 0, 0, 129.6, 4.35, 1.4, MATS["WindowFrame"], vertices=20)
+        cyl("chimney_band", 0, 0, band_z, band_r * 1.04, 7.5, MATS["CityAccentRed"], vertices=16)
+    cyl("chimney_rim", 0, 0, 129.6, 4.35, 1.4, MATS["WindowFrame"], vertices=16)
     box("chimney_beacon", 0, 0, 131.0, 0.8, 0.8, 0.8, MATS["CityAccentRed"])
 
 
 def build_radar_station():
     cyl("radar_base", 0, 0, 4, 5, 8, MATS["ConcreteLight"], vertices=16)
-    sphere("radar_dome", 0, 0, 10.5, 18, 18, 15, MATS["CityWhitePaint"])
+    sphere("radar_dome", 0, 0, 10.5, 18, 18, 15, MATS["CityWhitePaint"], segments=18, ring_count=12)
     box("radar_hut", 11.5, 0, 1.75, 9, 6, 3.5, MATS["FacadeMain"])
     box("radar_hut_roof", 11.5, 0, 3.8, 9.6, 6.6, 0.5, MATS["RoofDark"])
-    box("radar_hut_door", 11.5, -3.1, 1.5, 1.6, 0.25, 2.8, MATS["WindowFrame"])
+    panel("radar_hut_door", 11.5, -3.225, 1.5, 1.6, 2.8, MATS["WindowFrame"], "front")
     cyl("radar_mast", 13.5, 1.5, 8, 0.14, 9, MATS["PropsMetal"], vertices=8)
 
 
@@ -6959,14 +6961,21 @@ def build_watchtower():
         box("watch_ladder_rail", rx, -2.05, 5.1, 0.14, 0.14, 10.2, MATS["PropsMetal"])
     for rung in range(7):
         box("watch_ladder_rung", 0, -2.05, 1.2 + rung * 1.35, 1.15, 0.12, 0.12, MATS["PropsMetal"])
+    # 0.3.10: platform guard railing (was an open deck edge).
+    for rail_side in (-1.0, 1.0):
+        box("watch_rail_top", 0, rail_side * 2.45, 11.45, 5.0, 0.09, 0.09, wood)
+        box("watch_rail_top", rail_side * 2.45, 0, 11.45, 0.09, 5.0, 0.09, wood)
+    for post_x in (-2.45, 2.45):
+        for post_y in (-2.45, 2.45):
+            box("watch_rail_post", post_x, post_y, 10.95, 0.09, 0.09, 0.95, wood)
 
 
 def build_storage_tank():
     white = MATS["CityWhitePaint"]
     metal = MATS["PropsMetal"]
-    cyl("tank_base", 0, 0, 0.4, 11.7, 0.8, MATS["ConcreteLight"], vertices=24)
-    cyl("tank_shell", 0, 0, 6.3, 11, 11, white, vertices=24)
-    sphere("tank_roof", 0, 0, 11.6, 22.4, 22.4, 5.2, metal)
+    cyl("tank_base", 0, 0, 0.4, 11.7, 0.8, MATS["ConcreteLight"], vertices=20)
+    cyl("tank_shell", 0, 0, 6.3, 11, 11, white, vertices=20)
+    sphere("tank_roof", 0, 0, 11.6, 22.4, 22.4, 5.2, metal, segments=18, ring_count=10)
     cyl("tank_hatch", 0, 0, 14.0, 1.6, 0.9, metal, vertices=10)
     cyl("tank_pipe", 11.3, 0, 5.5, 0.5, 11, metal, vertices=8)
     box("tank_valve", 11.6, 0, 1.2, 1.1, 1.1, 1.4, MATS["CityAccentRed"])
@@ -6975,11 +6984,11 @@ def build_storage_tank():
 
 def build_silo():
     metal = MATS["PropsMetal"]
-    cyl("silo_body", 0, 0, 7, 6, 14, MATS["CityWhitePaint"], vertices=18)
-    cone("silo_roof", 0, 0, 15.7, 6.45, 0.7, 3.4, metal, vertices=18)
+    cyl("silo_body", 0, 0, 7, 6, 14, MATS["CityWhitePaint"], vertices=12)
+    cone("silo_roof", 0, 0, 15.7, 6.45, 0.7, 3.4, metal, vertices=12)
     cyl("silo_pipe", 0, 0, 17.9, 0.55, 1.2, metal, vertices=8)
     box("silo_chute", 0, -6.5, 5, 1.4, 1.2, 9, metal)
-    cyl("silo_base", 0, 0, 0.35, 6.5, 0.7, MATS["ConcreteLight"], vertices=18)
+    cyl("silo_base", 0, 0, 0.35, 6.5, 0.7, MATS["ConcreteLight"], vertices=12)
 
 
 def build_afv():
@@ -6993,12 +7002,12 @@ def build_afv():
         box("afv_track", sx, 0, 0.62, 1.05, 7.7, 1.15, dark)
         box("afv_skirt", sx * 1.444, 0, 1.25, 0.18, 7.3, 0.75, green)
         for wy in (-2.9, -1.45, 0.0, 1.45, 2.9):
-            cyl("afv_wheel", sx * 1.274, wy, 0.56, 0.53, 0.3, green, vertices=10, rotation=(0, math.radians(90), 0))
+            cyl("afv_wheel", sx * 1.274, wy, 0.56, 0.53, 0.3, green, vertices=8, rotation=(0, math.radians(90), 0))
     box("afv_turret", 0, 0.55, 2.6, 2.35, 3.2, 0.95, green)
     rbox("afv_turret_front", 0, -1.15, 2.55, 2.2, 1.2, 0.8, green, rotation=(math.radians(38), 0, 0))
     cyl("afv_barrel", 0, -3.6, 2.72, 0.16, 4.8, metal, vertices=8, rotation=(math.radians(90), 0, 0))
     cyl("afv_muzzle", 0, -5.6, 2.72, 0.25, 0.8, dark, vertices=8, rotation=(math.radians(90), 0, 0))
-    cyl("afv_hatch", -0.55, 0.6, 3.2, 0.55, 0.28, green, vertices=10)
+    cyl("afv_hatch", -0.55, 0.6, 3.2, 0.55, 0.28, green, vertices=8)
     cyl("afv_antenna", 0.85, 1.9, 4.4, 0.035, 2.8, dark, vertices=6)
     box("afv_stowage", 0, 2.35, 2.45, 2.1, 0.9, 0.7, dark)
     for hx in (-1.15, 1.15):
@@ -7350,26 +7359,26 @@ def _build_turbine_hall(length, height):
             box("turbine_rib", sx, ry, 1.0 + wall_h / 2.0, 0.9, 1.4, wall_h, accent)
         if ry + 5.0 < half - 4.0:
             for sx in (-20.06, 20.06):
-                box("turbine_louver", sx, ry + 5.0, 3.2, 0.3, 7.0, 2.2, metal)
+                panel("turbine_louver", sx + (0.15 if sx > 0.0 else -0.15), ry + 5.0, 3.2, 7.0, 2.2, metal, "right" if sx > 0.0 else "left")
         ry += 10.0
     for sy in (-(half - 0.55), half - 0.55):
         for ex in (-12.0, 0.0, 12.0):
             box("turbine_end_rib", ex, sy, 1.0 + wall_h / 2.0, 1.4, 0.9, wall_h, accent)
     # High ribbon glazing and the plant-blue stripe.
     for sx in (-20.05, 20.05):
-        box("turbine_ribbon", sx, 0, height - 6.0, 0.35, length - 10.0, 3.0, glass)
-        box("turbine_stripe", sx, 0, 7.5, 0.3, length - 6.0, 1.0, blue)
+        panel("turbine_ribbon", sx + (0.175 if sx > 0.0 else -0.175), 0, height - 6.0, length - 10.0, 3.0, glass, "right" if sx > 0.0 else "left")
+        panel("turbine_stripe", sx + (0.15 if sx > 0.0 else -0.15), 0, 7.5, length - 6.0, 1.0, blue, "right" if sx > 0.0 else "left")
     for sy in (-(half - 0.95), half - 0.95):
-        box("turbine_stripe", 0, sy, 7.5, 36.0, 0.3, 1.0, blue)
+        panel("turbine_stripe", 0, sy + (0.15 if sy > 0.0 else -0.15), 7.5, 36.0, 1.0, blue, "back" if sy > 0.0 else "front")
     # End doors: one wide equipment door + personnel door per gable.
     for sy in (-(half - 0.8), half - 0.8):
         box("turbine_door", -4.0, sy, 4.5, 14.0, 0.5, 7.0, dark)
-        box("turbine_door_split", -4.0, sy + (0.35 if sy > 0 else -0.35), 4.5, 0.4, 0.2, 7.0, metal)
+        panel("turbine_door_split", -4.0, sy + (0.45 if sy > 0 else -0.45), 4.5, 0.4, 7.0, metal, "back" if sy > 0 else "front")
         box("turbine_personnel_door", 10.0, sy, 2.6, 2.4, 0.5, 3.2, blue)
     # Roof exhaust stacks, vents and corner safety lights.
     stack_ys = (-60.0, -20.0, 20.0, 60.0) if length > 140.0 else (-32.0, 0.0, 32.0)
     for i, sy in enumerate(stack_ys):
-        cyl("turbine_stack", -10.0 if i % 2 == 0 else 10.0, sy, height - 1.1, 1.1, 1.8, metal, vertices=10)
+        cyl("turbine_stack", -10.0 if i % 2 == 0 else 10.0, sy, height - 1.1, 1.1, 1.8, metal, vertices=8)
     for vx, vy in ((-14.0, -half * 0.45), (14.0, half * 0.45), (14.0, -half * 0.15), (-14.0, half * 0.15)):
         box("turbine_roof_vent", vx, vy, height - 1.05, 5.0, 4.0, 0.9, dark)
     for cx in (-19.5, 19.5):
@@ -7516,10 +7525,10 @@ def build_barn():
     rbox("barn_brace_a", -15.45, 0, 2.6, 0.16, 6.4, 0.5, white, rotation=(math.radians(48), 0, 0))
     rbox("barn_brace_b", -15.45, 0, 2.6, 0.16, 6.4, 0.5, white, rotation=(math.radians(-48), 0, 0))
     box("barn_loft", -15.25, 0, 7.6, 0.3, 2.2, 2.0, white)
-    box("barn_loft_glass", -15.4, 0, 7.6, 0.2, 1.7, 1.5, MATS["WindowGlassDark"])
+    panel("barn_loft_glass", -15.5, 0, 7.6, 1.7, 1.5, MATS["WindowGlassDark"], "left")
     for wx in (-9.0, -3.0, 3.0, 9.0):
-        box("barn_win", wx, -7.12, 4.2, 1.5, 0.22, 1.6, white)
-        box("barn_win_glass", wx, -7.2, 4.2, 1.2, 0.15, 1.3, MATS["WindowGlassDark"])
+        panel("barn_win", wx, -7.23, 4.2, 1.5, 1.6, white, "front")
+        panel("barn_win_glass", wx, -7.275, 4.2, 1.2, 1.3, MATS["WindowGlassDark"], "front")
     box("barn_leanto", -2, 8.4, 1.7, 17, 3.4, 3.4, red)
     rbox("barn_leanto_roof", -2, 8.6, 3.6, 17.6, 4.4, 0.3, dark, rotation=(math.radians(10), 0, 0))
     box("barn_ridge_cap", 0, 0, 10.42, 31.6, 0.5, 0.25, dark)
@@ -7542,7 +7551,7 @@ def build_greenhouse():
         gy = math.sin(a) * 6.9
         gz = 0.8 + math.cos(a) * 5.1
         rbox("gh_glass", 0, gy, gz, 43.6, 3.6, 0.1, glass, rotation=(a, 0, 0))
-    for rib_x in range(-21, 22, 6):
+    for rib_x in range(-21, 22, 7):
         for a in angles:
             gy = math.sin(a) * 7.0
             gz = 0.8 + math.cos(a) * 5.2
@@ -7588,6 +7597,11 @@ def build_port_crane():
     tube_between("crane_cable", (0, -38.5, 55.2), (0, -38.5, 21.0), 0.09, 0.09, MATS["WindowFrame"], vertices=6)
     box("crane_spreader", 0, -38.5, 20.4, 6.2, 2.4, 1.1, MATS["CityAccentRed"])
     box("crane_load", 0, -38.5, 18.2, 12.0, 2.4, 2.5, MATS["CityAccentBlue"])
+    # 0.3.10: leg cross-bracing and a cab window band.
+    for lx in (-9.0, 9.0):
+        rbox("crane_brace_a", lx, 0, 15, 0.8, 17.5, 0.8, yellow, rotation=(0.55, 0, 0))
+        rbox("crane_brace_b", lx, 0, 15, 0.8, 17.5, 0.8, yellow, rotation=(-0.55, 0, 0))
+    panel("crane_cab_glass", 3.1, -6.28, 30.9, 2.6, 1.1, MATS["FacadeGlass"], "front")
 
 
 main()
