@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.12-native-alpha"'), 'Native project version metadata must match 0.3.12-native-alpha');
-assert(preset.includes('version/code=78'), 'Native 0.3.12 must bump Android versionCode to 78');
-assert(preset.includes('version/name="0.3.12-native-alpha"'), 'Native version name must be 0.3.12-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.12-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.13-native-alpha"'), 'Native project version metadata must match 0.3.13-native-alpha');
+assert(preset.includes('version/code=79'), 'Native 0.3.13 must bump Android versionCode to 79');
+assert(preset.includes('version/name="0.3.13-native-alpha"'), 'Native version name must be 0.3.13-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.13-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.12"') && preset.includes('application/product_version="0.3.12"'), 'Desktop Windows version metadata must match native 0.3.12');
+assert(preset.includes('application/file_version="0.3.13"') && preset.includes('application/product_version="0.3.13"'), 'Desktop Windows version metadata must match native 0.3.13');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -936,6 +936,8 @@ if (requireAssets) {
     'assets/textures/user_black_granite_normal.jpg',
     'assets/textures/user_brushed_metal.jpg',
     'assets/textures/user_brushed_metal_normal.jpg',
+    'assets/textures/user_brushed_metal_seamless.jpg',
+    'assets/textures/user_brushed_metal_seamless_normal.jpg',
     'assets/textures/user_mulch_soil.jpg',
     'assets/textures/hedge.jpg',
     'assets/textures/user_sky_day.jpg',
@@ -1357,8 +1359,8 @@ const modelBudgets038 = {
   'stadium.glb': [2_350, 7],
   'container_blue.glb': [620, 4],
   'container_red.glb': [620, 4],
-  'office_tower_mid.glb': [520, 7],
-  'office_tower_high.glb': [640, 8],
+  'office_tower_mid.glb': [720, 7],
+  'office_tower_high.glb': [830, 8],
   'warehouse_small.glb': [830, 6],
 };
 for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(modelBudgets038)) {
@@ -1401,8 +1403,8 @@ const modelBudgets039 = {
   'townhouse.glb': [17_500, 22],
   'villa.glb': [12_600, 19],
   'midrise_a.glb': [1_820, 8],
-  'shopping_mall.glb': [2_200, 9],
-  'school.glb': [1_600, 11],
+  'shopping_mall.glb': [2_400, 9],
+  'school.glb': [1_750, 11],
   'airport_terminal.glb': [1_150, 5],
   'villa_b.glb': [640, 8],
   'townhouse_b.glb': [780, 9],
@@ -1564,6 +1566,44 @@ for (const marker of ['_bake_world_uv_density_0312', '_UV_DENSITY_TILES_0312', '
     }
   }
   assert(uvMax0312 > 5.0, `0.3.12 warehouse PropsMetal UVs are not world-density baked (max |uv| = ${uvMax0312})`);
+}
+
+// 0.3.13: realism pass 2 - seamless brushed metal + framed glass.
+// The shared brushed-metal photo carried a hard horizontal seam
+// (row-mean step ~50/255 at mid-height and again at the wrap), so
+// every tiled metal surface banded visibly once 0.3.12 gave it
+// world-scale UVs; it is now a seamless derivative (FFT low-tone
+// equalisation + edge/centre mirror blends, originals kept) and
+// every runtime material points at it.  Office shafts gain
+// vertical face fins, the mall/school/terminal glass bands get
+// head/sill transom rails, and the school wing/gym panes become
+// recessed windows.  Parts and detail-node budgets stay frozen.
+for (const marker of ['office_face_fin0313', 'office_upper_fin0313', 'mall_storefront_rail0313', 'mall_clerestory_rail0313', 'school_win_rail0313', 'term_glass_rail0313']) {
+  assert(blenderScript.includes(marker), `0.3.13 Blender marker is missing: ${marker}`);
+}
+assert(worldScript.includes('user_brushed_metal_seamless.jpg') && worldScript.includes('user_brushed_metal_seamless_normal.jpg'), '0.3.13 world builder must use the seamless brushed-metal pair');
+assert(!worldScript.includes('"user_brushed_metal.jpg"') && !worldScript.includes('"user_brushed_metal_normal.jpg"'), '0.3.13 no runtime material may keep the seamed brushed-metal originals');
+assert(syncScript.includes('user_brushed_metal_seamless.jpg'), '0.3.13 sync must stage the seamless brushed-metal textures');
+for (const [tex0313, minBytes0313] of [['user_brushed_metal_seamless.jpg', 50_000], ['user_brushed_metal_seamless_normal.jpg', 10_000]]) {
+  const texInfo0313 = await stat(`src/assets/textures/realworld/${tex0313}`);
+  assert(texInfo0313.size > minBytes0313, `0.3.13 ${tex0313} is missing or truncated`);
+}
+{
+  const lowBytes0313 = await readFile('src/assets/models/props/office_tower_low.glb');
+  const lowJson0313 = parseGlbJson(lowBytes0313);
+  let lowTris0313 = 0;
+  let lowParts0313 = 0;
+  for (const mesh0313 of lowJson0313.meshes ?? []) {
+    for (const prim0313 of mesh0313.primitives ?? []) {
+      lowParts0313 += 1;
+      const count0313 = prim0313.indices !== undefined
+        ? lowJson0313.accessors[prim0313.indices].count
+        : lowJson0313.accessors[prim0313.attributes.POSITION].count;
+      const mode0313 = prim0313.mode ?? 4;
+      lowTris0313 += mode0313 === 4 ? Math.floor(count0313 / 3) : (mode0313 === 5 || mode0313 === 6 ? Math.max(count0313 - 2, 0) : 0);
+    }
+  }
+  assert(lowParts0313 === 7 && lowTris0313 <= 540, `0.3.13 office_tower_low budget blown: ${lowTris0313} tris / ${lowParts0313} parts`);
 }
 
 console.log('Native Godot project validation OK');
