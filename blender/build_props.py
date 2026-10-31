@@ -5974,6 +5974,8 @@ def main():
         (build_hangar_large, "hangar_large.glb"),
         (build_hangar_small, "hangar_small.glb"),
         (build_airliner, "airliner.glb"),
+        (build_yacht_sail, "yacht_sail.glb"),
+        (build_yacht_motor, "yacht_motor.glb"),
         (build_cooling_tower, "cooling_tower.glb"),
         (build_reactor, "reactor.glb"),
         (build_chimney, "chimney.glb"),
@@ -6858,6 +6860,111 @@ def build_hangar_large():
 
 def build_hangar_small():
     _build_hangar(30.0, 39.0, 6.8, 4.2)
+
+
+
+def _yacht_hull(name, length, beam, freeboard, material):
+    """0.3.11 lofted planing/sailing hull: five-point sections from a
+    flat transom stern (+Y) to a fine bow (-Y), deck-capped.  Keel
+    line at z=0 so the model origin sits on the basin floor grid and
+    placement Y handles the draft."""
+    sections = [
+        (0.50, 0.46, 1.00),
+        (0.30, 0.50, 0.97),
+        (0.05, 0.50, 0.95),
+        (-0.22, 0.44, 0.98),
+        (-0.40, 0.28, 1.06),
+        (-0.50, 0.02, 1.16),
+    ]
+    b = MeshBuilder()
+    rings = []
+    for yf, hf, sf in sections:
+        y = yf * length
+        hb = hf * beam
+        ring = [
+            b.add_vertex(Vector((-hb, y, freeboard * sf))),
+            b.add_vertex(Vector((-hb * 0.88, y, freeboard * 0.38))),
+            b.add_vertex(Vector((0.0, y, 0.0))),
+            b.add_vertex(Vector((hb * 0.88, y, freeboard * 0.38))),
+            b.add_vertex(Vector((hb, y, freeboard * sf))),
+        ]
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        a, c = rings[i], rings[i + 1]
+        for j in range(4):
+            b.quad(c[j], a[j], a[j + 1], c[j + 1])
+        b.quad(c[4], a[4], a[0], c[0])
+    r0 = rings[0]
+    b.add_face((r0[4], r0[3], r0[2], r0[1], r0[0]),
+               ((0.0, 1.0), (0.2, 0.4), (0.5, 0.0), (0.8, 0.4), (1.0, 1.0)))
+    return b.build(name, material, smooth=True)
+
+
+def _yacht_portholes(prefix, length, beam, freeboard, ys, material):
+    for sx in (-1.0, 1.0):
+        for i, yf in enumerate(ys):
+            hb = beam * (0.50 if abs(yf) < 0.3 else 0.44)
+            box(f"{prefix}_porthole_{int(sx)}_{i}", sx * (hb * 0.995), yf * length,
+                freeboard * 0.72, 0.08, 0.55, 0.28, material)
+
+
+def build_yacht_sail():
+    white = MATS["CityWhitePaint"]
+    glass = MATS["WindowGlassDark"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+
+    _yacht_hull("ys_hull", 11.5, 3.4, 1.05, white)
+    box("ys_coachroof", 0, 0.4, 1.28, 1.9, 3.4, 0.5, white)
+    box("ys_coachglass", 0, 0.35, 1.32, 1.98, 2.6, 0.26, glass)
+    box("ys_cockpit", 0, 3.1, 1.06, 1.7, 2.2, 0.22, dark)
+    box("ys_swimstep", 0, 5.95, 0.42, 2.2, 0.5, 0.12, white)
+    box("ys_bowroller", 0, -5.8, 1.24, 0.3, 0.7, 0.14, metal)
+    cyl("ys_mast", 0, -0.8, 7.6, 0.09, 13.2, metal, vertices=6)
+    cyl("ys_boom", 0, 1.1, 2.6, 0.07, 3.9, metal, vertices=6,
+        rotation=(math.radians(90), 0, 0))
+    sails = MeshBuilder()
+    tack = sails.add_vertex(Vector((0.0, -0.75, 2.75)))
+    head = sails.add_vertex(Vector((0.0, -0.75, 13.6)))
+    clew = sails.add_vertex(Vector((0.0, 3.0, 2.75)))
+    sails.tri(tack, head, clew)
+    sails.tri(tack, clew, head)
+    jib_tack = sails.add_vertex(Vector((0.0, -5.45, 1.35)))
+    jib_head = sails.add_vertex(Vector((0.0, -0.85, 12.2)))
+    jib_clew = sails.add_vertex(Vector((0.0, -0.55, 2.9)))
+    sails.tri(jib_tack, jib_head, jib_clew)
+    sails.tri(jib_tack, jib_clew, jib_head)
+    sails.build("ys_sails", white, smooth=False)
+    tube_between("ys_forestay", (0.0, -5.45, 1.4), (0.0, -0.82, 13.9), 0.025, 0.025, metal, vertices=4)
+    tube_between("ys_backstay", (0.0, 5.2, 1.15), (0.0, -0.82, 13.9), 0.025, 0.025, metal, vertices=4)
+    _yacht_portholes("ys", 11.5, 3.4, 1.05, (-0.18, 0.02, 0.22), glass)
+
+
+def build_yacht_motor():
+    white = MATS["CityWhitePaint"]
+    glass = MATS["WindowGlassDark"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+
+    _yacht_hull("ym_hull", 13.5, 4.3, 1.35, white)
+    box("ym_salon", 0, 0.7, 2.15, 3.5, 5.6, 1.5, white)
+    box("ym_salon_glass", 0, 0.45, 2.35, 3.58, 4.7, 0.62, glass)
+    rbox("ym_windshield", 0, -2.35, 2.5, 3.1, 0.18, 0.95, glass,
+         rotation=(math.radians(-24), 0, 0))
+    box("ym_flybridge", 0, 1.15, 3.35, 3.0, 3.4, 0.85, white)
+    rbox("ym_fly_glass", 0, -0.55, 3.6, 2.7, 0.16, 0.7, glass,
+         rotation=(math.radians(-24), 0, 0))
+    box("ym_hardtop", 0, 1.3, 4.05, 3.3, 3.9, 0.16, white)
+    for sx in (-1.0, 1.0):
+        rbox("ym_arch_post", sx * 1.45, 2.9, 3.5, 0.22, 0.5, 1.5, white,
+             rotation=(math.radians(18), 0, 0))
+        box("ym_exhaust", sx * 1.6, 6.55, 0.85, 0.5, 0.4, 0.35, dark)
+    box("ym_arch_top", 0, 3.35, 4.3, 3.1, 0.5, 0.22, white)
+    box("ym_radar", 0, 3.35, 4.52, 0.9, 0.45, 0.22, dark)
+    box("ym_sunpad", 0, -3.6, 1.5, 2.2, 2.0, 0.22, dark)
+    box("ym_swimplatform", 0, 7.05, 0.55, 3.6, 0.8, 0.14, white)
+    box("ym_windlass", 0, -5.6, 1.5, 0.55, 0.7, 0.3, metal)
+    _yacht_portholes("ym", 13.5, 4.3, 1.35, (-0.24, -0.06, 0.12, 0.3), glass)
 
 
 def build_airliner():

@@ -137,6 +137,13 @@ def base_height(x: float, z: float) -> float:
         sea_floor = -5.4 + fbm(x, z, 520.0) * 0.7
         h = lerp(h, sea_floor, coast)
 
+    # 0.3.11 marina basins: sheltered harbours carved into the beach
+    # in front of the Marina South/North districts.
+    for _bz0, _bz1 in ((-1090.0, -610.0), (610.0, 1090.0)):
+        _basin = rect_mask(x, z, -3005.0, -2675.0, _bz0, _bz1, 55.0)
+        if _basin > 0.0:
+            h = lerp(h, -2.4, _basin)
+
     return h
 
 
@@ -539,7 +546,8 @@ def spot_free(x, z, r, skip_x=None, skip_z=None):
 
 
 # 0.3.1 mega-structure parcels stay free of cafes/scatter.
-MEGA_RECTS = [(-2640, -160, -2540, -1600), (-2520, -1530, 2260, 2940), (2540, 3280, -1340, -680)]
+MEGA_RECTS = [(-2640, -160, -2540, -1600), (-2520, -1530, 2260, 2940), (2540, 3280, -1340, -680),
+              (1485, 1815, -45, 45), (-3010, -2660, -1100, -600), (-3010, -2660, 600, 1100)]
 
 
 def in_mega(x, z, pad=8.0):
@@ -554,6 +562,9 @@ SCHOOL_SPOTS = [
 ]
 for _sx, _sz in SCHOOL_SPOTS:
     _occ_register(_sx, _sz, 52.0)
+# 0.3.11 Roses land-tunnel footprint stays free of houses.
+for _tx in range(1500, 1801, 40):
+    _occ_register(float(_tx), 0.0, 30.0)
 for _ox, _oz, _orad in ((-1750, -1955, 140.0), (-1850, -1760, 42.0), (-1280, -1975, 20.0),
                         (1400, 1950, 16.0), (1416, 1950, 16.0), (2000, 2300, 16.0),
                         (2016, 2300, 16.0), (1650, 2750, 16.0),
@@ -952,6 +963,8 @@ print(f"Footprint repair: moved {_repaired}, unresolved {_unresolved}")
 
 landmarks = [
     {"kind": "rt-tower", "x": 0, "z": 0, "h": 148, "r": 0, "rotY": 0.0},
+    {"kind": "rt7-plaza", "x": 0, "z": 0, "h": 0, "r": 86, "rotY": 0.0},
+    {"kind": "rt7-tunnel", "x": 1650, "z": 0, "h": 8, "r": 120, "rotY": 0.0},
     {"kind": "rt-fountain", "x": 48, "z": 48, "h": 0, "r": 9, "rotY": 0.0},
     {"kind": "rt-fountain", "x": -1200, "z": 90, "h": 0, "r": 8, "rotY": 0.0},
     {"kind": "rt-arch", "x": 0, "z": -1150, "h": 43, "r": 0, "rotY": 0.0},
@@ -1012,6 +1025,26 @@ for cx in (-1200, -400, 400):
 for lm in landmarks:
     lm["y"] = round(ground(lm["x"], lm["z"]), 3)
 
+# --- 0.3.11 marinas: quay + finger piers, moored yachts, breakwaters.
+# Emitted after the ground-y fill: water landmarks carry explicit
+# waterline Y instead of the seabed height.
+_WATER_Y = 0.04
+for _cz in (-850.0, 850.0):
+    landmarks.append({"kind": "rt7-pier", "x": -2702.0, "z": _cz, "h": 0, "r": 190.0,
+                      "rotY": math.pi / 2.0, "y": _WATER_Y})
+    for _foff in (-165.0, -55.0, 55.0, 165.0):
+        _fz = _cz + _foff
+        landmarks.append({"kind": "rt7-pier", "x": -2755.0, "z": _fz, "h": 0, "r": 55.0,
+                          "rotY": 0.0, "y": _WATER_Y})
+        for _side in (-1.0, 1.0):
+            for _slot, _sx in enumerate((-2795.0, -2745.0)):
+                _kind = "rt7-yacht-sail" if ((_slot + (0 if _side < 0 else 1) + (0 if _cz < 0 else 1)) % 2 == 0) else "rt7-yacht-motor"
+                landmarks.append({"kind": _kind, "x": _sx, "z": _fz + _side * 6.8, "h": 0, "r": 0,
+                                  "rotY": math.pi / 2.0 if _side < 0 else -math.pi / 2.0, "y": -0.30})
+    for _bside in (-1.0, 1.0):
+        landmarks.append({"kind": "rt7-breakwater", "x": -2995.0, "z": _cz + _bside * 205.0,
+                          "h": 0, "r": 55.0, "rotY": _bside * 0.45, "y": _WATER_Y})
+
 # --------------------------------------------------------------------------
 # Scatter: pools, palms, trees, bushes, lamps, benches
 # --------------------------------------------------------------------------
@@ -1060,7 +1093,8 @@ for side in (-19.0, 19.0):
     palm_line(side, -3150, side, -120, 42)
     palm_line(side, 120, side, 1470, 42)
     palm_line(-2630, side, -120, side, 42)
-    palm_line(120, side, 2380, side, 42)
+    palm_line(120, side, 1480, side, 42)
+    palm_line(1820, side, 2380, side, 42)
 for sx in (-1019.0, 1019.0):
     palm_line(sx, -980, sx, 980, 44)
 for sz in (-1019.0, 1019.0):
@@ -1175,8 +1209,16 @@ lamp_line(-18.5, 120, -18.5, 3180, 55, 0, math.pi / 2.0, -1)
 lamp_line(18.5, 120, 18.5, 3180, 55, 0, -math.pi / 2.0, 1)
 lamp_line(-2630, -18.5, -120, -18.5, 55, 0, 0.0, -1)
 lamp_line(-2630, 18.5, -120, 18.5, 55, 0, math.pi, 1)
-lamp_line(120, -18.5, 2380, -18.5, 55, 0, 0.0, -1)
-lamp_line(120, 18.5, 2380, 18.5, 55, 0, math.pi, 1)
+lamp_line(120, -18.5, 1480, -18.5, 55, 0, 0.0, -1)
+lamp_line(1820, -18.5, 2380, -18.5, 55, 0, 0.0, -1)
+lamp_line(120, 18.5, 1480, 18.5, 55, 0, math.pi, 1)
+lamp_line(1820, 18.5, 2380, 18.5, 55, 0, math.pi, 1)
+# 0.3.11: plaza ring lamps + stadium approach rows.
+for _li in range(12):
+    _la = _li * math.tau / 12.0
+    add_lamp(math.cos(_la) * 106.0, math.sin(_la) * 106.0, _la + math.pi / 2.0, 1)
+lamp_line(30, -1562, 360, -1562, 66, 0, 0.0, -1)
+lamp_line(30, -1238, 360, -1238, 66, 0, math.pi, 1)
 # Highways (one side, sparse)
 lamp_line(-2630, -3222, 2380, -3222, 90, 0, 0.0, 1)
 lamp_line(-2630, 3222, 2380, 3222, 90, 0, math.pi, -1)
@@ -1212,6 +1254,24 @@ for i in range(18):
 for bz in range(-2400, 2500, 300):
     bx = -2695.0
     benches.append({"x": bx, "y": round(ground(bx, bz), 3), "z": float(bz), "rotY": -math.pi / 2.0})
+# 0.3.11: plaza inner ring, stadium forecourt and marina banks.
+for i in range(12):
+    a = (i / 12.0) * math.tau + 0.26
+    bx = math.cos(a) * 68.0
+    bz = math.sin(a) * 68.0
+    benches.append({"x": round(bx, 2), "y": round(ground(bx, bz), 3), "z": round(bz, 2),
+                    "rotY": round(-a + math.pi / 2.0, 3)})
+for i in range(12):
+    a = (i / 12.0) * math.tau
+    bx = 190.0 + math.cos(a) * 172.0
+    bz = -1400.0 + math.sin(a) * 172.0
+    benches.append({"x": round(bx, 2), "y": round(ground(bx, bz), 3), "z": round(bz, 2),
+                    "rotY": round(-a + math.pi / 2.0, 3)})
+for _cz in (-850.0, 850.0):
+    for _off in range(-210, 211, 60):
+        bx = -2682.0
+        bz = _cz + _off
+        benches.append({"x": bx, "y": round(ground(bx, bz), 3), "z": float(bz), "rotY": -math.pi / 2.0})
 
 print(f"Scatter: palms={len(palms)} trees={len(trees)} bushes={len(bushes)} lamps={len(lamps)} benches={len(benches)} pools={len(pools)}")
 
@@ -1223,6 +1283,8 @@ zones = {
     "sea": {"minX": -3500, "maxX": -2780, "minZ": -3500, "maxZ": 3500},
     "beach": {"minX": -2960, "maxX": -2610, "minZ": -3500, "maxZ": 3500},
     "marina": {"minX": -3500, "maxX": 2240, "minZ": 1570, "maxZ": 1630},  # the canal water body
+    "marinaBasinS": {"minX": -3040, "maxX": -2670, "minZ": -1100, "maxZ": -600},
+    "marinaBasinN": {"minX": -3040, "maxX": -2670, "minZ": 600, "maxZ": 1100},
     "rtPlaza": {"minX": -150, "maxX": 150, "minZ": -150, "maxZ": 150},
     "richtown": {"minX": -3500, "maxX": 3500, "minZ": -3500, "maxZ": 3500},
     "downtown": {"minX": -1030, "maxX": 1030, "minZ": -1030, "maxZ": 1030},

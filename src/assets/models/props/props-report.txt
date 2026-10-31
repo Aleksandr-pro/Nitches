@@ -53,4 +53,6 @@ props_out/villa_b.glb: meshes=8 tris=474 size=19.20x9.10x15.24m minY=0.00 mats=V
 props_out/warehouse_large.glb: meshes=6 tris=840 size=77.50x13.45x37.72m minY=0.00 mats=ConcreteLight,PropsMetal,WindowFrame,RoofDark,FacadeMain,FacadeGlass
 props_out/warehouse_small.glb: meshes=6 tris=744 size=47.50x10.45x29.72m minY=0.00 mats=ConcreteLight,PropsMetal,WindowFrame,RoofDark,FacadeMain,FacadeGlass
 props_out/watchtower.glb: meshes=4 tris=348 size=5.90x14.95x5.90m minY=0.00 mats=PropsWood,FacadeGlass,TownRoof,PropsMetal
+props_out/yacht_motor.glb: meshes=4 tris=329 size=4.36x4.63x14.20m minY=0.00 mats=CityWhitePaint,WindowGlassDark,RoofDark,PropsMetal
+props_out/yacht_sail.glb: meshes=4 tris=251 size=3.46x14.20x12.35m minY=0.00 mats=CityWhitePaint,WindowGlassDark,RoofDark,PropsMetal
 SMOKE OK
