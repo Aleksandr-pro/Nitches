@@ -341,14 +341,52 @@ def cone(name, x, y, z, r1, r2, depth, material, vertices=14):
     return finish(obj, material, smooth=True)
 
 
-def sphere(name, x, y, z, dx, dy, dz, material):
+def sphere(name, x, y, z, dx, dy, dz, material, segments=24, ring_count=16):
     bpy.ops.mesh.primitive_uv_sphere_add(
-        radius=0.5, segments=24, ring_count=16, location=(x, y, z),
+        radius=0.5, segments=segments, ring_count=ring_count, location=(x, y, z),
     )
     obj = bpy.context.active_object
     obj.name = name
     obj.dimensions = (dx, dy, dz)
     return finish(obj, material, smooth=True)
+
+
+def panel(name, x, y, z, width, height, material, face):
+    """Single-sided facade quad (2 tris) for flat window layers.
+
+    0.3.6: interior backings, curtains, blinds, glow strips and glass
+    panes sit inside solid frame/wall geometry, so their ~4 cm box
+    thickness was invisible from every exterior viewpoint while
+    costing 12 triangles each (thousands per premium building).  The
+    quad sits exactly on the old box's outer face and is wound
+    outward; frames, sills, mullions and reveals stay solid boxes
+    and keep the physical depth of the opening.
+    """
+    hw = width / 2.0
+    hh = height / 2.0
+    if face in ("front", "back"):
+        sign = -1.0 if face == "front" else 1.0
+        points = [(x - hw, y, z - hh), (x + hw, y, z - hh), (x + hw, y, z + hh), (x - hw, y, z + hh)]
+        outward = Vector((0.0, sign, 0.0))
+    else:
+        sign = -1.0 if face == "left" else 1.0
+        points = [(x, y - hw, z - hh), (x, y + hw, z - hh), (x, y + hw, z + hh), (x, y - hw, z + hh)]
+        outward = Vector((sign, 0.0, 0.0))
+    normal = (Vector(points[1]) - Vector(points[0])).cross(Vector(points[3]) - Vector(points[0]))
+    if normal.dot(outward) < 0.0:
+        points = [points[1], points[0], points[3], points[2]]
+    mesh = bpy.data.meshes.new(name + "_mesh")
+    mesh.from_pydata(points, [], [(0, 1, 2, 3)])
+    mesh.update()
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    for index, uv_value in enumerate(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))):
+        if index < len(uv_layer.data):
+            uv_layer.data[index].uv = uv_value
+    if material is not None:
+        mesh.materials.append(material)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    return obj
 
 
 def tube_between(name, start, end, radius_start, radius_end, material, vertices=16):
@@ -1313,18 +1351,18 @@ def build_hero():
         variant = int(abs(cx * 3.7 + cy * 5.3 + cz * 6.9)) % 4
         if face in ("front", "back"):
             box("hero_window_reveal", cx, cy + sign * 0.015, cz, width + 0.28, 0.075, height + 0.28, trim)
-            box("hero_window_interior", cx, cy + sign * 0.032, cz, width - 0.02, 0.034, height - 0.02, interior)
+            panel("hero_window_interior", cx, cy + sign * 0.049, cz, width - 0.02, height - 0.02, interior, face)
             if variant == 0:
                 for side in (-1.0, 1.0):
-                    box("hero_window_curtain", cx + side * (width / 2.0 - 0.15), cy + sign * 0.052, cz, 0.20, 0.028, height - 0.12, curtain)
+                    panel("hero_window_curtain", cx + side * (width / 2.0 - 0.15), cy + sign * 0.066, cz, 0.20, height - 0.12, curtain, face)
             elif variant == 1:
                 blind_h = height * 0.38
-                box("hero_window_blind", cx, cy + sign * 0.054, cz + height / 2.0 - blind_h / 2.0 - 0.03, width - 0.10, 0.028, blind_h, curtain)
+                panel("hero_window_blind", cx, cy + sign * 0.068, cz + height / 2.0 - blind_h / 2.0 - 0.03, width - 0.10, blind_h, curtain, face)
                 box("hero_window_blind_rail", cx, cy + sign * 0.058, cz + height / 2.0 - blind_h - 0.04, width - 0.08, 0.032, 0.038, frame)
             elif variant == 2:
-                box("hero_window_light", cx - width * 0.16, cy + sign * 0.055, cz + height * 0.30, width * 0.36, 0.022, 0.034, glow)
+                panel("hero_window_light", cx - width * 0.16, cy + sign * 0.066, cz + height * 0.30, width * 0.36, 0.034, glow, face)
             box("hero_window_frame", cx, cy + sign * 0.024, cz, width + 0.15, 0.135, height + 0.15, frame)
-            box("hero_window_glass", cx, cy + sign * 0.078, cz, width, 0.038, height, glass)
+            panel("hero_window_glass", cx, cy + sign * 0.097, cz, width, height, glass, face)
             divisions = max(1, int(width // 1.15))
             for division in range(1, divisions):
                 mx = cx - width / 2.0 + width * division / divisions
@@ -1333,18 +1371,18 @@ def build_hero():
             box("hero_window_sill", cx, cy + sign * 0.090, cz - height / 2.0 - 0.070, width + 0.34, 0.25, 0.085, trim)
         else:
             box("hero_window_reveal", cx + sign * 0.015, cy, cz, 0.075, width + 0.28, height + 0.28, trim)
-            box("hero_window_interior", cx + sign * 0.032, cy, cz, 0.034, width - 0.02, height - 0.02, interior)
+            panel("hero_window_interior", cx + sign * 0.049, cy, cz, width - 0.02, height - 0.02, interior, face)
             if variant == 0:
                 for side in (-1.0, 1.0):
-                    box("hero_window_curtain", cx + sign * 0.052, cy + side * (width / 2.0 - 0.15), cz, 0.028, 0.20, height - 0.12, curtain)
+                    panel("hero_window_curtain", cx + sign * 0.066, cy + side * (width / 2.0 - 0.15), cz, 0.20, height - 0.12, curtain, face)
             elif variant == 1:
                 blind_h = height * 0.38
-                box("hero_window_blind", cx + sign * 0.054, cy, cz + height / 2.0 - blind_h / 2.0 - 0.03, 0.028, width - 0.10, blind_h, curtain)
+                panel("hero_window_blind", cx + sign * 0.068, cy, cz + height / 2.0 - blind_h / 2.0 - 0.03, width - 0.10, blind_h, curtain, face)
                 box("hero_window_blind_rail", cx + sign * 0.058, cy, cz + height / 2.0 - blind_h - 0.04, 0.032, width - 0.08, 0.038, frame)
             elif variant == 2:
-                box("hero_window_light", cx + sign * 0.055, cy - width * 0.16, cz + height * 0.30, 0.022, width * 0.36, 0.034, glow)
+                panel("hero_window_light", cx + sign * 0.066, cy - width * 0.16, cz + height * 0.30, width * 0.36, 0.034, glow, face)
             box("hero_window_frame", cx + sign * 0.024, cy, cz, 0.135, width + 0.15, height + 0.15, frame)
-            box("hero_window_glass", cx + sign * 0.078, cy, cz, 0.038, width, height, glass)
+            panel("hero_window_glass", cx + sign * 0.097, cy, cz, width, height, glass, face)
             divisions = max(1, int(width // 1.15))
             for division in range(1, divisions):
                 my = cy - width / 2.0 + width * division / divisions
@@ -1506,7 +1544,7 @@ def build_hero():
     for ac_x in (-11.0, 11.0):
         for ac_y in (-9.65, 9.95):
             box("hero_podium_ac", ac_x, ac_y, 6.18, 1.45, 0.78, 0.72, metal, bevel=0.018)
-            cyl("hero_podium_ac_fan", ac_x, ac_y, 6.57, 0.24, 0.045, frame, vertices=16)
+            cyl("hero_podium_ac_fan", ac_x, ac_y, 6.57, 0.24, 0.045, frame, vertices=12)
 
     # Podium-roof terraces at the tower setback.
     for terrace_side in (-1.0, 1.0):
@@ -1534,12 +1572,12 @@ def build_hero():
         box("hero_roof_pergola_slat", -7.6 + slat_index * 1.90, -7.72, 27.52, 0.14, 1.10, 0.12, wood)
     box("hero_lift_overrun", 12.15, 4.00, 26.30, 2.55, 3.10, 2.30, stone, bevel=0.018)
     box("hero_lift_overrun_cap", 12.15, 4.00, 27.52, 2.80, 3.35, 0.16, granite)
-    cyl("hero_roof_tank", -12.00, 4.20, 26.20, 0.95, 2.05, metal, vertices=18)
-    cone("hero_roof_tank_cap", -12.00, 4.20, 27.48, 1.08, 0.18, 0.48, hero_metal, vertices=18)
+    cyl("hero_roof_tank", -12.00, 4.20, 26.20, 0.95, 2.05, metal, vertices=14)
+    cone("hero_roof_tank_cap", -12.00, 4.20, 27.48, 1.08, 0.18, 0.48, hero_metal, vertices=14)
     for hvac_x in (-8.0, 0.0, 8.0):
         for hvac_y in (-7.50, 8.55):
             box("hero_roof_hvac", hvac_x, hvac_y, 25.62, 2.25, 1.35, 0.88, metal, bevel=0.020)
-            cyl("hero_roof_hvac_fan", hvac_x, hvac_y, 26.09, 0.34, 0.05, frame, vertices=18)
+            cyl("hero_roof_hvac_fan", hvac_x, hvac_y, 26.09, 0.34, 0.05, frame, vertices=12)
     for vent_x in (-4.5, 4.5):
         cyl("hero_roof_vent", vent_x, 8.20, 25.72, 0.12, 1.05, metal, vertices=12)
         cone("hero_roof_vent_cap", vent_x, 8.20, 26.34, 0.22, 0.05, 0.24, metal, vertices=12)
@@ -1682,20 +1720,41 @@ def build_townhouse():
             else:
                 builder_box(bb(material), cx + sign * out, cy + along, zc, out_sz, along_sz, z_sz)
 
+        def wquad(material, along, out, zc, along_sz, z_sz):
+            # 0.3.6: flat window layers (interior/curtain/blind/glow/
+            # glass) become one outward quad on the old box's outer
+            # face -- 2 tris instead of 12, frames stay solid.
+            builder = bb(material)
+            a0, a1 = along - along_sz / 2.0, along + along_sz / 2.0
+            z0, z1 = zc - z_sz / 2.0, zc + z_sz / 2.0
+            if face in ("front", "back"):
+                points = [Vector((cx + a0, cy + sign * out, z0)), Vector((cx + a1, cy + sign * out, z0)),
+                          Vector((cx + a1, cy + sign * out, z1)), Vector((cx + a0, cy + sign * out, z1))]
+                outward = Vector((0.0, sign, 0.0))
+            else:
+                points = [Vector((cx + sign * out, cy + a0, z0)), Vector((cx + sign * out, cy + a1, z0)),
+                          Vector((cx + sign * out, cy + a1, z1)), Vector((cx + sign * out, cy + a0, z1))]
+                outward = Vector((sign, 0.0, 0.0))
+            normal = (points[1] - points[0]).cross(points[3] - points[0])
+            if normal.dot(outward) < 0.0:
+                points = [points[1], points[0], points[3], points[2]]
+            ids = [builder.add_vertex(point) for point in points]
+            builder.quad(*ids)
+
         wbox(trim, 0.0, 0.030, cz + height * 0.5 + 0.10, width + 0.34, 0.060, 0.12)
         wbox(trim, 0.0, 0.030, cz - height * 0.5 - 0.10, width + 0.34, 0.060, 0.12)
         for sd in (-1.0, 1.0):
             wbox(trim, sd * (width * 0.5 + 0.10), 0.030, cz, 0.12, 0.060, height + 0.10)
-        wbox(interior, 0.0, 0.030, cz, width - 0.03, 0.035, height - 0.03)
+        wquad(interior, 0.0, 0.048, cz, width - 0.03, height - 0.03)
         if variant != 1:
             for sd in (-1.0, 1.0):
-                wbox(curtain, sd * (width / 2.0 - 0.16), 0.060, cz, 0.22, 0.030, height - 0.13)
+                wquad(curtain, sd * (width / 2.0 - 0.16), 0.075, cz, 0.22, height - 0.13)
         if blind_drop > 0.05:
             blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.03
-            wbox(curtain, 0.0, 0.062, blind_z, width - 0.10, 0.028, blind_drop)
+            wquad(curtain, 0.0, 0.076, blind_z, width - 0.10, blind_drop)
             wbox(frame, 0.0, 0.066, blind_z - blind_drop / 2.0, width - 0.08, 0.034, 0.040)
-        wbox(glow, -width * 0.17, 0.058, cz + height * 0.33, width * 0.34, 0.022, 0.035)
-        wbox(glass, 0.0, 0.080, cz, width, 0.040, height)
+        wquad(glow, -width * 0.17, 0.069, cz + height * 0.33, width * 0.34, 0.035)
+        wquad(glass, 0.0, 0.100, cz, width, height)
         wbox(frame, 0.0, 0.095, cz + height * 0.5 + 0.030, width + 0.18, 0.150, 0.10)
         wbox(frame, 0.0, 0.095, cz - height * 0.5 - 0.030, width + 0.18, 0.150, 0.10)
         for sd in (-1.0, 1.0):
@@ -2176,18 +2235,18 @@ def build_villa():
             # 0.2.7 the transparent pane sat almost directly on the solid
             # wall box, which is why it read as flat black paint.
             box("villa_window_reveal", cx, cy + sign * 0.018, cz, width + 0.38, 0.085, height + 0.38, granite)
-            box("villa_window_interior", cx, cy + sign * 0.038, cz, width - 0.03, 0.040, height - 0.03, interior)
+            panel("villa_window_interior", cx, cy + sign * 0.058, cz, width - 0.03, height - 0.03, interior, face)
             if variant != 1:
                 for curtain_side in (-1.0, 1.0):
                     curtain_x = cx + curtain_side * (width / 2.0 - 0.17)
-                    box("villa_window_curtain", curtain_x, cy + sign * 0.064, cz, 0.24, 0.034, height - 0.14, curtain)
+                    panel("villa_window_curtain", curtain_x, cy + sign * 0.081, cz, 0.24, height - 0.14, curtain, face)
             if blind_drop > 0.05:
                 blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.035
-                box("villa_window_blind", cx, cy + sign * 0.066, blind_z, width - 0.12, 0.032, blind_drop, curtain)
+                panel("villa_window_blind", cx, cy + sign * 0.082, blind_z, width - 0.12, blind_drop, curtain, face)
                 box("villa_window_blind_rail", cx, cy + sign * 0.070, blind_z - blind_drop / 2.0, width - 0.10, 0.038, 0.045, frame)
-            box("villa_window_interior_light", cx - width * 0.18, cy + sign * 0.068, cz + height * 0.34, width * 0.38, 0.026, 0.040, glow)
+            panel("villa_window_interior_light", cx - width * 0.18, cy + sign * 0.084, cz + height * 0.34, width * 0.38, 0.040, glow, face)
             box("villa_window_frame", cx, cy + sign * 0.028, cz, width + 0.19, 0.17, height + 0.19, frame)
-            box("villa_window_glass", cx, cy + sign * 0.098, cz, width, 0.045, height, glass)
+            panel("villa_window_glass", cx, cy + sign * 0.121, cz, width, height, glass, face)
             for division in range(1, divisions):
                 mx = cx - width / 2.0 + width * division / divisions
                 box("villa_window_mullion", mx, cy + sign * 0.112, cz, 0.055, 0.055, height, frame)
@@ -2205,18 +2264,18 @@ def build_villa():
                     box("villa_window_shade_bracket", bracket_x, cy + sign * 0.24, cz + height / 2.0 + 0.30, 0.055, 0.42, 0.28, metal)
         else:
             box("villa_window_reveal", cx + sign * 0.018, cy, cz, 0.085, width + 0.38, height + 0.38, granite)
-            box("villa_window_interior", cx + sign * 0.038, cy, cz, 0.040, width - 0.03, height - 0.03, interior)
+            panel("villa_window_interior", cx + sign * 0.058, cy, cz, width - 0.03, height - 0.03, interior, face)
             if variant != 1:
                 for curtain_side in (-1.0, 1.0):
                     curtain_y = cy + curtain_side * (width / 2.0 - 0.17)
-                    box("villa_window_curtain", cx + sign * 0.064, curtain_y, cz, 0.034, 0.24, height - 0.14, curtain)
+                    panel("villa_window_curtain", cx + sign * 0.081, curtain_y, cz, 0.24, height - 0.14, curtain, face)
             if blind_drop > 0.05:
                 blind_z = cz + height / 2.0 - blind_drop / 2.0 - 0.035
-                box("villa_window_blind", cx + sign * 0.066, cy, blind_z, 0.032, width - 0.12, blind_drop, curtain)
+                panel("villa_window_blind", cx + sign * 0.082, cy, blind_z, width - 0.12, blind_drop, curtain, face)
                 box("villa_window_blind_rail", cx + sign * 0.070, cy, blind_z - blind_drop / 2.0, 0.038, width - 0.10, 0.045, frame)
-            box("villa_window_interior_light", cx + sign * 0.068, cy - width * 0.18, cz + height * 0.34, 0.026, width * 0.38, 0.040, glow)
+            panel("villa_window_interior_light", cx + sign * 0.084, cy - width * 0.18, cz + height * 0.34, width * 0.38, 0.040, glow, face)
             box("villa_window_frame", cx + sign * 0.028, cy, cz, 0.17, width + 0.19, height + 0.19, frame)
-            box("villa_window_glass", cx + sign * 0.098, cy, cz, 0.045, width, height, glass)
+            panel("villa_window_glass", cx + sign * 0.121, cy, cz, width, height, glass, face)
             for division in range(1, divisions):
                 my = cy - width / 2.0 + width * division / divisions
                 box("villa_window_mullion", cx + sign * 0.112, my, cz, 0.055, 0.055, height, frame)
@@ -2319,7 +2378,7 @@ def build_villa():
     box("villa_entry_canopy", 0.3, -5.25, 3.16, 4.6, 3.30, 0.18, frame, bevel=0.02)
     box("villa_entry_canopy_fascia", 0.3, -6.88, 3.08, 4.65, 0.10, 0.30, metal)
     for column_x in (-1.7, 2.3):
-        cyl("villa_entry_column", column_x, -6.62, 1.72, 0.075, 2.95, metal, vertices=16)
+        cyl("villa_entry_column", column_x, -6.62, 1.72, 0.075, 2.95, metal, vertices=12)
         tube_between(
             "villa_entry_tie_rod",
             (column_x, -6.62, 3.05),
@@ -2343,7 +2402,7 @@ def build_villa():
     for soffit_x in (-1.65, -1.26, -0.87, -0.48, -0.09, 0.30, 0.69, 1.08, 1.47, 1.86, 2.25):
         box("villa_entry_canopy_soffit", soffit_x, -5.25, 3.045, 0.22, 3.00, 0.045, deck)
     for downlight_x in (-1.05, 0.30, 1.65):
-        cyl("villa_entry_downlight", downlight_x, -5.25, 3.008, 0.055, 0.025, glow, vertices=14)
+        cyl("villa_entry_downlight", downlight_x, -5.25, 3.008, 0.055, 0.025, glow, vertices=10)
     box("villa_entry_threshold", 0.3, -4.02, 0.34, 2.80, 0.55, 0.12, granite)
     box("villa_house_number_plaque", -1.28, -3.84, 1.78, 0.42, 0.06, 0.55, granite)
     box("villa_house_number_inset", -1.28, -3.88, 1.78, 0.28, 0.025, 0.36, metal)
@@ -2428,8 +2487,8 @@ def build_villa():
 
     def roof_hvac(cx, cy, base_z):
         box("villa_roof_hvac", cx, cy, base_z + 0.42, 1.65, 1.05, 0.84, metal, bevel=0.025)
-        cyl("villa_roof_hvac_fan", cx, cy, base_z + 0.87, 0.34, 0.05, frame, vertices=24)
-        cyl("villa_roof_hvac_ring", cx, cy, base_z + 0.90, 0.22, 0.055, metal, vertices=24)
+        cyl("villa_roof_hvac_fan", cx, cy, base_z + 0.87, 0.34, 0.05, frame, vertices=12)
+        cyl("villa_roof_hvac_ring", cx, cy, base_z + 0.90, 0.22, 0.055, metal, vertices=12)
         for grille_offset in (-0.22, 0.0, 0.22):
             box("villa_roof_hvac_grille", cx + grille_offset, cy - 0.545, base_z + 0.42, 0.055, 0.025, 0.55, frame)
 
@@ -2439,10 +2498,10 @@ def build_villa():
     box("villa_skylight_glass", -1.6, 2.8, 6.92, 1.38, 0.88, 0.06, glass)
     box("villa_lift_overrun", 6.7, -3.2, 8.05, 2.2, 1.8, 1.35, accent, bevel=0.025)
     box("villa_lift_overrun_cap", 6.7, -3.2, 8.78, 2.4, 2.0, 0.12, dark)
-    cyl("villa_roof_vent", 2.8, -3.5, 7.85, 0.13, 1.05, metal, vertices=16)
-    cone("villa_roof_vent_cap", 2.8, -3.5, 8.48, 0.24, 0.05, 0.28, metal, vertices=16)
-    cyl("villa_chimney", -8.1, 3.9, 7.55, 0.20, 1.55, stone, vertices=16)
-    cyl("villa_chimney_cap", -8.1, 3.9, 8.38, 0.28, 0.12, frame, vertices=16)
+    cyl("villa_roof_vent", 2.8, -3.5, 7.85, 0.13, 1.05, metal, vertices=12)
+    cone("villa_roof_vent_cap", 2.8, -3.5, 8.48, 0.24, 0.05, 0.28, metal, vertices=12)
+    cyl("villa_chimney", -8.1, 3.9, 7.55, 0.20, 1.55, stone, vertices=12)
+    cyl("villa_chimney_cap", -8.1, 3.9, 8.38, 0.28, 0.12, frame, vertices=12)
 
     # Corner downspouts with lower shoes, plus side service hardware.
     for dx, dy, top_z in ((-8.88, -6.34, 6.35), (8.28, -5.64, 7.0), (-8.88, 4.94, 6.35), (8.28, 4.84, 7.0)):
@@ -2454,7 +2513,7 @@ def build_villa():
                 box("villa_downspout_bracket", dx, dy, bracket_z, 0.15, 0.15, 0.055, frame)
 
     box("villa_side_ac", 8.62, 2.85, 0.72, 0.38, 1.02, 0.82, metal, bevel=0.02)
-    cyl("villa_side_ac_fan", 8.83, 2.85, 0.72, 0.29, 0.045, frame, vertices=24, rotation=(0.0, math.pi / 2.0, 0.0))
+    cyl("villa_side_ac_fan", 8.83, 2.85, 0.72, 0.29, 0.045, frame, vertices=12, rotation=(0.0, math.pi / 2.0, 0.0))
     for grille_y in (2.60, 2.85, 3.10):
         box("villa_side_ac_grille", 8.855, grille_y, 0.72, 0.025, 0.045, 0.56, metal)
     box("villa_meter_cabinet", -9.18, -0.7, 1.05, 0.16, 0.72, 1.05, metal, bevel=0.015)
@@ -2670,15 +2729,15 @@ def build_glass_tower():
                 # Shadow-box spandrel: panel recessed behind a glass strip
                 # flush with the vision lites, so the shaft reads as one
                 # glass surface with a darker band behind it.
-                face_box(spandrel, face, 0.0, half - 0.100, z_floor + 0.600, field_half * 2.0, 0.060, 0.900)
-                face_box(glass, face, 0.0, glass_out - 0.025, z_floor + 0.600, field_half * 2.0, 0.050, 0.900)
+                face_quad(spandrel, face, -field_half, field_half, z_floor + 0.150, z_floor + 1.050, half - 0.070)
+                face_quad(glass, face, -field_half, field_half, z_floor + 0.150, z_floor + 1.050, glass_out)
                 face_box(frame, face, 0.0, half + 0.035, z_floor + 1.090, field_half * 2.0, 0.150, 0.090)
                 # Ceiling-edge hint behind the head of the vision zone.
                 face_quad(trim, face, -field_half, field_half, z_floor + 3.200, z_floor + 3.330, backing_out + 0.010)
                 for bay_index in range(bays):
                     bay_centre = -field_half + (bay_index + 0.5) * bay_w
                     # Vision lite with a real shadow gap to its frame.
-                    face_box(glass, face, bay_centre, glass_out - 0.025, z_floor + 2.210, bay_w - 0.095, 0.050, 2.210)
+                    face_quad(glass, face, bay_centre - (bay_w - 0.095) / 2.0, bay_centre + (bay_w - 0.095) / 2.0, z_floor + 1.105, z_floor + 3.315, glass_out)
                     # Tenant backing: dark office, blind states, lit bay.
                     backing_material, height_fraction = tenant_material(floor_index, bay_index, face_index, seed)
                     backing_height = 2.210 * height_fraction
@@ -2701,8 +2760,8 @@ def build_glass_tower():
         face_quad(backing, face, offset - 1.715, offset + 1.715, 0.880, 5.400, 15.500)
         for lite in (-1, 0, 1):
             lite_centre = offset + lite * 1.183
-            face_box(glass, face, lite_centre, 15.585, 1.980, 1.100, 0.050, 2.140)
-            face_box(glass, face, lite_centre, 15.585, 4.310, 1.100, 0.050, 2.240)
+            face_quad(glass, face, lite_centre - 0.550, lite_centre + 0.550, 0.910, 3.050, 15.610)
+            face_quad(glass, face, lite_centre - 0.550, lite_centre + 0.550, 3.190, 5.430, 15.610)
         for mullion_offset in (-0.592, 0.592):
             face_box(frame, face, offset + mullion_offset, 15.605, 3.145, 0.060, 0.110, 4.530)
         face_box(frame, face, offset, 15.605, 3.145, 3.550, 0.110, 0.080)   # transom
@@ -2733,9 +2792,9 @@ def build_glass_tower():
     # Segmented clerestory under the cornice, aligned to the bay grid,
     # over a recessed dark shadow gap.
     for face in ("front", "back", "left", "right"):
-        face_box(spandrel, face, 0.0, 15.520, 6.820, 27.40, 0.060, 0.420)
+        face_quad(spandrel, face, -13.70, 13.70, 6.610, 7.030, 15.550)
         for bay_offset in (-10.83, -6.50, -2.17, 2.17, 6.50, 10.83):
-            face_box(glass, face, bay_offset, 15.575, 6.100, 3.430, 0.050, 0.900)
+            face_quad(glass, face, bay_offset - 1.715, bay_offset + 1.715, 5.650, 6.550, 15.600)
             face_box(frame, face, bay_offset, 15.600, 6.100, 0.060, 0.110, 0.900)
         face_box(frame, face, 0.0, 15.600, 5.620, 27.40, 0.110, 0.070)
         face_box(frame, face, 0.0, 15.600, 6.590, 27.40, 0.110, 0.070)
@@ -5046,28 +5105,28 @@ def build_hotel():
         variant = int(abs(cx * 3.1 + cy * 4.7 + cz * 6.3)) % 5
         if face in ("front", "back"):
             box("hotel_win_frame", cx, cy + sign * 0.030, cz, width + 0.16, 0.14, height + 0.16, frame)
-            box("hotel_win_interior", cx, cy + sign * 0.012, cz, width - 0.02, 0.03, height - 0.02, interior)
+            panel("hotel_win_interior", cx, cy + sign * 0.027, cz, width - 0.02, height - 0.02, interior, face)
             if variant == 0:
-                box("hotel_win_lit", cx, cy + sign * 0.052, cz, width - 0.14, 0.025, height - 0.14, light)
+                panel("hotel_win_lit", cx, cy + sign * 0.065, cz, width - 0.14, height - 0.14, light, face)
             elif variant == 1:
                 for sd in (-1.0, 1.0):
-                    box("hotel_win_curtain", cx + sd * (width / 2.0 - 0.16), cy + sign * 0.052, cz, 0.22, 0.03, height - 0.14, curtain)
+                    panel("hotel_win_curtain", cx + sd * (width / 2.0 - 0.16), cy + sign * 0.067, cz, 0.22, height - 0.14, curtain, face)
             elif variant == 2:
-                box("hotel_win_blind", cx, cy + sign * 0.052, cz + height * 0.31, width - 0.10, 0.03, height * 0.34, curtain)
-            box("hotel_win_glass", cx, cy + sign * 0.088, cz, width, 0.04, height, glass)
+                panel("hotel_win_blind", cx, cy + sign * 0.067, cz + height * 0.31, width - 0.10, height * 0.34, curtain, face)
+            panel("hotel_win_glass", cx, cy + sign * 0.108, cz, width, height, glass, face)
             box("hotel_win_mullion", cx, cy + sign * 0.102, cz, 0.05, 0.05, height, frame)
             box("hotel_win_sill", cx, cy + sign * 0.10, cz - height / 2.0 - 0.065, width + 0.30, 0.26, 0.09, stone)
         else:
             box("hotel_win_frame", cx + sign * 0.030, cy, cz, 0.14, width + 0.16, height + 0.16, frame)
-            box("hotel_win_interior", cx + sign * 0.012, cy, cz, 0.03, width - 0.02, height - 0.02, interior)
+            panel("hotel_win_interior", cx + sign * 0.027, cy, cz, width - 0.02, height - 0.02, interior, face)
             if variant == 0:
-                box("hotel_win_lit", cx + sign * 0.052, cy, cz, 0.025, width - 0.14, height - 0.14, light)
+                panel("hotel_win_lit", cx + sign * 0.065, cy, cz, width - 0.14, height - 0.14, light, face)
             elif variant == 1:
                 for sd in (-1.0, 1.0):
-                    box("hotel_win_curtain", cx + sign * 0.052, cy + sd * (width / 2.0 - 0.16), cz, 0.03, 0.22, height - 0.14, curtain)
+                    panel("hotel_win_curtain", cx + sign * 0.067, cy + sd * (width / 2.0 - 0.16), cz, 0.22, height - 0.14, curtain, face)
             elif variant == 2:
-                box("hotel_win_blind", cx + sign * 0.052, cy, cz + height * 0.31, 0.03, width - 0.10, height * 0.34, curtain)
-            box("hotel_win_glass", cx + sign * 0.088, cy, cz, 0.04, width, height, glass)
+                panel("hotel_win_blind", cx + sign * 0.067, cy, cz + height * 0.31, width - 0.10, height * 0.34, curtain, face)
+            panel("hotel_win_glass", cx + sign * 0.108, cy, cz, width, height, glass, face)
             box("hotel_win_mullion", cx + sign * 0.102, cy, cz, 0.05, 0.05, height, frame)
             box("hotel_win_sill", cx + sign * 0.10, cy, cz - height / 2.0 - 0.065, 0.26, width + 0.30, 0.09, stone)
 
@@ -5111,13 +5170,13 @@ def build_hotel():
             if face == "front" and abs(bx) < 3.7:
                 continue  # entrance bays are built separately below
             box("hotel_lobby_frame", bx, face_y + sign * 0.045, 2.55, 3.00, 0.15, 4.00, frame)
-            box("hotel_lobby_interior", bx, face_y + sign * 0.015, 2.55, 2.86, 0.03, 3.86, interior)
-            box("hotel_lobby_lit", bx, face_y + sign * 0.045, 2.45, 2.70, 0.02, 3.60, light)
-            box("hotel_lobby_glass", bx, face_y + sign * 0.105, 2.55, 2.86, 0.04, 3.86, glass)
+            panel("hotel_lobby_interior", bx, face_y + sign * 0.030, 2.55, 2.86, 3.86, interior, face)
+            panel("hotel_lobby_lit", bx, face_y + sign * 0.055, 2.45, 2.70, 3.60, light, face)
+            panel("hotel_lobby_glass", bx, face_y + sign * 0.125, 2.55, 2.86, 3.86, glass, face)
             box("hotel_lobby_mullion", bx, face_y + sign * 0.12, 2.55, 0.06, 0.05, 3.86, bronze)
             box("hotel_upper_frame", bx, face_y + sign * 0.04, 6.15, 2.50, 0.13, 1.55, frame)
-            box("hotel_upper_interior", bx, face_y + sign * 0.012, 6.15, 2.36, 0.03, 1.41, interior)
-            box("hotel_upper_glass", bx, face_y + sign * 0.09, 6.15, 2.36, 0.04, 1.41, glass)
+            panel("hotel_upper_interior", bx, face_y + sign * 0.027, 6.15, 2.36, 1.41, interior, face)
+            panel("hotel_upper_glass", bx, face_y + sign * 0.110, 6.15, 2.36, 1.41, glass, face)
     for side_x, face in ((-16.20, "left"), (16.20, "right")):
         sign = -1.0 if face == "left" else 1.0
         for wy in (-8.0, -4.0, 0.0, 4.0, 8.0):
@@ -5125,13 +5184,13 @@ def build_hotel():
             tower_window(side_x, wy, 6.15, 2.10, 1.50, face)
 
     # ---- porte-cochere entrance (front, -Y) --------------------------
-    box("hotel_entrance_interior", 0.0, -11.26, 2.55, 9.60, 0.08, 4.30, interior)
-    box("hotel_entrance_lit", 0.0, -11.31, 2.45, 9.30, 0.02, 4.00, light)
-    box("hotel_entrance_glass", 0.0, -11.34, 2.55, 9.40, 0.04, 4.20, glass)
+    panel("hotel_entrance_interior", 0.0, -11.30, 2.55, 9.60, 4.30, interior, "front")
+    panel("hotel_entrance_lit", 0.0, -11.32, 2.45, 9.30, 4.00, light, "front")
+    panel("hotel_entrance_glass", 0.0, -11.36, 2.55, 9.40, 4.20, glass, "front")
     for mx in (-4.7, -2.35, 2.35, 4.7):
         box("hotel_entrance_mullion", mx, -11.37, 2.55, 0.09, 0.06, 4.20, bronze)
-    cyl("hotel_revolving_drum", 0.0, -11.40, 1.95, 1.45, 3.30, glass, vertices=24)
-    cyl("hotel_revolving_top", 0.0, -11.40, 3.68, 1.55, 0.18, bronze, vertices=24)
+    cyl("hotel_revolving_drum", 0.0, -11.40, 1.95, 1.45, 3.30, glass, vertices=18)
+    cyl("hotel_revolving_top", 0.0, -11.40, 3.68, 1.55, 0.18, bronze, vertices=18)
     cyl("hotel_revolving_post", 0.0, -11.40, 1.95, 0.09, 3.30, bronze, vertices=10)
     for dx in (-3.45, 3.45):
         box("hotel_side_door_frame", dx, -11.36, 1.95, 1.70, 0.10, 3.30, bronze)
@@ -5146,14 +5205,14 @@ def build_hotel():
         cyl("hotel_canopy_column_base", cx, -12.45, 0.42, 0.26, 0.24, granite, vertices=12)
     for lx in (-7.60, 7.60):
         cyl("hotel_lantern_post", lx, -12.30, 1.55, 0.05, 2.50, bronze, vertices=8)
-        sphere("hotel_lantern_globe", lx, -12.30, 2.95, 0.34, 0.34, 0.40, light)
+        sphere("hotel_lantern_globe", lx, -12.30, 2.95, 0.34, 0.34, 0.40, light, segments=14, ring_count=10)
     for fx, flag_mat in ((-10.50, accent), (10.50, curtain)):
         # Tapered pole on a granite base; both flags fly the same way
         # (one wind) as a ripple of four overlapping yawed cloth
         # segments, so they read as flags instead of flat panels.
         cone("hotel_flag_pole", fx, -12.20, 5.10, 0.09, 0.04, 9.60, frame, vertices=10)
         cyl("hotel_flag_pole_base", fx, -12.20, 0.55, 0.30, 0.50, granite, vertices=12)
-        sphere("hotel_flag_finial", fx, -12.20, 10.02, 0.17, 0.17, 0.17, bronze)
+        sphere("hotel_flag_finial", fx, -12.20, 10.02, 0.17, 0.17, 0.17, bronze, segments=10, ring_count=8)
         box("hotel_flag_hoist", fx + 0.07, -12.20, 9.28, 0.05, 0.06, 1.30, bronze)
         for seg in range(4):
             seg_x = fx + 0.38 + seg * 0.56
@@ -5242,7 +5301,7 @@ def build_hotel():
     box("hotel_roof_rail_front_top", 0.0, -7.55, 45.24, 26.10, 0.09, 0.07, bronze)
     box("hotel_roof_rail_back_top", 0.0, 9.55, 45.24, 26.10, 0.09, 0.07, bronze)
     cyl("hotel_beacon_mast", 0.0, 1.20, 48.35, 0.06, 0.90, bronze, vertices=8)
-    sphere("hotel_beacon", 0.0, 1.20, 48.92, 0.30, 0.30, 0.30, light)
+    sphere("hotel_beacon", 0.0, 1.20, 48.92, 0.30, 0.30, 0.30, light, segments=12, ring_count=8)
     # Penthouse-roof plant and a tilted solar field break up the slab.
     solar = MATS["SolarCell"]
     for px in (-6.50, 6.50):
@@ -6902,7 +6961,7 @@ def build_stadium():
         rbox("stadium_flood_glow", fx * 0.985, fy * 0.985, 57.3, 7.8, 1.5, 3.0, MATS["LampGlow"], rotation=(0, 0, head_a))
 
 
-def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
+def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_036=False):
     stone = MATS["TowerStone"]
     glass = MATS["TowerGlass"]
     spandrel = MATS["TowerSpandrel"]
@@ -6919,12 +6978,18 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
     for mullion_frac in (-0.18, -0.09, 0.0, 0.09, 0.18):
         box("office_storefront_mullion", podium_w * mullion_frac, -(podium_w / 2.0 + 0.92), 2.4, 0.28, 0.22, 4.6, metal)
     box("office_entrance_step", 0, -(podium_w / 2.0 + 2.0), 0.18, podium_w * 0.60, 3.6, 0.36, stone)
+    if detail_036:
+        # 0.3.6 (low tower): podium was dressed only at the front;
+        # side/rear storefront glass reuses the FacadeGlass part.
+        box("office_podium_glass_back", 0, podium_w / 2.0 + 0.4, 2.4, podium_w * 0.46, 0.9, 4.6, MATS["FacadeGlass"])
+        for sx in (-1.0, 1.0):
+            box("office_podium_glass_side", sx * (podium_w / 2.0 + 0.4), 0, 2.4, 0.9, podium_w * 0.46, 4.6, MATS["FacadeGlass"])
     lower_top = setback_at if setback_at > 0 else total_h - 4.0
     box("office_shaft", 0, 0, 6 + (lower_top - 6) / 2.0, shaft_w, shaft_w, lower_top - 6, glass)
     ring_z = 15.0
     while ring_z < lower_top - 3.0:
         box("office_spandrel", 0, 0, ring_z, shaft_w + 0.4, shaft_w + 0.4, 1.05, spandrel)
-        ring_z += 11.5
+        ring_z += 9.5 if detail_036 else 11.5
     for cx in (-shaft_w / 2.0, shaft_w / 2.0):
         for cy in (-shaft_w / 2.0, shaft_w / 2.0):
             box("office_corner_fin", cx, cy, 6 + (lower_top - 6) / 2.0, 1.15, 1.15, lower_top - 6, metal)
@@ -6941,6 +7006,8 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
     box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
     box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
     box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
+    if detail_036:
+        box("office_hvac_second", -top_w * 0.28, -top_w * 0.20, total_h - 1.35, 3.6, 3.2, 1.1, metal)
     for rail_y in (-top_w / 2.0 - 0.3, top_w / 2.0 + 0.3):
         box("office_roof_rail", 0, rail_y, total_h - 1.45, top_w + 0.8, 0.18, 0.55, metal)
     for rail_x in (-top_w / 2.0 - 0.3, top_w / 2.0 + 0.3):
@@ -6951,7 +7018,7 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire):
 
 
 def build_office_tower_low():
-    _build_office_tower(36.0, 31.0, 42.0, 0.0, False)
+    _build_office_tower(36.0, 31.0, 42.0, 0.0, False, detail_036=True)
 
 
 def build_office_tower_mid():
@@ -6962,7 +7029,7 @@ def build_office_tower_high():
     _build_office_tower(38.0, 33.0, 96.0, 58.0, True)
 
 
-def _build_midrise(width, depth, floors):
+def _build_midrise(width, depth, floors, detail_036=False):
     plaster = MATS["HeroPlaster"]
     stone = MATS["HeroStone"]
     glass = MATS["FacadeGlass"]
@@ -6983,8 +7050,12 @@ def _build_midrise(width, depth, floors):
                 box("mid_balcony_slab", bx, face_y + sy * 0.85, fz + 0.15, 5.4, 1.7, 0.22, MATS["HeroTrim"])
                 box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
                 box("mid_balcony_door", bx, face_y + sy * 0.12, fz + 1.45, 3.6, 0.2, 2.3, dark_glass)
+                if detail_036:
+                    box("mid_balcony_toprail", bx, face_y + sy * 1.66, fz + 1.22, 5.5, 0.16, 0.09, metal)
             for wx in (-width * 0.13, width * 0.13, -width * 0.44, width * 0.44):
                 box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
+            if detail_036:
+                box("mid_sill_band", 0, face_y + sy * 0.10, fz + 0.80, width * 0.92, 0.18, 0.16, MATS["HeroTrim"])
         for sx in (-1.0, 1.0):
             for wy in (-depth * 0.28, 0.0, depth * 0.28):
                 box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
@@ -7000,14 +7071,14 @@ def _build_midrise(width, depth, floors):
 
 
 def build_midrise_a():
-    _build_midrise(34.0, 26.0, 7)
+    _build_midrise(34.0, 26.0, 7, detail_036=True)
 
 
 def build_midrise_b():
     _build_midrise(30.0, 24.0, 10)
 
 
-def _build_warehouse(length, width, wall_h, roof_h, doors):
+def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):
     clad = MATS["ConcreteLight"]
     metal = MATS["PropsMetal"]
     frame = MATS["WindowFrame"]
@@ -7032,12 +7103,21 @@ def _build_warehouse(length, width, wall_h, roof_h, doors):
     box("wh_gutter", 0, -(width / 2.0 + 0.28), wall_h - 0.25, length * 0.98, 0.35, 0.30, metal)
     for downspout_x in (-length * 0.38, 0.0, length * 0.38):
         box("wh_downspout", downspout_x, -(width / 2.0 + 0.30), wall_h / 2.0, 0.18, 0.18, wall_h, metal)
+    if detail_036:
+        # 0.3.6 (large warehouse): rear gutter/downspouts, clerestory
+        # daylight strips and a ridge cap -- existing materials only.
+        box("wh_gutter_back", 0, width / 2.0 + 0.28, wall_h - 0.25, length * 0.98, 0.35, 0.30, metal)
+        for downspout_x in (-length * 0.38, 0.0, length * 0.38):
+            box("wh_downspout_back", downspout_x, width / 2.0 + 0.30, wall_h / 2.0, 0.18, 0.18, wall_h, metal)
+        for sy in (-1.0, 1.0):
+            box("wh_clerestory", 0, sy * (width / 2.0 + 0.10), wall_h - 1.35, length * 0.8, 0.2, 1.1, MATS["FacadeGlass"])
+        box("wh_ridge_cap", 0, 0, wall_h + roof_h + 0.02, length + 1.5, 0.5, 0.16, metal)
     for vx in (-length * 0.3, 0.0, length * 0.3):
         cyl("wh_vent", vx, 0, wall_h + roof_h - 0.3, 0.85, 1.5, metal, vertices=10)
 
 
 def build_warehouse_large():
-    _build_warehouse(76.0, 32.0, 8.0, 5.0, 6)
+    _build_warehouse(76.0, 32.0, 8.0, 5.0, 6, detail_036=True)
 
 
 def build_warehouse_small():
@@ -7278,6 +7358,16 @@ def build_villa_b():
             cyl("villab_pergola_post", px, py, 1.6, 0.14, 3.2, wood, vertices=8)
     for i in range(5):
         box("villab_pergola_beam", 3.2 + i * 1.4, 3.4, 3.3, 0.24, 5.6, 0.28, wood)
+    # 0.3.6: rear elevation (was blank), pergola cross beams, roof vent.
+    box("villab_rear_gloss", -2.4, 3.62, 2.9, 8.0, 0.25, 3.6, glass)
+    box("villab_rear_upper_win", -4.0, 1.47, 7.95, 6.5, 0.25, 1.2, glass)
+    box("villab_rear_door", 2.6, 3.62, 1.6, 1.4, 0.25, 2.8, wood)
+    box("villab_rear_step", 2.6, 4.05, 0.16, 2.0, 0.8, 0.32, granite)
+    for rear_mullion_x in (-4.9, -0.1):
+        box("villab_rear_mullion", rear_mullion_x, 3.80, 2.9, 0.22, 0.16, 3.6, wood)
+    for py in (1.2, 5.6):
+        box("villab_pergola_cross", 6.0, py, 3.52, 6.4, 0.24, 0.22, wood)
+    box("villab_roof_vent", 2.2, 2.2, 7.42, 1.6, 1.2, 0.5, dark)
 
 
 def build_townhouse_b():
@@ -7305,6 +7395,10 @@ def build_townhouse_b():
             box("townb_window", ux + wx, -6.42, 5.5, 1.5, 0.22, 1.7, glass)
         box("townb_chimney", ux + 2.8, 1.8, 10.4, 1.1, 1.1, 2.6, stone)
         box("townb_chimney_band", ux + 2.8, 1.8, 11.55, 1.35, 1.35, 0.20, trim)
+        # 0.3.6: rear elevation (was blank): door + upper windows.
+        box("townb_rear_door", ux + 2.0, 4.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"] if ux < 0 else MATS["TownDoorAccent"])
+        for rear_wx in (-2.4, 0.4):
+            box("townb_rear_win", ux + rear_wx, 4.42, 5.5, 1.5, 0.22, 1.7, glass)
     box("townb_door_l", -1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"])
     box("townb_door_r", 1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoorAccent"])
     for porch_light_x in (-1.95, 1.95):

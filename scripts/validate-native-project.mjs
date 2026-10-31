@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.5-native-alpha"'), 'Native project version metadata must match 0.3.5-native-alpha');
-assert(preset.includes('version/code=71'), 'Native 0.3.5 must bump Android versionCode to 71');
-assert(preset.includes('version/name="0.3.5-native-alpha"'), 'Native version name must be 0.3.5-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.5-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.6-native-alpha"'), 'Native project version metadata must match 0.3.6-native-alpha');
+assert(preset.includes('version/code=72'), 'Native 0.3.6 must bump Android versionCode to 72');
+assert(preset.includes('version/name="0.3.6-native-alpha"'), 'Native version name must be 0.3.6-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.6-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.5"') && preset.includes('application/product_version="0.3.5"'), 'Desktop Windows version metadata must match native 0.3.5');
+assert(preset.includes('application/file_version="0.3.6"') && preset.includes('application/product_version="0.3.6"'), 'Desktop Windows version metadata must match native 0.3.6');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1278,6 +1278,17 @@ const rtMall035 = data.buildings.find((b) => b.model === 'shopping_mall');
 assert(rtMall035 && rtMall035.w === 230 && rtMall035.d === 130, '0.3.5 RichTown Mall must use the shopping_mall GLB on its 230x130 parcel');
 assert(data.buildings.filter((b) => b.model === 'turbine_hall_long' || b.model === 'turbine_hall_short').length === 2, '0.3.5 both NPP turbine halls must use their GLBs');
 assert(data.stats.genericBuildings === 303 && data.stats.cityBlenderBuildings === 1185, '0.3.5 generator stats must show the last three generic boxes converted');
+
+// 0.3.6: ten-model perfection pass.  Premium window layers become
+// outward facade quads (same materials/parts, far fewer triangles);
+// five city archetypes gain rear/side detail inside strict budgets.
+for (const marker of ['def panel(', 'def wquad', 'detail_036', 'villab_rear_door', 'townb_rear_win', 'wh_clerestory', 'mid_sill_band', 'mid_balcony_toprail', 'office_podium_glass_back', 'segments=14, ring_count=10']) {
+  assert(blenderScript.includes(marker), `0.3.6 Blender marker is missing: ${marker}`);
+}
+for (const tenModel of ['townhouse.glb', 'villa.glb', 'hero_building.glb', 'glass_tower.glb', 'grand_hotel.glb', 'villa_b.glb', 'townhouse_b.glb', 'midrise_a.glb', 'office_tower_low.glb', 'warehouse_large.glb']) {
+  const tenInfo = await stat(`src/assets/models/props/${tenModel}`);
+  assert(tenInfo.size > 20_000, `0.3.6 ${tenModel} is missing or truncated`);
+}
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
