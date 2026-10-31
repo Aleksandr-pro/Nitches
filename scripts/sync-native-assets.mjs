@@ -209,6 +209,7 @@ const textureNames = [
   'roof_flat.jpg', 'roof_tiles.jpg', 'user_roof_terracotta.jpg',
   'user_roof_terracotta_normal.jpg', 'roof_slate.jpg', 'roof_slate_normal.jpg',
   'user_brushed_metal.jpg', 'user_brushed_metal_normal.jpg',
+  'user_brushed_metal_seamless.jpg', 'user_brushed_metal_seamless_normal.jpg',
   'user_black_rough.jpg', 'user_black_rough_normal.jpg',
   'user_wood_deck.jpg', 'user_wood_deck_normal.jpg',
   'oak_bark.jpg', 'oak_bark_normal.jpg', 'oak_bark_roughness.jpg', 'oak_bark_ao.jpg',
