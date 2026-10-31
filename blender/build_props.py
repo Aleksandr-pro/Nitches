@@ -389,6 +389,62 @@ def panel(name, x, y, z, width, height, material, face):
     return obj
 
 
+def win_recess_0312(name, x, y, z, width, height, glass_material, frame_material, face, depth=0.20, frame_w=0.14):
+    """0.3.12 recessed window: a proud frame ring with real returns
+    on both edges and the glass set back near the wall plane.
+
+    The 0.3.6-0.3.9 panel passes left the glass as a single quad
+    floating up to 0.24 m in front of the wall (on the old pane box's
+    outer face), which reads flat/plastic at street level and shows
+    an air gap at grazing angles.  This keeps the same outer plane
+    and the same two materials (part counts unchanged) but closes
+    the opening with a frame ring, outer returns to the wall and
+    inner returns down to the recessed glass -- real shadow lines
+    and parallax for ~26 tris instead of 2.  (x, y, z) is the wall
+    plane, as for panel()."""
+    if face in ("front", "back"):
+        outward = Vector((0.0, -1.0 if face == "front" else 1.0, 0.0))
+    else:
+        outward = Vector((-1.0 if face == "left" else 1.0, 0.0, 0.0))
+    up = Vector((0.0, 0.0, 1.0))
+    right = up.cross(outward).normalized()
+    base = Vector((x, y, z))
+    hw = width / 2.0
+    hh = height / 2.0
+    ow = hw + frame_w
+    oh = hh + frame_w
+    glass_d = 0.03
+
+    def point(u, v, d, builder):
+        return builder.add_vertex(base + right * u + up * v + outward * d)
+
+    frame = MeshBuilder()
+    for strip in (
+        ((-ow, -oh), (ow, -oh), (ow, -hh), (-ow, -hh)),
+        ((-ow, hh), (ow, hh), (ow, oh), (-ow, oh)),
+        ((-ow, -hh), (-hw, -hh), (-hw, hh), (-ow, hh)),
+        ((hw, -hh), (ow, -hh), (ow, hh), (hw, hh)),
+    ):
+        frame.quad(*[point(u, v, depth, frame) for (u, v) in strip])
+    for (u0, v0), (u1, v1) in (
+        ((-ow, -oh), (ow, -oh)), ((ow, -oh), (ow, oh)),
+        ((ow, oh), (-ow, oh)), ((-ow, oh), (-ow, -oh)),
+    ):
+        frame.quad(point(u0, v0, 0.0, frame), point(u1, v1, 0.0, frame),
+                   point(u1, v1, depth, frame), point(u0, v0, depth, frame))
+    for (u0, v0), (u1, v1) in (
+        ((-hw, -hh), (hw, -hh)), ((hw, -hh), (hw, hh)),
+        ((hw, hh), (-hw, hh)), ((-hw, hh), (-hw, -hh)),
+    ):
+        frame.quad(point(u0, v0, depth, frame), point(u1, v1, depth, frame),
+                   point(u1, v1, glass_d, frame), point(u0, v0, glass_d, frame))
+    frame.build(name + "_frame", frame_material, smooth=False)
+    glass = MeshBuilder()
+    glass.quad(point(-hw, -hh, glass_d, glass), point(hw, -hh, glass_d, glass),
+               point(hw, hh, glass_d, glass), point(-hw, hh, glass_d, glass))
+    glass.build(name, glass_material, smooth=False)
+
+
 def tube_between(name, start, end, radius_start, radius_end, material, vertices=16):
     """A tapered tube whose local +Z axis is aimed from start to end."""
     start_v = Vector(start)
@@ -667,6 +723,53 @@ def builder_ellipsoid(builder, centre, radii, segments=6, yaw=0.0, pitch=0.0, ri
                 builder.quad(current[side_index], current[next_side], following[next_side], following[side_index])
 
 
+# 0.3.12 world-density UV bake.  The runtime maps these material
+# names to tiling photo textures with uv1_scale == 1 and NO
+# triplanar, so the old per-face 0..1 box UVs stretched a single
+# texture repeat over anything from a 0.4 m trim to a 76 m warehouse
+# roof.  Rewriting UVs from model-space coordinates with a
+# dominant-axis projection gives every surface the same real-metre
+# texel density at zero triangle cost.  Curved objects (tanks,
+# fuselages, lamp tubes) keep their wrapped primitive UVs: an
+# object only bakes when >=90% of its area is near-cardinal.
+_UV_DENSITY_TILES_0312 = {
+    "PropsMetal": 5.0, "FacadeMain": 4.0, "FacadeAccent": 3.0,
+    "RoofDark": 5.0, "RoofTile": 4.0, "PropsWood": 2.5,
+    "CityWhitePaint": 4.0, "CityAccentRed": 4.0, "CityAccentBlue": 4.0,
+    "CityArmyGreen": 3.0, "CityBarnRed": 3.0, "CitySignYellow": 2.0,
+    "CityFieldGreen": 6.0,
+}
+
+
+def _bake_world_uv_density_0312():
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH" or len(obj.data.materials) != 1:
+            continue
+        material = obj.data.materials[0]
+        if material is None:
+            continue
+        tile = _UV_DENSITY_TILES_0312.get(material.name)
+        if tile is None:
+            continue
+        mesh = obj.data
+        total_area = 0.0
+        cardinal_area = 0.0
+        for polygon in mesh.polygons:
+            total_area += polygon.area
+            if max(abs(polygon.normal.x), abs(polygon.normal.y), abs(polygon.normal.z)) >= 0.80:
+                cardinal_area += polygon.area
+        if total_area <= 0.0 or cardinal_area < total_area * 0.90:
+            continue
+        uv_layer = mesh.uv_layers.active or mesh.uv_layers.new(name="UVMap")
+        for polygon in mesh.polygons:
+            normal = polygon.normal
+            axis = max(range(3), key=lambda i: abs(normal[i]))
+            others = [i for i in range(3) if i != axis]
+            for loop_index in polygon.loop_indices:
+                vertex = mesh.vertices[mesh.loops[loop_index].vertex_index].co
+                uv_layer.data[loop_index].uv = (vertex[others[0]] / tile, vertex[others[1]] / tile)
+
+
 def _merge_meshes_by_material_for_export(filename):
     """0.3.4 compression/loading pass.
 
@@ -695,6 +798,7 @@ def _merge_meshes_by_material_for_export(filename):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     except RuntimeError:
         pass
+    _bake_world_uv_density_0312()
     groups = {}
     for obj in list(bpy.context.scene.objects):
         if obj.type != "MESH":
@@ -7272,6 +7376,16 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
                     panel("mid_side_window", sx * (width / 2.0 + 0.22), wy, fz + 1.7, 2.2, 1.6, dark_glass, "right" if sx > 0.0 else "left")
                 else:
                     box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
+    # 0.3.12: full-height facade piers between the window columns,
+    # proud of the glass panels, so the flat panes sit inside a real
+    # structural grid with shadow lines instead of floating on the
+    # plaster.  HeroTrim is already a material of this model.
+    for sy in (-1.0, 1.0):
+        for pier_x in (-width * 0.365, -width * 0.21, width * 0.21, width * 0.365):
+            box("mid_pier0312", pier_x, sy * (depth / 2.0 + 0.13), 1.2 + body_h / 2.0, 0.55, 0.34, body_h, MATS["HeroTrim"])
+    for sx in (-1.0, 1.0):
+        for pier_y in (-depth * 0.14, depth * 0.14):
+            box("mid_pier0312", sx * (width / 2.0 + 0.13), pier_y, 1.2 + body_h / 2.0, 0.34, 0.55, body_h, MATS["HeroTrim"])
     box("mid_parapet", 0, 0, 1.2 + body_h + 0.4, width + 0.6, depth + 0.6, 0.8, stone)
     box("mid_bulkhead", -width * 0.2, 0, 1.2 + body_h + 1.6, 7, 6, 2.4, plaster)
     box("mid_hvac", width * 0.24, depth * 0.15, 1.2 + body_h + 1.2, 4.2, 3.4, 1.1, metal)
@@ -7306,6 +7420,7 @@ def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):
     for i in range(doors):
         dx = -door_span / 2.0 + (i + 0.5) * (door_span / doors)
         box("wh_dock_door", dx, -(width / 2.0 + 0.22), 2.4, 4.3, 0.4, 4.7, frame)
+        box("wh_dock_header0312", dx, -(width / 2.0 + 0.30), 4.95, 4.7, 0.5, 0.4, metal)
         for seam_z in (1.35, 2.95):
             box("wh_dock_seam", dx, -(width / 2.0 + 0.46), seam_z, 4.0, 0.16, 0.16, MATS["RoofDark"])
         box("wh_dock_bump", dx, -(width / 2.0 + 0.5), 0.5, 4.6, 0.7, 0.9, MATS["RoofDark"])
@@ -7548,11 +7663,11 @@ def build_villa_b():
     box("villab_main_roof", -2.4, -1.2, 6.95, 13.1, 10.1, 0.45, dark)
     box("villab_upper", -4.0, -2.3, 7.95, 9.5, 7.4, 1.9, stone)
     box("villab_upper_roof", -4.0, -2.3, 8.95, 10.0, 7.9, 0.3, dark)
-    panel("villab_glass", -2.4, -6.19, 2.9, 9.2, 4.4, glass, "front")
+    win_recess_0312("villab_glass", -2.4, -5.95, 2.9, 9.2, 4.4, glass, wood, "front", depth=0.24, frame_w=0.18)
     for i in range(6):
         box("villab_screen", -6.6 + i * 1.7, -6.35, 3.1, 0.28, 0.28, 5.2, wood)
-    panel("villab_side_win", -8.89, -1.2, 4.4, 5.5, 2.0, glass, "left")
-    panel("villab_upper_win", -4.0, -6.19, 7.95, 7.6, 1.3, glass, "front")
+    win_recess_0312("villab_side_win", -8.65, -1.2, 4.4, 5.5, 2.0, glass, wood, "left", depth=0.24, frame_w=0.16)
+    win_recess_0312("villab_upper_win", -4.0, -6.0, 7.95, 7.6, 1.3, glass, wood, "front", depth=0.19, frame_w=0.14)
     box("villab_garage", 6.4, -2.6, 1.95, 5.6, 6.5, 3.2, stone)
     box("villab_garage_roof", 6.4, -2.6, 3.7, 6.1, 7.0, 0.35, dark)
     box("villab_garage_door", 6.4, -5.95, 1.55, 4.4, 0.25, 2.5, MATS["TownGarage"])
@@ -7572,8 +7687,8 @@ def build_villa_b():
     for i in range(5):
         box("villab_pergola_beam", 3.2 + i * 1.4, 3.4, 3.3, 0.24, 5.6, 0.28, wood)
     # 0.3.6: rear elevation (was blank), pergola cross beams, roof vent.
-    panel("villab_rear_gloss", -2.4, 3.745, 2.9, 8.0, 3.6, glass, "back")
-    panel("villab_rear_upper_win", -4.0, 1.595, 7.95, 6.5, 1.2, glass, "back")
+    win_recess_0312("villab_rear_gloss", -2.4, 3.55, 2.9, 8.0, 3.6, glass, wood, "back", depth=0.20, frame_w=0.18)
+    win_recess_0312("villab_rear_upper_win", -4.0, 1.4, 7.95, 6.5, 1.2, glass, wood, "back", depth=0.195, frame_w=0.14)
     box("villab_rear_door", 2.6, 3.62, 1.6, 1.4, 0.25, 2.8, wood)
     box("villab_rear_step", 2.6, 4.05, 0.16, 2.0, 0.8, 0.32, granite)
     for rear_mullion_x in (-4.9, -0.1):
@@ -7597,7 +7712,7 @@ def build_townhouse_b():
         box("townb_band", ux, -1.0, 3.7, 9.1, 10.8, 0.35, trim)
         gable_roof("townb_roof", ux, -1.0, 9.05, 9.5, 11.4, 4.3, roof, ridge_axis="y")
         box("townb_bay", ux - 1.9, -6.9, 2.7, 3.6, 1.3, 5.2, plaster)
-        panel("townb_bay_glass", ux - 1.9, -7.725, 2.9, 3.0, 4.2, glass, "front")
+        win_recess_0312("townb_bay_glass", ux - 1.9, -7.55, 2.9, 3.0, 4.2, glass, trim, "front", depth=0.18, frame_w=0.14)
         box("townb_bay_roof", ux - 1.9, -6.9, 5.5, 4.0, 1.7, 0.3, roof)
         box("townb_garage", ux + 2.2, -6.45, 1.45, 3.3, 0.3, 2.4, MATS["TownGarage"])
         box("townb_bay_mullion_v", ux - 1.9, -7.76, 2.9, 0.18, 0.14, 4.2, trim)
@@ -7605,13 +7720,13 @@ def build_townhouse_b():
         box("townb_garage_seam", ux + 2.2, -6.64, 1.45, 3.2, 0.10, 0.12, trim)
         box("townb_downspout", ux + (-4.55 if ux < 0 else 4.55), -6.35, 3.4, 0.16, 0.16, 6.8, roof)
         for wx in (-2.6, 0.2, 3.0):
-            panel("townb_window", ux + wx, -6.53, 5.5, 1.5, 1.7, glass, "front")
+            win_recess_0312("townb_window", ux + wx, -6.30, 5.5, 1.5, 1.7, glass, trim, "front", depth=0.22, frame_w=0.12)
         box("townb_chimney", ux + 2.8, 1.8, 10.4, 1.1, 1.1, 2.6, stone)
         box("townb_chimney_band", ux + 2.8, 1.8, 11.55, 1.35, 1.35, 0.20, trim)
         # 0.3.6: rear elevation (was blank): door + upper windows.
         box("townb_rear_door", ux + 2.0, 4.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"] if ux < 0 else MATS["TownDoorAccent"])
         for rear_wx in (-2.4, 0.4):
-            panel("townb_rear_win", ux + rear_wx, 4.53, 5.5, 1.5, 1.7, glass, "back")
+            win_recess_0312("townb_rear_win", ux + rear_wx, 4.30, 5.5, 1.5, 1.7, glass, trim, "back", depth=0.22, frame_w=0.12)
     box("townb_door_l", -1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoor"])
     box("townb_door_r", 1.15, -6.42, 1.55, 1.3, 0.25, 2.7, MATS["TownDoorAccent"])
     for porch_light_x in (-1.95, 1.95):
