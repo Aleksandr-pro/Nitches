@@ -357,17 +357,16 @@ jobs:
           if-no-files-found: error
 
       - name: Publish direct-download APK (rolling prerelease)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Artifact downloads are always ZIP archives; a GitHub
-          # Release asset is served as the raw file, so the phone gets
-          # a direct .apk link that always points at the newest green
-          # build: releases/download/native-latest/NitchesHorizonNative.apk
-          if ! gh release view native-latest >/dev/null 2>&1; then
-            gh release create native-latest --prerelease \
-              --title "Nitches Native — последняя тестовая сборка (прямой APK)" \
-              --notes "Самая свежая успешная сборка. Файл NitchesHorizonNative.apk по постоянной ссылке всегда обновляется до актуального APK для установки с телефона."
-          fi
-          gh release upload native-latest "${{ env.APK_PATH }}" --clobber
+        # Artifact downloads are always ZIP archives; a GitHub
+        # Release asset is served as the raw file, so the phone gets
+        # a direct .apk link that always points at the newest green
+        # build: releases/download/native-latest/NitchesHorizonNative.apk
+        # (softprops action instead of `gh release upload`, which
+        # failed in run 41249882841 right after creating the release.)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-latest
+          name: "Nitches Native — последняя тестовая сборка (прямой APK)"
+          body: "Самая свежая успешная сборка. Файл NitchesHorizonNative.apk по постоянной ссылке всегда обновляется до актуального APK для установки с телефона."
+          prerelease: true
+          files: ${{ env.APK_PATH }}
