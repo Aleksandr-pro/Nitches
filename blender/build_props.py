@@ -6845,13 +6845,19 @@ def build_school():
         for mullion_x in range(-24, 25, 6):
             box("school_win_mullion", mullion_x, 6.60, floor_z, 0.26, 0.18, 1.75, trim)
             box("school_win_mullion", mullion_x, 25.40, floor_z, 0.26, 0.18, 1.75, trim)
+        # 0.3.13: head/sill rails close the ribbon glazing bands so
+        # the glass sits inside a frame grid, not on the plaster.
+        box("school_win_rail0313", 0, 6.55, floor_z + 0.98, 57.6, 0.24, 0.20, trim)
+        box("school_win_rail0313", 0, 6.55, floor_z - 0.98, 57.6, 0.24, 0.20, trim)
+        box("school_win_rail0313", 0, 25.45, floor_z + 0.98, 57.6, 0.24, 0.20, trim)
+        box("school_win_rail0313", 0, 25.45, floor_z - 0.98, 57.6, 0.24, 0.20, trim)
     for wx in (-29.0, 29.0):
         box("school_wing", wx, 3, 4.85, 18, 26, 9, plaster)
         gable_roof("school_wing_roof", wx, 3, 11.1, 19.4, 27.4, 3.4, roof, ridge_axis="y")
-        panel("school_wing_win", wx, -10.33, 5.4, 12, 3.6, dark_glass, "front")
+        win_recess_0312("school_wing_win", wx, -10.0, 5.4, 12, 3.6, dark_glass, trim, "front", depth=0.33, frame_w=0.18)
     box("school_gym", 0, 34, 4.85, 34, 20, 9, stone)
     box("school_gym_roof", 0, 34, 9.8, 35.5, 21.5, 0.9, MATS["RoofDark"])
-    panel("school_gym_glass", 0, 23.67, 7.6, 30, 1.8, dark_glass, "front")
+    win_recess_0312("school_gym_glass", 0, 24.0, 7.6, 30, 1.8, dark_glass, trim, "front", depth=0.33, frame_w=0.16)
     box("school_portal", 0, 6.4, 3.1, 13, 1.6, 6.2, trim)
     box("school_door", 0, 5.5, 2.2, 6.4, 0.4, 4.2, MATS["TownDoorAccent"])
     box("school_canopy", 0, 2.8, 5.6, 17, 6.4, 0.55, metal)
@@ -6888,6 +6894,12 @@ def build_airport_terminal():
     panel("term_glass_upper", 0, -32.7, 14.5, 376, 11, glass, "front")
     panel("term_glass_lower", 0, -32.7, 3.4, 376, 6.4, glass, "front")
     panel("term_glass_airside", 0, 32.7, 12, 376, 14, glass, "back")
+    # 0.3.13: transom rails tie the terminal glass bands to the hall.
+    box("term_glass_rail0313", 0, -32.8, 20.15, 378.0, 0.4, 0.35, metal)
+    box("term_glass_rail0313", 0, -32.8, 8.85, 378.0, 0.4, 0.35, metal)
+    box("term_glass_rail0313", 0, -32.8, 6.75, 378.0, 0.4, 0.35, metal)
+    box("term_glass_rail0313", 0, 32.8, 19.15, 378.0, 0.4, 0.35, metal)
+    box("term_glass_rail0313", 0, 32.8, 4.85, 378.0, 0.4, 0.35, metal)
     box("term_stripe", 0, -32.75, 20.6, 380, 0.7, 2.2, blue)
     for i in range(21):
         fx = -180.0 + i * 18.0
@@ -7291,6 +7303,15 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
     for cx in (-shaft_w / 2.0, shaft_w / 2.0):
         for cy in (-shaft_w / 2.0, shaft_w / 2.0):
             box("office_corner_fin", cx, cy, 6 + (lower_top - 6) / 2.0, 1.15, 1.15, lower_top - 6, metal)
+    # 0.3.13: vertical face fins between the corner fins, so the
+    # glass shaft reads as a framed curtain wall with a bay rhythm
+    # and shadow gaps instead of one smooth glass box.
+    for sy in (-1.0, 1.0):
+        for fin_x in (-shaft_w * 0.25, shaft_w * 0.25):
+            box("office_face_fin0313", fin_x, sy * (shaft_w / 2.0 + 0.10), 6 + (lower_top - 6) / 2.0, 0.5, 0.34, lower_top - 6, metal)
+    for sx in (-1.0, 1.0):
+        for fin_y in (-shaft_w * 0.25, shaft_w * 0.25):
+            box("office_face_fin0313", sx * (shaft_w / 2.0 + 0.10), fin_y, 6 + (lower_top - 6) / 2.0, 0.34, 0.5, lower_top - 6, metal)
     top_w = shaft_w
     if setback_at > 0:
         top_w = shaft_w - 6.0
@@ -7308,6 +7329,13 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
             for cx in (-top_w / 2.0, top_w / 2.0):
                 for cy in (-top_w / 2.0, top_w / 2.0):
                     box("office_upper_corner_fin", cx, cy, lower_top + upper_h / 2.0, 1.15, 1.15, upper_h, metal)
+            # 0.3.13: same face-fin rhythm on the setback shaft.
+            for sy in (-1.0, 1.0):
+                for fin_x in (-top_w * 0.25, top_w * 0.25):
+                    box("office_upper_fin0313", fin_x, sy * (top_w / 2.0 + 0.10), lower_top + upper_h / 2.0, 0.5, 0.34, upper_h, metal)
+            for sx in (-1.0, 1.0):
+                for fin_y in (-top_w * 0.25, top_w * 0.25):
+                    box("office_upper_fin0313", sx * (top_w / 2.0 + 0.10), fin_y, lower_top + upper_h / 2.0, 0.34, 0.5, upper_h, metal)
     box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
     box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
     box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
@@ -7488,12 +7516,28 @@ def build_shopping_mall():
         for sx in (-113.38, 113.38):
             box("mall_storefront_mullion", sx, my, 3.6, 0.3, 0.35, 4.2, metal)
         my += 12.0
+    # 0.3.13: head/sill transom rails frame the storefront glass
+    # (the panels floated proud of the massing with only vertical
+    # mullions tying them back to the facade).
+    for sy in (-63.38, 63.38):
+        box("mall_storefront_rail0313", 0, sy, 5.82, 202.0, 0.34, 0.30, metal)
+        box("mall_storefront_rail0313", 0, sy, 1.38, 202.0, 0.34, 0.30, metal)
+    for sx in (-113.38, 113.38):
+        box("mall_storefront_rail0313", sx, 0, 5.82, 0.34, 106.0, 0.30, metal)
+        box("mall_storefront_rail0313", sx, 0, 1.38, 0.34, 106.0, 0.30, metal)
     box("mall_mid_cornice", 0, 0, 7.05, 228.0, 128.0, 0.9, accent)
     box("mall_upper_mass", 0, 0, 11.3, 224.0, 124.0, 7.6, main_mat)
     for sy in (-62.10, 62.10):
         panel("mall_clerestory", 0, sy + (0.25 if sy > 0.0 else -0.25), 13.4, 180.0, 2.6, glass, "back" if sy > 0.0 else "front")
     for sx in (-112.10, 112.10):
         panel("mall_clerestory", sx + (0.25 if sx > 0.0 else -0.25), 0, 13.4, 96.0, 2.6, glass, "right" if sx > 0.0 else "left")
+    # 0.3.13: same transom treatment for the clerestory band.
+    for sy in (-62.38, 62.38):
+        box("mall_clerestory_rail0313", 0, sy, 14.82, 182.0, 0.32, 0.26, metal)
+        box("mall_clerestory_rail0313", 0, sy, 11.98, 182.0, 0.32, 0.26, metal)
+    for sx in (-112.38, 112.38):
+        box("mall_clerestory_rail0313", sx, 0, 14.82, 0.32, 98.0, 0.26, metal)
+        box("mall_clerestory_rail0313", sx, 0, 11.98, 0.32, 98.0, 0.26, metal)
     fx = -104.0
     while fx <= 104.1:
         for sy in (-62.45, 62.45):

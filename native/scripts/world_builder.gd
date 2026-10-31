@@ -2419,7 +2419,7 @@ func _prop_material(material_name: String) -> Material:
 			_register_night_material(panes, 0.0, 0.06, 0.24)
 			return panes
 		"PropsMetal":
-			return _material("prop_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.72, 0.76, 0.80), 0.38, 0.78)
+			return _material("prop_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.72, 0.76, 0.80), 0.38, 0.78)
 		"PropsWood":
 			return _material("prop_wood", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color.WHITE, 0.86)
 		"CafeTravertine":
@@ -2430,11 +2430,11 @@ func _prop_material(material_name: String) -> Material:
 		"CafeLimestone":
 			return _material("dubai_cafe_limestone", "user_stone_tiles_beige.jpg", "", Color(0.90, 0.84, 0.73), 0.88, 0.0, Vector3(0.24, 0.24, 0.24), true)
 		"CafeBronze":
-			var cafe_bronze := _material("dubai_cafe_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.74, 0.48, 0.25), 0.34, 0.78, Vector3(0.40, 0.40, 0.40), true)
+			var cafe_bronze := _material("dubai_cafe_bronze", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.74, 0.48, 0.25), 0.34, 0.78, Vector3(0.40, 0.40, 0.40), true)
 			cafe_bronze.metallic_specular = 0.92
 			return cafe_bronze
 		"CafeSteel":
-			var cafe_steel := _material("dubai_cafe_steel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.46, 0.54, 0.56), 0.38, 0.78, Vector3(0.44, 0.44, 0.44), true)
+			var cafe_steel := _material("dubai_cafe_steel", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.46, 0.54, 0.56), 0.38, 0.78, Vector3(0.44, 0.44, 0.44), true)
 			cafe_steel.metallic_specular = 0.92
 			return cafe_steel
 		"CafeGlass":
@@ -2662,7 +2662,7 @@ func _prop_material(material_name: String) -> Material:
 			town_roof.metallic_specular = 0.35
 			return town_roof
 		"TownGarage":
-			var town_garage := _material("townhouse_garage", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.36, 0.36), 0.48, 0.55, Vector3(0.45, 0.45, 0.45), true)
+			var town_garage := _material("townhouse_garage", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.30, 0.36, 0.36), 0.48, 0.55, Vector3(0.45, 0.45, 0.45), true)
 			town_garage.metallic_specular = 0.85
 			return town_garage
 		"TownDoor":
@@ -2697,7 +2697,7 @@ func _prop_material(material_name: String) -> Material:
 			hero_wood.metallic_specular = 0.45
 			return hero_wood
 		"HeroMetal":
-			var hero_metal := _material("hero_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.22, 0.26, 0.29), 0.46, 0.65, Vector3(0.50, 0.50, 0.50), true)
+			var hero_metal := _material("hero_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.22, 0.26, 0.29), 0.46, 0.65, Vector3(0.50, 0.50, 0.50), true)
 			hero_metal.metallic_specular = 0.90
 			return hero_metal
 		"TowerGlass":
@@ -2718,7 +2718,7 @@ func _prop_material(material_name: String) -> Material:
 				0.72
 			)
 		"TowerSpandrel":
-			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
+			var tower_spandrel := _material("tower_spandrel", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
 			tower_spandrel.metallic_specular = 0.95
 			return tower_spandrel
 		"TowerStone":
@@ -2731,7 +2731,7 @@ func _prop_material(material_name: String) -> Material:
 			tower_trim.metallic_specular = 0.62
 			return tower_trim
 		"TowerMetal":
-			var tower_metal := _material("tower_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.200, 0.220, 0.240), 0.38, 0.78, Vector3(0.48, 0.48, 0.48), true)
+			var tower_metal := _material("tower_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.200, 0.220, 0.240), 0.38, 0.78, Vector3(0.48, 0.48, 0.48), true)
 			tower_metal.metallic_specular = 0.92
 			return tower_metal
 		"MainGlass":
@@ -2754,7 +2754,7 @@ func _prop_material(material_name: String) -> Material:
 				0.72
 			)
 		"MainSpandrel":
-			var main_spandrel := _material("main_spandrel", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
+			var main_spandrel := _material("main_spandrel", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.105, 0.130, 0.155), 0.38, 0.72, Vector3(0.35, 0.35, 0.35), true)
 			main_spandrel.metallic_specular = 0.95
 			return main_spandrel
 		"MainStone":
@@ -2762,11 +2762,11 @@ func _prop_material(material_name: String) -> Material:
 			main_stone.metallic_specular = 0.48
 			return main_stone
 		"MainTrim":
-			var main_trim := _material("main_trim", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.46, 0.34, 0.18), 0.42, 0.60, Vector3(0.35, 0.35, 0.35), true)
+			var main_trim := _material("main_trim", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.46, 0.34, 0.18), 0.42, 0.60, Vector3(0.35, 0.35, 0.35), true)
 			main_trim.metallic_specular = 0.92
 			return main_trim
 		"MainMetal":
-			var main_metal := _material("main_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.075, 0.090, 0.105), 0.42, 0.82, Vector3(0.48, 0.48, 0.48), true)
+			var main_metal := _material("main_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.075, 0.090, 0.105), 0.42, 0.82, Vector3(0.48, 0.48, 0.48), true)
 			main_metal.metallic_specular = 0.92
 			return main_metal
 		"MainWater":
@@ -2795,7 +2795,7 @@ func _prop_material(material_name: String) -> Material:
 			opera_stone.metallic_specular = 0.48
 			return opera_stone
 		"OperaBronze":
-			var opera_bronze := _material("opera_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.38, 0.18), 0.34, 0.82, Vector3(0.45, 0.45, 0.45), true)
+			var opera_bronze := _material("opera_bronze", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.62, 0.38, 0.18), 0.34, 0.82, Vector3(0.45, 0.45, 0.45), true)
 			opera_bronze.metallic_specular = 0.95
 			return opera_bronze
 		"OperaGlass":
@@ -2868,7 +2868,7 @@ func _prop_material(material_name: String) -> Material:
 			# Patinated turquoise copper: brushed-metal microtexture,
 			# near-metallic reflections and a clearcoat sheen over the
 			# real lathed onion profile and brass rib geometry.
-			var mosque_dome := _material("mosque_dome_copper", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.52, 0.55), 0.34, 0.68, Vector3(0.30, 0.30, 0.30), true)
+			var mosque_dome := _material("mosque_dome_copper", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.10, 0.52, 0.55), 0.34, 0.68, Vector3(0.30, 0.30, 0.30), true)
 			mosque_dome.normal_scale = 0.72
 			mosque_dome.metallic_specular = 0.96
 			mosque_dome.clearcoat_enabled = true
@@ -2877,7 +2877,7 @@ func _prop_material(material_name: String) -> Material:
 			mosque_dome.cull_mode = BaseMaterial3D.CULL_DISABLED
 			return mosque_dome
 		"MosqueBrass":
-			var mosque_brass := _material("mosque_brass", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.66, 0.42, 0.18), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			var mosque_brass := _material("mosque_brass", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.66, 0.42, 0.18), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
 			mosque_brass.normal_scale = 0.72
 			mosque_brass.metallic_specular = 0.96
 			mosque_brass.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -2944,7 +2944,7 @@ func _prop_material(material_name: String) -> Material:
 			hotel_plaster.metallic_specular = 0.44
 			return hotel_plaster
 		"HotelBronze":
-			var hotel_bronze := _material("hotel_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.40, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			var hotel_bronze := _material("hotel_bronze", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.62, 0.40, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
 			hotel_bronze.normal_scale = 0.72
 			hotel_bronze.metallic_specular = 0.96
 			hotel_bronze.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -3025,7 +3025,7 @@ func _prop_material(material_name: String) -> Material:
 			museum_core.metallic_specular = 0.30
 			return museum_core
 		"MuseumBronze":
-			var museum_bronze := _material("museum_bronze", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.60, 0.39, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
+			var museum_bronze := _material("museum_bronze", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.60, 0.39, 0.20), 0.32, 0.85, Vector3(0.45, 0.45, 0.45), true)
 			museum_bronze.normal_scale = 0.72
 			museum_bronze.metallic_specular = 0.96
 			museum_bronze.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -3116,7 +3116,7 @@ func _prop_material(material_name: String) -> Material:
 			solar.metallic_specular = 1.0
 			return solar
 		"SignalMetal":
-			return _material("signal_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.48, 0.52, 0.56), 0.36, 0.84, Vector3(0.55, 0.55, 0.55), true)
+			return _material("signal_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.48, 0.52, 0.56), 0.36, 0.84, Vector3(0.55, 0.55, 0.55), true)
 		"SignalHousing":
 			return _material("signal_housing", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.16, 0.17, 0.18), 0.62, 0.08, Vector3(0.65, 0.65, 0.65), true)
 		"SignalRedOn":
@@ -3219,17 +3219,17 @@ func _prop_material(material_name: String) -> Material:
 			city_white.metallic_specular = 0.62
 			return city_white
 		"CityAccentRed":
-			var city_red := _material("city_accent_red", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.85, 0.12, 0.09), 0.46, 0.32)
+			var city_red := _material("city_accent_red", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.85, 0.12, 0.09), 0.46, 0.32)
 			city_red.normal_scale = 0.42
 			city_red.metallic_specular = 0.78
 			return city_red
 		"CityAccentBlue":
-			var city_blue := _material("city_accent_blue", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.32, 0.70), 0.46, 0.32)
+			var city_blue := _material("city_accent_blue", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.10, 0.32, 0.70), 0.46, 0.32)
 			city_blue.normal_scale = 0.42
 			city_blue.metallic_specular = 0.78
 			return city_blue
 		"CityArmyGreen":
-			var city_army := _material("city_army_green", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.28, 0.34, 0.18), 0.74, 0.22)
+			var city_army := _material("city_army_green", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.28, 0.34, 0.18), 0.74, 0.22)
 			city_army.normal_scale = 0.50
 			city_army.metallic_specular = 0.55
 			return city_army
@@ -3238,7 +3238,7 @@ func _prop_material(material_name: String) -> Material:
 			city_barn.normal_scale = 1.05
 			return city_barn
 		"CitySignYellow":
-			var city_yellow := _material("city_sign_yellow", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.95, 0.68, 0.08), 0.52, 0.25)
+			var city_yellow := _material("city_sign_yellow", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.95, 0.68, 0.08), 0.52, 0.25)
 			city_yellow.normal_scale = 0.40
 			city_yellow.metallic_specular = 0.70
 			return city_yellow
@@ -5383,8 +5383,8 @@ func _build_road_details(parent: Node) -> void:
 			signal_count += 1
 
 
-	var manhole_material := _material("manhole_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
-	var drainage_material := _material("drainage_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.13, 0.15, 0.17), 0.42, 0.76, Vector3(4.0, 4.0, 1.0))
+	var manhole_material := _material("manhole_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.20, 0.22, 0.24), 0.48, 0.72, Vector3(2.5, 2.5, 1.0))
+	var drainage_material := _material("drainage_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.13, 0.15, 0.17), 0.42, 0.76, Vector3(4.0, 4.0, 1.0))
 	var patch_city_material := _material("asphalt_patch_city", "asphalt_city.jpg", "", Color(0.44, 0.45, 0.46), 0.96)
 	var patch_pothole_material := _material("asphalt_patch_pothole", "user_asphalt_pothole.jpg", "user_asphalt_pothole_normal.jpg", Color(0.46, 0.46, 0.47), 0.98)
 	var tar_material := _material("tar_seam", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.10, 0.10, 0.11), 0.82)
@@ -9834,7 +9834,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	# the photograph.  Add a slim contemporary L-arm lamp in every palm
 	# bay and a long stone bench in every second bay.  Four MultiMesh
 	# families cover the whole 860 m corridor; no per-lamp nodes.
-	var furniture_metal := _material("boulevard_modern_lamp_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.22, 0.27, 0.29), 0.32, 0.72)
+	var furniture_metal := _material("boulevard_modern_lamp_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.22, 0.27, 0.29), 0.32, 0.72)
 	var furniture_head := _material("boulevard_modern_lamp_head", "", "", Color(1.0, 0.74, 0.40), 0.30, 0.05)
 	furniture_head.emission_enabled = true
 	furniture_head.emission = Color(0.36, 0.17, 0.045)
@@ -9982,7 +9982,7 @@ func _build_premium_boulevard_details(parent: Node) -> void:
 	warm_sign.emission_enabled = true
 	warm_sign.emission = Color(0.42, 0.12, 0.025)
 	var table_material := _material("boulevard_cafe_table", "user_stone_tiles_beige.jpg", "", Color(0.86, 0.82, 0.73), 0.48, 0.03)
-	var chair_material := _material("boulevard_cafe_chair", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.24, 0.30, 0.32), 0.36, 0.54)
+	var chair_material := _material("boulevard_cafe_chair", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.24, 0.30, 0.32), 0.36, 0.54)
 	var glass_wall_transforms: Array[Transform3D] = []
 	var canopy_transforms: Array[Transform3D] = []
 	var frame_transforms: Array[Transform3D] = []
@@ -12453,23 +12453,23 @@ func _dz_material(key: String) -> Material:
 		"dz_wood_dark":
 			return _material("dz_wood_dark", "user_wood_slats_dark.jpg", "user_wood_slats_dark_normal.jpg", Color(0.45, 0.34, 0.24), 0.95)
 		"dz_metal":
-			return _material("dz_metal", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.66, 0.68, 0.71), 0.45, 0.7)
+			return _material("dz_metal", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.66, 0.68, 0.71), 0.45, 0.7)
 		"dz_metal_dark":
 			return _material("dz_metal_dark", "user_black_rough.jpg", "user_black_rough_normal.jpg", Color(0.34, 0.35, 0.38), 0.6, 0.55)
 		"dz_pole":
 			return _material("dz_pole", "metal_pole.jpg", "metal_pole_normal.jpg", Color(0.45, 0.40, 0.34), 0.8, 0.3)
 		"dz_yellow":
-			return _material("dz_yellow", "user_brushed_metal.jpg", "", Color(0.88, 0.64, 0.16), 0.55, 0.25)
+			return _material("dz_yellow", "user_brushed_metal_seamless.jpg", "", Color(0.88, 0.64, 0.16), 0.55, 0.25)
 		"dz_rust":
 			return _material("dz_rust", "rock.jpg", "", Color(0.50, 0.30, 0.20), 0.95)
 		"dz_rust_light":
 			return _material("dz_rust_light", "rock.jpg", "", Color(0.66, 0.47, 0.33), 0.95)
 		"dz_wreck_blue":
-			return _material("dz_wreck_blue", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.30, 0.42, 0.55), 0.72, 0.25)
+			return _material("dz_wreck_blue", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.30, 0.42, 0.55), 0.72, 0.25)
 		"dz_wreck_red":
-			return _material("dz_wreck_red", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.48, 0.22, 0.16), 0.72, 0.25)
+			return _material("dz_wreck_red", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.48, 0.22, 0.16), 0.72, 0.25)
 		"dz_wreck_cream":
-			return _material("dz_wreck_cream", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.62, 0.55, 0.42), 0.75, 0.20)
+			return _material("dz_wreck_cream", "user_brushed_metal_seamless.jpg", "user_brushed_metal_seamless_normal.jpg", Color(0.62, 0.55, 0.42), 0.75, 0.20)
 		"dz_concrete":
 			return _material("dz_concrete", "user_concrete_slabs.jpg", "user_concrete_slabs_normal.jpg", Color(0.70, 0.69, 0.66), 0.95)
 		"dz_tunnel_wall":
