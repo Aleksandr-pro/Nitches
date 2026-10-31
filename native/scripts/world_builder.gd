@@ -8246,7 +8246,7 @@ func _build_landmarks() -> void:
 				s34_grass_t.append(make_transform(pos + Vector3(0.0, 8.42, 0.0), 0.0, Vector3(tun_len, 0.24, 34.0)))
 				_add_box_collider(pos + Vector3(0.0, 7.95, 0.0), Vector3(tun_len, 0.8, 36.4))
 				for end_sign in [-1.0, 1.0]:
-					var px := end_sign * (r + 1.0)
+					var px: float = end_sign * (r + 1.0)
 					for side2 in [-1.0, 1.0]:
 						s34_marble_t.append(make_transform(pos + Vector3(px, 4.3, side2 * 17.0), 0.0, Vector3(1.6, 9.4, 2.4)))
 						_add_box_collider(pos + Vector3(px, 4.3, side2 * 17.0), Vector3(1.8, 9.4, 2.6))
