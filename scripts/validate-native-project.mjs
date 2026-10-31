@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.8-native-alpha"'), 'Native project version metadata must match 0.3.8-native-alpha');
-assert(preset.includes('version/code=74'), 'Native 0.3.8 must bump Android versionCode to 74');
-assert(preset.includes('version/name="0.3.8-native-alpha"'), 'Native version name must be 0.3.8-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.8-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.10-native-alpha"'), 'Native project version metadata must match 0.3.10-native-alpha');
+assert(preset.includes('version/code=76'), 'Native 0.3.10 must bump Android versionCode to 76');
+assert(preset.includes('version/name="0.3.10-native-alpha"'), 'Native version name must be 0.3.10-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.10-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.8"') && preset.includes('application/product_version="0.3.8"'), 'Desktop Windows version metadata must match native 0.3.8');
+assert(preset.includes('application/file_version="0.3.10"') && preset.includes('application/product_version="0.3.10"'), 'Desktop Windows version metadata must match native 0.3.10');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1379,6 +1379,101 @@ for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(mode
   }
   assert(parts038 === expectedParts038, `0.3.8 ${model038} part count changed: ${parts038} !== ${expectedParts038}`);
   assert(triangles038 <= triangleCap038, `0.3.8 ${model038} exceeds its triangle budget: ${triangles038} > ${triangleCap038}`);
+}
+
+// 0.3.9: fourth ten-model perfection pass.  The hero/villa solid
+// frame slabs and reveal plates (backed by wall/reveal layers) become
+// outward panels and the blind rails fully embedded inside those
+// slabs are removed; townhouse reveal rails and blind rails become
+// merged quads; glass-tower blind headrails, fin shadow strips, slab
+// nosings and sill transoms become quads behind the vision glass and
+// its rooftop smalls use size-appropriate radial segments; midrise_a
+// joins midrise_b on panel glazing; mall/school/airport/villa_b/
+// townhouse_b wall-backed glass becomes panels on the old outer
+// faces, round timber/plaster posts become square posts, and the
+// school gains a name band and roof plant.
+for (const marker of ['panel("hero_window_frame"', 'panel("villa_window_frame"', 'wquad(frame, 0.0, 0.083', 'backing_out + 0.030', 'sphere("tower_flag_finial"', '_build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True)', 'panel("mall_storefront"', 'panel("school_win_front"', 'school_sign', 'panel("term_glass_upper"', 'panel("villab_glass"', 'panel("townb_window"']) {
+  assert(blenderScript.includes(marker), `0.3.9 Blender marker is missing: ${marker}`);
+}
+const modelBudgets039 = {
+  'glass_tower.glb': [22_000, 18],
+  'hero_building.glb': [22_500, 18],
+  'townhouse.glb': [17_500, 22],
+  'villa.glb': [12_600, 19],
+  'midrise_a.glb': [1_700, 8],
+  'shopping_mall.glb': [2_200, 9],
+  'school.glb': [1_600, 11],
+  'airport_terminal.glb': [1_150, 5],
+  'villa_b.glb': [520, 8],
+  'townhouse_b.glb': [500, 9],
+};
+for (const [model039, [triangleCap039, expectedParts039]] of Object.entries(modelBudgets039)) {
+  const modelBytes039 = await readFile(`src/assets/models/props/${model039}`);
+  assert(modelBytes039.subarray(0, 4).toString('utf8') === 'glTF', `0.3.9 ${model039} is not a real GLB`);
+  const modelJson039 = parseGlbJson(modelBytes039);
+  let triangles039 = 0;
+  let parts039 = 0;
+  for (const mesh039 of modelJson039.meshes ?? []) {
+    for (const primitive039 of mesh039.primitives ?? []) {
+      parts039 += 1;
+      const vertexCount039 = primitive039.indices !== undefined
+        ? modelJson039.accessors[primitive039.indices].count
+        : modelJson039.accessors[primitive039.attributes.POSITION].count;
+      const mode039 = primitive039.mode ?? 4;
+      triangles039 += mode039 === 4 ? Math.floor(vertexCount039 / 3) : (mode039 === 5 || mode039 === 6 ? Math.max(vertexCount039 - 2, 0) : 0);
+    }
+  }
+  assert(parts039 === expectedParts039, `0.3.9 ${model039} part count changed: ${parts039} !== ${expectedParts039}`);
+  assert(triangles039 <= triangleCap039, `0.3.9 ${model039} exceeds its triangle budget: ${triangles039} > ${triangleCap039}`);
+}
+
+// 0.3.10: fifth and final model pass - the 17 remaining industrial/
+// airfield/farm models.  Oversized UV spheres (reactor/radar/tank
+// domes were 704 tris each at 24x16) and radial parts use
+// size-appropriate segment counts; wall-backed glass/louvers/stripes
+// become outward panels; the watchtower gains its guard railing, the
+// port crane leg cross-bracing and a cab window band, and the ATC
+// base a window band.  Greenhouse glass and crop rows stay solid.
+for (const marker of ['panel("hangar_door_rail"', 'panel("turbine_louver"', 'segments=20, ring_count=12', 'watch_rail_top', 'crane_brace_a', 'panel("barn_win"', 'atc_base_windows', 'range(-21, 22, 7)', 'sphere("tank_roof"']) {
+  assert(blenderScript.includes(marker), `0.3.10 Blender marker is missing: ${marker}`);
+}
+const modelBudgets0310 = {
+  'cooling_tower.glb': [1_350, 2],
+  'reactor.glb': [850, 6],
+  'turbine_hall_long.glb': [920, 8],
+  'turbine_hall_short.glb': [720, 8],
+  'storage_tank.glb': [620, 4],
+  'radar_station.glb': [560, 6],
+  'airliner.glb': [660, 6],
+  'afv.glb': [570, 4],
+  'greenhouse.glb': [730, 5],
+  'chimney.glb': [410, 3],
+  'atc_tower.glb': [440, 6],
+  'hangar_large.glb': [240, 5],
+  'hangar_small.glb': [240, 5],
+  'port_crane.glb': [400, 7],
+  'barn.glb': [240, 5],
+  'watchtower.glb': [380, 4],
+  'silo.glb': [200, 3],
+};
+for (const [model0310, [triangleCap0310, expectedParts0310]] of Object.entries(modelBudgets0310)) {
+  const modelBytes0310 = await readFile(`src/assets/models/props/${model0310}`);
+  assert(modelBytes0310.subarray(0, 4).toString('utf8') === 'glTF', `0.3.10 ${model0310} is not a real GLB`);
+  const modelJson0310 = parseGlbJson(modelBytes0310);
+  let triangles0310 = 0;
+  let parts0310 = 0;
+  for (const mesh0310 of modelJson0310.meshes ?? []) {
+    for (const primitive0310 of mesh0310.primitives ?? []) {
+      parts0310 += 1;
+      const vertexCount0310 = primitive0310.indices !== undefined
+        ? modelJson0310.accessors[primitive0310.indices].count
+        : modelJson0310.accessors[primitive0310.attributes.POSITION].count;
+      const mode0310 = primitive0310.mode ?? 4;
+      triangles0310 += mode0310 === 4 ? Math.floor(vertexCount0310 / 3) : (mode0310 === 5 || mode0310 === 6 ? Math.max(vertexCount0310 - 2, 0) : 0);
+    }
+  }
+  assert(parts0310 === expectedParts0310, `0.3.10 ${model0310} part count changed: ${parts0310} !== ${expectedParts0310}`);
+  assert(triangles0310 <= triangleCap0310, `0.3.10 ${model0310} exceeds its triangle budget: ${triangles0310} > ${triangleCap0310}`);
 }
 
 console.log('Native Godot project validation OK');
