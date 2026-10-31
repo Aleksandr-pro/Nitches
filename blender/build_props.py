@@ -6107,6 +6107,7 @@ def main():
         (build_greenhouse, "greenhouse.glb"),
         (build_port_crane, "port_crane.glb"),
         (build_barge, "barge.glb"),
+        (build_bleacher, "bleacher.glb"),
     ):
         # Local model reviews can build one asset without regenerating
         # the whole city set, e.g. NITCHES_PROPS_ONLY=cottage_dune.glb.
@@ -7931,6 +7932,84 @@ def build_barge():
     for bx in (-3.7, 3.7):
         for by in (-25.4, 25.8):
             cyl("barge_bollard0315", bx, by, deck + 0.25, 0.15, 0.5, metal, vertices=6)
+
+def _mb_box(b, cx, cy, cz, dx, dy, dz):
+    """Axis-aligned box as 6 outward-wound quads on a MeshBuilder."""
+    x0, x1 = cx - dx * 0.5, cx + dx * 0.5
+    y0, y1 = cy - dy * 0.5, cy + dy * 0.5
+    z0, z1 = cz - dz * 0.5, cz + dz * 0.5
+    from mathutils import Vector
+    v = lambda X, Y, Z: b.add_vertex(Vector((X, Y, Z)))
+    a, bb, c, d = v(x0, y0, z1), v(x1, y0, z1), v(x1, y1, z1), v(x0, y1, z1)
+    b.quad(a, bb, c, d)  # top +Z
+    a, bb, c, d = v(x0, y0, z0), v(x0, y1, z0), v(x1, y1, z0), v(x1, y0, z0)
+    b.quad(a, bb, c, d)  # bottom -Z
+    a, bb, c, d = v(x0, y0, z0), v(x1, y0, z0), v(x1, y0, z1), v(x0, y0, z1)
+    b.quad(a, bb, c, d)  # front -Y
+    a, bb, c, d = v(x1, y1, z0), v(x0, y1, z0), v(x0, y1, z1), v(x1, y1, z1)
+    b.quad(a, bb, c, d)  # back +Y
+    a, bb, c, d = v(x1, y0, z0), v(x1, y1, z0), v(x1, y1, z1), v(x1, y0, z1)
+    b.quad(a, bb, c, d)  # right +X
+    a, bb, c, d = v(x0, y1, z0), v(x0, y0, z0), v(x0, y0, z1), v(x0, y1, z1)
+    b.quad(a, bb, c, d)  # left -X
+
+
+def build_bleacher():
+    """0.3.16 (TZ stage 7): 5-row spectator grandstand for the drift
+    arena.  14 m wide concrete tiers with continuous bench seats,
+    rear posts and a slanted canopy roof.  Origin at ground centre,
+    audience faces -Y (the track side).  Four merged parts.
+    """
+    from mathutils import Vector
+    concrete = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    accent = MATS["CityAccentRed"]
+    roof_m = MATS["RoofDark"]
+    conc, met, acc, roof = MeshBuilder(), MeshBuilder(), MeshBuilder(), MeshBuilder()
+    width = 14.0
+    rows = 5
+    tread = 0.95
+    front_y = -tread * rows * 0.5  # -2.375
+    for i in range(rows):
+        top = 0.55 + i * 0.5
+        cy = front_y + tread * (i + 0.5)
+        back_y = front_y + tread * (i + 1)
+        _mb_box(conc, 0.0, cy, top * 0.5, width, tread, top)
+        # Continuous bench: riser + seat plank + backrest at tread back.
+        _mb_box(acc, 0.0, back_y - 0.47, top + 0.36, width - 0.3, 0.06, 0.18)
+        _mb_box(acc, 0.0, back_y - 0.26, top + 0.47, width - 0.3, 0.42, 0.07)
+        _mb_box(acc, 0.0, back_y - 0.055, top + 0.72, width - 0.3, 0.07, 0.42)
+    top_back = front_y + tread * rows  # +2.375
+    top_z = 0.55 + (rows - 1) * 0.5  # 2.55
+    # Rear safety barrier behind the top row.
+    _mb_box(met, 0.0, top_back - 0.05, top_z + 0.45, width, 0.07, 0.9)
+    # Canopy posts (rise from the top platform to the roof).
+    for px in (-6.6, -2.2, 2.2, 6.6):
+        _mb_box(met, px, top_back - 0.28, top_z + 1.17, 0.14, 0.14, 2.34)
+    # Slanted canopy roof prism (front edge higher, sheds back).
+    v = lambda X, Y, Z: roof.add_vertex(Vector((X, Y, Z)))
+    fx0, fx1, tz = -(width * 0.5 + 0.35), width * 0.5 + 0.35, 0.09
+    fy, fz = -0.85, top_z + 2.78  # front edge
+    by, bz = top_back + 0.35, top_z + 2.36  # back edge
+    a, b, c, d = v(fx0, fy, fz), v(fx1, fy, fz), v(fx1, by, bz), v(fx0, by, bz)
+    roof.quad(a, b, c, d)  # top
+    a, b, c, d = v(fx0, fy, fz - tz), v(fx0, by, bz - tz), v(fx1, by, bz - tz), v(fx1, fy, fz - tz)
+    roof.quad(a, b, c, d)  # underside
+    a, b, c, d = v(fx0, fy, fz - tz), v(fx1, fy, fz - tz), v(fx1, fy, fz), v(fx0, fy, fz)
+    roof.quad(a, b, c, d)  # front lip
+    a, b, c, d = v(fx1, by, bz - tz), v(fx0, by, bz - tz), v(fx0, by, bz), v(fx1, by, bz)
+    roof.quad(a, b, c, d)  # back lip
+    a, b, c, d = v(fx1, fy, fz - tz), v(fx1, by, bz - tz), v(fx1, by, bz), v(fx1, fy, fz)
+    roof.quad(a, b, c, d)  # right lip
+    a, b, c, d = v(fx0, by, bz - tz), v(fx0, fy, fz - tz), v(fx0, fy, fz), v(fx0, by, bz)
+    roof.quad(a, b, c, d)  # left lip
+    # Accent fascia band on the front roof edge.
+    _mb_box(acc, 0.0, fy - 0.02, fz - 0.12, width + 0.74, 0.07, 0.3)
+    conc.build("bleacher_tiers0316", concrete, smooth=False)
+    acc.build("bleacher_seats0316", accent, smooth=False)
+    met.build("bleacher_frame0316", metal, smooth=False)
+    roof.build("bleacher_roof0316", roof_m, smooth=False)
+
 
 
 def build_port_crane():

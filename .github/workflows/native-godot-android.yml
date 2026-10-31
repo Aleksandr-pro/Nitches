@@ -24,7 +24,7 @@ on:
       - '.github/workflows/native-godot-android.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: native-godot-${{ github.ref }}
@@ -355,3 +355,19 @@ jobs:
           path: ${{ env.APK_PATH }}
           retention-days: 90
           if-no-files-found: error
+
+      - name: Publish direct-download APK (rolling prerelease)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Artifact downloads are always ZIP archives; a GitHub
+          # Release asset is served as the raw file, so the phone gets
+          # a direct .apk link that always points at the newest green
+          # build: releases/download/native-latest/NitchesHorizonNative.apk
+          if ! gh release view native-latest >/dev/null 2>&1; then
+            gh release create native-latest --prerelease \
+              --title "Nitches Native — последняя тестовая сборка (прямой APK)" \
+              --notes "Самая свежая успешная сборка. Файл NitchesHorizonNative.apk по постоянной ссылке всегда обновляется до актуального APK для установки с телефона."
+          fi
+          gh release upload native-latest "${{ env.APK_PATH }}" --clobber
