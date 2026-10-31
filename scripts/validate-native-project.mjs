@@ -1640,6 +1640,14 @@ for (const marker of ['villab_solar0314', 'villab_ac0314', 'townb_bin0314', 'tow
   }
   assert(townParts0314 === 9 && townTris0314 <= 910, `0.3.14 townhouse_b budget blown: ${townTris0314} tris / ${townParts0314} parts`);
 }
+// 0.3.14 world-data part (TZ stage 5): courtyard landscaping is
+// baked into the committed world JSON by generate_richtown7_world.py
+// (foundation hedges, side-yard oaks, accent/pool palms per house).
+// The entries only ever append to the plant arrays, so every
+// pre-0.3.14 placement stays byte-identical.
+assert(data.bushes.length >= 2000, '0.3.14 courtyard hedge bushes must ship in the world data');
+assert(data.trees.length >= 1050, '0.3.14 courtyard yard oaks must ship in the world data');
+assert(data.palms.length >= 1150, '0.3.14 courtyard/pool palms must ship in the world data');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
