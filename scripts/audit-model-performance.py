@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Model weight / draw-budget audit for Nitches (0.3.4).
+"""Model weight / draw-budget audit for Nitches (0.3.4; runtime estimate 0.3.5).
 
 Reads every committed GLB directly (glTF JSON chunk only, stdlib only)
 and reports the numbers that decide whether a phone keeps frame:
@@ -22,6 +22,7 @@ Usage:
 import argparse
 import collections
 import json
+import math
 import struct
 import sys
 from pathlib import Path
@@ -91,6 +92,109 @@ def fmt(n: int) -> str:
     return f"{n:,}".replace(",", " ")
 
 
+
+# --- 0.3.5 runtime estimate -------------------------------------------------
+# The shipped JSON still carries ~300 buildings with model="generic":
+# the world builder classifies them into premium fixed-scale GLBs by
+# kind/size at load time.  Counting only direct `model` stems therefore
+# understates the heavy repeats (262 premium townhouses).  The tables
+# below mirror native/scripts/world_builder.gd (_build_buildings
+# classification, _batched_model_chunk_size, _add_building_far_proxy
+# cells) so this audit reports what the phone actually submits.
+
+CITY_STEMS_035 = {
+    "office_tower_low", "office_tower_mid", "office_tower_high",
+    "midrise_a", "midrise_b", "warehouse_large", "warehouse_small",
+    "container_red", "container_blue", "villa_b", "townhouse_b",
+    "barn", "greenhouse", "shopping_mall",
+    "turbine_hall_long", "turbine_hall_short",
+}
+DETAIL_CHUNK_035 = {"townhouse": 360.0, "villa": 460.0, "hero_building": 460.0,
+                    "glass_tower": 520.0, "grand_hotel": 520.0}
+PROXY_CHUNK_035 = {"townhouse": 560.0, "villa": 560.0, "hero_building": 700.0,
+                   "glass_tower": 700.0, "grand_hotel": 700.0}
+PROXY_BOXES_035 = {
+    "villa": 2, "townhouse": 2, "hero_building": 2, "glass_tower": 2,
+    "grand_hotel": 3, "office_tower_low": 3, "office_tower_mid": 4,
+    "office_tower_high": 4, "midrise_a": 2, "midrise_b": 2,
+    "warehouse_large": 2, "warehouse_small": 2, "container_red": 1,
+    "container_blue": 1, "villa_b": 2, "townhouse_b": 2, "barn": 2,
+    "greenhouse": 2, "shopping_mall": 2, "turbine_hall_long": 2,
+    "turbine_hall_short": 2,
+}
+# Gate for the classified city+premium detail layer.  0.3.4 shipped
+# 6 398 of these nodes (premium models still at 180 m cells); the
+# 0.3.5 wide-cell pass measures 4 031.  Keep regressions visible.
+DETAIL_NODE_BUDGET_035 = 4400
+
+
+def classify_building(building: dict) -> str:
+    model = str(building.get("model", "generic"))
+    kind = str(building.get("kind", ""))
+    w = float(building.get("w", 20.0))
+    d = float(building.get("d", 16.0))
+    h = float(building.get("h", 10.0))
+    total = max(h + float(building.get("roofH", 0.0)), 5.0)
+    if model.startswith("cottage_"):
+        return model
+    if model in ("villa", "glass_tower"):
+        return model
+    if model in CITY_STEMS_035:
+        return model
+    if kind == "rt-villa" and w <= 29.0 and d <= 22.0 and total <= 13.0:
+        return "townhouse"
+    if kind == "rt-hotel" and h > 38.0 and 33.0 <= w <= 36.0 and 25.0 <= d <= 28.0:
+        return "grand_hotel"
+    if kind == "rt-hotel" and 15.0 <= h <= 38.0 and w <= 55.0 and d <= 38.0:
+        return "hero_building"
+    return "GENERIC"
+
+
+def _cell_count(points: list, chunk_m: float) -> int:
+    return len({(math.floor((x + 3500.0) / chunk_m), math.floor((z + 3500.0) / chunk_m))
+                for x, z in points})
+
+
+def runtime_building_audit(world: dict, by_stem: dict, top: int) -> dict:
+    positions: dict = collections.defaultdict(list)
+    instances: dict = collections.Counter()
+    generic = 0
+    for building in world.get("buildings", []):
+        stem = classify_building(building)
+        if stem == "GENERIC":
+            generic += 1
+            continue
+        if stem not in by_stem:
+            continue
+        positions[stem].append((float(building.get("x", 0.0)), float(building.get("z", 0.0))))
+        instances[stem] += 1
+        if stem.startswith("container") and float(building.get("h", 0.0)) > 4.0:
+            instances[stem] += 1  # stacked second box (same cell)
+    rows = []
+    detail_nodes = 0
+    proxy_nodes = 0
+    worst_tris = 0
+    for stem, points in positions.items():
+        parts = by_stem[stem]["primitives"]
+        chunk = 620.0 if stem in CITY_STEMS_035 else DETAIL_CHUNK_035.get(stem, 180.0)
+        d_nodes = _cell_count(points, chunk) * parts
+        p_chunk = 820.0 if stem in CITY_STEMS_035 else PROXY_CHUNK_035.get(stem, 260.0)
+        p_nodes = _cell_count(points, p_chunk) * PROXY_BOXES_035.get(stem, 0)
+        tris = by_stem[stem]["unique_tris"] * instances[stem]
+        detail_nodes += d_nodes
+        proxy_nodes += p_nodes
+        worst_tris += tris
+        rows.append((d_nodes, stem, instances[stem], parts, p_nodes, tris))
+    print("\nRichTown runtime estimate (builder classification, chunked MultiMesh nodes):")
+    for d_nodes, stem, count, parts, p_nodes, tris in sorted(rows, reverse=True)[:top]:
+        print(f"  {stem:24s} x{count:4d}  parts={parts:2d}  detail_nodes={d_nodes:5d}  "
+              f"proxy_nodes={p_nodes:4d}  worst_tris={fmt(tris):>9s}")
+    print(f"  TOTAL detail_nodes={fmt(detail_nodes)}  proxy_nodes={fmt(proxy_nodes)}  "
+          f"worst_tris={fmt(worst_tris)}  generic_boxes={generic}")
+    return {"generic": generic, "detail_nodes": detail_nodes,
+            "proxy_nodes": proxy_nodes, "worst_tris": worst_tris}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--top", type=int, default=20)
@@ -146,7 +250,20 @@ def main() -> int:
         print(f"  TOTAL placed buildings: {fmt(total)} tris "
               "(HLOD/visibility ranges cut this by an order of magnitude in play)")
 
+    runtime = {"generic": 0, "detail_nodes": 0, "proxy_nodes": 0}
+    if world_path.exists():
+        runtime = runtime_building_audit(
+            json.loads(world_path.read_text(encoding="utf-8")), by_stem, args.top)
+
     problems = []
+    if runtime["generic"]:
+        problems.append(
+            f"{runtime['generic']} RichTown buildings still render as generic "
+            "massing boxes (0.3.5 target: 0)")
+    if runtime["detail_nodes"] > DETAIL_NODE_BUDGET_035:
+        problems.append(
+            f"runtime detail layer needs {runtime['detail_nodes']} MultiMesh "
+            f"nodes (0.3.5 budget: {DETAIL_NODE_BUDGET_035})")
     for row in props:
         if row["meshes"] > 250:
             problems.append(f"{row['stem']}: {row['meshes']} mesh objects (unmerged Blender export)")

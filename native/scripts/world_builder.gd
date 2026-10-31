@@ -6134,6 +6134,10 @@ func _batched_model_base_range(path: String) -> float:
 		return 220.0
 	if path.ends_with("greenhouse.glb"):
 		return 205.0
+	if path.ends_with("shopping_mall.glb"):
+		return 620.0
+	if path.ends_with("turbine_hall_long.glb") or path.ends_with("turbine_hall_short.glb"):
+		return 520.0
 	if path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb"):
 		return 360.0
 	if path.ends_with("airliner.glb"):
@@ -6186,12 +6190,17 @@ func _batched_model_detail_range(path: String, material_name: String) -> float:
 			return 210.0
 		return base_range
 	var architectural_limit := base_range
+	# 0.3.5: wider radius-compensated premium chunks extend the
+	# effective detail reach at chunk edges, so the nominal switch
+	# trims slightly; beside the road nothing changes.
 	if path.ends_with("villa.glb") or path.ends_with("townhouse.glb"):
-		architectural_limit = 125.0
+		architectural_limit = 112.0
 	elif path.ends_with("hero_building.glb"):
-		architectural_limit = 180.0
+		architectural_limit = 162.0
 	elif path.ends_with("glass_tower.glb"):
-		architectural_limit = 240.0
+		architectural_limit = 220.0
+	elif path.ends_with("grand_hotel.glb"):
+		architectural_limit = 270.0
 	if path.ends_with("palm_date.glb") or path.ends_with("palm_royal.glb"):
 		# 0.3.0: 13-17k-triangle fronds retire at 105 m (far proxy from
 		# 82 m); near-field quality is untouched, avenue views drop
@@ -6225,6 +6234,7 @@ func _is_city_pack_path(path: String) -> bool:
 		or path.ends_with("container_red.glb") or path.ends_with("container_blue.glb")
 		or path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb")
 		or path.ends_with("barn.glb") or path.ends_with("greenhouse.glb")
+		or path.ends_with("shopping_mall.glb") or path.ends_with("turbine_hall_long.glb") or path.ends_with("turbine_hall_short.glb")
 		or path.ends_with("school.glb") or path.ends_with("airport_terminal.glb") or path.ends_with("atc_tower.glb")
 		or path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb") or path.ends_with("airliner.glb")
 		or path.ends_with("cooling_tower.glb") or path.ends_with("reactor.glb") or path.ends_with("chimney.glb")
@@ -6243,6 +6253,17 @@ func _batched_model_chunk_size(path: String) -> float:
 		# range compensation cut that by roughly two thirds while
 		# every near model keeps its exact geometry and materials.
 		return 620.0
+	if path.ends_with("townhouse.glb"):
+		# 0.3.5: 262 exported premium townhouses at the 180 m default
+		# made ~3.3k detailed MultiMesh nodes on their own (22 parts
+		# x 151 cells), the largest remaining node pool at 12-18 FPS.
+		# 360 m radius-compensated cells halve that while capping the
+		# worst cell at ~195k triangles.  Near geometry is unchanged.
+		return 360.0
+	if path.ends_with("villa.glb") or path.ends_with("hero_building.glb") or path.ends_with("cottage_dune.glb") or path.ends_with("cottage_courtyard.glb") or path.ends_with("cottage_palm.glb"):
+		return 460.0
+	if path.ends_with("glass_tower.glb") or path.ends_with("grand_hotel.glb"):
+		return 520.0
 	if path.ends_with("main_tower.glb"):
 		return MULTIMESH_CHUNK_SIZE_M
 	if path.contains("traffic_signal"):
@@ -6316,11 +6337,13 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		return
 	var proxy_begin := maxf(base_range - 20.0, 0.0)
 	if path.ends_with("villa.glb") or path.ends_with("townhouse.glb"):
-		proxy_begin = 95.0
+		proxy_begin = 88.0
 	elif path.ends_with("hero_building.glb"):
-		proxy_begin = 145.0
+		proxy_begin = 138.0
 	elif path.ends_with("glass_tower.glb"):
 		proxy_begin = 200.0
+	elif path.ends_with("grand_hotel.glb"):
+		proxy_begin = 240.0
 	var proxy_end := 1050.0
 	var specs: Array[Dictionary] = []
 	if path.ends_with("villa.glb"):
@@ -6452,6 +6475,24 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 			{"size": Vector3(44.00, 0.80, 14.00), "center": Vector3(0.0, 0.40, 0.0), "material": _prop_material("ConcreteLight"), "name": "Base"},
 			{"size": Vector3(43.00, 4.60, 13.00), "center": Vector3(0.0, 3.10, 0.0), "material": _prop_material("PropsGlass"), "name": "Shell"},
 		]
+	elif path.ends_with("shopping_mall.glb"):
+		proxy_end = 1500.0
+		specs = [
+			{"size": Vector3(226.00, 14.50, 126.00), "center": Vector3(0.0, 8.45, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(150.00, 2.00, 30.00), "center": Vector3(0.0, 16.90, 0.0), "material": _prop_material("FacadeGlass"), "name": "Atria"},
+		]
+	elif path.ends_with("turbine_hall_long.glb"):
+		proxy_end = 1400.0
+		specs = [
+			{"size": Vector3(40.00, 22.50, 168.00), "center": Vector3(0.0, 12.25, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(13.00, 2.20, 106.00), "center": Vector3(0.0, 24.60, 0.0), "material": _prop_material("FacadeGlass"), "name": "Monitor"},
+		]
+	elif path.ends_with("turbine_hall_short.glb"):
+		proxy_end = 1200.0
+		specs = [
+			{"size": Vector3(40.00, 16.50, 108.00), "center": Vector3(0.0, 9.25, 0.0), "material": _prop_material("FacadeMain"), "name": "Mass"},
+			{"size": Vector3(13.00, 2.20, 68.00), "center": Vector3(0.0, 18.60, 0.0), "material": _prop_material("FacadeGlass"), "name": "Monitor"},
+		]
 	elif path.ends_with("hangar_large.glb"):
 		proxy_end = 1300.0
 		specs = [
@@ -6523,12 +6564,31 @@ func _add_building_far_proxy(parent: Node, path: String, transforms: Array, node
 		var city_proxy_cap := 1500.0
 		if path.ends_with("villa_b.glb") or path.ends_with("townhouse_b.glb") or path.ends_with("container_red.glb") or path.ends_with("container_blue.glb"):
 			city_proxy_cap = 1050.0
-		elif path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb") or path.ends_with("school.glb"):
+		elif path.ends_with("office_tower_low.glb") or path.ends_with("office_tower_mid.glb") or path.ends_with("office_tower_high.glb") or path.ends_with("school.glb") or path.ends_with("shopping_mall.glb") or path.ends_with("turbine_hall_long.glb") or path.ends_with("turbine_hall_short.glb"):
 			city_proxy_cap = 1900.0
 		elif path.ends_with("hangar_large.glb") or path.ends_with("hangar_small.glb") or path.ends_with("airliner.glb") or path.ends_with("port_crane.glb"):
 			city_proxy_cap = 1700.0
 		proxy_end = minf(proxy_end, city_proxy_cap)
 		_enhancement_stats["perf_city_hlod_0330"] = true
+	elif _is_rt7 and (path.ends_with("villa.glb") or path.ends_with("townhouse.glb") or path.ends_with("hero_building.glb") or path.ends_with("glass_tower.glb") or path.ends_with("grand_hotel.glb") or path.ends_with("cottage_dune.glb") or path.ends_with("cottage_courtyard.glb") or path.ends_with("cottage_palm.glb")):
+		# 0.3.5: premium repeats were still proxied in 260 m cells out
+		# to 2.6 km.  Wide radius-compensated cells plus per-class
+		# caps keep the silhouettes and collapse the node count.
+		proxy_chunk_m = 560.0
+		var premium_proxy_cap := 1400.0
+		if path.ends_with("hero_building.glb"):
+			proxy_chunk_m = 700.0
+			premium_proxy_cap = 1700.0
+		elif path.ends_with("glass_tower.glb"):
+			proxy_chunk_m = 700.0
+			premium_proxy_cap = 2200.0
+		elif path.ends_with("grand_hotel.glb"):
+			proxy_chunk_m = 700.0
+			premium_proxy_cap = 2000.0
+		elif path.contains("cottage_"):
+			premium_proxy_cap = 1500.0
+		proxy_end = minf(proxy_end, premium_proxy_cap)
+		_enhancement_stats["perf_premium_hlod_0350"] = true
 
 	var unit_box := BoxMesh.new()
 	unit_box.size = Vector3.ONE
@@ -6597,6 +6657,15 @@ func _flush_batched_models() -> void:
 				or material_key.contains("water")
 				or material_key.contains("leaf")
 				or material_key.contains("grass")
+				# 0.3.5: recessed window frames/blinds and flat ground
+				# dressing cast no readable shadow (the wall/core behind
+				# them does), but WindowFrame alone is 23-29% of every
+				# premium building in the shadow pass.
+				or material_key.contains("windowframe")
+				or material_key.contains("blind")
+				or material_key.contains("pavement")
+				or material_key.contains("deck")
+				or material_key.contains("gravel")
 			)
 			if not casts_shadow:
 				_enhancement_stats["model_parts_without_shadow_pass"] = int(_enhancement_stats.get("model_parts_without_shadow_pass", 0)) + 1
@@ -6705,6 +6774,9 @@ const CITY_MODELS_0320 := {
 	"townhouse_b": "townhouse_b.glb",
 	"barn": "barn.glb",
 	"greenhouse": "greenhouse.glb",
+	"shopping_mall": "shopping_mall.glb",
+	"turbine_hall_long": "turbine_hall_long.glb",
+	"turbine_hall_short": "turbine_hall_short.glb",
 }
 
 
@@ -7050,7 +7122,7 @@ func _build_buildings() -> void:
 
 func _townhouse_model_fit(item: Dictionary, self_index: int, accepted: Array, placed_rects: Array) -> Dictionary:
 	var centre := Vector2(_f(item, "x"), _f(item, "z"))
-	for footprint_variant in [Vector2(18.87, 16.37), Vector2(16.37, 18.87)]:
+	for footprint_variant in [Vector2(19.0, 16.5), Vector2(16.5, 19.0)]:
 		var size: Vector2 = footprint_variant
 		var rect := Rect2(centre - size * 0.5 - Vector2.ONE, size + Vector2(2.0, 2.0))
 		var clear := true
@@ -7479,7 +7551,7 @@ func _build_infill_buildings(parent: Node) -> void:
 				base,
 				float(townhouse_fit.get("yaw", 0.0)),
 				Vector3.ONE,
-				Vector3(0.0, 0.0, 0.047)
+				Vector3.ZERO
 			))
 		else:
 			if not facade_transforms.has(facade):
@@ -7531,7 +7603,7 @@ func _build_infill_buildings(parent: Node) -> void:
 		elif model_kind == "hero":
 			_add_box_collider(base + Vector3(0.0, 14.279, 0.0), Vector3(32.40, 28.56, 24.60), float(hero_fit.get("yaw", 0.0)))
 		elif model_kind == "townhouse":
-			_add_box_collider(base + Vector3(0.0, 5.525, 0.0), Vector3(18.87, 11.05, 16.37), float(townhouse_fit.get("yaw", 0.0)))
+			_add_box_collider(base + Vector3(0.0, 5.85, 0.0), Vector3(19.0, 11.7, 16.5), float(townhouse_fit.get("yaw", 0.0)))
 		else:
 			_add_box_collider(base + Vector3(0.0, (h + roof_height) * 0.5, 0.0), Vector3(w, h + roof_height, d))
 
@@ -7592,10 +7664,14 @@ func _build_infill_buildings(parent: Node) -> void:
 			"InfillBuildings_%s" % facade_name,
 			true
 		)
-	_add_batched_model(parent, "res://assets/buildings/townhouse.glb", infill_townhouse_transforms, "InfillBlenderTownhouses")
+	# 0.3.5: procedural filler joins the 536-triangle city
+	# townhouse_b batch; exported rt-villa parcels keep the premium
+	# 21.7k-triangle townhouse (see _build_buildings).
+	_add_batched_model(parent, "res://assets/props/townhouse_b.glb", infill_townhouse_transforms, "InfillCityTownhouses")
 	_add_batched_model(parent, "res://assets/buildings/hero_building.glb", infill_hero_transforms, "InfillBlenderHeroBuildings")
 	_add_batched_model(parent, "res://assets/buildings/glass_tower.glb", infill_glass_transforms, "InfillBlenderGlassTowers")
 	_enhancement_stats["infill_model_buildings"] = infill_townhouse_transforms.size() + infill_hero_transforms.size() + infill_glass_transforms.size()
+	_enhancement_stats["infill_city_townhouses_0350"] = infill_townhouse_transforms.size()
 	_add_multimesh(parent, unit_box, _roof_material(false), flat_roof_transforms, "InfillFlatRoofs", false)
 	_add_multimesh(parent, _get_gable_mesh(), _roof_material(true), pitched_roof_transforms, "InfillPitchedRoofs", true)
 	_add_multimesh(parent, unit_box, _prop_material("FacadeGlass"), storefront_transforms, "CityStorefrontGlass", false)

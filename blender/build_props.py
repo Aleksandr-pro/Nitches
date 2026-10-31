@@ -5857,6 +5857,9 @@ def main():
         (build_midrise_b, "midrise_b.glb"),
         (build_warehouse_large, "warehouse_large.glb"),
         (build_warehouse_small, "warehouse_small.glb"),
+        (build_shopping_mall, "shopping_mall.glb"),
+        (build_turbine_hall_long, "turbine_hall_long.glb"),
+        (build_turbine_hall_short, "turbine_hall_short.glb"),
         (build_container_red, "container_red.glb"),
         (build_container_blue, "container_blue.glb"),
         (build_villa_b, "villa_b.glb"),
@@ -7039,6 +7042,170 @@ def build_warehouse_large():
 
 def build_warehouse_small():
     _build_warehouse(46.0, 24.0, 6.5, 3.5, 4)
+
+
+def build_shopping_mall():
+    """RichTown Mall: the exact 230 x 130 x 18 m rt-mall parcel.
+
+    0.3.5 closes the last generic massing box in the exported city.
+    Two retail levels with continuous storefront glass, a finned stone
+    upper gallery, four entrance pavilions, roof atria and a rear
+    loading dock -- nine shared materials, no new runtime material.
+    Everything stays inside the parcel envelope (canopies included).
+    """
+    main_mat = MATS["FacadeMain"]
+    accent = MATS["FacadeAccent"]
+    glass = MATS["FacadeGlass"]
+    concrete = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+    blue = MATS["CityAccentBlue"]
+    red = MATS["CityAccentRed"]
+    glow = MATS["LampGlow"]
+
+    box("mall_plinth", 0, 0, 0.5, 230.0, 130.0, 1.0, concrete)
+    box("mall_ground_mass", 0, 0, 3.8, 226.0, 126.0, 5.6, main_mat)
+    # Ground-floor storefront glass on all four faces.
+    for sy in (-63.10, 63.10):
+        box("mall_storefront", 0, sy, 3.6, 200.0, 0.5, 4.2, glass)
+    for sx in (-113.10, 113.10):
+        box("mall_storefront", sx, 0, 3.6, 0.5, 104.0, 4.2, glass)
+    mx = -87.5
+    while mx <= 87.6:
+        for sy in (-63.38, 63.38):
+            box("mall_storefront_mullion", mx, sy, 3.6, 0.35, 0.3, 4.2, metal)
+        mx += 12.5
+    my = -48.0
+    while my <= 48.1:
+        for sx in (-113.38, 113.38):
+            box("mall_storefront_mullion", sx, my, 3.6, 0.3, 0.35, 4.2, metal)
+        my += 12.0
+    box("mall_mid_cornice", 0, 0, 7.05, 228.0, 128.0, 0.9, accent)
+    box("mall_upper_mass", 0, 0, 11.3, 224.0, 124.0, 7.6, main_mat)
+    for sy in (-62.10, 62.10):
+        box("mall_clerestory", 0, sy, 13.4, 180.0, 0.5, 2.6, glass)
+    for sx in (-112.10, 112.10):
+        box("mall_clerestory", sx, 0, 13.4, 0.5, 96.0, 2.6, glass)
+    fx = -104.0
+    while fx <= 104.1:
+        for sy in (-62.45, 62.45):
+            box("mall_fin", fx, sy, 11.3, 1.2, 0.9, 7.6, accent)
+        fx += 16.0
+    fy = -48.0
+    while fy <= 48.1:
+        for sx in (-112.45, 112.45):
+            box("mall_fin", sx, fy, 11.3, 0.9, 1.2, 7.6, accent)
+        fy += 16.0
+    for cx in (-112.0, 112.0):
+        for cy in (-62.0, 62.0):
+            box("mall_corner_pier", cx, cy, 8.55, 3.0, 3.0, 15.1, accent)
+    box("mall_roof_slab", 0, 0, 15.6, 229.0, 129.0, 1.0, concrete)
+    for sy in (-63.9, 63.9):
+        box("mall_parapet", 0, sy, 16.85, 229.0, 1.2, 1.5, accent)
+    for sx in (-113.9, 113.9):
+        box("mall_parapet", sx, 0, 16.85, 1.2, 129.0, 1.5, accent)
+
+    def entrance(sign, along_y):
+        if along_y:
+            box("mall_entrance_glass", 0, sign * 63.6, 3.4, 34.0, 1.2, 4.8, glass)
+            box("mall_entrance_canopy", 0, sign * 62.75, 5.9, 38.0, 4.5, 0.5, metal)
+            box("mall_entrance_light", 0, sign * 63.9, 5.55, 30.0, 0.3, 0.15, glow)
+            box("mall_entrance_sign", 0, sign * 63.8, 6.9, 30.0, 0.5, 0.9, blue)
+            for cx in (-14.0, 14.0):
+                cyl("mall_entrance_column", cx, sign * 64.2, 3.3, 0.35, 5.6, metal, vertices=8)
+        else:
+            box("mall_entrance_glass", sign * 113.6, 0, 3.4, 1.2, 34.0, 4.8, glass)
+            box("mall_entrance_canopy", sign * 112.75, 0, 5.9, 4.5, 38.0, 0.5, metal)
+            box("mall_entrance_light", sign * 113.9, 0, 5.55, 0.3, 30.0, 0.15, glow)
+            box("mall_entrance_sign", sign * 113.8, 0, 6.9, 0.5, 30.0, 0.9, blue)
+            for cy in (-14.0, 14.0):
+                cyl("mall_entrance_column", sign * 114.2, cy, 3.3, 0.35, 5.6, metal, vertices=8)
+
+    entrance(-1.0, True)
+    entrance(1.0, True)
+    entrance(-1.0, False)
+    entrance(1.0, False)
+    # Tenant sign bands high on the long south face and east face.
+    box("mall_sign_band", 0, -62.4, 14.8, 60.0, 0.6, 1.6, blue)
+    box("mall_sign_band", 112.4, 0, 14.8, 0.6, 44.0, 1.6, red)
+    # Rear loading dock (north face, clear of the centre entrance).
+    for dx in (-80.0, -58.0, 58.0, 80.0):
+        box("mall_dock_door", dx, 63.3, 3.0, 6.0, 0.6, 4.0, dark)
+        box("mall_dock_leveler", dx, 63.7, 0.65, 5.2, 0.5, 0.5, metal)
+    # Roof atria, HVAC and exhaust vents (hard cap z = 18.0).
+    for ax in (-70.0, 0.0, 70.0):
+        box("mall_atrium", ax, 0, 17.0, 36.0, 24.0, 1.8, glass)
+        box("mall_atrium_frame", ax, 0, 17.95, 36.0, 0.5, 0.1, metal)
+        box("mall_atrium_frame", ax, 0, 17.95, 0.5, 24.0, 0.1, metal)
+    for hx, hy in ((-100.0, -40.0), (-35.0, 42.0), (35.0, -42.0), (100.0, 40.0), (-100.0, 38.0), (100.0, -38.0)):
+        box("mall_hvac", hx, hy, 16.8, 10.0, 6.0, 1.4, dark)
+    for vx, vy in ((-52.0, -30.0), (52.0, 30.0), (-52.0, 30.0), (52.0, -30.0)):
+        cyl("mall_roof_vent", vx, vy, 16.9, 1.2, 1.6, metal, vertices=10)
+
+
+def _build_turbine_hall(length, height):
+    """NPP turbine hall: 42 m wide, `length` long (Blender Y), `height` high.
+
+    0.3.5 replaces the last two generic warehouse boxes on the NPP
+    apron with ribbed industrial halls: high ribbon glazing, louver
+    bands, end doors, a glazed roof monitor and exhaust stacks.
+    """
+    main_mat = MATS["FacadeMain"]
+    accent = MATS["FacadeAccent"]
+    glass = MATS["FacadeGlass"]
+    concrete = MATS["ConcreteLight"]
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+    blue = MATS["CityAccentBlue"]
+    red = MATS["CityAccentRed"]
+    wall_h = height - 3.5
+    half = length / 2.0
+
+    box("turbine_plinth", 0, 0, 0.5, 42.0, length, 1.0, concrete)
+    box("turbine_hall", 0, 0, 1.0 + wall_h / 2.0, 40.0, length - 2.0, wall_h, main_mat)
+    box("turbine_roof", 0, 0, height - 2.0, 42.0, length, 1.0, dark)
+    box("turbine_monitor", 0, 0, height - 0.85, 12.0, length * 0.62, 1.3, glass)
+    box("turbine_monitor_cap", 0, 0, height - 0.10, 13.0, length * 0.62, 0.2, metal)
+    # Structural ribs + louver segments along both long walls.
+    ry = -half + 8.0
+    while ry < half - 4.0:
+        for sx in (-20.45, 20.45):
+            box("turbine_rib", sx, ry, 1.0 + wall_h / 2.0, 0.9, 1.4, wall_h, accent)
+        if ry + 5.0 < half - 4.0:
+            for sx in (-20.06, 20.06):
+                box("turbine_louver", sx, ry + 5.0, 3.2, 0.3, 7.0, 2.2, metal)
+        ry += 10.0
+    for sy in (-(half - 0.55), half - 0.55):
+        for ex in (-12.0, 0.0, 12.0):
+            box("turbine_end_rib", ex, sy, 1.0 + wall_h / 2.0, 1.4, 0.9, wall_h, accent)
+    # High ribbon glazing and the plant-blue stripe.
+    for sx in (-20.05, 20.05):
+        box("turbine_ribbon", sx, 0, height - 6.0, 0.35, length - 10.0, 3.0, glass)
+        box("turbine_stripe", sx, 0, 7.5, 0.3, length - 6.0, 1.0, blue)
+    for sy in (-(half - 0.95), half - 0.95):
+        box("turbine_stripe", 0, sy, 7.5, 36.0, 0.3, 1.0, blue)
+    # End doors: one wide equipment door + personnel door per gable.
+    for sy in (-(half - 0.8), half - 0.8):
+        box("turbine_door", -4.0, sy, 4.5, 14.0, 0.5, 7.0, dark)
+        box("turbine_door_split", -4.0, sy + (0.35 if sy > 0 else -0.35), 4.5, 0.4, 0.2, 7.0, metal)
+        box("turbine_personnel_door", 10.0, sy, 2.6, 2.4, 0.5, 3.2, blue)
+    # Roof exhaust stacks, vents and corner safety lights.
+    stack_ys = (-60.0, -20.0, 20.0, 60.0) if length > 140.0 else (-32.0, 0.0, 32.0)
+    for i, sy in enumerate(stack_ys):
+        cyl("turbine_stack", -10.0 if i % 2 == 0 else 10.0, sy, height - 1.1, 1.1, 1.8, metal, vertices=10)
+    for vx, vy in ((-14.0, -half * 0.45), (14.0, half * 0.45), (14.0, -half * 0.15), (-14.0, half * 0.15)):
+        box("turbine_roof_vent", vx, vy, height - 1.05, 5.0, 4.0, 0.9, dark)
+    for cx in (-19.5, 19.5):
+        for cy in (-(half - 1.5), half - 1.5):
+            box("turbine_safety_light", cx, cy, height - 0.3, 0.5, 0.5, 0.5, red)
+
+
+def build_turbine_hall_long():
+    _build_turbine_hall(170.0, 26.0)
+
+
+def build_turbine_hall_short():
+    _build_turbine_hall(110.0, 20.0)
 
 
 def _build_container(material):
