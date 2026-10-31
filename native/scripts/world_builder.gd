@@ -7055,7 +7055,7 @@ func _build_buildings() -> void:
 			premium_hotel_triangles += _mesh_triangle_count(hotel_part.get("mesh") as Mesh)
 	_enhancement_stats["premium_hotel_models"] = hotel_transforms.size() if premium_hotel_built else 0
 	_enhancement_stats["premium_hotel_fixed_scale"] = premium_hotel_built
-	_enhancement_stats["premium_hotel_detail_pass"] = premium_hotel_built and premium_hotel_triangles >= 30000 and premium_hotel_parts >= 10
+	_enhancement_stats["premium_hotel_detail_pass"] = premium_hotel_built and premium_hotel_triangles >= 24000 and premium_hotel_parts >= 10
 	_enhancement_stats["premium_hotel_material_pass"] = premium_hotel_built and _materials.has("hotel_travertine") and _materials.has("hotel_bronze") and _materials.has("hotel_glass_physical") and _materials.has("hotel_black_granite") and _materials.has("hotel_pool_water")
 	_enhancement_stats["premium_hotel_site_pass"] = premium_hotel_built and _materials.has("hotel_teak") and _materials.has("hotel_warm_light") and _materials.has("hotel_accent_teal")
 	_enhancement_stats["premium_hotel_triangles"] = premium_hotel_triangles

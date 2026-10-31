@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.6-native-alpha"'), 'Native project version metadata must match 0.3.6-native-alpha');
-assert(preset.includes('version/code=72'), 'Native 0.3.6 must bump Android versionCode to 72');
-assert(preset.includes('version/name="0.3.6-native-alpha"'), 'Native version name must be 0.3.6-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.6-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.7-native-alpha"'), 'Native project version metadata must match 0.3.7-native-alpha');
+assert(preset.includes('version/code=73'), 'Native 0.3.7 must bump Android versionCode to 73');
+assert(preset.includes('version/name="0.3.7-native-alpha"'), 'Native version name must be 0.3.7-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.7-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.6"') && preset.includes('application/product_version="0.3.6"'), 'Desktop Windows version metadata must match native 0.3.6');
+assert(preset.includes('application/file_version="0.3.7"') && preset.includes('application/product_version="0.3.7"'), 'Desktop Windows version metadata must match native 0.3.7');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1288,6 +1288,50 @@ for (const marker of ['def panel(', 'def wquad', 'detail_036', 'villab_rear_door
 for (const tenModel of ['townhouse.glb', 'villa.glb', 'hero_building.glb', 'glass_tower.glb', 'grand_hotel.glb', 'villa_b.glb', 'townhouse_b.glb', 'midrise_a.glb', 'office_tower_low.glb', 'warehouse_large.glb']) {
   const tenInfo = await stat(`src/assets/models/props/${tenModel}`);
   assert(tenInfo.size > 20_000, `0.3.6 ${tenModel} is missing or truncated`);
+}
+
+// 0.3.7: second ten-model perfection pass.  Landmark glazing that is
+// backed by a solid core/frame becomes outward merged quads; mosque
+// tori/spheres and opera shell seam tubes use size-appropriate
+// segment counts; repeated street furniture loses invisible 6-22 mm
+// bevels while hero bevels and freestanding shelter glass stay solid.
+for (const marker of ['def local_panel(', 'def builder_panel(', 'cross_segments = 28', 'length_segments = 14', 'segments = 16 if radius > 2.0 else 12', 'major_segments=28 if major > 3.0 else 20']) {
+  assert(blenderScript.includes(marker), `0.3.7 Blender marker is missing: ${marker}`);
+}
+assert(worldScript.includes('premium_hotel_triangles >= 24000'), '0.3.7 must keep the Grand Hotel smoke floor aligned with the optimized 0.3.6 model');
+for (const marker of ['premium_hotel_triangles", 0)) < 24000', 'street_lamp_triangles", 0)) < 1800', 'bus_shelter_triangles", 0)) < 2800', 'park_bench_triangles", 0)) < 1200', 'park_pergola_triangles", 0)) < 2400']) {
+  assert(mainScript.includes(marker), `0.3.7 runtime triangle floor is missing: ${marker}`);
+}
+const modelBudgets037 = {
+  'opera_house.glb': [47_000, 18],
+  'mosque.glb': [32_000, 12],
+  'main_tower.glb': [34_500, 18],
+  'museum.glb': [31_800, 16],
+  'traffic_signal_long.glb': [6_200, 8],
+  'traffic_signal_short.glb': [4_200, 8],
+  'bus_shelter.glb': [3_800, 6],
+  'park_pergola.glb': [3_600, 3],
+  'street_lamp.glb': [2_300, 3],
+  'park_bench.glb': [1_600, 3],
+};
+for (const [model037, [triangleCap037, expectedParts037]] of Object.entries(modelBudgets037)) {
+  const modelBytes037 = await readFile(`src/assets/models/props/${model037}`);
+  assert(modelBytes037.subarray(0, 4).toString('utf8') === 'glTF', `0.3.7 ${model037} is not a real GLB`);
+  const modelJson037 = parseGlbJson(modelBytes037);
+  let triangles037 = 0;
+  let parts037 = 0;
+  for (const mesh037 of modelJson037.meshes ?? []) {
+    for (const primitive037 of mesh037.primitives ?? []) {
+      parts037 += 1;
+      const vertexCount037 = primitive037.indices !== undefined
+        ? modelJson037.accessors[primitive037.indices].count
+        : modelJson037.accessors[primitive037.attributes.POSITION].count;
+      const mode037 = primitive037.mode ?? 4;
+      triangles037 += mode037 === 4 ? Math.floor(vertexCount037 / 3) : (mode037 === 5 || mode037 === 6 ? Math.max(vertexCount037 - 2, 0) : 0);
+    }
+  }
+  assert(parts037 === expectedParts037, `0.3.7 ${model037} part count changed: ${parts037} !== ${expectedParts037}`);
+  assert(triangles037 <= triangleCap037, `0.3.7 ${model037} exceeds its triangle budget: ${triangles037} > ${triangleCap037}`);
 }
 
 console.log('Native Godot project validation OK');
