@@ -5,12 +5,12 @@ props_out/atc_tower.glb: meshes=6 tris=440 size=15.00x53.70x15.25m minY=0.00 mat
 props_out/barn.glb: meshes=5 tris=300 size=31.60x13.20x18.87m minY=0.00 mats=CityBarnRed,RoofDark,CityWhitePaint,WindowGlassDark,PropsMetal
 props_out/bus_shelter.glb: meshes=6 tris=3604 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,SolarCell,PropsGlass,LampGlow,PropsWood
 props_out/chimney.glb: meshes=3 tris=468 size=19.00x131.40x19.00m minY=0.00 mats=ConcreteLight,CityAccentRed,WindowFrame
-props_out/container_blue.glb: meshes=4 tris=728 size=12.53x2.82x2.65m minY=0.00 mats=CityAccentBlue,RoofDark,PropsMetal,CityWhitePaint
-props_out/container_red.glb: meshes=4 tris=728 size=12.53x2.82x2.65m minY=0.00 mats=CityAccentRed,RoofDark,PropsMetal,CityWhitePaint
+props_out/container_blue.glb: meshes=4 tris=598 size=12.53x2.82x2.65m minY=0.00 mats=CityAccentBlue,RoofDark,PropsMetal,CityWhitePaint
+props_out/container_red.glb: meshes=4 tris=598 size=12.53x2.82x2.65m minY=0.00 mats=CityAccentRed,RoofDark,PropsMetal,CityWhitePaint
 props_out/cooling_tower.glb: meshes=2 tris=1364 size=84.00x98.00x84.00m minY=0.00 mats=ConcreteLight,WindowFrame
-props_out/cottage_courtyard.glb: meshes=17 tris=16692 size=35.96x11.64x26.99m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,CottageCore,CottageGlass,RoofGravel,SolarCell,CottageBlind
-props_out/cottage_dune.glb: meshes=17 tris=14568 size=35.96x8.90x27.01m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,RoofGravel,SolarCell,CottageCore,CottageGlass,CottageBlind
-props_out/cottage_palm.glb: meshes=16 tris=13544 size=35.96x8.81x27.01m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,CottageCore,CottageRoofMetal,CottageGlass,CottageBlind
+props_out/cottage_courtyard.glb: meshes=17 tris=10672 size=35.96x11.64x26.99m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,CottageCore,CottageGlass,RoofGravel,SolarCell,CottageBlind
+props_out/cottage_dune.glb: meshes=17 tris=9212 size=35.96x8.90x27.01m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,RoofGravel,SolarCell,CottageCore,CottageGlass,CottageBlind
+props_out/cottage_palm.glb: meshes=16 tris=8234 size=35.96x8.81x27.01m minY=0.00 mats=CottageGravel,CottageLawn,CottageBasalt,CottagePaving,CottageBronze,CottageTravertine,CottageSand,CottageLight,CottageTeak,CottageHedge,CottageWater,CottageLimestone,CottageCore,CottageRoofMetal,CottageGlass,CottageBlind
 props_out/flower_clump.glb: meshes=6 tris=4336 size=0.66x0.51x0.71m minY=0.01 mats=FlowerLeaf,FlowerCentre,FlowerCoral,FlowerWhite,FlowerYellow
 props_out/glass_tower.glb: meshes=18 tris=27206 size=34.00x72.90x34.00m minY=0.00 mats=VillaGranite,TowerStone,TowerTrim,TowerMetal,LampGlow,TowerSpandrel,VillaWood,PropsMetal,VillaPavement,RoofDark,WindowFrame,VillaInterior,TowerGlass,VillaHedge,SolarCell,VillaLawn,VillaMulch,VillaCurtain
 props_out/grand_hotel.glb: meshes=15 tris=28550 size=33.60x49.07x26.00m minY=0.00 mats=HotelGranite,HotelStone,HotelPlaster,HotelBronze,WindowFrame,HotelInterior,HotelLight,HotelGlass,HotelCurtain,HotelAccent,VillaHedge,HotelWood,HotelWater,RoofDark,SolarCell
@@ -21,12 +21,12 @@ props_out/hangar_small.glb: meshes=5 tris=336 size=31.60x11.40x40.61m minY=0.00 
 props_out/hero_building.glb: meshes=18 tris=26566 size=32.40x28.56x24.60m minY=0.00 mats=VillaGranite,HeroStone,HeroTrim,HeroPlaster,RoofDark,WindowFrame,VillaInterior,VillaCurtain,VillaGlass,LampGlow,HeroWood,VillaHedge,HeroMetal,VillaPavement,PropsMetal,SolarCell,VillaLawn,VillaMulch
 props_out/main_tower.glb: meshes=18 tris=33936 size=50.00x148.00x42.00m minY=0.00 mats=VillaGranite,VillaPavement,MainStone,VillaInterior,MainGlass,WindowFrame,MainTrim,VillaMulch,VillaHedge,PropsMetal,VillaWood,MainMetal,LampGlow,RoofDark,MainSpandrel,MainWater,VillaLawn,VillaCurtain
 props_out/midrise_a.glb: meshes=8 tris=2856 size=34.60x25.70x30.04m minY=0.00 mats=HeroStone,HeroPlaster,FacadeGlass,WindowFrame,PropsMetal,HeroTrim,WindowGlassDark,LampGlow
-props_out/midrise_b.glb: meshes=8 tris=3288 size=30.60x35.00x28.03m minY=0.00 mats=HeroStone,HeroPlaster,FacadeGlass,WindowFrame,PropsMetal,HeroTrim,WindowGlassDark,LampGlow
+props_out/midrise_b.glb: meshes=8 tris=2208 size=30.60x35.00x28.04m minY=0.00 mats=HeroStone,HeroPlaster,FacadeGlass,WindowFrame,PropsMetal,HeroTrim,WindowGlassDark,LampGlow
 props_out/mosque.glb: meshes=12 tris=31784 size=38.40x30.00x36.00m minY=0.00 mats=MosqueGranite,MosqueLimestone,MosqueTile,MosqueLight,MosqueStone,MosqueBrass,WindowFrame,MosqueInterior,MosqueGlass,MosqueWood,MosqueDome,RoofDark
 props_out/museum.glb: meshes=16 tris=31260 size=54.00x19.01x38.00m minY=0.00 mats=MuseumGranite,MuseumTravertine,MuseumBronze,MuseumCore,MuseumInterior,MuseumGlass,MuseumWhite,MuseumBannerTeal,MuseumBannerOchre,WindowFrame,MuseumLight,RoofDark,MuseumWater,VillaHedge,MuseumStonePale,MuseumStone
-props_out/office_tower_high.glb: meshes=8 tris=492 size=38.80x105.90x42.90m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim,CityAccentRed
+props_out/office_tower_high.glb: meshes=8 tris=600 size=39.70x105.90x43.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim,CityAccentRed
 props_out/office_tower_low.glb: meshes=7 tris=404 size=37.70x42.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
-props_out/office_tower_mid.glb: meshes=7 tris=392 size=36.80x68.05x40.90m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
+props_out/office_tower_mid.glb: meshes=7 tris=488 size=37.70x68.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
 props_out/opera_house.glb: meshes=18 tris=43952 size=52.00x22.00x56.00m minY=-0.00 mats=VillaPavement,OperaGranite,VillaLimestone,OperaLight,OperaWater,OperaBronze,OperaStone,OperaInterior,WindowFrame,RoofDark,PropsMetal,OperaWood,OperaGlass,OperaCurtain,OperaShell,VillaMulch,VillaHedge,VillaLawn
 props_out/ornamental_shrub.glb: meshes=3 tris=5260 size=0.91x1.06x1.01m minY=0.01 mats=ShrubBranch,OrnamentalLeaf,ShrubBerry
 props_out/palm_date.glb: meshes=6 tris=17107 size=8.29x8.72x8.54m minY=-0.01 mats=PalmTrunk,PalmCrown,PalmLeaf,PalmLeafDry,PalmRachis,PalmFruit
@@ -39,7 +39,7 @@ props_out/reactor.glb: meshes=6 tris=1116 size=66.33x41.50x46.50m minY=0.00 mats
 props_out/school.glb: meshes=11 tris=1520 size=80.00x13.35x90.00m minY=0.00 mats=TownStone,TownPlaster,RoofDark,WindowGlassDark,TownTrim,TownRoof,TownDoorAccent,PropsMetal,CityAccentRed,CityFieldGreen,CityWhitePaint
 props_out/shopping_mall.glb: meshes=9 tris=2192 size=230.00x18.00x130.00m minY=0.00 mats=ConcreteLight,FacadeMain,FacadeGlass,PropsMetal,FacadeAccent,LampGlow,CityAccentBlue,CityAccentRed,RoofDark
 props_out/silo.glb: meshes=3 tris=244 size=12.80x18.50x13.60m minY=0.00 mats=CityWhitePaint,PropsMetal,ConcreteLight
-props_out/stadium.glb: meshes=7 tris=2832 size=310.60x59.30x264.60m minY=0.00 mats=ConcreteLight,CityAccentRed,PropsMetal,WindowFrame,CityFieldGreen,CityWhitePaint,LampGlow
+props_out/stadium.glb: meshes=7 tris=2296 size=310.60x59.30x264.60m minY=0.00 mats=ConcreteLight,CityAccentRed,PropsMetal,WindowFrame,CityFieldGreen,CityWhitePaint,LampGlow
 props_out/storage_tank.glb: meshes=4 tris=992 size=23.85x14.45x23.40m minY=0.00 mats=ConcreteLight,CityWhitePaint,PropsMetal,CityAccentRed
 props_out/street_lamp.glb: meshes=3 tris=2196 size=0.54x6.63x4.97m minY=0.00 mats=RoofDark,PropsMetal,LampGlow
 props_out/townhouse.glb: meshes=22 tris=20022 size=18.87x11.05x16.36m minY=0.00 mats=VillaGranite,TownTrim,TownRoof,WindowFrame,TownStone,TownPlaster,TownGarage,LampGlow,VillaPavement,TownDoor,VillaGlass,PropsMetal,RoofDark,VillaWood,VillaDeck,VillaLawn,VillaMulch,VillaHedge,TownDoorAccent,SolarCell,VillaInterior,VillaCurtain
@@ -51,6 +51,6 @@ props_out/turbine_hall_short.glb: meshes=8 tris=960 size=42.00x20.00x110.00m min
 props_out/villa.glb: meshes=19 tris=15718 size=19.20x8.84x15.24m minY=0.00 mats=VillaGranite,VillaPlaster,VillaStone,WindowFrame,VillaLimestone,RoofDark,RoofGravel,VillaInterior,VillaCurtain,LampGlow,VillaGlass,PropsMetal,VillaWood,VillaDeck,VillaHedge,VillaPavement,SolarCell,VillaMulch,VillaLawn
 props_out/villa_b.glb: meshes=8 tris=628 size=19.20x9.10x15.24m minY=0.00 mats=VillaGranite,VillaPlaster,RoofDark,VillaStone,VillaGlass,VillaWood,TownGarage,LampGlow
 props_out/warehouse_large.glb: meshes=6 tris=840 size=77.50x13.45x37.72m minY=0.00 mats=ConcreteLight,PropsMetal,WindowFrame,RoofDark,FacadeMain,FacadeGlass
-props_out/warehouse_small.glb: meshes=6 tris=660 size=47.40x10.45x29.72m minY=0.00 mats=ConcreteLight,PropsMetal,WindowFrame,RoofDark,FacadeMain,FacadeGlass
+props_out/warehouse_small.glb: meshes=6 tris=744 size=47.50x10.45x29.72m minY=0.00 mats=ConcreteLight,PropsMetal,WindowFrame,RoofDark,FacadeMain,FacadeGlass
 props_out/watchtower.glb: meshes=4 tris=252 size=5.90x14.95x5.90m minY=0.00 mats=PropsWood,FacadeGlass,TownRoof,PropsMetal
 SMOKE OK

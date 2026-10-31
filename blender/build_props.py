@@ -6043,14 +6043,14 @@ def _cottage_window(cx, cy, cz, width, height, face, blind_fraction=0.0, divisio
     blind_drop = height * blind_fraction
     if face in ("front", "back"):
         box("cottage_window_reveal", cx, cy + sign * 0.025, cz, width + 0.34, 0.09, height + 0.34, basalt)
-        box("cottage_window_core", cx, cy + sign * 0.055, cz, width - 0.02, 0.045, height - 0.02, core)
+        panel("cottage_window_core", cx, cy + sign * 0.0775, cz, width - 0.02, height - 0.02, core, face)
         if blind_drop > 0.04:
-            box("cottage_window_blind", cx, cy + sign * 0.085, cz + height / 2.0 - blind_drop / 2.0 - 0.03, width - 0.14, 0.030, blind_drop, blind)
+            panel("cottage_window_blind", cx, cy + sign * 0.100, cz + height / 2.0 - blind_drop / 2.0 - 0.03, width - 0.14, blind_drop, blind, face)
             box("cottage_window_blind_rail", cx, cy + sign * 0.090, cz + height / 2.0 - blind_drop - 0.055, width - 0.10, 0.035, 0.045, bronze)
         for side in (-1.0, 1.0):
             box("cottage_window_frame_side", cx + side * (width / 2.0 + 0.035), cy + sign * 0.085, cz, 0.15, 0.15, height + 0.24, bronze)
             box("cottage_window_frame_rail", cx, cy + sign * 0.085, cz + side * (height / 2.0 + 0.035), width + 0.30, 0.15, 0.15, bronze)
-        box("cottage_window_glass", cx, cy + sign * 0.128, cz, width, 0.035, height, glass)
+        panel("cottage_window_glass", cx, cy + sign * 0.1455, cz, width, height, glass, face)
         for division in range(1, divisions):
             mx = cx - width / 2.0 + width * division / divisions
             box("cottage_window_mullion", mx, cy + sign * 0.152, cz, 0.055, 0.045, height, bronze)
@@ -6059,14 +6059,14 @@ def _cottage_window(cx, cy, cz, width, height, face, blind_fraction=0.0, divisio
         box("cottage_window_header", cx, cy + sign * 0.110, cz + height / 2.0 + 0.17, width + 0.34, 0.20, 0.10, sand)
     else:
         box("cottage_window_reveal", cx + sign * 0.025, cy, cz, 0.09, width + 0.34, height + 0.34, basalt)
-        box("cottage_window_core", cx + sign * 0.055, cy, cz, 0.045, width - 0.02, height - 0.02, core)
+        panel("cottage_window_core", cx + sign * 0.0775, cy, cz, width - 0.02, height - 0.02, core, face)
         if blind_drop > 0.04:
-            box("cottage_window_blind", cx + sign * 0.085, cy, cz + height / 2.0 - blind_drop / 2.0 - 0.03, 0.030, width - 0.14, blind_drop, blind)
+            panel("cottage_window_blind", cx + sign * 0.100, cy, cz + height / 2.0 - blind_drop / 2.0 - 0.03, width - 0.14, blind_drop, blind, face)
             box("cottage_window_blind_rail", cx + sign * 0.090, cy, cz + height / 2.0 - blind_drop - 0.055, 0.035, width - 0.10, 0.045, bronze)
         for side in (-1.0, 1.0):
             box("cottage_window_frame_side", cx + sign * 0.085, cy + side * (width / 2.0 + 0.035), cz, 0.15, 0.15, height + 0.24, bronze)
             box("cottage_window_frame_rail", cx + sign * 0.085, cy, cz + side * (height / 2.0 + 0.035), 0.15, width + 0.30, 0.15, bronze)
-        box("cottage_window_glass", cx + sign * 0.128, cy, cz, 0.035, width, height, glass)
+        panel("cottage_window_glass", cx + sign * 0.1455, cy, cz, width, height, glass, face)
         for division in range(1, divisions):
             my = cy - width / 2.0 + width * division / divisions
             box("cottage_window_mullion", cx + sign * 0.152, my, cz, 0.045, 0.055, height, bronze)
@@ -6082,7 +6082,7 @@ def _cottage_louver(cx, cy, cz, width, height, face, material=None):
     sign = -1.0 if face in ("front", "left") else 1.0
     count = max(3, int(width / 0.34))
     if face in ("front", "back"):
-        box("cottage_louver_core", cx, cy + sign * 0.045, cz, width, 0.05, height, core)
+        panel("cottage_louver_core", cx, cy + sign * 0.070, cz, width, height, core, face)
         for side in (-1.0, 1.0):
             box("cottage_louver_frame", cx + side * (width / 2.0 + 0.04), cy + sign * 0.13, cz, 0.12, 0.18, height + 0.18, bronze)
             box("cottage_louver_frame", cx, cy + sign * 0.13, cz + side * (height / 2.0 + 0.04), width + 0.22, 0.18, 0.12, bronze)
@@ -6090,7 +6090,7 @@ def _cottage_louver(cx, cy, cz, width, height, face, material=None):
             x = cx - width / 2.0 + (index + 0.5) * width / count
             box("cottage_louver_slat", x, cy + sign * 0.15, cz, 0.11, 0.07, height - 0.08, slat_material)
     else:
-        box("cottage_louver_core", cx + sign * 0.045, cy, cz, 0.05, width, height, core)
+        panel("cottage_louver_core", cx + sign * 0.070, cy, cz, width, height, core, face)
         for side in (-1.0, 1.0):
             box("cottage_louver_frame", cx + sign * 0.13, cy + side * (width / 2.0 + 0.04), cz, 0.18, 0.12, height + 0.18, bronze)
             box("cottage_louver_frame", cx + sign * 0.13, cy, cz + side * (height / 2.0 + 0.04), 0.18, width + 0.22, 0.12, bronze)
@@ -6107,7 +6107,7 @@ def _cottage_mashrabiya(cx, cy, cz, width, height, face):
     verticals = max(3, int(width / 0.42))
     horizontals = max(3, int(height / 0.48))
     if face in ("front", "back"):
-        box("cottage_mashrabiya_core", cx, cy + sign * 0.04, cz, width, 0.05, height, core)
+        panel("cottage_mashrabiya_core", cx, cy + sign * 0.065, cz, width, height, core, face)
         for side in (-1.0, 1.0):
             box("cottage_mashrabiya_frame", cx + side * (width / 2.0 + 0.05), cy + sign * 0.12, cz, 0.16, 0.18, height + 0.22, stone)
             box("cottage_mashrabiya_frame", cx, cy + sign * 0.12, cz + side * (height / 2.0 + 0.05), width + 0.28, 0.18, 0.16, stone)
@@ -6118,7 +6118,7 @@ def _cottage_mashrabiya(cx, cy, cz, width, height, face):
             z = cz - height / 2.0 + (index + 0.5) * height / horizontals
             box("cottage_mashrabiya_bar_h", cx, cy + sign * 0.145, z, width, 0.075, 0.065, bronze)
     else:
-        box("cottage_mashrabiya_core", cx + sign * 0.04, cy, cz, 0.05, width, height, core)
+        panel("cottage_mashrabiya_core", cx + sign * 0.065, cy, cz, width, height, core, face)
         for side in (-1.0, 1.0):
             box("cottage_mashrabiya_frame", cx + sign * 0.12, cy + side * (width / 2.0 + 0.05), cz, 0.18, 0.16, height + 0.22, stone)
             box("cottage_mashrabiya_frame", cx + sign * 0.12, cy, cz + side * (height / 2.0 + 0.05), 0.18, width + 0.28, 0.16, stone)
@@ -6139,20 +6139,20 @@ def _cottage_door(cx, cy, face="front"):
     sign = -1.0 if face in ("front", "left") else 1.0
     if face in ("front", "back"):
         box("cottage_door_reveal", cx, cy + sign * 0.035, 1.72, 2.05, 0.10, 3.05, basalt)
-        box("cottage_door_leaf", cx - 0.28, cy + sign * 0.105, 1.68, 1.28, 0.09, 2.92, teak, bevel=0.012)
+        box("cottage_door_leaf", cx - 0.28, cy + sign * 0.105, 1.68, 1.28, 0.09, 2.92, teak)
         for groove in (-0.42, 0.0, 0.42):
             box("cottage_door_groove", cx - 0.28 + groove, cy + sign * 0.158, 1.68, 0.025, 0.018, 2.72, basalt)
-        box("cottage_door_sidelight_core", cx + 0.72, cy + sign * 0.070, 1.68, 0.42, 0.045, 2.86, core)
-        box("cottage_door_sidelight", cx + 0.72, cy + sign * 0.112, 1.68, 0.36, 0.035, 2.80, glass)
+        panel("cottage_door_sidelight_core", cx + 0.72, cy + sign * 0.0925, 1.68, 0.42, 2.86, core, face)
+        panel("cottage_door_sidelight", cx + 0.72, cy + sign * 0.1295, 1.68, 0.36, 2.80, glass, face)
         box("cottage_door_handle", cx + 0.24, cy + sign * 0.20, 1.55, 0.055, 0.055, 1.35, bronze)
         box("cottage_door_step", cx, cy + sign * 0.48, 0.16, 2.35, 0.72, 0.18, basalt)
-        box("cottage_door_canopy", cx, cy + sign * 0.62, 3.38, 2.75, 1.25, 0.14, bronze, bevel=0.015)
+        box("cottage_door_canopy", cx, cy + sign * 0.62, 3.38, 2.75, 1.25, 0.14, bronze)
         box("cottage_door_canopy_light", cx, cy + sign * 0.62, 3.29, 1.55, 0.055, 0.025, MATS["CottageLight"])
     else:
         box("cottage_door_reveal", cx + sign * 0.035, cy, 1.72, 0.10, 2.05, 3.05, basalt)
-        box("cottage_door_leaf", cx + sign * 0.105, cy - 0.28, 1.68, 0.09, 1.28, 2.92, teak, bevel=0.012)
-        box("cottage_door_sidelight_core", cx + sign * 0.070, cy + 0.72, 1.68, 0.045, 0.42, 2.86, core)
-        box("cottage_door_sidelight", cx + sign * 0.112, cy + 0.72, 1.68, 0.035, 0.36, 2.80, glass)
+        box("cottage_door_leaf", cx + sign * 0.105, cy - 0.28, 1.68, 0.09, 1.28, 2.92, teak)
+        panel("cottage_door_sidelight_core", cx + sign * 0.0925, cy + 0.72, 1.68, 0.42, 2.86, core, face)
+        panel("cottage_door_sidelight", cx + sign * 0.1295, cy + 0.72, 1.68, 0.36, 2.80, glass, face)
         box("cottage_door_handle", cx + sign * 0.20, cy + 0.24, 1.55, 0.055, 0.055, 1.35, bronze)
         box("cottage_door_step", cx + sign * 0.48, cy, 0.16, 0.72, 2.35, 0.18, basalt)
 
@@ -6165,19 +6165,19 @@ def _cottage_garage_door(cx, cy, width=4.8, face="front"):
     sign = -1.0 if face in ("front", "left") else 1.0
     if face in ("front", "back"):
         box("cottage_garage_reveal", cx, cy + sign * 0.035, 1.62, width + 0.42, 0.10, 3.05, basalt)
-        for panel in range(4):
-            z = 0.48 + panel * 0.72
+        for door_panel in range(4):
+            z = 0.48 + door_panel * 0.72
             box("cottage_garage_panel", cx, cy + sign * 0.105, z, width, 0.075, 0.64, bronze)
         for xoff in (-width * 0.30, 0.0, width * 0.30):
-            box("cottage_garage_window_core", cx + xoff, cy + sign * 0.150, 2.72, 0.72, 0.025, 0.28, core)
-            box("cottage_garage_window", cx + xoff, cy + sign * 0.168, 2.72, 0.64, 0.025, 0.22, glass)
+            panel("cottage_garage_window_core", cx + xoff, cy + sign * 0.1625, 2.72, 0.72, 0.28, core, face)
+            panel("cottage_garage_window", cx + xoff, cy + sign * 0.1805, 2.72, 0.64, 0.22, glass, face)
         box("cottage_garage_handle", cx, cy + sign * 0.17, 1.02, 0.52, 0.045, 0.055, basalt)
         box("cottage_garage_sensor", cx + width / 2.0 + 0.34, cy + sign * 0.12, 1.25, 0.16, 0.07, 0.26, basalt)
         box("cottage_garage_sensor_light", cx + width / 2.0 + 0.34, cy + sign * 0.165, 1.30, 0.045, 0.025, 0.045, MATS["CottageLight"])
     else:
         box("cottage_garage_reveal", cx + sign * 0.035, cy, 1.62, 0.10, width + 0.42, 3.05, basalt)
-        for panel in range(4):
-            box("cottage_garage_panel", cx + sign * 0.105, cy, 0.48 + panel * 0.72, 0.075, width, 0.64, bronze)
+        for door_panel in range(4):
+            box("cottage_garage_panel", cx + sign * 0.105, cy, 0.48 + door_panel * 0.72, 0.075, width, 0.64, bronze)
 
 
 def _cottage_flat_roof(cx, cy, top, width, depth, parapet_material=None, solar=False):
@@ -6216,7 +6216,7 @@ def _cottage_hvac(cx, cy, base_z):
     box("cottage_hvac_body", cx, cy, base_z + 0.42, 1.85, 0.92, 0.84, bronze, bevel=0.025)
     for index in range(5):
         box("cottage_hvac_louvre", cx, cy - 0.49, base_z + 0.18 + index * 0.14, 1.62, 0.035, 0.055, basalt)
-    cyl("cottage_hvac_fan", cx, cy, base_z + 0.87, 0.34, 0.055, basalt, vertices=16)
+    cyl("cottage_hvac_fan", cx, cy, base_z + 0.87, 0.34, 0.055, basalt, vertices=12)
 
 
 def _cottage_pergola(cx, cy, width, depth, height=2.85, base_z=0.22):
@@ -6240,7 +6240,7 @@ def _cottage_balcony(cx, cy, cz, width, face):
     hedge = MATS["CottageHedge"]
     sign = -1.0 if face in ("front", "left") else 1.0
     if face in ("front", "back"):
-        box("cottage_balcony_slab", cx, cy + sign * 0.72, cz, width + 0.35, 1.48, 0.18, basalt, bevel=0.015)
+        box("cottage_balcony_slab", cx, cy + sign * 0.72, cz, width + 0.35, 1.48, 0.18, basalt)
         box("cottage_balcony_glass", cx, cy + sign * 1.38, cz + 0.58, width, 0.045, 0.92, glass)
         box("cottage_balcony_rail", cx, cy + sign * 1.38, cz + 1.08, width + 0.08, 0.09, 0.075, bronze)
         for side in (-1.0, 1.0):
@@ -6248,7 +6248,7 @@ def _cottage_balcony(cx, cy, cz, width, face):
             box("cottage_balcony_planter", cx + side * (width / 2.0 - 0.42), cy + sign * 1.05, cz + 0.22, 0.62, 0.38, 0.26, basalt)
             box("cottage_balcony_hedge", cx + side * (width / 2.0 - 0.42), cy + sign * 1.05, cz + 0.43, 0.54, 0.30, 0.20, hedge, bevel=0.06)
     else:
-        box("cottage_balcony_slab", cx + sign * 0.72, cy, cz, 1.48, width + 0.35, 0.18, basalt, bevel=0.015)
+        box("cottage_balcony_slab", cx + sign * 0.72, cy, cz, 1.48, width + 0.35, 0.18, basalt)
         box("cottage_balcony_glass", cx + sign * 1.38, cy, cz + 0.58, 0.045, width, 0.92, glass)
         box("cottage_balcony_rail", cx + sign * 1.38, cy, cz + 1.08, 0.09, width + 0.08, 0.075, bronze)
 
@@ -6286,10 +6286,10 @@ def _cottage_wall_pilaster(cx, cy, side=False):
     basalt = MATS["CottageBasalt"]
     light = MATS["CottageLight"]
     if side:
-        box("cottage_wall_pilaster", cx, cy, 1.13, 0.46, 0.58, 2.26, stone, bevel=0.015)
+        box("cottage_wall_pilaster", cx, cy, 1.13, 0.46, 0.58, 2.26, stone)
         box("cottage_wall_pilaster_cap", cx, cy, 2.32, 0.56, 0.68, 0.12, basalt)
     else:
-        box("cottage_wall_pilaster", cx, cy, 1.13, 0.58, 0.46, 2.26, stone, bevel=0.015)
+        box("cottage_wall_pilaster", cx, cy, 1.13, 0.58, 0.46, 2.26, stone)
         box("cottage_wall_pilaster_cap", cx, cy, 2.32, 0.68, 0.56, 0.12, basalt)
         box("cottage_wall_light", cx, cy - 0.26, 1.78, 0.09, 0.035, 0.34, light)
 
@@ -6311,7 +6311,7 @@ def _cottage_gate(cx, width, pedestrian=False):
         box("cottage_gate_handle", cx + width / 2.0 - 0.25, y - 0.11, 1.08, 0.045, 0.045, 0.52, bronze)
     else:
         box("cottage_gate_track", cx + 1.2, y + 0.22, 0.055, width + 4.0, 0.16, 0.055, basalt)
-        box("cottage_gate_motor", cx - width / 2.0 - 0.55, y + 0.52, 0.42, 0.62, 0.52, 0.62, basalt, bevel=0.02)
+        box("cottage_gate_motor", cx - width / 2.0 - 0.55, y + 0.52, 0.42, 0.62, 0.52, 0.62, basalt)
         box("cottage_gate_motor_light", cx - width / 2.0 - 0.55, y + 0.24, 0.48, 0.055, 0.025, 0.055, MATS["CottageLight"])
 
 
@@ -6319,7 +6319,7 @@ def _cottage_planter(cx, cy, width, depth, hedge_height=0.62):
     basalt = MATS["CottageBasalt"]
     hedge = MATS["CottageHedge"]
     gravel = MATS["CottageGravel"]
-    box("cottage_planter", cx, cy, 0.34, width, depth, 0.48, basalt, bevel=0.015)
+    box("cottage_planter", cx, cy, 0.34, width, depth, 0.48, basalt)
     box("cottage_planter_soil", cx, cy, 0.60, width - 0.18, depth - 0.18, 0.055, gravel)
     box("cottage_planter_hedge", cx, cy, 0.66 + hedge_height / 2.0, width - 0.30, depth - 0.30, hedge_height, hedge, bevel=0.10)
 
@@ -6421,7 +6421,7 @@ def _build_cottage_site(gate_x, pedestrian_x, entrance_x, entrance_y, garage_x, 
     _cottage_planter(-15.6, 7.5, 2.6, 5.2, 0.58)
     _cottage_planter(15.6, 7.5, 2.6, 5.2, 0.58)
     for bx, by, scale in ((-13.8, -10.6, 1.15), (13.8, -10.8, 0.92), (-14.4, 11.2, 0.82)):
-        sphere("cottage_garden_boulder", bx, by, 0.38, 1.15 * scale, 0.82 * scale, 0.58 * scale, basalt)
+        sphere("cottage_garden_boulder", bx, by, 0.38, 1.15 * scale, 0.82 * scale, 0.58 * scale, basalt, segments=12, ring_count=8)
     for lx in (-6.0, 6.0):
         box("cottage_path_bollard", pedestrian_x + lx * 0.18, -10.7, 0.42, 0.13, 0.13, 0.62, basalt)
         box("cottage_path_bollard_light", pedestrian_x + lx * 0.18, -10.7, 0.75, 0.095, 0.095, 0.055, MATS["CottageLight"])
@@ -6440,7 +6440,7 @@ def _build_cottage_site(gate_x, pedestrian_x, entrance_x, entrance_y, garage_x, 
     _cottage_pool(pool_x, pool_y, pool_w, pool_d)
     if pool_w >= 5.0:
         _cottage_pergola(deck_x + deck_w / 2.0 - 2.35, pool_y, 4.3, min(deck_d - 0.5, 4.8), 2.75, 0.22)
-        box("cottage_outdoor_kitchen", deck_x - deck_w / 2.0 + 1.45, pool_y, 0.58, 2.25, 0.72, 0.78, basalt, bevel=0.015)
+        box("cottage_outdoor_kitchen", deck_x - deck_w / 2.0 + 1.45, pool_y, 0.58, 2.25, 0.72, 0.78, basalt)
         box("cottage_outdoor_kitchen_top", deck_x - deck_w / 2.0 + 1.45, pool_y, 1.01, 2.38, 0.82, 0.09, stone)
         box("cottage_outdoor_grill", deck_x - deck_w / 2.0 + 1.45, pool_y, 1.09, 0.92, 0.52, 0.07, bronze)
     else:
@@ -6448,7 +6448,7 @@ def _build_cottage_site(gate_x, pedestrian_x, entrance_x, entrance_y, garage_x, 
         # at the shallow southern end instead of over the water, and
         # the outdoor kitchen is omitted from the 3 m side garden.
         _cottage_pergola(pool_x, pool_y - pool_d / 2.0 - 0.15, 3.7, 3.4, 2.65, 0.22)
-        box("cottage_lap_pool_bench", pool_x - pool_w / 2.0 - 0.55, pool_y + 1.8, 0.48, 0.55, 2.4, 0.52, stone, bevel=0.015)
+        box("cottage_lap_pool_bench", pool_x - pool_w / 2.0 - 0.55, pool_y + 1.8, 0.48, 0.55, 2.4, 0.52, stone)
 
 
 def _cottage_facade_seams(cx, cy, base_z, width, height, face):
@@ -6500,7 +6500,7 @@ def build_cottage_dune():
     box("dune_blade_cap", -4.9, 0.55, 8.39, 2.58, 12.35, 0.14, basalt)
     _cottage_flat_roof(3.8, 1.8, 7.60, 16.8, 10.6, None, solar=True)
     _cottage_flat_roof(-10.6, -1.15, 3.76, 8.1, 7.1, limestone, solar=False)
-    box("dune_link_roof", -2.2, -2.65, 3.66, 5.65, 4.80, 0.20, MATS["CottageBronze"], bevel=0.015)
+    box("dune_link_roof", -2.2, -2.65, 3.66, 5.65, 4.80, 0.20, MATS["CottageBronze"])
     # A perimeter bronze frame enlarges the main roof shadow without
     # burying its solar/HVAC layer under a second full slab.
     for edge_y in (-4.18, 7.78):
@@ -6558,7 +6558,7 @@ def build_cottage_courtyard():
     box("courtyard_front_screen_east", 4.15, -4.28, 3.22, 4.0, 0.72, 5.88, stone, bevel=0.025)
     box("courtyard_portal_beam", 0.0, -4.28, 5.94, 4.55, 0.78, 0.58, basalt)
     for sx in (-2.10, 2.10):
-        box("courtyard_portal_column", sx, -4.28, 2.92, 0.52, 0.62, 5.28, stone, bevel=0.02)
+        box("courtyard_portal_column", sx, -4.28, 2.92, 0.52, 0.62, 5.28, stone)
         box("courtyard_portal_light", sx, -4.65, 2.92, 0.075, 0.030, 2.25, MATS["CottageLight"])
     _cottage_mashrabiya(-4.15, -4.65, 3.35, 3.15, 4.65, "front")
     _cottage_mashrabiya(4.15, -4.65, 3.35, 3.15, 4.65, "front")
@@ -6588,11 +6588,11 @@ def build_cottage_courtyard():
     _cottage_mashrabiya(13.07, -2.4, 5.05, 2.6, 1.75, "right")
 
     # Exterior courtyard room: fountain, paving medallion and pergola.
-    cyl("courtyard_paving_medallion", 0.0, 1.35, 0.42, 3.05, 0.10, stone, vertices=28)
-    cyl("courtyard_fountain_basin", 0.0, 1.35, 0.62, 1.52, 0.48, basalt, vertices=20)
-    cyl("courtyard_fountain_water", 0.0, 1.35, 0.86, 1.32, 0.055, MATS["CottageWater"], vertices=20)
+    cyl("courtyard_paving_medallion", 0.0, 1.35, 0.42, 3.05, 0.10, stone, vertices=20)
+    cyl("courtyard_fountain_basin", 0.0, 1.35, 0.62, 1.52, 0.48, basalt, vertices=16)
+    cyl("courtyard_fountain_water", 0.0, 1.35, 0.86, 1.32, 0.055, MATS["CottageWater"], vertices=16)
     cyl("courtyard_fountain_column", 0.0, 1.35, 1.13, 0.17, 0.62, MATS["CottageBronze"], vertices=12)
-    sphere("courtyard_fountain_sphere", 0.0, 1.35, 1.55, 0.52, 0.52, 0.52, stone)
+    sphere("courtyard_fountain_sphere", 0.0, 1.35, 1.55, 0.52, 0.52, 0.52, stone, segments=14, ring_count=10)
     _cottage_pergola(0.0, -1.15, 8.6, 3.2, 3.05, 0.34)
     _cottage_planter(-5.15, 3.6, 1.15, 4.4, 0.52)
     _cottage_planter(5.15, 3.6, 1.15, 4.4, 0.52)
@@ -6636,7 +6636,7 @@ def build_cottage_palm():
     box("palm_west_ridge", -6.4, 1.0, 7.99, 14.42, 0.28, 0.12, bronze)
     gable_roof("palm_east_roof", 8.6, 0.55, 6.28, 10.4, 10.1, 2.02, roof_metal, ridge_axis="x")
     box("palm_east_ridge", 8.6, 0.55, 7.34, 10.52, 0.28, 0.12, bronze)
-    box("palm_link_roof", 1.0, -1.05, 3.83, 5.55, 6.45, 0.22, bronze, bevel=0.015)
+    box("palm_link_roof", 1.0, -1.05, 3.83, 5.55, 6.45, 0.22, bronze)
     for roof_x, roof_y, roof_z, slope in ((-8.8, -1.55, 6.99, -1.0), (-3.9, 3.55, 6.99, 1.0), (8.6, -1.75, 6.43, -1.0)):
         rbox("palm_skylight", roof_x, roof_y, roof_z, 1.65, 1.10, 0.10, MATS["CottageGlass"], rotation=(math.radians(21.0 * slope), 0.0, 0.0))
         rbox("palm_skylight_frame", roof_x, roof_y, roof_z - 0.035, 1.82, 1.26, 0.055, bronze, rotation=(math.radians(21.0 * slope), 0.0, 0.0))
@@ -6651,7 +6651,7 @@ def build_cottage_palm():
     # Deep front and rear verandas with slim columns and teak soffit slats.
     for vy, face in ((-5.95, "front"), (7.25, "back")):
         box("palm_veranda_floor", -3.0, vy + (0.95 if face == "front" else -0.95), 0.34, 18.5, 2.25, 0.16, teak)
-        box("palm_veranda_roof", -3.0, vy, 3.42, 18.8, 2.55, 0.16, bronze, bevel=0.015)
+        box("palm_veranda_roof", -3.0, vy, 3.42, 18.8, 2.55, 0.16, bronze)
         for vx in (-11.8, -7.4, -3.0, 1.4, 5.8):
             cyl("palm_veranda_column", vx, vy, 1.86, 0.075, 3.05, bronze, vertices=10)
         for index in range(24):
@@ -7017,11 +7017,11 @@ def build_stadium():
         (106.0, 41.0), (96.0, 35.0), (84.0, 29.0), (71.0, 23.0), (58.0, 17.0),
         (47.0, 11.0), (40.0, 5.0),
     ]
-    _ct_lathe("stadium_bowl", profile, concrete, segments=48, scale_x=sx)
+    _ct_lathe("stadium_bowl", profile, concrete, segments=36, scale_x=sx)
     seat_profile = [(103.0, 40.4), (93.0, 34.4), (81.0, 28.4), (68.0, 22.4), (55.0, 16.4), (44.0, 10.4)]
-    _ct_lathe("stadium_seats", seat_profile, seats, segments=48, scale_x=sx)
+    _ct_lathe("stadium_seats", seat_profile, seats, segments=36, scale_x=sx)
     roof_profile = [(106.0, 43.6), (109.0, 45.6), (130.0, 43.6), (130.5, 41.2), (126.0, 40.6), (108.0, 42.2)]
-    _ct_lathe("stadium_roof", roof_profile, metal, segments=48, scale_x=sx)
+    _ct_lathe("stadium_roof", roof_profile, metal, segments=36, scale_x=sx)
     for i in range(36):
         a = 2.0 * math.pi * i / 36.0
         rbox("stadium_rib", math.cos(a) * 150.2, math.sin(a) * 127.2, 17.5, 2.8, 2.4, 35.0, concrete, rotation=(0, 0, a))
@@ -7033,7 +7033,7 @@ def build_stadium():
     box("stadium_line_box", -44, 0, 0.4, 0.5, 40, 0.06, white)
     box("stadium_line_box", 44, 0, 0.4, 0.5, 40, 0.06, white)
     for fx, fy in ((-118.0, -98.0), (118.0, -98.0), (-118.0, 98.0), (118.0, 98.0)):
-        cyl("stadium_pylon", fx, fy, 28.5, 0.9, 57, metal, vertices=10)
+        cyl("stadium_pylon", fx, fy, 28.5, 0.9, 57, metal, vertices=8)
         head_a = math.atan2(-fy, -fx)
         rbox("stadium_flood_head", fx, fy, 57.5, 8.5, 1.4, 3.6, metal, rotation=(0, 0, head_a))
         rbox("stadium_flood_glow", fx * 0.985, fy * 0.985, 57.3, 7.8, 1.5, 3.0, MATS["LampGlow"], rotation=(0, 0, head_a))
@@ -7079,8 +7079,15 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
         ring_z = lower_top + 8.0
         while ring_z < total_h - 6.0:
             box("office_spandrel_up", 0, 0, ring_z, top_w + 0.4, top_w + 0.4, 1.05, spandrel)
-            ring_z += 11.5
+            ring_z += 9.5 if detail_036 else 11.5
         box("office_setback_slab", 0, 0, lower_top + 0.35, shaft_w + 0.7, shaft_w + 0.7, 0.7, trim)
+        if detail_036:
+            # 0.3.8 (mid/high towers): the setback upper shaft keeps
+            # the lower shaft's corner-fin rhythm; fins stay inside
+            # the lower shaft envelope.
+            for cx in (-top_w / 2.0, top_w / 2.0):
+                for cy in (-top_w / 2.0, top_w / 2.0):
+                    box("office_upper_corner_fin", cx, cy, lower_top + upper_h / 2.0, 1.15, 1.15, upper_h, metal)
     box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
     box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
     box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
@@ -7100,14 +7107,14 @@ def build_office_tower_low():
 
 
 def build_office_tower_mid():
-    _build_office_tower(36.0, 31.0, 68.0, 46.0, False)
+    _build_office_tower(36.0, 31.0, 68.0, 46.0, False, detail_036=True)
 
 
 def build_office_tower_high():
-    _build_office_tower(38.0, 33.0, 96.0, 58.0, True)
+    _build_office_tower(38.0, 33.0, 96.0, 58.0, True, detail_036=True)
 
 
-def _build_midrise(width, depth, floors, detail_036=False):
+def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
     plaster = MATS["HeroPlaster"]
     stone = MATS["HeroStone"]
     glass = MATS["FacadeGlass"]
@@ -7127,16 +7134,28 @@ def _build_midrise(width, depth, floors, detail_036=False):
             for bx in (-width * 0.29, width * 0.29):
                 box("mid_balcony_slab", bx, face_y + sy * 0.85, fz + 0.15, 5.4, 1.7, 0.22, MATS["HeroTrim"])
                 box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
-                box("mid_balcony_door", bx, face_y + sy * 0.12, fz + 1.45, 3.6, 0.2, 2.3, dark_glass)
+                if panel_038:
+                    # 0.3.8 (midrise_b): flat dark-glass slabs become
+                    # outward panels on the old outer face; the
+                    # plaster wall behind hides the back side.
+                    panel("mid_balcony_door", bx, face_y + sy * 0.22, fz + 1.45, 3.6, 2.3, dark_glass, "back" if sy > 0.0 else "front")
+                else:
+                    box("mid_balcony_door", bx, face_y + sy * 0.12, fz + 1.45, 3.6, 0.2, 2.3, dark_glass)
                 if detail_036:
                     box("mid_balcony_toprail", bx, face_y + sy * 1.66, fz + 1.22, 5.5, 0.16, 0.09, metal)
             for wx in (-width * 0.13, width * 0.13, -width * 0.44, width * 0.44):
-                box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
+                if panel_038:
+                    panel("mid_window", wx, face_y + sy * 0.22, fz + 1.7, 2.5, 1.6, dark_glass, "back" if sy > 0.0 else "front")
+                else:
+                    box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
             if detail_036:
                 box("mid_sill_band", 0, face_y + sy * 0.10, fz + 0.80, width * 0.92, 0.18, 0.16, MATS["HeroTrim"])
         for sx in (-1.0, 1.0):
             for wy in (-depth * 0.28, 0.0, depth * 0.28):
-                box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
+                if panel_038:
+                    panel("mid_side_window", sx * (width / 2.0 + 0.22), wy, fz + 1.7, 2.2, 1.6, dark_glass, "right" if sx > 0.0 else "left")
+                else:
+                    box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
     box("mid_parapet", 0, 0, 1.2 + body_h + 0.4, width + 0.6, depth + 0.6, 0.8, stone)
     box("mid_bulkhead", -width * 0.2, 0, 1.2 + body_h + 1.6, 7, 6, 2.4, plaster)
     box("mid_hvac", width * 0.24, depth * 0.15, 1.2 + body_h + 1.2, 4.2, 3.4, 1.1, metal)
@@ -7153,7 +7172,7 @@ def build_midrise_a():
 
 
 def build_midrise_b():
-    _build_midrise(30.0, 24.0, 10)
+    _build_midrise(30.0, 24.0, 10, detail_036=True, panel_038=True)
 
 
 def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):
@@ -7199,7 +7218,7 @@ def build_warehouse_large():
 
 
 def build_warehouse_small():
-    _build_warehouse(46.0, 24.0, 6.5, 3.5, 4)
+    _build_warehouse(46.0, 24.0, 6.5, 3.5, 4, detail_036=True)
 
 
 def build_shopping_mall():
@@ -7372,12 +7391,12 @@ def _build_container(material):
     box("cont_body", 0, 0, 1.42, 12.2, 2.44, 2.59, material)
     for sy in (-0.92, 0.92):
         box("cont_rail", 0, sy, 0.12, 12.2, 0.32, 0.24, dark)
-    for i in range(16):
-        rx = -5.7 + i * 0.76
+    for i in range(12):
+        rx = -5.7 + i * (11.4 / 11.0)
         box("cont_rib", rx, -1.26, 1.42, 0.34, 0.13, 2.3, material)
         box("cont_rib", rx, 1.26, 1.42, 0.34, 0.13, 2.3, material)
-    for i in range(8):
-        rx = -5.25 + i * 1.5
+    for i in range(6):
+        rx = -5.25 + i * 2.1
         box("cont_roof_rib", rx, 0, 2.76, 0.36, 2.2, 0.12, material)
     for cx in (-6.02, 6.02):
         for cy in (-1.14, 1.14):
@@ -7389,7 +7408,7 @@ def _build_container(material):
     for hinge_z in (0.65, 2.2):
         for hinge_y in (-1.12, 1.12):
             box("cont_hinge", 6.25, hinge_y, hinge_z, 0.18, 0.28, 0.42, metal)
-    box("cont_data_plate", 6.29, -0.6, 1.95, 0.05, 0.75, 0.50, MATS["CityWhitePaint"])
+    panel("cont_data_plate", 6.315, -0.6, 1.95, 0.75, 0.50, MATS["CityWhitePaint"], "right")
 
 
 def build_container_red():
