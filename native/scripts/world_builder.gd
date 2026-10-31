@@ -3208,19 +3208,44 @@ func _prop_material(material_name: String) -> Material:
 		"nh_bark":
 			return _material("plant_bark", "oak_bark.jpg", "oak_bark_normal.jpg", Color(0.82, 0.72, 0.62), 1.0)
 		"CityWhitePaint":
-			return _material("city_white_paint", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.90, 0.91, 0.92), 0.58, 0.06)
+			# 0.3.4 painted-surface pass: the city accent paints were flat
+			# colours in 0.3.2 even though their Blender geometry carries
+			# ribs/frames.  They now reuse the existing brushed-metal /
+			# plaster photo maps (no new textures, no shader changes), so
+			# containers, cranes, tanks and the airliner respond to sun
+			# angle with believable roughness instead of a plastic fill.
+			var city_white := _material("city_white_paint", "user_plaster_white.jpg", "user_plaster_white_normal.jpg", Color(0.90, 0.91, 0.92), 0.50, 0.08)
+			city_white.normal_scale = 0.38
+			city_white.metallic_specular = 0.62
+			return city_white
 		"CityAccentRed":
-			return _material("city_accent_red", "", "", Color(0.58, 0.09, 0.07), 0.52, 0.18)
+			var city_red := _material("city_accent_red", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.85, 0.12, 0.09), 0.46, 0.32)
+			city_red.normal_scale = 0.42
+			city_red.metallic_specular = 0.78
+			return city_red
 		"CityAccentBlue":
-			return _material("city_accent_blue", "", "", Color(0.07, 0.26, 0.52), 0.52, 0.18)
+			var city_blue := _material("city_accent_blue", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.10, 0.32, 0.70), 0.46, 0.32)
+			city_blue.normal_scale = 0.42
+			city_blue.metallic_specular = 0.78
+			return city_blue
 		"CityArmyGreen":
-			return _material("city_army_green", "", "", Color(0.17, 0.21, 0.11), 0.80, 0.06)
+			var city_army := _material("city_army_green", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.28, 0.34, 0.18), 0.74, 0.22)
+			city_army.normal_scale = 0.50
+			city_army.metallic_specular = 0.55
+			return city_army
 		"CityBarnRed":
-			return _material("city_barn_red", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.16, 0.11), 0.84, 0.0)
+			var city_barn := _material("city_barn_red", "user_wood_deck.jpg", "user_wood_deck_normal.jpg", Color(0.62, 0.16, 0.11), 0.84, 0.0)
+			city_barn.normal_scale = 1.05
+			return city_barn
 		"CitySignYellow":
-			return _material("city_sign_yellow", "", "", Color(0.82, 0.60, 0.06), 0.55, 0.10)
+			var city_yellow := _material("city_sign_yellow", "user_brushed_metal.jpg", "user_brushed_metal_normal.jpg", Color(0.95, 0.68, 0.08), 0.52, 0.25)
+			city_yellow.normal_scale = 0.40
+			city_yellow.metallic_specular = 0.70
+			return city_yellow
 		"CityFieldGreen":
-			return _material("city_field_green", "user_grass.jpg", "user_grass_normal.jpg", Color(0.50, 0.78, 0.40), 1.0, 0.0)
+			var city_field := _material("city_field_green", "user_grass.jpg", "user_grass_normal.jpg", Color(0.50, 0.78, 0.40), 1.0, 0.0)
+			city_field.normal_scale = 0.75
+			return city_field
 		_:
 			return _create_concrete_material("prop_fallback_shader", Color(0.70, 0.70, 0.69), 0.93, 0.78, 0.55, 0.45)
 
@@ -5651,6 +5676,7 @@ func _collect_model_parts(node: Node, parent_transform: Transform3D, tools: Dict
 		local_transform = parent_transform * (node as Node3D).transform
 
 	if node is MeshInstance3D:
+		_enhancement_stats["model_source_mesh_objects_total_0340"] = int(_enhancement_stats.get("model_source_mesh_objects_total_0340", 0)) + 1
 		var mesh_instance := node as MeshInstance3D
 		var mesh := mesh_instance.mesh
 		if mesh != null:
@@ -5799,6 +5825,13 @@ func _get_model_parts(path: String) -> Array:
 				"material": _model_part_material(material_name, mesh) if is_vegetation_model else _prop_material(material_name),
 				"material_name": material_name,
 			})
+	# 0.3.4 model performance audit: every distinct model loaded for
+	# a world contributes its source triangle/part totals so CI smoke
+	# logs show exactly which budgets grow between releases.
+	_enhancement_stats["model_perf_audit_0340"] = true
+	_enhancement_stats["model_source_triangles_total_0340"] = int(_enhancement_stats.get("model_source_triangles_total_0340", 0)) + model_triangle_count
+	_enhancement_stats["model_parts_total_0340"] = int(_enhancement_stats.get("model_parts_total_0340", 0)) + parts.size()
+	_enhancement_stats["model_max_triangles_0340"] = maxi(int(_enhancement_stats.get("model_max_triangles_0340", 0)), model_triangle_count)
 	var is_photoreal_prop_0223 := path.ends_with("street_lamp.glb") or path.ends_with("bus_shelter.glb") or path.ends_with("park_bench.glb") or path.ends_with("park_pergola.glb")
 	if is_vegetation_model or is_photoreal_prop_0223:
 		var triangle_key := "%s_triangles" % path.get_file().trim_suffix(".glb")

@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.3-native-alpha"'), 'Native project version metadata must match 0.3.3-native-alpha');
-assert(preset.includes('version/code=69'), 'Native 0.3.3 must bump Android versionCode to 69');
-assert(preset.includes('version/name="0.3.3-native-alpha"'), 'Native version name must be 0.3.3-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.3-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.4-native-alpha"'), 'Native project version metadata must match 0.3.4-native-alpha');
+assert(preset.includes('version/code=70'), 'Native 0.3.4 must bump Android versionCode to 70');
+assert(preset.includes('version/name="0.3.4-native-alpha"'), 'Native version name must be 0.3.4-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.4-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.3"') && preset.includes('application/product_version="0.3.3"'), 'Desktop Windows version metadata must match native 0.3.3');
+assert(preset.includes('application/file_version="0.3.4"') && preset.includes('application/product_version="0.3.4"'), 'Desktop Windows version metadata must match native 0.3.4');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -738,7 +738,8 @@ for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottag
   const cottageSource = `src/assets/models/props/${cottageModel}`;
   const cottageInfo = await stat(cottageSource);
   const cottageBytes = await readFile(cottageSource);
-  assert(cottageInfo.size > 1_000_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
+  // 0.3.4 merged-by-material exports legitimately shrink these GLBs; the floor still rejects LFS pointers/truncation.
+  assert(cottageInfo.size > 700_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
   assert(cottageBytes.subarray(0, 4).toString('utf8') === 'glTF', `${cottageModel} source is an LFS pointer or corrupt GLB`);
 }
 for (const cottageTextureStem of ['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse']) {
@@ -1244,6 +1245,17 @@ for (const marker of ['_update_performance_governor_0330', '_apply_performance_g
   assert(mainScript.includes(marker), `0.3.3 main performance marker is missing: ${marker}`);
 }
 assert(project.includes('shadows/positional_shadow/atlas_size.mobile=1024'), '0.3.3 phones must cap the positional shadow atlas at 1024px');
+
+// 0.3.4: model detail + compression + performance audit.
+// blenderScript is loaded with the other sources at the top of this validator.
+for (const marker of ['_merge_meshes_by_material_for_export', 'school_win_mullion', 'villab_glass_mullion', 'townb_bay_mullion_v', 'wh_dock_seam', 'cont_data_plate', 'term_door_mullion', 'hangar_door_leaf', 'stadium_portal']) {
+  assert(blenderScript.includes(marker), `0.3.4 Blender detail/compression marker is missing: ${marker}`);
+}
+for (const marker of ['model_perf_audit_0340', 'model_source_triangles_total_0340', 'model_source_mesh_objects_total_0340']) {
+  assert(worldScript.includes(marker), `0.3.4 world performance-audit marker is missing: ${marker}`);
+}
+const auditStat034 = await stat('scripts/audit-model-performance.py');
+assert(auditStat034.size > 0, '0.3.4 model performance audit script is missing');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
