@@ -42,6 +42,8 @@ const modelCopies = [
   ['src/assets/models/props/hangar_large.glb', 'props/hangar_large.glb'],
   ['src/assets/models/props/hangar_small.glb', 'props/hangar_small.glb'],
   ['src/assets/models/props/airliner.glb', 'props/airliner.glb'],
+  ['src/assets/models/props/yacht_sail.glb', 'props/yacht_sail.glb'],
+  ['src/assets/models/props/yacht_motor.glb', 'props/yacht_motor.glb'],
   ['src/assets/models/props/cooling_tower.glb', 'props/cooling_tower.glb'],
   ['src/assets/models/props/reactor.glb', 'props/reactor.glb'],
   ['src/assets/models/props/chimney.glb', 'props/chimney.glb'],

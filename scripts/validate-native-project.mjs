@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.10-native-alpha"'), 'Native project version metadata must match 0.3.10-native-alpha');
-assert(preset.includes('version/code=76'), 'Native 0.3.10 must bump Android versionCode to 76');
-assert(preset.includes('version/name="0.3.10-native-alpha"'), 'Native version name must be 0.3.10-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.10-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.11-native-alpha"'), 'Native project version metadata must match 0.3.11-native-alpha');
+assert(preset.includes('version/code=77'), 'Native 0.3.11 must bump Android versionCode to 77');
+assert(preset.includes('version/name="0.3.11-native-alpha"'), 'Native version name must be 0.3.11-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.11-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.10"') && preset.includes('application/product_version="0.3.10"'), 'Desktop Windows version metadata must match native 0.3.10');
+assert(preset.includes('application/file_version="0.3.11"') && preset.includes('application/product_version="0.3.11"'), 'Desktop Windows version metadata must match native 0.3.11');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1277,7 +1277,7 @@ for (const newModel of ['shopping_mall.glb', 'turbine_hall_long.glb', 'turbine_h
 const rtMall035 = data.buildings.find((b) => b.model === 'shopping_mall');
 assert(rtMall035 && rtMall035.w === 230 && rtMall035.d === 130, '0.3.5 RichTown Mall must use the shopping_mall GLB on its 230x130 parcel');
 assert(data.buildings.filter((b) => b.model === 'turbine_hall_long' || b.model === 'turbine_hall_short').length === 2, '0.3.5 both NPP turbine halls must use their GLBs');
-assert(data.stats.genericBuildings === 303 && data.stats.cityBlenderBuildings === 1185, '0.3.5 generator stats must show the last three generic boxes converted');
+assert(data.stats.genericBuildings === 300 && data.stats.cityBlenderBuildings === 1184, '0.3.5/0.3.11 generator stats must show the last three generic boxes converted (0.3.11 tunnel reserve frees four parcels)');
 
 // 0.3.6: ten-model perfection pass.  Premium window layers become
 // outward facade quads (same materials/parts, far fewer triangles);
@@ -1475,6 +1475,59 @@ for (const [model0310, [triangleCap0310, expectedParts0310]] of Object.entries(m
   assert(parts0310 === expectedParts0310, `0.3.10 ${model0310} part count changed: ${parts0310} !== ${expectedParts0310}`);
   assert(triangles0310 <= triangleCap0310, `0.3.10 ${model0310} exceeds its triangle budget: ${triangles0310} > ${triangleCap0310}`);
 }
+
+// 0.3.11: RichTown 7x7 stages 3+4 - detailed downtown and marinas.
+// Rich Tower plaza (paving discs, planters, flags), the Roses Avenue
+// land tunnel (cut-and-cover tube with colliders, emissive ceiling
+// strips and a green roof slab), the stadium forecourt, and two
+// carved marina basins with quay/finger piers, breakwaters and 32
+// moored Blender yachts.  All repeated primitives ride eight chunked
+// MultiMesh batches; no building detail budget changes.
+for (const marker of ['rt7-plaza', 'rt7-tunnel', 'rt7-pier', 'rt7-breakwater', 'rt7-yacht-sail', 'rt7-yacht-motor', 'Stage34Concrete0311', 'Stage34PierDecks0311', 'marinaBasinS', 'marinaBasinN', 'rt7_stage34_batches_0311', 'rt7_stadium_forecourt_0311']) {
+  assert(worldScript.includes(marker), `0.3.11 world builder marker is missing: ${marker}`);
+}
+for (const marker of ['build_yacht_sail', 'build_yacht_motor', '_yacht_hull', 'yacht_sail.glb', 'yacht_motor.glb']) {
+  assert(blenderScript.includes(marker), `0.3.11 Blender marker is missing: ${marker}`);
+}
+for (const yachtGlb of ['yacht_sail.glb', 'yacht_motor.glb']) {
+  assert(syncScript.includes(yachtGlb), `0.3.11 sync must stage ${yachtGlb}`);
+}
+const modelBudgets0311 = {
+  'yacht_sail.glb': [320, 4],
+  'yacht_motor.glb': [420, 4],
+};
+for (const [model0311, [triangleCap0311, expectedParts0311]] of Object.entries(modelBudgets0311)) {
+  const modelBytes0311 = await readFile(`src/assets/models/props/${model0311}`);
+  assert(modelBytes0311.subarray(0, 4).toString('utf8') === 'glTF', `0.3.11 ${model0311} is not a real GLB`);
+  const modelJson0311 = parseGlbJson(modelBytes0311);
+  let triangles0311 = 0;
+  let parts0311 = 0;
+  for (const mesh0311 of modelJson0311.meshes ?? []) {
+    for (const primitive0311 of mesh0311.primitives ?? []) {
+      parts0311 += 1;
+      const vertexCount0311 = primitive0311.indices !== undefined
+        ? modelJson0311.accessors[primitive0311.indices].count
+        : modelJson0311.accessors[primitive0311.attributes.POSITION].count;
+      const mode0311 = primitive0311.mode ?? 4;
+      triangles0311 += mode0311 === 4 ? Math.floor(vertexCount0311 / 3) : (mode0311 === 5 || mode0311 === 6 ? Math.max(vertexCount0311 - 2, 0) : 0);
+    }
+  }
+  assert(parts0311 === expectedParts0311, `0.3.11 ${model0311} part count changed: ${parts0311} !== ${expectedParts0311}`);
+  assert(triangles0311 <= triangleCap0311, `0.3.11 ${model0311} exceeds its triangle budget: ${triangles0311} > ${triangleCap0311}`);
+}
+const landmarkKinds0311 = new Map();
+for (const landmark0311 of data.landmarks) {
+  landmarkKinds0311.set(landmark0311.kind, (landmarkKinds0311.get(landmark0311.kind) ?? 0) + 1);
+}
+assert(landmarkKinds0311.get('rt7-plaza') === 1 && landmarkKinds0311.get('rt7-tunnel') === 1, '0.3.11 downtown must place one plaza and one tunnel');
+assert((landmarkKinds0311.get('rt7-pier') ?? 0) >= 10 && (landmarkKinds0311.get('rt7-breakwater') ?? 0) >= 4, '0.3.11 marinas must place 10 piers and 4 breakwaters');
+assert((landmarkKinds0311.get('rt7-yacht-sail') ?? 0) >= 16 && (landmarkKinds0311.get('rt7-yacht-motor') ?? 0) >= 16, '0.3.11 marinas must moor at least 32 yachts');
+assert(data.zones?.marinaBasinS && data.zones?.marinaBasinN, '0.3.11 world must expose both marina basin water zones');
+assert(data.benches.length >= 70, '0.3.11 plaza/stadium/marina benches must ship in the world data');
+const tunnelLamp0311 = data.lamps.some((lamp0311) => lamp0311.x > 1480 && lamp0311.x < 1820 && Math.abs(Math.abs(lamp0311.z) - 18.5) < 1.0);
+assert(!tunnelLamp0311, '0.3.11 Roses tunnel tube must stay free of street lamps');
+const basinBuilding0311 = data.buildings.some((b0311) => b0311.x > -3010 && b0311.x < -2660 && Math.abs(b0311.z) > 600 && Math.abs(b0311.z) < 1100);
+assert(!basinBuilding0311, '0.3.11 marina basins must stay free of buildings');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

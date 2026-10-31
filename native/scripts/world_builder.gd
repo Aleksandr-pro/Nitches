@@ -3936,6 +3936,8 @@ func _build_water_and_pools() -> void:
 	if _is_rt7:
 		_add_water_plane(water_root, _zone_rect("sea"), "Sea", 40, 220)
 		_add_water_plane(water_root, _zone_rect("marina"), "Canal", 200, 3)
+		_add_water_plane(water_root, _zone_rect("marinaBasinS"), "MarinaBasinS", 28, 38)
+		_add_water_plane(water_root, _zone_rect("marinaBasinN"), "MarinaBasinN", 28, 38)
 	else:
 		var sea_mesh := PlaneMesh.new()
 		sea_mesh.size = Vector2(760.0, 1040.0)
@@ -7743,6 +7745,27 @@ func _build_landmarks() -> void:
 	var wood := _prop_material("PropsWood")
 	var metal := _prop_material("PropsMetal")
 
+	# 0.3.11 stage 3-4 shared MultiMesh accumulators (tower plaza,
+	# Roses tunnel, stadium forecourt, marina piers/breakwaters).
+	# Every repeated primitive lands in one of eight chunked batches
+	# flushed after the landmark loop, so the whole stage costs a
+	# handful of draw calls instead of hundreds of nodes.
+	var s34_box := BoxMesh.new()
+	s34_box.size = Vector3.ONE
+	var s34_cyl := CylinderMesh.new()
+	s34_cyl.top_radius = 0.5
+	s34_cyl.bottom_radius = 0.5
+	s34_cyl.height = 1.0
+	s34_cyl.radial_segments = 10
+	var s34_concrete_t: Array[Transform3D] = []
+	var s34_marble_t: Array[Transform3D] = []
+	var s34_wood_t: Array[Transform3D] = []
+	var s34_pile_t: Array[Transform3D] = []
+	var s34_metalcyl_t: Array[Transform3D] = []
+	var s34_glow_t: Array[Transform3D] = []
+	var s34_grass_t: Array[Transform3D] = []
+	var s34_gold_t: Array[Transform3D] = []
+
 	for landmark_variant in data.get("landmarks", []):
 		var item: Dictionary = landmark_variant
 		var kind := String(item.get("kind", ""))
@@ -7972,7 +7995,23 @@ func _build_landmarks() -> void:
 				else:
 					_enhancement_stats["city_landmark_glb_0320"] = int(_enhancement_stats.get("city_landmark_glb_0320", 0)) + 1
 				_add_box_collider(pos + Vector3(0.0, h * 0.5, 0.0), Vector3(r * 2.0 - 8.0, h, r * 1.6923 - 8.0))
+				# 0.3.11 stadium forecourt: paving disc, four gate
+				# pavilions and a flag ring around the bowl.
+				_add_cylinder(root, 182.0, 0.22, pos + Vector3(0.0, 0.05, 0.0), concrete, 0.0, 56, "StadiumForecourt0311")
+				_add_cylinder_collider(pos + Vector3(0.0, 0.0, 0.0), 182.0, 0.32)
+				for gate_i in 4:
+					var gate_a := float(gate_i) * PI * 0.5 + PI * 0.25
+					var gate_pos := pos + Vector3(cos(gate_a) * 166.0, 2.2, sin(gate_a) * 140.0)
+					s34_marble_t.append(make_transform(gate_pos, -gate_a, Vector3(14.0, 4.4, 6.0)))
+					s34_concrete_t.append(make_transform(gate_pos + Vector3(0.0, 2.55, 0.0), -gate_a, Vector3(16.0, 0.5, 7.5)))
+					_add_box_collider(gate_pos, Vector3(14.0, 4.4, 6.0), -gate_a)
+				for flag_i in 8:
+					var flag_a := float(flag_i) * PI * 0.25
+					var flag_pos := pos + Vector3(cos(flag_a) * 175.0, 0.0, sin(flag_a) * 148.0)
+					s34_metalcyl_t.append(make_transform(flag_pos + Vector3(0.0, 4.5, 0.0), 0.0, Vector3(0.18, 9.0, 0.18)))
+					s34_gold_t.append(make_transform(flag_pos + Vector3(0.98, 8.15, 0.0), 0.0, Vector3(1.9, 1.15, 0.06)))
 				_enhancement_stats["rt7_stadium_0300"] = true
+				_enhancement_stats["rt7_stadium_forecourt_0311"] = true
 			"rt7-cable-bridge":
 				# Twin pylons just outside the deck edges with stay cables
 				# fanning to the deck.  The drivable surface is the bridge
@@ -8168,10 +8207,111 @@ func _build_landmarks() -> void:
 				for leg_side in [-9.0, 9.0]:
 					_add_box_collider(pos + Vector3(0.0, 15.0, 0.0) + crane_basis * Vector3(leg_side, 0.0, 0.0), Vector3(2.2, 30.0, 15.7), crane_yaw)
 				_enhancement_stats["rt7_cranes_0320"] = int(_enhancement_stats.get("rt7_cranes_0320", 0)) + 1
+			"rt7-plaza":
+				# 0.3.11 Rich Tower plaza: patterned paving discs,
+				# planters and a flag quartet inside the ring road.
+				_add_cylinder(root, r, 0.16, pos + Vector3(0.0, 0.08, 0.0), _terrain_material("plaza"), 0.0, 56, "TowerPlaza0311")
+				_add_cylinder(root, r * 0.62, 0.24, pos + Vector3(0.0, 0.12, 0.0), concrete, 0.0, 48, "TowerPlazaRing0311")
+				_add_cylinder_collider(pos + Vector3(0.0, 0.02, 0.0), r, 0.3)
+				for pl_i in 8:
+					var pl_a := float(pl_i) * PI * 0.25 + PI * 0.125
+					var pl_pos := pos + Vector3(cos(pl_a) * (r - 12.0), 0.45, sin(pl_a) * (r - 12.0))
+					s34_marble_t.append(make_transform(pl_pos, -pl_a + PI * 0.5, Vector3(9.0, 0.9, 1.8)))
+					s34_grass_t.append(make_transform(pl_pos + Vector3(0.0, 0.55, 0.0), -pl_a + PI * 0.5, Vector3(8.4, 0.35, 1.3)))
+					_add_box_collider(pl_pos, Vector3(9.0, 0.9, 1.8), -pl_a + PI * 0.5)
+				for pf_i in 4:
+					var pf_a := float(pf_i) * PI * 0.5 + PI * 0.25
+					var pf_pos := pos + Vector3(cos(pf_a) * 44.0, 0.0, sin(pf_a) * 44.0)
+					s34_metalcyl_t.append(make_transform(pf_pos + Vector3(0.0, 5.5, 0.0), 0.0, Vector3(0.22, 11.0, 0.22)))
+					s34_gold_t.append(make_transform(pf_pos + Vector3(1.18, 10.0, 0.0), 0.0, Vector3(2.3, 1.4, 0.06)))
+				_enhancement_stats["rt7_plaza_0311"] = true
+			"rt7-tunnel":
+				# 0.3.11 Roses Avenue land tunnel: cut-and-cover
+				# tube over the existing straight, so the road
+				# profile and terrain stay untouched.  Walls and
+				# roof carry real colliders (wheel raycasts ride
+				# the road mesh below), ceiling strips use the
+				# emissive lamp material and a green park slab
+				# caps the roof between parapets.
+				var tun_len := r * 2.0
+				for side in [-1.0, 1.0]:
+					s34_concrete_t.append(make_transform(pos + Vector3(0.0, 3.3, side * 17.6), 0.0, Vector3(tun_len + 12.0, 8.6, 1.2)))
+					s34_glow_t.append(make_transform(pos + Vector3(0.0, 1.15, side * 16.95), 0.0, Vector3(tun_len, 0.28, 0.08)))
+					s34_concrete_t.append(make_transform(pos + Vector3(0.0, 8.72, side * 17.85), 0.0, Vector3(tun_len, 0.85, 0.5)))
+					s34_concrete_t.append(make_transform(pos + Vector3(0.0, 0.55, side * 20.4), 0.0, Vector3(tun_len + 12.0, 1.5, 4.4)))
+					_add_box_collider(pos + Vector3(0.0, 3.3, side * 17.6), Vector3(tun_len + 12.0, 8.6, 1.4))
+				for seg_i in 6:
+					var seg_x := -100.0 + float(seg_i) * 40.0
+					s34_concrete_t.append(make_transform(pos + Vector3(seg_x, 7.95, 0.0), 0.0, Vector3(39.0, 0.7, 36.4)))
+				s34_grass_t.append(make_transform(pos + Vector3(0.0, 8.42, 0.0), 0.0, Vector3(tun_len, 0.24, 34.0)))
+				_add_box_collider(pos + Vector3(0.0, 7.95, 0.0), Vector3(tun_len, 0.8, 36.4))
+				for end_sign in [-1.0, 1.0]:
+					var px := end_sign * (r + 1.0)
+					for side2 in [-1.0, 1.0]:
+						s34_marble_t.append(make_transform(pos + Vector3(px, 4.3, side2 * 17.0), 0.0, Vector3(1.6, 9.4, 2.4)))
+						_add_box_collider(pos + Vector3(px, 4.3, side2 * 17.0), Vector3(1.8, 9.4, 2.6))
+					s34_marble_t.append(make_transform(pos + Vector3(px, 8.55, 0.0), 0.0, Vector3(1.6, 2.3, 36.4)))
+					s34_glow_t.append(make_transform(pos + Vector3(px - end_sign * 0.95, 7.28, 0.0), 0.0, Vector3(0.25, 0.22, 30.0)))
+				for strip_i in 15:
+					var strip_x := -112.0 + float(strip_i) * 16.0
+					for strip_side in [-8.0, 8.0]:
+						s34_glow_t.append(make_transform(pos + Vector3(strip_x, 7.55, strip_side), 0.0, Vector3(2.4, 0.12, 0.55)))
+				for vent_x in [-60.0, 60.0]:
+					_add_cylinder(root, 1.1, 3.4, pos + Vector3(vent_x, 10.2, 0.0), concrete, 0.0, 12, "TunnelVent0311")
+				_enhancement_stats["rt7_tunnel_0311"] = true
+			"rt7-pier":
+				# 0.3.11 marina pier: timber deck on piles.  The
+				# long quay piers run along the basin, the short
+				# fingers reach into it between the yacht rows.
+				var pier_yaw := _f(item, "rotY")
+				var pier_basis := Basis(Vector3.UP, pier_yaw)
+				var pier_len := r * 2.0
+				s34_wood_t.append(make_transform(pos + Vector3(0.0, 1.02, 0.0), pier_yaw, Vector3(pier_len, 0.35, 3.4)))
+				var pile_steps := maxi(int(pier_len / 9.0), 1)
+				for pile_i in range(pile_steps + 1):
+					var along := -r + pier_len * float(pile_i) / float(pile_steps)
+					for pile_side in [-1.45, 1.45]:
+						var pile_pos := pos + pier_basis * Vector3(along, 0.0, pile_side) + Vector3(0.0, -0.5, 0.0)
+						s34_pile_t.append(make_transform(pile_pos, 0.0, Vector3(0.36, 3.2, 0.36)))
+				_add_box_collider(pos + Vector3(0.0, 0.7, 0.0), Vector3(pier_len, 1.6, 3.4), pier_yaw)
+				_enhancement_stats["rt7_piers_0311"] = int(_enhancement_stats.get("rt7_piers_0311", 0)) + 1
+			"rt7-breakwater":
+				# 0.3.11 breakwater arm sheltering the marina
+				# mouth, with a navigation beacon on the outer end.
+				var bw_yaw := _f(item, "rotY")
+				var bw_basis := Basis(Vector3.UP, bw_yaw)
+				s34_concrete_t.append(make_transform(pos + Vector3(0.0, 0.55, 0.0), bw_yaw, Vector3(r * 2.0, 2.1, 5.0)))
+				var beacon_pos := pos + bw_basis * Vector3(-r + 3.0, 0.0, 0.0)
+				s34_metalcyl_t.append(make_transform(beacon_pos + Vector3(0.0, 2.6, 0.0), 0.0, Vector3(0.5, 2.2, 0.5)))
+				s34_glow_t.append(make_transform(beacon_pos + Vector3(0.0, 3.85, 0.0), 0.0, Vector3(0.42, 0.42, 0.42)))
+				_add_box_collider(pos + Vector3(0.0, 0.55, 0.0), Vector3(r * 2.0, 2.4, 5.0), bw_yaw)
+				_enhancement_stats["rt7_breakwaters_0311"] = int(_enhancement_stats.get("rt7_breakwaters_0311", 0)) + 1
+			"rt7-yacht-sail", "rt7-yacht-motor":
+				# 0.3.11 moored Blender yachts; placement Y already
+				# carries the draft below the basin waterline.
+				var yacht_path := "res://assets/props/yacht_sail.glb" if kind == "rt7-yacht-sail" else "res://assets/props/yacht_motor.glb"
+				var yacht_yaw := _f(item, "rotY")
+				var yacht_built := _add_batched_model(root, yacht_path, [_centered_model_transform(pos, yacht_yaw, Vector3.ONE, Vector3.ZERO)], "MarinaYacht0311")
+				if not yacht_built:
+					_add_box(root, Vector3(3.2, 1.2, 11.0), pos + Vector3(0.0, 0.6, 0.0), marble, yacht_yaw, "YachtFallback0311")
+				_add_box_collider(pos + Vector3(0.0, 0.8, 0.0), Vector3(3.6, 2.2, 12.5), yacht_yaw)
+				_enhancement_stats["rt7_yachts_0311"] = int(_enhancement_stats.get("rt7_yachts_0311", 0)) + 1
 			_:
 				var fallback_height := maxf(h, 8.0)
 				_add_box(root, Vector3(24.0, fallback_height, 24.0), pos + Vector3(0.0, fallback_height * 0.5, 0.0), hotel)
 				_add_box_collider(pos + Vector3(0.0, fallback_height * 0.5, 0.0), Vector3(24.0, fallback_height, 24.0))
+
+	# 0.3.11 stage 3-4 flush: plaza, tunnel, stadium forecourt and
+	# both marinas together cost eight chunked MultiMesh batches.
+	_add_multimesh(root, s34_box, concrete, s34_concrete_t, "Stage34Concrete0311", true, -1.0, 1100.0, 260.0)
+	_add_multimesh(root, s34_box, marble, s34_marble_t, "Stage34Marble0311", true, -1.0, 900.0, 260.0)
+	_add_multimesh(root, s34_box, wood, s34_wood_t, "Stage34PierDecks0311", true, -1.0, 700.0, 220.0)
+	_add_multimesh(root, s34_cyl, wood, s34_pile_t, "Stage34PierPiles0311", false, -1.0, 520.0, 220.0)
+	_add_multimesh(root, s34_cyl, metal, s34_metalcyl_t, "Stage34Poles0311", false, -1.0, 700.0, 260.0)
+	_add_multimesh(root, s34_box, _prop_material("LampGlow"), s34_glow_t, "Stage34Glow0311", false, -1.0, 700.0, 260.0)
+	_add_multimesh(root, s34_box, _terrain_material("grass"), s34_grass_t, "Stage34Green0311", false, -1.0, 900.0, 260.0)
+	_add_multimesh(root, s34_box, gold, s34_gold_t, "Stage34Flags0311", false, -1.0, 520.0, 260.0)
+	_enhancement_stats["rt7_stage34_batches_0311"] = 8
 
 
 ## 0.2.37 Sail Island resort landscaping.  Terrain, loop road, villas
