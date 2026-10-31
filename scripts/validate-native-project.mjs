@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.7-native-alpha"'), 'Native project version metadata must match 0.3.7-native-alpha');
-assert(preset.includes('version/code=73'), 'Native 0.3.7 must bump Android versionCode to 73');
-assert(preset.includes('version/name="0.3.7-native-alpha"'), 'Native version name must be 0.3.7-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.7-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.8-native-alpha"'), 'Native project version metadata must match 0.3.8-native-alpha');
+assert(preset.includes('version/code=74'), 'Native 0.3.8 must bump Android versionCode to 74');
+assert(preset.includes('version/name="0.3.8-native-alpha"'), 'Native version name must be 0.3.8-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.8-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.7"') && preset.includes('application/product_version="0.3.7"'), 'Desktop Windows version metadata must match native 0.3.7');
+assert(preset.includes('application/file_version="0.3.8"') && preset.includes('application/product_version="0.3.8"'), 'Desktop Windows version metadata must match native 0.3.8');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -738,8 +738,8 @@ for (const cottageModel of ['cottage_dune.glb', 'cottage_courtyard.glb', 'cottag
   const cottageSource = `src/assets/models/props/${cottageModel}`;
   const cottageInfo = await stat(cottageSource);
   const cottageBytes = await readFile(cottageSource);
-  // 0.3.4 merged-by-material exports legitimately shrink these GLBs; the floor still rejects LFS pointers/truncation.
-  assert(cottageInfo.size > 700_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
+  // 0.3.4 merged-by-material exports and the 0.3.8 panel/bevel pass legitimately shrink these GLBs; the floor still rejects LFS pointers/truncation.
+  assert(cottageInfo.size > 500_000, `Native 0.2.39 ${cottageModel} GLB is unexpectedly small`);
   assert(cottageBytes.subarray(0, 4).toString('utf8') === 'glTF', `${cottageModel} source is an LFS pointer or corrupt GLB`);
 }
 for (const cottageTextureStem of ['cottage_basalt', 'cottage_limestone_blocks', 'cottage_paving', 'cottage_rammed_sand', 'cottage_roof_metal', 'cottage_teak_weathered', 'cottage_travertine_coarse']) {
@@ -1332,6 +1332,53 @@ for (const [model037, [triangleCap037, expectedParts037]] of Object.entries(mode
   }
   assert(parts037 === expectedParts037, `0.3.7 ${model037} part count changed: ${parts037} !== ${expectedParts037}`);
   assert(triangles037 <= triangleCap037, `0.3.7 ${model037} exceeds its triangle budget: ${triangles037} > ${triangleCap037}`);
+}
+
+// 0.3.8: third ten-model perfection pass.  Cottage window/door/garage
+// glazing layers backed by basalt reveals become outward panels,
+// garden boulders and the courtyard fountain use size-appropriate
+// sphere segments, 12-20 mm bevels leave small stone parts (main
+// volume and hedge bevels stay), the stadium lathes match their 36
+// facade ribs, midrise_b dark glass becomes panels behind solid
+// balcony rails, container corrugation keeps its silhouette at a
+// wider pitch, and office_tower_mid/high plus warehouse_small gain
+// the detail their sibling variants already had.
+for (const marker of ['panel("cottage_window_glass"', 'panel("cottage_mashrabiya_core"', 'segments=12, ring_count=8', '_ct_lathe("stadium_bowl", profile, concrete, segments=36', 'def _build_midrise(width, depth, floors, detail_036=False, panel_038=False)', 'office_upper_corner_fin', 'panel("cont_data_plate"']) {
+  assert(blenderScript.includes(marker), `0.3.8 Blender marker is missing: ${marker}`);
+}
+for (const marker of ['sail_cottage_dune_triangles_0239", 0)) < 7500', 'sail_cottage_courtyard_triangles_0239", 0)) < 8500', 'sail_cottage_palm_triangles_0239", 0)) < 6500']) {
+  assert(mainScript.includes(marker), `0.3.8 runtime triangle floor is missing: ${marker}`);
+}
+const modelBudgets038 = {
+  'cottage_courtyard.glb': [11_500, 17],
+  'cottage_dune.glb': [9_800, 17],
+  'cottage_palm.glb': [9_200, 16],
+  'midrise_b.glb': [2_300, 8],
+  'stadium.glb': [2_350, 7],
+  'container_blue.glb': [620, 4],
+  'container_red.glb': [620, 4],
+  'office_tower_mid.glb': [520, 7],
+  'office_tower_high.glb': [640, 8],
+  'warehouse_small.glb': [760, 6],
+};
+for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(modelBudgets038)) {
+  const modelBytes038 = await readFile(`src/assets/models/props/${model038}`);
+  assert(modelBytes038.subarray(0, 4).toString('utf8') === 'glTF', `0.3.8 ${model038} is not a real GLB`);
+  const modelJson038 = parseGlbJson(modelBytes038);
+  let triangles038 = 0;
+  let parts038 = 0;
+  for (const mesh038 of modelJson038.meshes ?? []) {
+    for (const primitive038 of mesh038.primitives ?? []) {
+      parts038 += 1;
+      const vertexCount038 = primitive038.indices !== undefined
+        ? modelJson038.accessors[primitive038.indices].count
+        : modelJson038.accessors[primitive038.attributes.POSITION].count;
+      const mode038 = primitive038.mode ?? 4;
+      triangles038 += mode038 === 4 ? Math.floor(vertexCount038 / 3) : (mode038 === 5 || mode038 === 6 ? Math.max(vertexCount038 - 2, 0) : 0);
+    }
+  }
+  assert(parts038 === expectedParts038, `0.3.8 ${model038} part count changed: ${parts038} !== ${expectedParts038}`);
+  assert(triangles038 <= triangleCap038, `0.3.8 ${model038} exceeds its triangle budget: ${triangles038} > ${triangleCap038}`);
 }
 
 console.log('Native Godot project validation OK');
