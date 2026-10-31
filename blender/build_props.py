@@ -6106,6 +6106,7 @@ def main():
         (build_barn, "barn.glb"),
         (build_greenhouse, "greenhouse.glb"),
         (build_port_crane, "port_crane.glb"),
+        (build_barge, "barge.glb"),
     ):
         # Local model reviews can build one asset without regenerating
         # the whole city set, e.g. NITCHES_PROPS_ONLY=cottage_dune.glb.
@@ -7862,6 +7863,74 @@ def build_greenhouse():
         box("gh_fan", fan_x, 4.2, 2.6, 0.18, 2.2, 2.2, MATS["WindowFrame"])
     for row_y in (-4.4, -1.5, 1.5, 4.4):
         box("gh_crops", 0, row_y, 1.25, 40, 1.7, 0.95, green)
+
+
+def build_barge():
+    """0.3.15 (TZ stage 6): 55 m canal cargo barge for the port quay.
+
+    Flat-bottom hull with raked ends (keel line z=0 like the yachts,
+    placement Y carries the 1.55 m draft), one open hold with a cargo
+    mound, three closed hatch covers aft and a raised wheelhouse.
+    Five merged parts, all in the 0.3.12 world-density UV set except
+    the glass band.
+    """
+    dark = MATS["RoofDark"]
+    metal = MATS["PropsMetal"]
+    white = MATS["CityWhitePaint"]
+    glass = MATS["WindowGlassDark"]
+    red = MATS["CityAccentRed"]
+    deck = 2.6
+    # Hull loft: (y, top half-beam, bottom half-beam, bottom z).
+    sections = [
+        (-27.5, 3.1, 0.8, 1.55),
+        (-24.0, 4.3, 3.6, 0.55),
+        (-19.0, 4.3, 4.1, 0.0),
+        (19.0, 4.3, 4.1, 0.0),
+        (24.0, 4.3, 3.6, 0.55),
+        (27.5, 3.4, 1.2, 1.45),
+    ]
+    b = MeshBuilder()
+    rings = []
+    for y, thb, bhb, bz in sections:
+        rings.append([
+            b.add_vertex(Vector((-thb, y, deck))),
+            b.add_vertex(Vector((-bhb, y, bz))),
+            b.add_vertex(Vector((bhb, y, bz))),
+            b.add_vertex(Vector((thb, y, deck))),
+        ])
+    for i in range(len(rings) - 1):
+        a, c = rings[i], rings[i + 1]
+        for j in range(3):
+            b.quad(c[j], a[j], a[j + 1], c[j + 1])
+        b.quad(c[3], a[3], a[0], c[0])
+    r0 = rings[0]
+    b.quad(r0[0], r0[1], r0[2], r0[3])
+    r1 = rings[-1]
+    b.quad(r1[3], r1[2], r1[1], r1[0])
+    b.build("barge_hull0315", dark, smooth=False)
+    # Red sheer stripe along the parallel mid-body (ends stay clear
+    # of the raked sections where the hull narrows).
+    box("barge_stripe0315", 0, 0, 2.18, 8.74, 38.0, 0.34, red)
+    # Open forward hold: coaming rim + stepped cargo mound.
+    box("barge_coaming0315", 0, -10.5, deck + 0.25, 7.6, 17.0, 0.5, metal)
+    box("barge_cargo0315", 0, -10.5, deck + 0.55, 7.0, 16.0, 0.7, dark)
+    box("barge_cargo0315", 0, -10.5, deck + 1.05, 6.0, 14.0, 0.5, dark)
+    # Three closed hatch covers aft of the hold.
+    for hy in (1.5, 7.6, 13.7):
+        box("barge_hatch0315", 0, hy, deck + 0.28, 7.5, 5.6, 0.55, metal)
+    # Raised wheelhouse on the stern deck.
+    box("barge_wheelhouse0315", 0, 22.6, deck + 1.05, 5.5, 4.6, 2.1, white)
+    box("barge_wh_glass0315", 0, 22.6, deck + 1.55, 5.68, 4.78, 0.75, glass)
+    box("barge_wh_roof0315", 0, 22.6, deck + 2.22, 5.9, 5.0, 0.24, dark)
+    for stack_x in (-1.7, 1.7):
+        cyl("barge_stack0315", stack_x, 24.9, deck + 1.5, 0.17, 1.7, metal, vertices=8)
+    cyl("barge_mast0315", 0, 19.8, deck + 2.1, 0.08, 4.2, metal, vertices=6)
+    box("barge_mast_bar0315", 0, 19.8, deck + 3.6, 2.2, 0.1, 0.1, metal)
+    # Forecastle gear + mooring bollards.
+    box("barge_windlass0315", 0, -23.6, deck + 0.35, 1.8, 1.1, 0.7, metal)
+    for bx in (-3.7, 3.7):
+        for by in (-25.4, 25.8):
+            cyl("barge_bollard0315", bx, by, deck + 0.25, 0.15, 0.5, metal, vertices=6)
 
 
 def build_port_crane():

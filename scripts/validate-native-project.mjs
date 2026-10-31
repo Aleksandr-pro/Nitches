@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.14-native-alpha"'), 'Native project version metadata must match 0.3.14-native-alpha');
-assert(preset.includes('version/code=80'), 'Native 0.3.14 must bump Android versionCode to 80');
-assert(preset.includes('version/name="0.3.14-native-alpha"'), 'Native version name must be 0.3.14-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.14-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.15-native-alpha"'), 'Native project version metadata must match 0.3.15-native-alpha');
+assert(preset.includes('version/code=81'), 'Native 0.3.15 must bump Android versionCode to 81');
+assert(preset.includes('version/name="0.3.15-native-alpha"'), 'Native version name must be 0.3.15-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.15-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.14"') && preset.includes('application/product_version="0.3.14"'), 'Desktop Windows version metadata must match native 0.3.14');
+assert(preset.includes('application/file_version="0.3.15"') && preset.includes('application/product_version="0.3.15"'), 'Desktop Windows version metadata must match native 0.3.15');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -916,6 +916,7 @@ if (requireAssets) {
     'assets/props/barn.glb',
     'assets/props/greenhouse.glb',
     'assets/props/port_crane.glb',
+    'assets/props/barge.glb',
     'assets/vegetation/plants.glb',
     'assets/vegetation/palm_date.glb',
     'assets/vegetation/palm_royal.glb',
@@ -1279,7 +1280,7 @@ for (const newModel of ['shopping_mall.glb', 'turbine_hall_long.glb', 'turbine_h
 const rtMall035 = data.buildings.find((b) => b.model === 'shopping_mall');
 assert(rtMall035 && rtMall035.w === 230 && rtMall035.d === 130, '0.3.5 RichTown Mall must use the shopping_mall GLB on its 230x130 parcel');
 assert(data.buildings.filter((b) => b.model === 'turbine_hall_long' || b.model === 'turbine_hall_short').length === 2, '0.3.5 both NPP turbine halls must use their GLBs');
-assert(data.stats.genericBuildings === 300 && data.stats.cityBlenderBuildings === 1184, '0.3.5/0.3.11 generator stats must show the last three generic boxes converted (0.3.11 tunnel reserve frees four parcels)');
+assert(data.stats.genericBuildings === 300 && data.stats.cityBlenderBuildings === 1274, '0.3.5/0.3.11 generator stats must show the last three generic boxes converted (0.3.11 tunnel reserve frees four parcels; 0.3.15 container terminal adds 90 city archetypes)');
 
 // 0.3.6: ten-model perfection pass.  Premium window layers become
 // outward facade quads (same materials/parts, far fewer triangles);
@@ -1454,6 +1455,7 @@ const modelBudgets0310 = {
   'hangar_large.glb': [330, 5],
   'hangar_small.glb': [330, 5],
   'port_crane.glb': [400, 7],
+  'barge.glb': [400, 5],
   'barn.glb': [330, 5],
   'watchtower.glb': [380, 4],
   'silo.glb': [200, 3],
@@ -1648,6 +1650,28 @@ for (const marker of ['villab_solar0314', 'villab_ac0314', 'townb_bin0314', 'tow
 assert(data.bushes.length >= 2000, '0.3.14 courtyard hedge bushes must ship in the world data');
 assert(data.trees.length >= 1050, '0.3.14 courtyard yard oaks must ship in the world data');
 assert(data.palms.length >= 1150, '0.3.14 courtyard/pool palms must ship in the world data');
+
+// 0.3.15: TZ stage 6 - canal/port/farm detail.  A new Blender
+// canal barge (344 tris, 5 parts) moors along both canal walls; the
+// runtime raises concrete quay walls with copings and mooring
+// bollards along the full 4.7 km channel and builds the farm field
+// patches (soil/meadow slabs + crop ridge rows) from the new
+// data["fields"] array - five chunked MultiMesh batches total.
+// The generator appends an organised container terminal (+90),
+// three more quay cranes, farm silo pairs and a port fuel-tank row;
+// every pre-0.3.15 placement stays byte-identical (append-only).
+for (const marker of ['build_barge', 'barge_hull0315', 'barge_wheelhouse0315']) {
+  assert(blenderScript.includes(marker), `0.3.15 Blender marker is missing: ${marker}`);
+}
+for (const marker of ['rt7-barge', '_build_rt7_stage6_0315', 'CanalQuay0315', 'FarmFieldSoil0315', 'FarmFieldRows0315', 'rt7_barges_0315', 'rt7_fields_0315']) {
+  assert(worldScript.includes(marker), `0.3.15 world-builder marker is missing: ${marker}`);
+}
+assert(syncScript.includes('props/barge.glb'), '0.3.15 sync must stage the canal barge GLB');
+assert(data.landmarks.filter((l) => l.kind === 'rt7-crane').length >= 6, '0.3.15 must ship six canal quay cranes');
+assert(data.landmarks.filter((l) => l.kind === 'rt7-barge').length >= 10, '0.3.15 must ship ten moored canal barges');
+assert(data.landmarks.filter((l) => l.kind === 'rt7-tank').length >= 15, '0.3.15 farm silos + port fuel tanks must ship in the world data');
+assert(Array.isArray(data.fields) && data.fields.length >= 18, '0.3.15 farm fields must ship in the world data');
+assert(data.buildings.filter((b) => b.model === 'container_red' || b.model === 'container_blue').length >= 210, '0.3.15 container terminal rows must ship in the world data');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

@@ -70,6 +70,7 @@ const modelCopies = [
   ['src/assets/models/props/turbine_hall_long.glb', 'props/turbine_hall_long.glb'],
   ['src/assets/models/props/turbine_hall_short.glb', 'props/turbine_hall_short.glb'],
   ['src/assets/models/props/port_crane.glb', 'props/port_crane.glb'],
+  ['src/assets/models/props/barge.glb', 'props/barge.glb'],
   ['src/assets/models/plants.glb', 'vegetation/plants.glb'],
   ['src/assets/models/props/palm_date.glb', 'vegetation/palm_date.glb'],
   ['src/assets/models/props/palm_royal.glb', 'vegetation/palm_royal.glb'],
