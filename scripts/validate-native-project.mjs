@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.13-native-alpha"'), 'Native project version metadata must match 0.3.13-native-alpha');
-assert(preset.includes('version/code=79'), 'Native 0.3.13 must bump Android versionCode to 79');
-assert(preset.includes('version/name="0.3.13-native-alpha"'), 'Native version name must be 0.3.13-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.13-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.14-native-alpha"'), 'Native project version metadata must match 0.3.14-native-alpha');
+assert(preset.includes('version/code=80'), 'Native 0.3.14 must bump Android versionCode to 80');
+assert(preset.includes('version/name="0.3.14-native-alpha"'), 'Native version name must be 0.3.14-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.14-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.13"') && preset.includes('application/product_version="0.3.13"'), 'Desktop Windows version metadata must match native 0.3.13');
+assert(preset.includes('application/file_version="0.3.14"') && preset.includes('application/product_version="0.3.14"'), 'Desktop Windows version metadata must match native 0.3.14');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1357,8 +1357,8 @@ const modelBudgets038 = {
   'cottage_palm.glb': [9_200, 16],
   'midrise_b.glb': [2_450, 8],
   'stadium.glb': [2_350, 7],
-  'container_blue.glb': [620, 4],
-  'container_red.glb': [620, 4],
+  'container_blue.glb': [660, 4],
+  'container_red.glb': [660, 4],
   'office_tower_mid.glb': [720, 7],
   'office_tower_high.glb': [830, 8],
   'warehouse_small.glb': [830, 6],
@@ -1406,8 +1406,8 @@ const modelBudgets039 = {
   'shopping_mall.glb': [2_400, 9],
   'school.glb': [1_750, 11],
   'airport_terminal.glb': [1_150, 5],
-  'villa_b.glb': [640, 8],
-  'townhouse_b.glb': [780, 9],
+  'villa_b.glb': [700, 8],
+  'townhouse_b.glb': [910, 9],
 };
 for (const [model039, [triangleCap039, expectedParts039]] of Object.entries(modelBudgets039)) {
   const modelBytes039 = await readFile(`src/assets/models/props/${model039}`);
@@ -1436,7 +1436,7 @@ for (const [model039, [triangleCap039, expectedParts039]] of Object.entries(mode
 // become outward panels; the watchtower gains its guard railing, the
 // port crane leg cross-bracing and a cab window band, and the ATC
 // base a window band.  Greenhouse glass and crop rows stay solid.
-for (const marker of ['panel("hangar_door_rail"', 'panel("turbine_louver"', 'segments=20, ring_count=12', 'watch_rail_top', 'crane_brace_a', 'panel("barn_win"', 'atc_base_windows', 'range(-21, 22, 7)', 'sphere("tank_roof"']) {
+for (const marker of ['panel("hangar_door_rail"', 'panel("turbine_louver"', 'segments=20, ring_count=12', 'watch_rail_top', 'crane_brace_a', 'win_recess_0312("barn_win"', 'atc_base_windows', 'range(-21, 22, 7)', 'sphere("tank_roof"']) {
   assert(blenderScript.includes(marker), `0.3.10 Blender marker is missing: ${marker}`);
 }
 const modelBudgets0310 = {
@@ -1451,10 +1451,10 @@ const modelBudgets0310 = {
   'greenhouse.glb': [730, 5],
   'chimney.glb': [410, 3],
   'atc_tower.glb': [440, 6],
-  'hangar_large.glb': [240, 5],
-  'hangar_small.glb': [240, 5],
+  'hangar_large.glb': [330, 5],
+  'hangar_small.glb': [330, 5],
   'port_crane.glb': [400, 7],
-  'barn.glb': [240, 5],
+  'barn.glb': [330, 5],
   'watchtower.glb': [380, 4],
   'silo.glb': [200, 3],
 };
@@ -1605,6 +1605,49 @@ for (const [tex0313, minBytes0313] of [['user_brushed_metal_seamless.jpg', 50_00
   }
   assert(lowParts0313 === 7 && lowTris0313 <= 540, `0.3.13 office_tower_low budget blown: ${lowTris0313} tris / ${lowParts0313} parts`);
 }
+
+// 0.3.14: TZ stage 5 (model part) - lived-in residential detail.
+// Mass housing was clean to the point of sterility: no services, no
+// street-level clutter.  villa_b gains a tilted garage-roof solar
+// array and two AC outdoor units; townhouse_b gains wheelie bins at
+// the front wall and a side-wall AC unit per home.  Realism-pass
+// leftovers close in the same pass: barn flat window panel pairs
+// become recessed openings, hangar sliding doors get a portal
+// surround and their side glazing gets head/sill rails, container
+// plain rear ends get corrugation ribs, and the NPP turbine-hall
+// ribbon glazing gets head/sill rails.  Street furniture (lamp,
+// bench, signal) was render-inspected and needs no geometry.  All
+// detail reuses each model's existing materials, so merged parts
+// and the detail-node budget stay frozen; worst-frame triangles
+// stay under the 7.0M discipline line (6,990,138 audited).
+for (const marker of ['villab_solar0314', 'villab_ac0314', 'townb_bin0314', 'townb_ac0314', 'hangar_door_post0314', 'hangar_glass_rail0314', 'cont_rear_rib0314', 'turbine_ribbon_rail0314']) {
+  assert(blenderScript.includes(marker), `0.3.14 Blender marker is missing: ${marker}`);
+}
+{
+  const townBytes0314 = await readFile('src/assets/models/props/townhouse_b.glb');
+  const townJson0314 = parseGlbJson(townBytes0314);
+  let townTris0314 = 0;
+  let townParts0314 = 0;
+  for (const mesh0314 of townJson0314.meshes ?? []) {
+    for (const prim0314 of mesh0314.primitives ?? []) {
+      townParts0314 += 1;
+      const count0314 = prim0314.indices !== undefined
+        ? townJson0314.accessors[prim0314.indices].count
+        : townJson0314.accessors[prim0314.attributes.POSITION].count;
+      const mode0314 = prim0314.mode ?? 4;
+      townTris0314 += mode0314 === 4 ? Math.floor(count0314 / 3) : (mode0314 === 5 || mode0314 === 6 ? Math.max(count0314 - 2, 0) : 0);
+    }
+  }
+  assert(townParts0314 === 9 && townTris0314 <= 910, `0.3.14 townhouse_b budget blown: ${townTris0314} tris / ${townParts0314} parts`);
+}
+// 0.3.14 world-data part (TZ stage 5): courtyard landscaping is
+// baked into the committed world JSON by generate_richtown7_world.py
+// (foundation hedges, side-yard oaks, accent/pool palms per house).
+// The entries only ever append to the plant arrays, so every
+// pre-0.3.14 placement stays byte-identical.
+assert(data.bushes.length >= 2000, '0.3.14 courtyard hedge bushes must ship in the world data');
+assert(data.trees.length >= 1050, '0.3.14 courtyard yard oaks must ship in the world data');
+assert(data.palms.length >= 1150, '0.3.14 courtyard/pool palms must ship in the world data');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

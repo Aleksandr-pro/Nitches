@@ -1273,6 +1273,58 @@ for _cz in (-850.0, 850.0):
         bz = _cz + _off
         benches.append({"x": bx, "y": round(ground(bx, bz), 3), "z": float(bz), "rotY": -math.pi / 2.0})
 
+# 0.3.14 (TZ stage 5, world-data part): residential courtyard
+# landscaping.  Houses sat on bare ground between the runtime corner
+# bushes; every rt-villa now gets a foundation hedge along one long
+# side wall, a chance of a side-yard oak and an accent palm, and
+# pools gain side palms.  All entries feed the existing plants.glb
+# MultiMesh pipelines, so draw calls do not grow; this block runs
+# after every other scatter consumer so the seeded RNG stream (and
+# therefore every pre-0.3.14 placement) stays byte-identical.
+def _yard_point0314(b, lx, lz):
+    th = b["rotY"]
+    c = math.cos(th)
+    s = math.sin(th)
+    return b["x"] + lx * c + lz * s, b["z"] + (-lx * s + lz * c)
+
+
+yard_bushes0314 = 0
+yard_trees0314 = 0
+for b in buildings:
+    if b["kind"] != "rt-villa":
+        continue
+    w = float(b["w"])
+    d = float(b["d"])
+    side = 1.0 if RNG.random() < 0.5 else -1.0
+    if RNG.random() < 0.82:
+        lz = -d * 0.5 + 2.0
+        while lz <= d * 0.5 - 1.4:
+            if RNG.random() > 0.18:
+                hx, hz = _yard_point0314(b, side * (w * 0.5 + 1.5), lz + RNG.uniform(-0.5, 0.5))
+                if (clear_of_roads(hx, hz, 2.1) and ground(hx, hz) > 0.35
+                        and abs(hz - 1600.0) > 60.0
+                        and spot_free(hx, hz, 1.0, b["x"], b["z"])):
+                    bushes.append({"x": round(hx, 2), "y": round(ground(hx, hz), 3), "z": round(hz, 2),
+                                   "rotY": round(RNG.uniform(0.0, math.tau), 3),
+                                   "s": round(RNG.uniform(0.8, 1.05), 3),
+                                   "tint": round(RNG.uniform(0.85, 1.15), 3)})
+                    yard_bushes0314 += 1
+            lz += 5.0
+    if RNG.random() < 0.26:
+        tx, tz = _yard_point0314(b, -side * (w * 0.5 + 6.5), RNG.uniform(-d * 0.25, d * 0.25))
+        if spot_free(tx, tz, 2.6, b["x"], b["z"]):
+            _nt = len(trees)
+            add_tree(tx, tz)
+            yard_trees0314 += len(trees) - _nt
+    if RNG.random() < 0.10:
+        gx, gz = _yard_point0314(b, side * (w * 0.5 + 5.2), (1.0 if RNG.random() < 0.5 else -1.0) * d * 0.30)
+        if spot_free(gx, gz, 2.2, b["x"], b["z"]):
+            add_palm(gx, gz)
+for _pool in pools:
+    if RNG.random() < 0.30:
+        add_palm(_pool["x"] + _pool["w"] * 0.5 + 3.0, _pool["z"] + RNG.uniform(-2.0, 2.0))
+print(f"Courtyards 0.3.14: hedge_bushes={yard_bushes0314} yard_trees={yard_trees0314}")
+
 print(f"Scatter: palms={len(palms)} trees={len(trees)} bushes={len(bushes)} lamps={len(lamps)} benches={len(benches)} pools={len(pools)}")
 
 # --------------------------------------------------------------------------
