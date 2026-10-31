@@ -1,6 +1,6 @@
 props_out/afv.glb: meshes=4 tris=528 size=4.08x5.77x10.28m minY=0.03 mats=CityArmyGreen,RoofDark,PropsMetal,LampGlow
 props_out/airliner.glb: meshes=6 tris=612 size=38.41x12.17x45.00m minY=0.02 mats=CityWhitePaint,WindowGlassDark,CityAccentBlue,PropsMetal,WindowFrame,RoofDark
-props_out/airport_terminal.glb: meshes=5 tris=1078 size=386.00x26.25x126.00m minY=0.00 mats=FacadeMain,FacadeGlass,CityAccentBlue,TowerMetal,RoofDark
+props_out/airport_terminal.glb: meshes=5 tris=1138 size=386.00x26.25x126.00m minY=0.00 mats=FacadeMain,FacadeGlass,TowerMetal,CityAccentBlue,RoofDark
 props_out/atc_tower.glb: meshes=6 tris=400 size=15.00x53.70x15.25m minY=0.00 mats=FacadeAccent,WindowFrame,ConcreteLight,PropsMetal,FacadeGlass,CityAccentRed
 props_out/barn.glb: meshes=5 tris=210 size=31.60x13.20x18.87m minY=0.00 mats=CityBarnRed,RoofDark,CityWhitePaint,WindowGlassDark,PropsMetal
 props_out/bus_shelter.glb: meshes=6 tris=3604 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,SolarCell,PropsGlass,LampGlow,PropsWood
@@ -24,9 +24,9 @@ props_out/midrise_a.glb: meshes=8 tris=1740 size=34.60x25.70x30.04m minY=0.00 ma
 props_out/midrise_b.glb: meshes=8 tris=2352 size=30.60x35.00x28.04m minY=0.00 mats=HeroStone,HeroPlaster,FacadeGlass,WindowFrame,PropsMetal,HeroTrim,WindowGlassDark,LampGlow
 props_out/mosque.glb: meshes=12 tris=31784 size=38.40x30.00x36.00m minY=0.00 mats=MosqueGranite,MosqueLimestone,MosqueTile,MosqueLight,MosqueStone,MosqueBrass,WindowFrame,MosqueInterior,MosqueGlass,MosqueWood,MosqueDome,RoofDark
 props_out/museum.glb: meshes=16 tris=31260 size=54.00x19.01x38.00m minY=0.00 mats=MuseumGranite,MuseumTravertine,MuseumBronze,MuseumCore,MuseumInterior,MuseumGlass,MuseumWhite,MuseumBannerTeal,MuseumBannerOchre,WindowFrame,MuseumLight,RoofDark,MuseumWater,VillaHedge,MuseumStonePale,MuseumStone
-props_out/office_tower_high.glb: meshes=8 tris=600 size=39.70x105.90x43.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim,CityAccentRed
-props_out/office_tower_low.glb: meshes=7 tris=404 size=37.70x42.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
-props_out/office_tower_mid.glb: meshes=7 tris=488 size=37.70x68.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
+props_out/office_tower_high.glb: meshes=8 tris=792 size=39.70x105.90x43.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim,CityAccentRed
+props_out/office_tower_low.glb: meshes=7 tris=500 size=37.70x42.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
+props_out/office_tower_mid.glb: meshes=7 tris=680 size=37.70x68.05x41.35m minY=0.00 mats=TowerStone,RoofDark,FacadeGlass,TowerMetal,TowerGlass,TowerSpandrel,TowerTrim
 props_out/opera_house.glb: meshes=18 tris=43952 size=52.00x22.00x56.00m minY=-0.00 mats=VillaPavement,OperaGranite,VillaLimestone,OperaLight,OperaWater,OperaBronze,OperaStone,OperaInterior,WindowFrame,RoofDark,PropsMetal,OperaWood,OperaGlass,OperaCurtain,OperaShell,VillaMulch,VillaHedge,VillaLawn
 props_out/ornamental_shrub.glb: meshes=3 tris=5260 size=0.91x1.06x1.01m minY=0.01 mats=ShrubBranch,OrnamentalLeaf,ShrubBerry
 props_out/palm_date.glb: meshes=6 tris=17107 size=8.29x8.72x8.54m minY=-0.01 mats=PalmTrunk,PalmCrown,PalmLeaf,PalmLeafDry,PalmRachis,PalmFruit
@@ -36,8 +36,8 @@ props_out/park_pergola.glb: meshes=3 tris=3000 size=10.03x3.84x11.50m minY=0.00 
 props_out/port_crane.glb: meshes=7 tris=374 size=26.00x56.82x57.33m minY=0.00 mats=RoofDark,CitySignYellow,PropsMetal,FacadeGlass,WindowFrame,CityAccentRed,CityAccentBlue
 props_out/radar_station.glb: meshes=6 tris=510 size=25.30x18.00x18.00m minY=0.00 mats=ConcreteLight,CityWhitePaint,FacadeMain,RoofDark,WindowFrame,PropsMetal
 props_out/reactor.glb: meshes=6 tris=786 size=66.27x41.50x46.50m minY=0.00 mats=ConcreteLight,PropsMetal,CityWhitePaint,FacadeAccent,RoofDark,WindowGlassDark
-props_out/school.glb: meshes=11 tris=1466 size=80.00x14.15x90.00m minY=0.00 mats=TownStone,TownPlaster,RoofDark,WindowGlassDark,TownTrim,TownRoof,TownDoorAccent,PropsMetal,CityAccentRed,CityFieldGreen,CityWhitePaint
-props_out/shopping_mall.glb: meshes=9 tris=2112 size=230.00x18.00x130.00m minY=0.00 mats=ConcreteLight,FacadeMain,FacadeGlass,PropsMetal,FacadeAccent,LampGlow,CityAccentBlue,CityAccentRed,RoofDark
+props_out/school.glb: meshes=11 tris=1682 size=80.00x14.15x90.00m minY=0.00 mats=TownStone,TownPlaster,RoofDark,WindowGlassDark,TownTrim,TownRoof,TownDoorAccent,PropsMetal,CityAccentRed,CityFieldGreen,CityWhitePaint
+props_out/shopping_mall.glb: meshes=9 tris=2304 size=230.00x18.00x130.00m minY=0.00 mats=ConcreteLight,FacadeMain,FacadeGlass,PropsMetal,FacadeAccent,LampGlow,CityAccentBlue,CityAccentRed,RoofDark
 props_out/silo.glb: meshes=3 tris=172 size=13.00x18.50x13.60m minY=0.00 mats=CityWhitePaint,PropsMetal,ConcreteLight
 props_out/stadium.glb: meshes=7 tris=2296 size=310.60x59.30x264.60m minY=0.00 mats=ConcreteLight,CityAccentRed,PropsMetal,WindowFrame,CityFieldGreen,CityWhitePaint,LampGlow
 props_out/storage_tank.glb: meshes=4 tris=564 size=23.85x14.45x23.40m minY=0.00 mats=ConcreteLight,CityWhitePaint,PropsMetal,CityAccentRed
