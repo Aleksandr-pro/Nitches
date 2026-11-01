@@ -90,7 +90,7 @@ func _draw() -> void:
 	draw_circle(centre, base_radius, Color(0.006, 0.014, 0.028, 0.44))
 	draw_arc(centre, base_radius, 0.0, TAU, 56, Color(1.0, 0.64, 0.16, 0.5), 3.0, true)
 	# Cardinal ticks keep the stick readable at a glance.
-	for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+	for direction: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		var tick_at := centre + direction * base_radius * 0.78
 		draw_circle(tick_at, 3.0, Color(1.0, 1.0, 1.0, 0.28))
 	var knob_radius := base_radius * 0.42
