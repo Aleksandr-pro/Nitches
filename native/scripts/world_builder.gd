@@ -8358,6 +8358,7 @@ func _build_landmarks() -> void:
 	_enhancement_stats["rt7_stage34_batches_0311"] = 8
 	_build_rt7_stage6_0315(root)
 	_build_rt7_stage7_0316(root)
+	_build_rt7_stage8_0317(root)
 
 
 ## 0.3.15 TZ stage 6: canal quay walls with mooring bollards and the
@@ -8365,6 +8366,207 @@ func _build_landmarks() -> void:
 ## batches on top of the landmark pass (quay concrete, bollard metal,
 ## soil, meadow, crop rows); the moored barges/cranes/silos of the
 ## stage ride the landmark model batches above.
+func _build_rt7_stage8_0317(root: Node3D) -> void:
+	if not _is_rt7:
+		return
+	# 0.3.17 (TZ stage 8, rescoped by the user: NO traffic of any
+	# kind - the 0.2.5 "player vehicle only" rule stands).  This
+	# stage is street furniture + lighting only, all derived from
+	# existing world data at build time: lamp glow cones/pools,
+	# bus shelters on the avenues, litter bins by the benches and
+	# beach umbrellas/sunbeds.  Runtime-only - the committed world
+	# JSON is untouched.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 80317
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = Vector3.ONE
+	var cyl_mesh := CylinderMesh.new()
+	cyl_mesh.top_radius = 0.5
+	cyl_mesh.bottom_radius = 0.5
+	cyl_mesh.height = 1.0
+	cyl_mesh.radial_segments = 10
+
+	# --- Street-light glow: additive cones + ground pools -----------------
+	# The double-head lamp GLB has emissive panels at local z=+-1.85,
+	# y=6.31 (measured from the LampGlow mesh bounds).  Two fake
+	# volumetric cones and light pools per installed lamp make the
+	# sunset/night modes read as lit streets for ~zero GPU cost: one
+	# unshaded additive material, chunked MultiMesh, 200 m range.
+	var glow_mat := StandardMaterial3D.new()
+	glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow_mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	glow_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	glow_mat.albedo_color = Color(1.0, 0.72, 0.42, 0.060)
+	var pool_mat := glow_mat.duplicate() as StandardMaterial3D
+	pool_mat.albedo_color = Color(1.0, 0.72, 0.42, 0.085)
+	var cone_mesh := CylinderMesh.new()
+	cone_mesh.top_radius = 0.30
+	cone_mesh.bottom_radius = 3.05
+	cone_mesh.height = 6.05
+	cone_mesh.radial_segments = 12
+	var pool_mesh := CylinderMesh.new()
+	pool_mesh.top_radius = 3.0
+	pool_mesh.bottom_radius = 3.0
+	pool_mesh.height = 0.04
+	pool_mesh.radial_segments = 12
+	var cone_t: Array = []
+	var pool_t: Array = []
+	for lamp_variant in data.get("lamps", []):
+		var lamp: Dictionary = lamp_variant
+		var lpos := _item_position(lamp)
+		if not _is_pole_clear_of_road(lpos, 0.45):
+			continue
+		var lyaw := _f(lamp, "rotY")
+		var zaxis := Vector3(sin(lyaw), 0.0, cos(lyaw))
+		for hi in 2:
+			var s_off: float = -1.85 if hi == 0 else 1.85
+			var head: Vector3 = lpos + zaxis * s_off
+			cone_t.append(make_transform(Vector3(head.x, lpos.y + 3.28, head.z), 0.0, Vector3.ONE))
+			pool_t.append(make_transform(Vector3(head.x, lpos.y + 0.07, head.z), 0.0, Vector3.ONE))
+	# Drift-arena floodlights (stage 7) get the same treatment.
+	var dc := Vector2(2670.0, -250.0)
+	for sx_i in 2:
+		for sz_i in 2:
+			var fsx: float = -1.0 if sx_i == 0 else 1.0
+			var fsz: float = -1.0 if sz_i == 0 else 1.0
+			var fx: float = dc.x + fsx * 97.6
+			var fz: float = dc.y + fsz * 97.6
+			cone_t.append(make_transform(Vector3(fx, height_at(fx, fz) + 5.6, fz), 0.0, Vector3(1.9, 1.82, 1.9)))
+	_add_multimesh(root, cone_mesh, glow_mat, cone_t, "Rt7LampGlow0317", false, -1.0, 200.0, 240.0)
+	_add_multimesh(root, pool_mesh, pool_mat, pool_t, "Rt7LampPools0317", false, -1.0, 200.0, 240.0)
+
+	# --- Bus shelters along the avenues -----------------------------------
+	# Derived from the road network: mid-block spots on 50-60 km/h
+	# streets, clear of every carriageway, facing the road.
+	var shelter_candidates: Array = []
+	for road_variant in data.get("roads", []):
+		var road: Dictionary = road_variant
+		var road_id := String(road.get("id", ""))
+		if road_id.contains("mil") or road_id.contains("port") or road_id.contains("npp") or road_id.contains("air"):
+			continue
+		var width_m: float = float(road.get("widthM", 10.0))
+		var speed_kmh: float = float(road.get("speedLimitKmh", 50.0))
+		if width_m < 12.0 or width_m > 18.0 or speed_kmh < 50.0 or speed_kmh > 60.0:
+			continue
+		var samples: Array = road.get("samples", [])
+		if samples.size() < 6:
+			continue
+		var pts: Array[Vector3] = []
+		for sample_variant in samples:
+			pts.append(_sample_point(sample_variant))
+		var total_len: float = 0.0
+		for i in range(1, pts.size()):
+			total_len += pts[i].distance_to(pts[i - 1])
+		if total_len < 160.0:
+			continue
+		var target: float = total_len * 0.55
+		var acc: float = 0.0
+		var mid_pos := pts[pts.size() / 2]
+		var mid_dir := Vector3.RIGHT
+		for i in range(1, pts.size()):
+			var seg: float = pts[i].distance_to(pts[i - 1])
+			if acc + seg >= target:
+				mid_pos = pts[i - 1].lerp(pts[i], (target - acc) / maxf(seg, 0.001))
+				mid_dir = pts[i] - pts[i - 1]
+				break
+			acc += seg
+		mid_dir.y = 0.0
+		if mid_dir.length_squared() < 0.0001:
+			continue
+		shelter_candidates.append({"pos": mid_pos, "dir": mid_dir.normalized(), "width": width_m})
+	var shelter_t: Array = []
+	var shelters_placed := 0
+	if not shelter_candidates.is_empty():
+		var stride: float = maxf(float(shelter_candidates.size()) / 30.0, 1.0)
+		var pick: float = 0.0
+		while shelters_placed < 30 and int(pick) < shelter_candidates.size():
+			var cand: Dictionary = shelter_candidates[int(pick)]
+			pick += stride
+			var cpos: Vector3 = cand["pos"]
+			var cdir: Vector3 = cand["dir"]
+			var sign_f: float = 1.0 if shelters_placed % 2 == 0 else -1.0
+			var side3 := Vector3(-cdir.z, 0.0, cdir.x) * sign_f
+			var spos: Vector3 = cpos + side3 * (float(cand["width"]) * 0.5 + 2.7)
+			spos.y = height_at(spos.x, spos.z)
+			if spos.y < 1.0:
+				continue
+			if not _is_pole_clear_of_road(spos, 0.5):
+				continue
+			var to_road := cpos - spos
+			to_road.y = 0.0
+			to_road = to_road.normalized()
+			var syaw: float = atan2(to_road.x, to_road.z)
+			shelter_t.append(make_transform(spos, syaw))
+			_add_box_collider(spos + Vector3(0.0, 1.3, 0.0), Vector3(5.5, 2.6, 2.0), syaw)
+			shelters_placed += 1
+	if not shelter_t.is_empty():
+		_add_batched_model(root, "res://assets/props/bus_shelter.glb", shelter_t, "Rt7BusShelters0317")
+
+	# --- Litter bins next to benches ---------------------------------------
+	var bin_mat := _material("rt7_bin0317", "", "", Color(0.16, 0.28, 0.20), 0.8)
+	var bin_lid_mat := _material("rt7_bin_lid0317", "", "", Color(0.09, 0.10, 0.11), 0.9)
+	var bin_t: Array = []
+	var bin_lid_t: Array = []
+	for bench_variant in data.get("benches", []):
+		var bench: Dictionary = bench_variant
+		var bpos := _item_position(bench)
+		var byaw := _f(bench, "rotY")
+		var bin_pos: Vector3 = bpos + Basis(Vector3.UP, byaw) * Vector3(1.45, 0.0, 0.1)
+		bin_pos.y = height_at(bin_pos.x, bin_pos.z)
+		bin_t.append(make_transform(bin_pos + Vector3(0.0, 0.39, 0.0), byaw, Vector3(0.62, 0.78, 0.62)))
+		bin_lid_t.append(make_transform(bin_pos + Vector3(0.0, 0.81, 0.0), byaw, Vector3(0.66, 0.07, 0.66)))
+		_add_cylinder_collider(bin_pos + Vector3(0.0, 0.39, 0.0), 0.32, 0.78)
+	_add_multimesh(root, cyl_mesh, bin_mat, bin_t, "Rt7Bins0317", true, -1.0, 150.0, 260.0)
+	_add_multimesh(root, cyl_mesh, bin_lid_mat, bin_lid_t, "Rt7BinLids0317", true, -1.0, 150.0, 260.0)
+
+	# --- Beach umbrellas and sunbeds (dry-sand strip) ----------------------
+	var canopy_mesh := CylinderMesh.new()
+	canopy_mesh.top_radius = 0.06
+	canopy_mesh.bottom_radius = 1.45
+	canopy_mesh.height = 0.5
+	canopy_mesh.radial_segments = 10
+	var canopy_mats: Array = [
+		_material("rt7_canopy_a0317", "", "", Color(0.92, 0.35, 0.25), 0.85),
+		_material("rt7_canopy_b0317", "", "", Color(0.95, 0.94, 0.90), 0.85),
+		_material("rt7_canopy_c0317", "", "", Color(0.15, 0.55, 0.55), 0.85),
+	]
+	var beach_white := _material("rt7_beach_white0317", "", "", Color(0.92, 0.92, 0.90), 0.7)
+	var sunbed_mat := _material("rt7_sunbed0317", "", "", Color(0.55, 0.70, 0.85), 0.8)
+	var umbrella_pole_t: Array = []
+	var canopy_t: Array = [[], [], []]
+	var sunbed_t: Array = []
+	var beach_z: float = -3180.0
+	var spot_i := 0
+	while beach_z < 3180.0:
+		beach_z += rng.randf_range(42.0, 68.0)
+		spot_i += 1
+		if beach_z > 1420.0 and beach_z < 1780.0:
+			continue
+		var row_x: float = -2735.0 if spot_i % 2 == 0 else -2678.0
+		var bx: float = row_x + rng.randf_range(-14.0, 14.0)
+		var by: float = height_at(bx, beach_z)
+		if by < 0.35 or by > 6.0:
+			continue
+		if rng.randf() < 0.72:
+			umbrella_pole_t.append(make_transform(Vector3(bx, by + 1.12, beach_z), 0.0, Vector3(0.11, 2.25, 0.11)))
+			(canopy_t[spot_i % 3] as Array).append(make_transform(Vector3(bx, by + 2.18, beach_z), rng.randf_range(0.0, TAU), Vector3.ONE))
+		var bed_pos := Vector3(bx + rng.randf_range(-2.5, 2.5), 0.0, beach_z + rng.randf_range(-2.5, 2.5))
+		bed_pos.y = height_at(bed_pos.x, bed_pos.z) + 0.14
+		sunbed_t.append(make_transform(bed_pos, PI * 0.5 + rng.randf_range(-0.35, 0.35), Vector3(0.62, 0.16, 1.75)))
+	_add_multimesh(root, cyl_mesh, beach_white, umbrella_pole_t, "Rt7BeachPoles0317", false, -1.0, 220.0, 300.0)
+	for ci in 3:
+		_add_multimesh(root, canopy_mesh, canopy_mats[ci], canopy_t[ci], "Rt7BeachCanopy0317_%d" % ci, true, -1.0, 220.0, 300.0)
+	_add_multimesh(root, box_mesh, sunbed_mat, sunbed_t, "Rt7Sunbeds0317", true, -1.0, 220.0, 300.0)
+
+	_enhancement_stats["rt7_stage8_glow_cones0317"] = cone_t.size()
+	_enhancement_stats["rt7_stage8_shelters0317"] = shelters_placed
+	_enhancement_stats["rt7_stage8_bins0317"] = bin_t.size()
+	_enhancement_stats["rt7_stage8_umbrellas0317"] = umbrella_pole_t.size()
+	_enhancement_stats["rt7_stage8_sunbeds0317"] = sunbed_t.size()
+
+
 func _rt7_rock_mesh0316() -> ArrayMesh:
 	# One jittered octahedron (32 flat-faceted triangles) shared by all
 	# desert rocks; per-instance scale/rotation does the variation.
