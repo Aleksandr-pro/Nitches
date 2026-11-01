@@ -7504,6 +7504,26 @@ def build_radar_station():
     box("radar_hut_roof", 11.5, 0, 3.8, 9.6, 6.6, 0.5, MATS["RoofDark"])
     panel("radar_hut_door", 11.5, -3.225, 1.5, 1.6, 2.8, MATS["WindowFrame"], "front")
     cyl("radar_mast", 13.5, 1.5, 8, 0.14, 9, MATS["PropsMetal"], vertices=8)
+    # 0.3.21: radome panel seam rings, drum-top walkway with rails,
+    # drum door/slits, hut windows + AC + roof vent, mast crossarms
+    # and a small comms dish (existing materials only).
+    for (seam_r, seam_z) in ((8.80, 9.2), (8.99, 11.5), (8.55, 13.8), (7.45, 15.8)):
+        _ct_lathe("radar_seam0321", [(seam_r, seam_z - 0.07), (seam_r, seam_z + 0.07)], MATS["CityWhitePaint"], segments=26)
+    cyl("radar_walkway0321", 0, 0, 8.06, 5.55, 0.16, MATS["PropsMetal"], vertices=18)
+    _ct_lathe("radar_rail0321", [(5.50, 8.95), (5.50, 9.03)], MATS["PropsMetal"], segments=18)
+    _ct_lathe("radar_rail0321", [(5.50, 8.52), (5.50, 8.58)], MATS["PropsMetal"], segments=18)
+    panel("radar_drum_door0321", 0, -5.07, 1.7, 1.1, 2.7, MATS["WindowFrame"], "front")
+    panel("radar_drum_slit0321", 5.07, 0, 4.6, 0.9, 1.1, MATS["WindowFrame"], "right")
+    panel("radar_drum_slit0321", -5.07, 0, 4.6, 0.9, 1.1, MATS["WindowFrame"], "left")
+    for hut_wx in (9.6, 13.4):
+        win_recess_0312("radar_hut_win0321", hut_wx, -3.0, 2.05, 1.4, 1.2, MATS["WindowFrame"], MATS["PropsMetal"], "front", depth=0.16, frame_w=0.10)
+    box("radar_hut_ac0321", 15.1, -3.28, 1.15, 0.95, 0.4, 0.75, MATS["PropsMetal"])
+    cyl("radar_hut_vent0321", 9.8, 1.2, 4.35, 0.34, 0.55, MATS["PropsMetal"], vertices=8)
+    box("radar_mast_arm0321", 13.5, 1.5, 9.6, 1.7, 0.08, 0.08, MATS["PropsMetal"])
+    box("radar_mast_arm0321", 13.5, 1.5, 11.1, 1.3, 0.08, 0.08, MATS["PropsMetal"])
+    dish = cone("radar_dish0321", 13.5, 0.75, 10.3, 1.15, 0.22, 0.5, MATS["CityWhitePaint"], vertices=14)
+    dish.rotation_euler = (math.radians(112), 0, 0)
+    tube_between("radar_dish_feed0321", (13.5, 0.75, 10.3), (13.5, 0.05, 10.75), 0.045, 0.045, MATS["PropsMetal"], vertices=6)
 
 
 def build_watchtower():
@@ -7533,25 +7553,99 @@ def build_watchtower():
             box("watch_rail_post", post_x, post_y, 10.95, 0.09, 0.09, 0.95, wood)
 
 
+def _caged_ladder_0321(cx, cy, z0, z1, yaw, material):
+    """Vertical caged access ladder: rails, rungs every ~0.55 m,
+    cage hoops and back straps.  Local +Y faces the structure; the
+    whole group is yawed around (cx, cy)."""
+    c = math.cos(yaw)
+    sn = math.sin(yaw)
+
+    def place(lx, ly):
+        return (cx + lx * c - ly * sn, cy + lx * sn + ly * c)
+
+    h = z1 - z0
+    for lx in (-0.26, 0.26):
+        px, py = place(lx, 0.0)
+        rbox("ladder_rail0321", px, py, z0 + h / 2.0, 0.09, 0.09, h, material, rotation=(0, 0, yaw))
+    rung_z = z0 + 0.35
+    while rung_z < z1 - 0.15:
+        px, py = place(0.0, 0.0)
+        rbox("ladder_rung0321", px, py, rung_z, 0.52, 0.07, 0.07, material, rotation=(0, 0, yaw))
+        rung_z += 0.55
+    for lx in (-0.45, 0.45):
+        px, py = place(lx, -0.38)
+        rbox("ladder_strap0321", px, py, z0 + h / 2.0, 0.07, 0.07, h * 0.82, material, rotation=(0, 0, yaw))
+    hoop_z = z0 + h * 0.22
+    while hoop_z < z1 - 0.3:
+        px, py = place(0.0, -0.19)
+        rbox("ladder_hoop0321", px, py, hoop_z, 0.97, 0.44, 0.07, material, rotation=(0, 0, yaw))
+        hoop_z += 1.55
+
+
+# 0.3.21 rebuild (was a plain 564-triangle cylinder + squashed sphere):
+# shell course rings, rim ring with roof railing and gauge platform,
+# caged ladder, inlet elbow, base manifold with valve wheels.  The
+# 23.85 x 23.40 x 14.45 m envelope and material set are unchanged.
 def build_storage_tank():
     white = MATS["CityWhitePaint"]
     metal = MATS["PropsMetal"]
-    cyl("tank_base", 0, 0, 0.4, 11.7, 0.8, MATS["ConcreteLight"], vertices=20)
-    cyl("tank_shell", 0, 0, 6.3, 11, 11, white, vertices=20)
-    sphere("tank_roof", 0, 0, 11.6, 22.4, 22.4, 5.2, metal, segments=18, ring_count=10)
-    cyl("tank_hatch", 0, 0, 14.0, 1.6, 0.9, metal, vertices=10)
-    cyl("tank_pipe", 11.3, 0, 5.5, 0.5, 11, metal, vertices=8)
-    box("tank_valve", 11.6, 0, 1.2, 1.1, 1.1, 1.4, MATS["CityAccentRed"])
-    box("tank_ladder", 0, -11.15, 5.8, 0.9, 0.25, 11, metal)
+    red = MATS["CityAccentRed"]
+    cyl("tank_base", 0, 0, 0.4, 11.7, 0.8, MATS["ConcreteLight"], vertices=24)
+    cyl("tank_shell", 0, 0, 6.3, 11, 11, white, vertices=22)
+    for course_z in (2.9, 5.1, 7.3, 9.5, 11.35):
+        cyl("tank_course0321", 0, 0, course_z, 11.07, 0.22, white, vertices=22)
+    sphere("tank_roof", 0, 0, 11.6, 22.4, 22.4, 5.2, metal, segments=20, ring_count=10)
+    _ct_lathe("tank_rim0321", [(11.16, 11.45), (11.16, 11.98)], metal, segments=20)
+    cyl("tank_hatch", 0, 0, 14.0, 1.6, 0.9, metal, vertices=12)
+    cyl("tank_gauge_platform0321", 0, 0, 13.62, 2.3, 0.16, metal, vertices=16)
+    for post_i in range(18):
+        pa = 2.0 * math.pi * post_i / 18.0
+        rbox("tank_rail_post0321", math.cos(pa) * 10.88, math.sin(pa) * 10.88, 12.62, 0.09, 0.09, 0.95, metal, rotation=(0, 0, pa))
+    _ct_lathe("tank_rail_top0321", [(10.90, 13.06), (10.90, 13.14)], metal, segments=20)
+    _ct_lathe("tank_rail_mid0321", [(10.90, 12.58), (10.90, 12.64)], metal, segments=20)
+    _caged_ladder_0321(0.0, -11.16, 0.8, 12.35, 0.0, metal)
+    cyl("tank_pipe", 11.3, 0, 5.5, 0.5, 11, metal, vertices=10)
+    tube_between("tank_inlet0321", (11.3, 0, 10.6), (9.4, 0, 12.35), 0.42, 0.42, metal, vertices=10)
+    cyl("tank_manifold0321", 11.15, -2.6, 1.15, 0.34, 5.2, metal, vertices=10, rotation=(math.radians(90), 0, 0))
+    box("tank_valve", 11.6, 0, 1.2, 1.1, 1.1, 1.4, red)
+    for wheel_y in (-4.3, -1.1):
+        cyl("tank_valve_wheel0321", 11.62, wheel_y, 1.75, 0.34, 0.09, red, vertices=12, rotation=(0, math.radians(90), 0))
+        cyl("tank_valve_stem0321", 11.45, wheel_y, 1.45, 0.09, 0.5, metal, vertices=8)
+    box("tank_gauge_board0321", 2.2, -10.82, 6.4, 0.7, 0.28, 9.6, white)
+    box("tank_nameplate0321", -2.2, -10.86, 3.1, 1.7, 0.24, 1.1, metal)
 
 
+# 0.3.21 rebuild (was a 172-triangle tube + cone): corrugated shell
+# courses on a lathe, ringed conical roof, caged ladder, diagonal
+# auger fill pipe and a proper discharge chute.  The 13.00 x 13.60 x
+# 18.50 m envelope and 3-material set are unchanged.
 def build_silo():
     metal = MATS["PropsMetal"]
-    cyl("silo_body", 0, 0, 7, 6, 14, MATS["CityWhitePaint"], vertices=12)
-    cone("silo_roof", 0, 0, 15.7, 6.45, 0.7, 3.4, metal, vertices=12)
-    cyl("silo_pipe", 0, 0, 17.9, 0.55, 1.2, metal, vertices=8)
+    white = MATS["CityWhitePaint"]
+    cyl("silo_base", 0, 0, 0.35, 6.5, 0.7, MATS["ConcreteLight"], vertices=20)
+    corr_profile = [(6.02, 0.7)]
+    cz = 0.7
+    while cz < 13.2:
+        corr_profile.append((6.17, cz + 0.40))
+        corr_profile.append((6.17, cz + 0.84))
+        corr_profile.append((6.02, cz + 1.36))
+        cz += 1.36
+    corr_profile.append((6.02, 14.05))
+    _ct_lathe("silo_body", corr_profile, white, segments=16)
+    cone("silo_roof", 0, 0, 15.7, 6.45, 0.7, 3.4, metal, vertices=16)
+    for (ring_r, ring_z) in ((5.52, 14.85), (3.72, 15.95), (1.92, 17.05)):
+        _ct_lathe("silo_roof_ring0321", [(ring_r, ring_z - 0.09), (ring_r, ring_z + 0.09)], metal, segments=16)
+    cyl("silo_pipe", 0, 0, 17.9, 0.55, 1.2, metal, vertices=10)
+    cone("silo_vent_cap0321", 0, 0, 18.32, 0.72, 0.58, 0.36, metal, vertices=10)
+    ladder_az = math.radians(140.0)
+    _caged_ladder_0321(math.cos(ladder_az) * 6.22, math.sin(ladder_az) * 6.22, 0.7, 14.1, ladder_az + math.pi / 2.0, metal)
+    tube_between("silo_auger0321", (4.35, -3.35, 0.55), (1.15, -0.85, 13.55), 0.28, 0.28, metal, vertices=10)
+    tube_between("silo_auger_leg0321", (3.35, -2.55, 4.4), (4.9, -3.9, 0.1), 0.09, 0.09, metal, vertices=6)
     box("silo_chute", 0, -6.5, 5, 1.4, 1.2, 9, metal)
-    cyl("silo_base", 0, 0, 0.35, 6.5, 0.7, MATS["ConcreteLight"], vertices=12)
+    rbox("silo_chute_mouth0321", 0, -6.42, 0.95, 1.3, 0.95, 1.1, metal, rotation=(math.radians(24), 0, 0))
+    silo_door_az = math.radians(-55.0)
+    rbox("silo_door0321", math.cos(silo_door_az) * 6.08, math.sin(silo_door_az) * 6.08, 1.75, 1.15, 0.22, 2.9, metal, rotation=(0, 0, silo_door_az + math.pi / 2.0))
+    rbox("silo_door_lintel0321", math.cos(silo_door_az) * 6.16, math.sin(silo_door_az) * 6.16, 3.32, 1.5, 0.35, 0.22, metal, rotation=(0, 0, silo_door_az + math.pi / 2.0))
 
 
 def build_afv():
@@ -7563,7 +7657,9 @@ def build_afv():
     rbox("afv_rear", 0, 3.6, 1.5, 3.3, 1.4, 0.45, green, rotation=(math.radians(-40), 0, 0))
     for sx in (-1.35, 1.35):
         box("afv_track", sx, 0, 0.62, 1.05, 7.7, 1.15, dark)
-        box("afv_skirt", sx * 1.444, 0, 1.25, 0.18, 7.3, 0.75, green)
+        # 0.3.21: segmented side skirts (4 plates with gaps).
+        for skirt_i in range(4):
+            box("afv_skirt", sx * 1.444, -2.74 + skirt_i * 1.83, 1.25, 0.18, 1.68, 0.75, green)
         for wy in (-2.9, -1.45, 0.0, 1.45, 2.9):
             cyl("afv_wheel", sx * 1.274, wy, 0.56, 0.53, 0.3, green, vertices=8, rotation=(0, math.radians(90), 0))
     box("afv_turret", 0, 0.55, 2.6, 2.35, 3.2, 0.95, green)
@@ -7575,6 +7671,35 @@ def build_afv():
     box("afv_stowage", 0, 2.35, 2.45, 2.1, 0.9, 0.7, dark)
     for hx in (-1.15, 1.15):
         box("afv_headlight", hx, -4.15, 1.75, 0.42, 0.2, 0.3, MATS["LampGlow"])
+    # 0.3.21 detail pass: wheel hubs + return rollers, driver hatch
+    # with periscopes, headlight guards, exhaust, rear fuel drums,
+    # cupola ring + gunner sight, smoke launchers, turret basket,
+    # barrel thermal sleeves and a hull tow cable.
+    for sx in (-1.35, 1.35):
+        for wy in (-2.9, -1.45, 0.0, 1.45, 2.9):
+            cyl("afv_hub0321", sx * 1.32, wy, 0.56, 0.21, 0.36, metal, vertices=8, rotation=(0, math.radians(90), 0))
+        for ry in (-1.9, 0.0, 1.9):
+            cyl("afv_roller0321", sx * 1.28, ry, 1.04, 0.16, 0.22, dark, vertices=8, rotation=(0, math.radians(90), 0))
+    box("afv_driver_hatch0321", -0.75, -2.55, 2.18, 0.95, 0.95, 0.12, green)
+    for peri_x in (-1.05, -0.75, -0.45):
+        box("afv_periscope0321", peri_x, -3.08, 2.16, 0.17, 0.13, 0.15, dark)
+    for hx in (-1.15, 1.15):
+        box("afv_light_guard0321", hx, -4.28, 1.98, 0.5, 0.08, 0.08, metal)
+    tube_between("afv_exhaust0321", (1.52, 2.7, 1.95), (1.70, 3.45, 1.62), 0.13, 0.15, metal, vertices=8)
+    for drum_x in (-0.85, 0.85):
+        cyl("afv_drum0321", drum_x, 3.50, 1.82, 0.29, 0.85, dark, vertices=10, rotation=(0, math.radians(90), 0))
+    cyl("afv_cupola0321", -0.55, 0.6, 3.30, 0.63, 0.18, green, vertices=10)
+    box("afv_sight0321", 0.55, -0.72, 3.16, 0.34, 0.5, 0.24, dark)
+    for smoke_sx in (-1.0, 1.0):
+        for smoke_i in (-1, 0, 1):
+            cyl("afv_smoke0321", smoke_sx * 1.02, -1.55 + smoke_i * 0.18, 2.72, 0.085, 0.55, dark, vertices=6,
+                rotation=(math.radians(52), 0, smoke_sx * smoke_i * 0.16))
+    for rail_sx in (-1.02, 1.02):
+        box("afv_basket0321", rail_sx, 2.45, 2.98, 0.07, 1.1, 0.07, metal)
+    box("afv_basket0321", 0, 2.98, 2.98, 2.1, 0.07, 0.07, metal)
+    cyl("afv_sleeve0321", 0, -2.45, 2.72, 0.205, 1.25, green, vertices=8, rotation=(math.radians(90), 0, 0))
+    cyl("afv_sleeve0321", 0, -4.35, 2.72, 0.195, 0.95, green, vertices=8, rotation=(math.radians(90), 0, 0))
+    tube_between("afv_tow_cable0321", (1.74, -2.6, 1.98), (1.74, 1.7, 1.98), 0.05, 0.05, dark, vertices=6)
 
 
 def build_stadium():
@@ -7821,7 +7946,12 @@ def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):
         box("wh_dock_bump", dx, -(width / 2.0 + 0.5), 0.5, 4.6, 0.7, 0.9, MATS["RoofDark"])
     rbox("wh_dock_canopy", 0, -(width / 2.0 + 1.5), 5.6, door_span + 6, 3.0, 0.3, metal, rotation=(math.radians(14), 0, 0))
     box("wh_office", length / 2.0 - 6.0, -(width / 2.0 + 2.2), wall_h * 0.42, 12, 4.6, wall_h * 0.84, MATS["FacadeMain"])
-    box("wh_office_glass", length / 2.0 - 6.0, -(width / 2.0 + 4.65), wall_h * 0.5, 11, 0.35, wall_h * 0.5, MATS["FacadeGlass"])
+    # 0.3.21: recessed office windows + entrance replace the single
+    # glass slab (outer plane stays behind the old slab front).
+    for office_wx in (-3.9, -1.3, 1.3):
+        win_recess_0312("wh_office_win0321", length / 2.0 - 6.0 + office_wx, -(width / 2.0 + 4.5), wall_h * 0.48, 1.9, wall_h * 0.44, MATS["FacadeGlass"], frame, "front", depth=0.20, frame_w=0.13)
+    box("wh_office_door0321", length / 2.0 - 2.1, -(width / 2.0 + 4.58), 1.45, 1.15, 0.18, 2.9, frame)
+    box("wh_office_canopy0321", length / 2.0 - 2.1, -(width / 2.0 + 4.60), 3.05, 2.6, 0.45, 0.16, metal)
     box("wh_end_door", length / 2.0 + 0.22, 0, 2.7, 0.4, 6.4, 5.4, frame)
     box("wh_gutter", 0, -(width / 2.0 + 0.28), wall_h - 0.25, length * 0.98, 0.35, 0.30, metal)
     for downspout_x in (-length * 0.38, 0.0, length * 0.38):
@@ -7837,6 +7967,29 @@ def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):
         box("wh_ridge_cap", 0, 0, wall_h + roof_h + 0.02, length + 1.5, 0.5, 0.16, metal)
     for vx in (-length * 0.3, 0.0, length * 0.3):
         cyl("wh_vent", vx, 0, wall_h + roof_h - 0.3, 0.85, 1.5, metal, vertices=10)
+    # 0.3.21: dock leveler plates + wheel guides, door window rows,
+    # a wall girt shadow line, roof skylight strips with HVAC curbs
+    # and (large shed) two rear dock doors.
+    for i in range(doors):
+        dx = -door_span / 2.0 + (i + 0.5) * (door_span / doors)
+        box("wh_leveler0321", dx, -(width / 2.0 + 0.62), 0.30, 3.2, 0.55, 0.22, MATS["RoofDark"])
+        panel("wh_door_windows0321", dx, -(width / 2.0 + 0.435), 3.85, 3.5, 0.55, MATS["FacadeGlass"], "front")
+        for guide_sx in (-1.0, 1.0):
+            rbox("wh_wheel_guide0321", dx + guide_sx * 1.85, -(width / 2.0 + 1.55), 0.28, 0.28, 2.3, 0.35, metal, rotation=(0, 0, guide_sx * 0.16))
+    for sy in (-1.0, 1.0):
+        box("wh_girt0321", 0, sy * (width / 2.0 + 0.10), wall_h * 0.56, length * 0.98, 0.20, 0.26, metal)
+    roof_ang = math.atan2(roof_h, width / 2.0 + 0.9)
+    for sy in (-1.0, 1.0):
+        sky_y = sy * (width / 2.0 + 0.9) * 0.56
+        sky_z = wall_h + roof_h * 0.44 + 0.10
+        rbox("wh_skylight0321", 0, sky_y, sky_z, length * 0.68, 2.3, 0.14, MATS["FacadeGlass"], rotation=(-sy * roof_ang, 0, 0))
+    for hvac_x in (-length * 0.24, 0.0, length * 0.24):
+        box("wh_hvac0321", hvac_x, 0, wall_h + roof_h - 0.28, 4.4, 2.7, 1.1, metal)
+    if length > 60.0:
+        for back_dx in (-length * 0.16, length * 0.16):
+            box("wh_back_door0321", back_dx, width / 2.0 + 0.22, 2.4, 4.3, 0.4, 4.7, frame)
+            box("wh_back_header0321", back_dx, width / 2.0 + 0.30, 4.95, 4.7, 0.5, 0.4, metal)
+            box("wh_back_bump0321", back_dx, width / 2.0 + 0.5, 0.5, 4.6, 0.7, 0.9, MATS["RoofDark"])
 
 
 def build_warehouse_large():
@@ -8192,6 +8345,27 @@ def build_barn():
     box("barn_cupola", 0, 0, 11.1, 2.2, 2.2, 1.6, white)
     cupola_roof = cone("barn_cupola_roof", 0, 0, 12.5, 1.9, 0.15, 1.4, dark, vertices=4)
     cupola_roof.rotation_euler = (0, 0, math.radians(45))
+    # 0.3.21: board-and-batten siding rhythm on both long walls,
+    # standing roof seams, the sliding-door track with hangers, a
+    # hay hood over the loft door and stall fronts on the lean-to.
+    batten_x = -13.5
+    while batten_x <= 13.51:
+        for sy in (-1.0, 1.0):
+            box("barn_batten0321", batten_x, sy * 7.07, 3.5, 0.30, 0.14, 6.9, red)
+        batten_x += 3.0
+    barn_roof_ang = math.atan2(3.4, 7.9)
+    for sy in (-1.0, 1.0):
+        for seam_f in (0.30, 0.55, 0.80):
+            rbox("barn_roof_seam0321", 0, sy * 7.9 * (1.0 - seam_f), 7.0 + 3.4 * seam_f + 0.07, 30.8, 1.9, 0.09, dark, rotation=(-sy * barn_roof_ang, 0, 0))
+    box("barn_door_track0321", -15.50, 0, 5.45, 0.16, 7.8, 0.22, MATS["PropsMetal"])
+    for hanger_y in (-1.9, 1.9):
+        box("barn_door_hanger0321", -15.50, hanger_y, 5.05, 0.14, 0.30, 0.65, MATS["PropsMetal"])
+    rbox("barn_hay_hood0321", -15.30, 0, 8.95, 0.85, 2.9, 0.13, dark, rotation=(0, 0.35, 0))
+    for stall_x in (-9.2, -5.6, -2.0, 1.6, 5.2):
+        box("barn_stall_post0321", stall_x, 10.18, 1.7, 0.26, 0.16, 3.3, white)
+    box("barn_stall_rail0321", -2.0, 10.18, 2.95, 16.6, 0.16, 0.24, white)
+    for stall_dx in (-7.4, -3.8, -0.2, 3.4):
+        panel("barn_stall_door0321", stall_dx, 10.13, 1.45, 2.5, 2.5, dark, "back")
 
 
 def build_greenhouse():
@@ -8215,12 +8389,29 @@ def build_greenhouse():
         box("gh_end", ex, 0, 2.4, 0.3, 12.6, 3.4, glass)
         box("gh_end_peak", ex, 0, 5.3, 0.3, 8.6, 2.6, glass)
         box("gh_end_frame", ex, 0, 4.4, 0.35, 9.0, 0.5, metal)
-    box("gh_door", -22.1, 0, 1.7, 0.3, 2.4, 3.0, MATS["WindowFrame"])
+    # 0.3.21: framed glass door replaces the slab (same extents).
+    box("gh_door", -22.1, 0, 1.7, 0.22, 2.4, 3.0, MATS["WindowFrame"])
+    panel("gh_door_glass0321", -22.23, 0, 1.95, 1.8, 2.2, glass, "left")
+    box("gh_door_bar0321", -22.21, 0, 1.05, 0.08, 2.0, 0.14, metal)
     box("gh_ridge_vent", 0, 0, 6.05, 40, 1.2, 0.25, metal)
     for fan_x in (-22.12, 22.12):
         box("gh_fan", fan_x, 4.2, 2.6, 0.18, 2.2, 2.2, MATS["WindowFrame"])
     for row_y in (-4.4, -1.5, 1.5, 4.4):
         box("gh_crops", 0, row_y, 1.25, 40, 1.7, 0.95, green)
+    # 0.3.21: end-wall mullion frames with arched peak members,
+    # eaves gutters and six tilted ridge vent flaps.
+    for ex in (-22.02, 22.02):
+        for mull_y in (-4.4, 4.4):
+            box("gh_end_mull0321", ex, mull_y, 2.4, 0.16, 0.2, 3.4, metal)
+        if ex > 0:
+            box("gh_end_mull0321", ex, 0, 2.4, 0.16, 0.2, 3.4, metal)
+        for peak_sy in (-1.0, 1.0):
+            rbox("gh_peak0321", ex, peak_sy * 2.15, 5.1, 0.16, 4.85, 0.2, metal, rotation=(peak_sy * 0.473, 0, 0))
+    for sy in (-1.0, 1.0):
+        box("gh_gutter0321", 0, sy * 6.88, 2.85, 43.4, 0.24, 0.24, metal)
+    for flap_i in range(6):
+        flap_sy = 1.0 if flap_i % 2 == 0 else -1.0
+        rbox("gh_vent_flap0321", -16.25 + flap_i * 6.5, flap_sy * 0.55, 5.92, 5.2, 1.15, 0.07, glass, rotation=(flap_sy * 0.42, 0, 0))
 
 
 def build_barge():
