@@ -7469,6 +7469,11 @@ def build_cooling_tower():
         cy = math.sin(a) * 38.2
         rbox("cooling_column", cx, cy, 4.6, 1.1, 1.1, 7.6, concrete, rotation=(0.42, 0, a))
         rbox("cooling_column_b", cx, cy, 4.6, 1.1, 1.1, 7.6, concrete, rotation=(-0.42, 0, a))
+    # 0.3.24: throat rim band, shell pour seams and basin water.
+    _ct_lathe("cooling_rim0324", [(28.7, 96.3), (29.1, 98.0), (30.4, 98.0), (30.35, 96.0)], concrete, segments=36)
+    for seam_r, seam_z in ((31.08, 36.0), (27.58, 55.0), (26.28, 71.0)):
+        _ct_lathe("cooling_seam0324", [(seam_r, seam_z - 0.09), (seam_r, seam_z + 0.09)], concrete, segments=30)
+    cyl("cooling_water0324", 0, 0, 1.28, 40.5, 0.16, MATS["WindowFrame"], vertices=28)
 
 
 def build_reactor():
@@ -7480,21 +7485,56 @@ def build_reactor():
     cyl("reactor_vent", -15, 9, 35, 1.6, 13, metal, vertices=10)
     box("reactor_aux", 33.5, 0, 6.5, 19, 17, 13, MATS["FacadeAccent"])
     box("reactor_aux_roof", 33.5, 0, 13.5, 20, 18, 0.9, MATS["RoofDark"])
-    panel("reactor_aux_glass", 33.5, -8.85, 8.5, 15, 3.4, MATS["WindowGlassDark"], "front")
+    # 0.3.24: recessed aux window row replaces the flat glass slab.
+    for aux_wx in (26.8, 30.1, 33.4, 36.7, 40.0):
+        win_recess_0312("reactor_aux_win0324", aux_wx, -8.5, 8.6, 2.2, 1.7, MATS["WindowGlassDark"], metal, "front", depth=0.18, frame_w=0.11)
+    panel("reactor_aux_door0324", 25.0, -8.56, 1.5, 1.5, 2.7, metal, "front")
     tube_between("reactor_pipe_a", (19, -3, 19), (26, -3, 12), 1.15, 1.15, metal, vertices=10)
     tube_between("reactor_pipe_b", (19, 4, 15), (26, 4, 9), 0.9, 0.9, metal, vertices=10)
     cyl("reactor_tank_small", 12, -19, 4, 4.5, 8, metal, vertices=12)
+    # 0.3.24: shell pour seams, corbel under the ring beam, dome
+    # meridian seams + apex cap, equipment hatch, aux roof gear,
+    # pipe supports and small-tank fittings (envelope unchanged).
+    for seam_z in (10.0, 18.0, 26.0):
+        _ct_lathe("reactor_seam0324", [(22.07, seam_z - 0.09), (22.07, seam_z + 0.09)], concrete, segments=26)
+    cyl("reactor_corbel0324", 0, 0, 29.1, 22.55, 0.95, concrete, vertices=26)
+    for dome_r, dome_z in ((21.3, 34.0), (18.0, 37.0), (12.0, 39.5)):
+        _ct_lathe("reactor_dome_seam0324", [(dome_r, dome_z - 0.08), (dome_r, dome_z + 0.08)], MATS["CityWhitePaint"], segments=26)
+    cyl("reactor_apex0324", 0, 0, 40.85, 1.5, 0.75, metal, vertices=12)
+    cyl("reactor_hatch_rim0324", 0, -22.0, 4.4, 2.9, 0.4, metal, vertices=14, rotation=(math.pi / 2.0, 0, 0))
+    cyl("reactor_hatch0324", 0, -22.25, 4.4, 2.55, 0.5, metal, vertices=14, rotation=(math.pi / 2.0, 0, 0))
+    for parapet in ((33.5, -8.85, 19.9, 0.3), (33.5, 8.85, 19.9, 0.3), (23.55, 0, 0.3, 17.4), (43.35, 0, 0.3, 17.4)):
+        box("reactor_aux_parapet0324", parapet[0], parapet[1], 14.2, parapet[2], parapet[3], 0.5, MATS["FacadeAccent"])
+    cyl("reactor_aux_vent0324", 29.0, 3.0, 14.9, 0.5, 1.9, metal, vertices=10)
+    cyl("reactor_aux_vent0324", 38.0, -3.0, 14.9, 0.5, 1.9, metal, vertices=10)
+    box("reactor_aux_hatch0324", 33.5, 4.5, 14.15, 2.2, 2.2, 0.4, metal)
+    box("reactor_pipe_post0324", 22.5, -3.0, 7.4, 0.55, 0.55, 14.8, metal)
+    box("reactor_pipe_post0324", 22.5, 4.0, 5.9, 0.55, 0.55, 11.8, metal)
+    cyl("reactor_tank_rim0324", 12, -19, 8.1, 4.3, 0.4, metal, vertices=14)
+    for tank_rail_y in (-19.28, -18.72):
+        box("reactor_tank_ladder0324", 16.68, tank_rail_y, 4.0, 0.08, 0.08, 8.0, metal)
+    for tank_rung in range(7):
+        box("reactor_tank_rung0324", 16.68, -19.0, 0.7 + tank_rung * 1.1, 0.07, 0.56, 0.07, metal)
+    tube_between("reactor_tank_pipe0324", (10.0, -15.2, 1.1), (6.0, -7.0, 1.1), 0.34, 0.34, metal, vertices=8)
 
 
 def build_chimney():
     concrete = MATS["ConcreteLight"]
     cyl("chimney_plinth", 0, 0, 1, 9.5, 2, concrete, vertices=16)
-    cone("chimney_stack", 0, 0, 65, 7.2, 4.0, 130, concrete, vertices=16)
-    for band_z in (78.0, 99.0, 119.0):
-        band_r = 7.2 - 3.2 * (band_z / 130.0)
-        cyl("chimney_band", 0, 0, band_z, band_r * 1.04, 7.5, MATS["CityAccentRed"], vertices=16)
+    # 0.3.24: smoothly tapered lathe shaft (was a straight cone).
+    _ct_lathe("chimney_stack", [(7.2, 0.0), (6.55, 30.0), (5.95, 60.0), (5.4, 90.0), (4.95, 112.0), (4.55, 124.0), (4.35, 128.0), (4.0, 130.0)], concrete, segments=18)
+    for band_z, band_r in ((78.0, 5.62), (99.0, 5.22), (119.0, 4.72)):
+        cyl("chimney_band", 0, 0, band_z, band_r * 1.045, 7.5, MATS["CityAccentRed"], vertices=16)
     cyl("chimney_rim", 0, 0, 129.6, 4.35, 1.4, MATS["WindowFrame"], vertices=16)
-    box("chimney_beacon", 0, 0, 131.0, 0.8, 0.8, 0.8, MATS["CityAccentRed"])
+    cyl("chimney_rod0324", 0, 0, 130.85, 0.07, 1.1, MATS["WindowFrame"], vertices=6)
+    box("chimney_beacon", 0, 0, 131.28, 0.34, 0.34, 0.24, MATS["CityAccentRed"])
+    # 0.3.24: plinth step, shaft door over the plinth roof, flue
+    # duct into the plinth and aviation lights on the top band.
+    cyl("chimney_step0324", 0, 0, 2.55, 8.3, 1.1, concrete, vertices=16)
+    box("chimney_door0324", 0, -7.0, 3.5, 1.7, 0.4, 3.0, MATS["WindowFrame"])
+    box("chimney_flue0324", 0, 7.2, 1.6, 3.2, 4.6, 3.2, concrete)
+    for light_x, light_y in ((4.95, 0.0), (-4.95, 0.0), (0.0, -4.95), (0.0, 4.95)):
+        box("chimney_light0324", light_x, light_y, 119.0, 0.42, 0.42, 0.55, MATS["CityAccentRed"])
 
 
 def build_radar_station():
@@ -8493,6 +8533,28 @@ def build_barge():
     for bx in (-3.7, 3.7):
         for by in (-25.4, 25.8):
             cyl("barge_bollard0315", bx, by, deck + 0.25, 0.15, 0.5, metal, vertices=6)
+    # 0.3.24: hatch-cover ribs, rubbing strakes, tyre fenders,
+    # wheelhouse mullions + radar bar, windlass drum and coaming
+    # stiffeners (all inside the 8.74 x 6.80 x 55.0 envelope).
+    for hy in (1.5, 7.6, 13.7):
+        for rib_x in (-2.4, 0.0, 2.4):
+            box("barge_hatch_rib0324", rib_x, hy, deck + 0.60, 0.28, 5.7, 0.18, metal)
+    for strake_x in (-4.28, 4.28):
+        box("barge_strake0324", strake_x, 0, 2.44, 0.14, 37.5, 0.22, dark)
+    for fender_x in (-4.24, 4.24):
+        for fender_y in (-16.0, -8.0, 0.0, 8.0, 16.0):
+            cyl("barge_fender0324", fender_x, fender_y, 1.45, 0.52, 0.22, dark, vertices=8, rotation=(0, math.pi / 2.0, 0))
+    for mullion_x in (-1.9, -0.95, 0.0, 0.95, 1.9):
+        box("barge_wh_mullion0324", mullion_x, 20.16, deck + 1.55, 0.09, 0.08, 0.78, white)
+    for mullion_side in (-2.86, 2.86):
+        for mullion_y in (21.4, 23.8):
+            box("barge_wh_mullion0324", mullion_side, mullion_y, deck + 1.55, 0.08, 0.09, 0.78, white)
+    cyl("barge_radar_post0324", 0, 22.6, deck + 2.55, 0.05, 0.5, metal, vertices=6)
+    box("barge_radar_bar0324", 0, 22.6, deck + 2.82, 1.7, 0.22, 0.1, white)
+    cyl("barge_windlass_drum0324", 0, -23.6, deck + 0.75, 0.32, 1.5, dark, vertices=10, rotation=(0, math.pi / 2.0, 0))
+    for stiff_x in (-3.86, 3.86):
+        for stiff_y in (-17.0, -13.5, -7.0, -3.5):
+            box("barge_coaming_stiff0324", stiff_x, stiff_y, deck + 0.25, 0.14, 0.5, 0.55, metal)
 
 def _mb_box(b, cx, cy, cz, dx, dy, dz):
     """Axis-aligned box as 6 outward-wound quads on a MeshBuilder."""
@@ -8573,6 +8635,50 @@ def build_bleacher():
 
 
 
+def _lattice_jib_0324(name, cx, cy, cz, length, half_w, half_h, theta_deg, material, root_solid=0.0):
+    """0.3.24: four-chord lattice jib inside the old solid slab's
+    swept volume (same centre, pitch angle and cross-section
+    extremes, so the model envelope is unchanged).  Chords sit at
+    the slab's corners, side webs zigzag between them and cross
+    struts tie the chord pairs on the top/bottom faces."""
+    theta = math.radians(theta_deg)
+    ct = math.cos(theta)
+    st = math.sin(theta)
+    chord = 0.34
+    ox = half_w - chord / 2.0
+    oz = half_h - chord / 2.0
+
+    def at(lx, ly, lz):
+        return (cx + lx, cy + ly * ct - lz * st, cz + ly * st + lz * ct)
+
+    span = length - root_solid
+    mid = -length / 2.0 + span / 2.0
+    for sx in (-1.0, 1.0):
+        for sz in (-1.0, 1.0):
+            px, py, pz = at(sx * ox, mid, sz * oz)
+            rbox(name + "_chord0324", px, py, pz, chord, span, chord, material, rotation=(theta, 0, 0))
+    if root_solid > 0.0:
+        px, py, pz = at(0.0, length / 2.0 - root_solid / 2.0, 0.0)
+        rbox(name + "_root0324", px, py, pz, half_w * 2.0, root_solid, half_h * 2.0, material, rotation=(theta, 0, 0))
+    px, py, pz = at(0.0, -length / 2.0 + 0.17, 0.0)
+    rbox(name + "_tip0324", px, py, pz, half_w * 2.0, 0.34, half_h * 2.0, material, rotation=(theta, 0, 0))
+    pitch = 4.4
+    web_len = math.sqrt(pitch * pitch + (2.0 * oz) * (2.0 * oz))
+    web_ang = math.atan2(2.0 * oz, pitch)
+    stations = int(span / pitch)
+    for side in (-1.0, 1.0):
+        for i in range(stations):
+            s = -length / 2.0 + pitch * (i + 0.5)
+            px, py, pz = at(side * ox, s, 0.0)
+            tilt = web_ang if i % 2 == 0 else -web_ang
+            rbox(name + "_web0324", px, py, pz, 0.10, web_len, 0.26, material, rotation=(theta + tilt, 0, 0))
+    for i in range(1, stations):
+        s = -length / 2.0 + pitch * i
+        for sz in (-1.0, 1.0):
+            px, py, pz = at(0.0, s, sz * oz)
+            rbox(name + "_strut0324", px, py, pz, half_w * 2.0 - 0.1, 0.22, 0.22, material, rotation=(theta, 0, 0))
+
+
 def build_port_crane():
     yellow = MATS["CitySignYellow"]
     metal = MATS["PropsMetal"]
@@ -8591,20 +8697,65 @@ def build_port_crane():
     for ax in (-2.6, 2.6):
         rbox("crane_aframe", ax, 0, 40.5, 1.1, 1.1, 16.5, yellow, rotation=(0.30, 0, 0))
         rbox("crane_aframe_b", ax, 0, 40.5, 1.1, 1.1, 16.5, yellow, rotation=(-0.30, 0, 0))
-    rbox("crane_jib", 0, -20.7, 45.0, 1.7, 44, 1.9, yellow, rotation=(math.radians(-30), 0, 0))
-    rbox("crane_counterjib", 0, 8.5, 35.2, 1.5, 17, 1.7, yellow, rotation=(math.radians(6), 0, 0))
+    _lattice_jib_0324("crane_jib", 0, -20.7, 45.0, 44.0, 0.85, 0.95, -30.0, yellow, root_solid=5.0)
+    _lattice_jib_0324("crane_counterjib", 0, 8.5, 35.2, 17.0, 0.75, 0.85, 6.0, yellow, root_solid=3.5)
     box("crane_counterweight", 0, 15.5, 33.4, 4.2, 3.2, 4.6, dark)
     tube_between("crane_tie_a", (0, 0, 48.6), (0, -38.5, 55.6), 0.22, 0.22, metal, vertices=6)
     tube_between("crane_tie_b", (0, 0, 48.6), (0, 16.4, 36.2), 0.22, 0.22, metal, vertices=6)
-    box("crane_cab", 3.1, -4.5, 30.2, 3.0, 3.4, 3.0, MATS["FacadeGlass"])
+    box("crane_cab", 3.1, -4.5, 29.35, 3.0, 3.4, 1.3, yellow)
+    box("crane_cab_glass0324", 3.1, -4.5, 30.55, 3.04, 3.44, 1.15, MATS["FacadeGlass"])
+    box("crane_cab_roof0324", 3.1, -4.5, 31.5, 3.25, 3.65, 0.28, yellow)
     tube_between("crane_cable", (0, -38.5, 55.2), (0, -38.5, 21.0), 0.09, 0.09, MATS["WindowFrame"], vertices=6)
     box("crane_spreader", 0, -38.5, 20.4, 6.2, 2.4, 1.1, MATS["CityAccentRed"])
-    box("crane_load", 0, -38.5, 18.2, 12.0, 2.4, 2.5, MATS["CityAccentBlue"])
+    # 0.3.24: the hanging load becomes a corrugated container
+    # (core + proud ribs inside the old 12.0 x 2.4 x 2.5 box).
+    box("crane_load", 0, -38.5, 18.2, 12.0, 2.26, 2.5, MATS["CityAccentBlue"])
+    for rib_i in range(9):
+        box("crane_load_rib0324", -5.35 + rib_i * 1.34, -38.5, 18.2, 0.2, 2.4, 2.5, MATS["CityAccentBlue"])
+    for cx0324 in (-5.8, 5.8):
+        for cy0324 in (-39.55, -37.45):
+            box("crane_load_cast0324", cx0324, cy0324, 19.28, 0.4, 0.3, 0.34, dark)
     # 0.3.10: leg cross-bracing and a cab window band.
     for lx in (-9.0, 9.0):
         rbox("crane_brace_a", lx, 0, 15, 0.8, 17.5, 0.8, yellow, rotation=(0.55, 0, 0))
         rbox("crane_brace_b", lx, 0, 15, 0.8, 17.5, 0.8, yellow, rotation=(-0.55, 0, 0))
-    panel("crane_cab_glass", 3.1, -6.28, 30.9, 2.6, 1.1, MATS["FacadeGlass"], "front")
+    # 0.3.24: rail bogies with wheels, portal side beams, deck
+    # railing, machinery-house gear, a leg ladder, twin hoist falls
+    # and an A-frame crossbar with beacon (existing materials only).
+    for lx in (-9.0, 9.0):
+        for ly in (-7.0, 7.0):
+            box("crane_bogie0324", lx, ly, 0.95, 3.6, 2.0, 0.9, dark)
+            for wx in (-1.2, 1.2):
+                cyl("crane_wheel0324", lx + wx, ly, 0.92, 0.42, 0.3, metal, vertices=8, rotation=(math.pi / 2.0, 0, 0))
+        box("crane_sidebeam0324", lx, 0, 15.0, 1.15, 12.4, 1.15, yellow)
+    for post_x in (-7.2, -3.6, 0.0, 3.6, 7.2):
+        for post_y in (-5.2, 5.2):
+            box("crane_rail_post0324", post_x, post_y, 33.5, 0.09, 0.09, 1.0, metal)
+    for rail_y in (-5.2, 5.2):
+        box("crane_rail_top0324", 0, rail_y, 34.0, 14.6, 0.08, 0.08, metal)
+    for rail_x in (-7.2, 7.2):
+        box("crane_rail_top0324", rail_x, 0, 34.0, 0.08, 10.5, 0.08, metal)
+    for louvre_i in range(4):
+        box("crane_louvre0324", -0.22, 2.5, 33.55 + louvre_i * 0.45, 0.08, 4.2, 0.16, dark)
+    cyl("crane_exhaust0324", -5.6, 4.2, 36.6, 0.17, 1.5, dark, vertices=8)
+    panel("crane_machine_door0324", -3.5, -0.32, 34.1, 1.5, 2.4, MATS["WindowFrame"], "front")
+    box("crane_aframe_bar0324", 0, 0, 47.8, 6.3, 0.45, 0.45, yellow)
+    box("crane_beacon0324", 0, 0, 48.35, 0.36, 0.36, 0.5, MATS["CityAccentRed"])
+    for fall_x in (-2.4, 2.4):
+        tube_between("crane_fall0324", (fall_x, -38.5, 54.6), (fall_x, -38.5, 21.0), 0.07, 0.07, MATS["WindowFrame"], vertices=6)
+    # slim access ladder up the outer face of the (9, 7) leg
+    for rail_off in (-0.27, 0.27):
+        box("crane_ladder_rail0324", 10.02, 7.0 + rail_off, 16.0, 0.09, 0.09, 30.8, yellow)
+    rung_z = 1.4
+    while rung_z < 31.0:
+        box("crane_ladder_rung0324", 10.02, 7.0, rung_z, 0.07, 0.55, 0.07, yellow)
+        rung_z += 1.55
+    for strap_off in (-0.42, 0.42):
+        box("crane_ladder_strap0324", 10.42, 7.0 + strap_off, 17.5, 0.07, 0.07, 26.0, yellow)
+    hoop_z = 6.0
+    while hoop_z < 30.5:
+        box("crane_ladder_hoop0324", 10.22, 7.0, hoop_z, 0.45, 0.92, 0.07, yellow)
+        hoop_z += 3.4
 
 
 main()

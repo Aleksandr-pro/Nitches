@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.23-native-alpha"'), 'Native project version metadata must match 0.3.23-native-alpha');
-assert(preset.includes('version/code=89'), 'Native 0.3.23 must bump Android versionCode to 89');
-assert(preset.includes('version/name="0.3.23-native-alpha"'), 'Native version name must be 0.3.23-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.23-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.24-native-alpha"'), 'Native project version metadata must match 0.3.24-native-alpha');
+assert(preset.includes('version/code=90'), 'Native 0.3.24 must bump Android versionCode to 90');
+assert(preset.includes('version/name="0.3.24-native-alpha"'), 'Native version name must be 0.3.24-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.24-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.23"') && preset.includes('application/product_version="0.3.23"'), 'Desktop Windows version metadata must match native 0.3.23');
+assert(preset.includes('application/file_version="0.3.24"') && preset.includes('application/product_version="0.3.24"'), 'Desktop Windows version metadata must match native 0.3.24');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1442,8 +1442,8 @@ for (const marker of ['panel("hangar_door_rail"', 'panel("turbine_louver"', 'seg
   assert(blenderScript.includes(marker), `0.3.10 Blender marker is missing: ${marker}`);
 }
 const modelBudgets0310 = {
-  'cooling_tower.glb': [1_350, 2],
-  'reactor.glb': [850, 6],
+  'cooling_tower.glb': [1_900, 2],
+  'reactor.glb': [1_950, 6],
   'turbine_hall_long.glb': [920, 8],
   'turbine_hall_short.glb': [720, 8],
   'storage_tank.glb': [2_200, 4],
@@ -1451,12 +1451,12 @@ const modelBudgets0310 = {
   'airliner.glb': [4_500, 8],
   'afv.glb': [1_600, 4],
   'greenhouse.glb': [980, 5],
-  'chimney.glb': [410, 3],
+  'chimney.glb': [780, 3],
   'atc_tower.glb': [800, 7],
   'hangar_large.glb': [830, 6],
   'hangar_small.glb': [780, 6],
-  'port_crane.glb': [400, 7],
-  'barge.glb': [400, 5],
+  'port_crane.glb': [2_300, 7],
+  'barge.glb': [1_150, 5],
   'bleacher.glb': [380, 4],
   'barn.glb': [800, 5],
   'watchtower.glb': [380, 4],
@@ -1745,7 +1745,7 @@ for (const marker of ['_build_rt7_stage9_0318', '_rt7_ridge_mesh0318', 'Rt7SeaHo
   }
   assert(glbNames0318.length <= 62, `0.3.18 props budget: ${glbNames0318.length} GLBs > 62`);
   assert(totalBytes0318 <= 24500000, `0.3.18 props budget: ${totalBytes0318} bytes > 24.5 MB`);
-  assert(totalTris0318 <= 390000, `0.3.18 props budget: ${totalTris0318} unique tris > 390k`);
+  assert(totalTris0318 <= 395000, `0.3.18 props budget (0.3.24: single-instance landmark detail): ${totalTris0318} unique tris > 395k`);
   console.log(`0.3.18 props budget: ${glbNames0318.length} GLBs, ${totalBytes0318} bytes, ${totalTris0318} unique tris`);
 }
 
@@ -1881,6 +1881,42 @@ for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0
     assert(wb0323.includes(marker0323), `0.3.23 world_builder marker is missing: ${marker0323}`);
   }
   console.log('0.3.23 loading pass OK (spatial clearance index)');
+}
+
+// 0.3.24: landmark detail pass - the crudest remaining one-off
+// structures.  Port crane stick-toy becomes a four-chord lattice
+// jib inside the old slab's swept volume (bogies, deck railing,
+// machinery gear, corrugated container load); reactor gains shell
+// seams, corbel, dome seams, equipment hatch and a dressed aux
+// building; chimney gets a tapered lathe shaft, rod + aviation
+// lights, plinth door/flue; cooling tower a throat rim, pour seams
+// and basin water; barge hatch ribs, strakes, tyre fenders and a
+// dressed wheelhouse.  All envelopes byte-identical, material sets
+// (and therefore part counts) unchanged.  The unique-tris lock
+// moves 390k -> 395k for these single-instance landmarks: they do
+// not appear in the placed-buildings worst case at all, so the
+// runtime cost is one extra detailed instance per district.
+{
+  const buildProps0324 = await readFile('blender/build_props.py', 'utf8');
+  for (const marker0324 of ['_lattice_jib_0324', 'crane_bogie0324', 'crane_load_rib0324', 'reactor_seam0324', 'reactor_hatch0324', 'reactor_dome_seam0324', 'chimney_rod0324', 'chimney_flue0324', 'cooling_rim0324', 'cooling_water0324', 'barge_fender0324', 'barge_hatch_rib0324']) {
+    assert(buildProps0324.includes(marker0324), `0.3.24 build_props marker is missing: ${marker0324}`);
+  }
+  const floors0324 = { 'port_crane.glb': 1900, 'reactor.glb': 1600, 'chimney.glb': 620, 'cooling_tower.glb': 1550, 'barge.glb': 900 };
+  for (const [name0324, floor0324] of Object.entries(floors0324)) {
+    const bytes0324 = await readFile(path.join('src/assets/models/props', name0324));
+    const json0324 = parseGlbJson(bytes0324);
+    let tris0324 = 0;
+    for (const mesh0324 of json0324.meshes ?? []) {
+      for (const prim0324 of mesh0324.primitives ?? []) {
+        if (prim0324.indices === undefined) continue;
+        const count0324 = json0324.accessors[prim0324.indices]?.count ?? 0;
+        const mode0324 = prim0324.mode ?? 4;
+        tris0324 += mode0324 === 4 ? Math.floor(count0324 / 3) : (mode0324 === 5 || mode0324 === 6 ? Math.max(count0324 - 2, 0) : 0);
+      }
+    }
+    assert(tris0324 >= floor0324, `0.3.24 detail floor: ${name0324} has ${tris0324} tris < ${floor0324} (placeholder regression?)`);
+  }
+  console.log('0.3.24 detail floors OK (5 landmark models)');
 }
 
 console.log('Native Godot project validation OK');
