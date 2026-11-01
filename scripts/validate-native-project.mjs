@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.29-native-alpha"'), 'Native project version metadata must match 0.3.29-native-alpha');
-assert(preset.includes('version/code=95'), 'Native 0.3.29 must bump Android versionCode to 95');
-assert(preset.includes('version/name="0.3.29-native-alpha"'), 'Native version name must be 0.3.29-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.29-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.29"') && preset.includes('application/product_version="0.3.29"'), 'Desktop file/product versions must match native 0.3.29');
+assert(project.includes('config/version="0.3.30-native-alpha"'), 'Native project version metadata must match 0.3.30-native-alpha');
+assert(preset.includes('version/code=96'), 'Native 0.3.30 must bump Android versionCode to 96');
+assert(preset.includes('version/name="0.3.30-native-alpha"'), 'Native version name must be 0.3.30-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.30-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.30"') && preset.includes('application/product_version="0.3.30"'), 'Desktop file/product versions must match native 0.3.30');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.29"') && preset.includes('application/product_version="0.3.29"'), 'Desktop Windows version metadata must match native 0.3.29');
+assert(preset.includes('application/file_version="0.3.30"') && preset.includes('application/product_version="0.3.30"'), 'Desktop Windows version metadata must match native 0.3.30');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -2050,8 +2050,33 @@ console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturat
   }
   const hasColor0329 = (characterJson0329.meshes ?? []).every((mesh0329) => (mesh0329.primitives ?? []).every((prim0329) => prim0329.attributes?.COLOR_0 !== undefined));
   assert(hasColor0329, '0.3.29 avatar must carry COLOR_0 tint x grain on every primitive');
-  assert(characterBytes0329.length < 1800000, `0.3.29 avatar GLB must stay under 1.8MB, got ${characterBytes0329.length}`);
+  assert(characterBytes0329.length < 7000000, `Avatar GLB must stay under the 7MB textured budget (0.3.30), got ${characterBytes0329.length}`);
   console.log('0.3.29 detailed player character OK (skull-deformation face, COLOR_0 grain, append-only materials)');
+}
+
+// 0.3.30: photoreal texture pass for the player character.  The
+// generator (numpy + Pillow, never executed in CI) synthesises PBR
+// maps: a face painted in world space over the deformed skull,
+// radial-fibre irises behind real pupil holes, veined sclera,
+// strand hair, fabric weaves, denim twill, leather grain, treaded
+// soles; append-only Skin - face / Fingernails materials.
+{
+  const characterBytes0330 = await readFile('src/assets/models/characters/nitches_player.glb');
+  const characterJson0330 = parseGlbJson(characterBytes0330);
+  const generator0330 = await readFile('scripts/generate_native_player_character.py', 'utf8');
+  for (const marker0330 of ['def build_material_textures', 'def _make_face_textures', 'def head_deform_np', '"Skin - face"', '"Fingernails"', 'TEXCOORD_0']) {
+    assert(generator0330.includes(marker0330), `0.3.30 character generator marker is missing: ${marker0330}`);
+  }
+  for (const mat0330 of ['Skin - face', 'Fingernails']) {
+    assert(characterJson0330.materials?.some((material0330) => material0330.name === mat0330), `0.3.30 avatar material is missing: ${mat0330}`);
+  }
+  assert((characterJson0330.images ?? []).length >= 24, '0.3.30 avatar must embed its synthesised PBR maps');
+  const hasUv0330 = (characterJson0330.meshes ?? []).every((mesh0330) => (mesh0330.primitives ?? []).every((prim0330) => prim0330.attributes?.TEXCOORD_0 !== undefined));
+  assert(hasUv0330, '0.3.30 avatar must carry TEXCOORD_0 on every primitive');
+  const textured0330 = (characterJson0330.materials ?? []).filter((m0330) => m0330.pbrMetallicRoughness?.baseColorTexture !== undefined).length;
+  assert(textured0330 >= 10, `0.3.30 avatar must texture at least 10 materials, got ${textured0330}`);
+  assert(characterBytes0330.length < 7000000, `0.3.30 textured avatar GLB must stay under 7MB, got ${characterBytes0330.length}`);
+  console.log('0.3.30 photoreal textured player character OK (world-space face paint, embedded PBR maps, append-only materials)');
 }
 
 console.log('Native Godot project validation OK');

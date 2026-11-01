@@ -586,8 +586,11 @@ def hair_rim_theta(phi: float) -> float:
     rim += 0.19 * ang_gauss(phi, -2.96, 0.30)                # sideburn L
     rim += 0.09 * ang_gauss(phi, -2.30, 0.55)                # swept fringe falls left
     rim += -0.05 * ang_gauss(phi, -0.80, 0.55)               # parting side sits higher
-    rim += -0.055 * ang_gauss(phi, -1.05, 0.26)              # temple recession R
-    rim += -0.055 * ang_gauss(phi, -2.09, 0.26)              # temple recession L
+    rim += -0.085 * ang_gauss(phi, -1.05, 0.28)              # temple recession R
+    rim += -0.085 * ang_gauss(phi, -2.09, 0.28)              # temple recession L
+    rim += -0.035 * ang_gauss(phi, -1.57, 0.85)              # fringe sits a touch higher
+    rim += 0.030 * ang_gauss(phi, -1.57, 0.12)               # slight widow's peak
+    rim += 0.014 * (value_noise(math.cos(phi) * 9.0 + 20.0, math.sin(phi) * 9.0, 1.0) * 2.0 - 1.0)  # irregular edge
     return min(rim, 1.88)
 
 
@@ -664,7 +667,7 @@ def add_iris(ex: float) -> None:
 def add_lips() -> None:
     def deform(x, y, z, _xu, _yu, _zu):
         # Pinch the meeting line, taper the corners, cupid's bow on top.
-        pinch = 1.0 - 0.38 * math.exp(-(((y - 1.6115) / 0.0016) ** 2))
+        pinch = 1.0 - 0.30 * math.exp(-(((y - 1.6115) / 0.0016) ** 2))
         taper = 1.0 - 0.45 * _smooth(min(max((abs(x) - 0.014) / 0.010, 0.0), 1.0))
         z = -0.0990 + (z + 0.0990) * pinch
         y = 1.6115 + (y - 1.6115) * taper
@@ -780,12 +783,14 @@ def add_torso() -> None:
     add_ellipsoid(SKIN, (0.0, 1.576, -0.0435), (0.0155, 0.0135, 0.0115), 20, 14, None,
                   lambda x, y, z: mul3(skin_paint(x, y, z), 0.97))
     add_zipper()
-    # Chest pocket flaps with muted mini-zips.
+    # Waist pocket flaps bent to hug the torso curve.
     for s in (-1.0, 1.0):
-        add_ellipsoid(JACKET, (s * 0.187, 1.098, -0.128), (0.056, 0.026, 0.007), 24, 14, None,
+        def flap_deform(x, y, z, _xu, _yu, _zu, s=s):
+            # Bend the flap around the torso curve so its edges hug.
+            return x, y, z + 0.010 * ((x - s * 0.155) / 0.052) ** 2 + 0.004 * ((y - 1.098) / 0.022) ** 2
+
+        add_ellipsoid(JACKET, (s * 0.155, 1.098, -0.131), (0.052, 0.022, 0.006), 24, 14, flap_deform,
                       lambda x, y, z: mul3(jacket_paint(x, y, z), 0.96))
-        add_box(METAL, (s * 0.187, 1.138, -0.132), (0.052, 0.0045, 0.004),
-                lambda x, y, z: (0.36, 0.36, 0.36))
 
 
 def add_zipper() -> None:
@@ -829,7 +834,7 @@ def add_arm(side: float) -> None:
         return (0.0, 0.0, 0.0035 * math.sin(t * math.pi))
 
     set_limb("UpperArm" + suffix)
-    add_ellipsoid(JACKET, (side * 0.326, 1.447, 0.0), (0.087, 0.089, 0.094), 32, 22, None, jacket_paint, (2.0, 1.0))
+    add_ellipsoid(JACKET, (side * 0.326, 1.441, 0.0), (0.087, 0.085, 0.094), 32, 22, None, jacket_paint, (2.0, 1.0))
     add_tube_path(JACKET, [(side * 0.318, 1.478, 0.0), shoulder, (side * 0.392, 1.300, -0.004), elbow],
                   [(0.0, 0.096), (0.3, 0.085), (0.75, 0.072), (1.0, 0.064)], 28, 14, 0.92, True, fold, jacket_paint, (2.0, 1.3))
     set_limb("Forearm" + suffix)
@@ -892,7 +897,7 @@ def add_leg(side: float) -> None:
     knee = (side * 0.145, 0.48, 0.018)
     ankle = (side * 0.155, 0.115, -0.005)
     set_limb("Thigh" + suffix)
-    add_tube_path(TROUSERS, [(side * 0.132, 0.878, 0.0), hip, (side * 0.141, 0.650, 0.010), knee],
+    add_tube_path(TROUSERS, [(side * 0.132, 0.900, 0.0), hip, (side * 0.141, 0.650, 0.010), knee],
                   [(0.0, 0.126), (0.3, 0.112), (0.75, 0.095), (1.0, 0.089)], 30, 16, 0.90, True, None, trousers_paint, (3.0, 1.6))
     set_limb("Shin" + suffix)
     add_ellipsoid(TROUSERS, knee, (0.086, 0.089, 0.087), 28, 20, None, trousers_paint, (2.0, 1.0))
@@ -1191,7 +1196,7 @@ def _make_skin_textures():
 def _make_hair_textures():
     H, W = 512, 1024
     rng = np.random.default_rng(20261103)
-    base = np.array([0.225, 0.160, 0.118])
+    base = np.array([0.207, 0.147, 0.109])
     # Fine ~1px strands: smoothed 1D column noise resampled through a
     # slow flow warp (value-noise streaks read as wide metal flutes).
     def _strand_field(scale, warp_amp, smooth_passes):
@@ -1204,16 +1209,16 @@ def _make_hair_textures():
         frac = sx - i0
         return n1d[i0] * (1.0 - frac) + n1d[(i0 + 1) % 4096] * frac
 
-    strand_mix = 0.68 * _strand_field(2.0, 90.0, 2) + 0.32 * _strand_field(5.0, 150.0, 1)
+    strand_mix = 0.68 * _strand_field(3.0, 35.0, 2) + 0.32 * _strand_field(8.0, 60.0, 1)
     clumps = _tile_noise(H, W, 60, 3, rng)
-    bright = (0.68 + 0.48 * strand_mix) * (0.86 + 0.28 * clumps)
+    bright = (0.64 + 0.54 * strand_mix) * (0.86 + 0.28 * clumps)
     alb = np.ones((H, W, 3)) * base[None, None, :] * bright[:, :, None]
     light_strands = _smooth_np((strand_mix - 0.90) / 0.08)
     k = (light_strands * 0.22)[:, :, None]
     alb = alb * (1.0 - k) + np.array([0.44, 0.33, 0.22])[None, None, :] * k
     vv = np.linspace(0.0, 1.0, H)[:, None]
     alb *= (1.0 - 0.22 * _smooth_np((vv - 0.88) / 0.1))[:, :, None]  # darker hairline rim
-    height = strand_mix * 0.55 + clumps * 0.2
+    height = strand_mix * 0.7 + clumps * 0.2
     rough = 0.65 - 0.09 * strand_mix + 0.04 * (_fbm_tile(H, W, 16, 4, rng) - 0.5)
     return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 0.9), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
@@ -1327,7 +1332,7 @@ def _make_iris_texture():
 def _make_lips_textures():
     H = W = 256
     rng = np.random.default_rng(20261108)
-    base = np.array([0.660, 0.450, 0.392])
+    base = np.array([0.640, 0.425, 0.365])
     lines = _tile_noise(H, W, 190, 26, rng)
     alb = np.ones((H, W, 3)) * base[None, None, :] * (0.94 + 0.10 * lines)[:, :, None]
     uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
