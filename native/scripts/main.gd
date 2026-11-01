@@ -3077,6 +3077,12 @@ func _run_smoke_checks() -> void:
 	if not moving_vehicle_rejected or not mode_button_hidden_while_moving or not mode_button_visible_when_parked or not character_in_scene or not character_near_car or not foot_controls_hidden or not vehicle_idle_on_foot or not character_removed or not driver_controls_restored:
 		failures.append("0.3.25 parked-only human character enter/exit pass failed: moving_rejected=%s hidden_while_moving=%s shown_when_parked=%s spawned=%s near_car=%s foot_controls_hidden=%s vehicle_idle=%s removed=%s controls_restored=%s" % [str(moving_vehicle_rejected), str(mode_button_hidden_while_moving), str(mode_button_visible_when_parked), str(character_in_scene), str(character_near_car), str(foot_controls_hidden), str(vehicle_idle_on_foot), str(character_removed), str(driver_controls_restored)])
 
+	# 0.3.26 scenic photo spots: eight turnout pads with vista
+	# signs, saturation planting at the spots and along the
+	# scenic corridors, and matching world-map POI entries.
+	if is_rt7 and (int(enhancement_stats.get("rt7_scenic_photo_spots0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_signs0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_pads0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_plantings0326", 0)) < 100 or int(enhancement_stats.get("rt7_scenic_corridor0326", 0)) < 30 or _world.get_photo_spot_entries().size() != 8):
+		failures.append("0.3.26 scenic photo spots / saturation pass is incomplete: spots=%s signs=%s pads=%s plantings=%s corridor=%s entries=%d" % [str(enhancement_stats.get("rt7_scenic_photo_spots0326", 0)), str(enhancement_stats.get("rt7_scenic_signs0326", 0)), str(enhancement_stats.get("rt7_scenic_pads0326", 0)), str(enhancement_stats.get("rt7_scenic_plantings0326", 0)), str(enhancement_stats.get("rt7_scenic_corridor0326", 0)), _world.get_photo_spot_entries().size()])
+
 	if failures.is_empty():
 		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s parked_exit=%s avatar=%s" % [
 			world_geometry_count,
@@ -3175,6 +3181,18 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "01a_driver_exit", "time": "day", "hud": true,
 			"vehicle": "spawn", "gameplay_camera": true, "avatar": true, "frames": 6,
+		},
+		{
+			"name": "01b_photo_corniche", "time": "sunset", "hud": true,
+			"vehicle": "road", "vehicle_at": Vector3(-2635.0, 0.0, 300.0),
+			"camera": Vector3(-2608.0, 10.0, 258.0), "target": Vector3(-2680.0, 6.0, 318.0),
+			"avatar": true, "frames": 6,
+		},
+		{
+			"name": "01c_photo_plaza", "time": "day", "hud": true,
+			"vehicle": "road", "vehicle_at": Vector3(135.0, 0.0, 135.0),
+			"camera": Vector3(168.0, 14.0, 168.0), "target": Vector3(0.0, 26.0, 0.0),
+			"avatar": true, "frames": 6,
 		},
 		{
 			"name": "02_mosque_east", "time": "day", "vehicle": "hide",

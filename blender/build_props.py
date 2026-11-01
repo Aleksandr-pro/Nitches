@@ -1246,6 +1246,56 @@ def build_park_pergola():
 
 
 # --------------------------------------------------------------------------- #
+# 0.3.26 scenic photo spots: a wayside viewpoint lectern sign.
+# Blender local convention (as everywhere in this file): origin at
+# the ground centre, Z up, the board face looks along +Y in Blender
+# which becomes -Z after Y-up glTF export.  Envelope 1.78 x 0.62 m,
+# 1.73 m tall: two steel posts with feet and accent caps, a dark
+# board with a proud light face, an orange title bar, and a relief
+# pictogram (sun disc, twin peaks, three sea waves) under a small
+# slanted cap roof.  ~280 tris / 6 materials: it is placed eight
+# times by _build_rt7_scenic_0326 next to gravel turnout pads.
+# --------------------------------------------------------------------------- #
+def build_vista_sign():
+    metal = MATS["PropsMetal"]
+    dark = MATS["RoofDark"]
+    face = mat("VistaFace0326", (0.92, 0.89, 0.82), roughness=0.55)
+    accent = mat("VistaAccent0326", (1.0, 0.55, 0.13), roughness=0.45,
+                 emission=(0.30, 0.14, 0.03))
+    sea = mat("VistaSea0326", (0.16, 0.42, 0.58), roughness=0.5)
+    slate = mat("VistaSlate0326", (0.23, 0.26, 0.30), roughness=0.8)
+
+    for px in (-0.68, 0.68):
+        box("vista_sign_foot", px, 0.0, 0.03, 0.34, 0.56, 0.06, dark)
+        box("vista_sign_post", px, -0.10, 0.82, 0.09, 0.09, 1.52, metal)
+        box("vista_sign_post_cap", px, -0.10, 1.585, 0.13, 0.13, 0.03, accent)
+    box("vista_sign_rail", 0.0, -0.06, 0.52, 1.36, 0.05, 0.07, metal)
+
+    # Board: dark back panel with a proud light face plate.
+    box("vista_sign_board", 0.0, -0.02, 1.10, 1.58, 0.05, 0.92, dark)
+    box("vista_sign_face", 0.0, 0.016, 1.10, 1.46, 0.018, 0.82, face)
+
+    # Relief pictogram: title bar, sun disc, twin peaks, sea waves.
+    box("vista_sign_title", 0.0, 0.028, 1.435, 1.30, 0.014, 0.085, accent)
+    cyl("vista_sign_sun", -0.44, 0.030, 1.22, 0.095, 0.018, accent,
+        vertices=18, rotation=(math.pi / 2.0, 0.0, 0.0))
+    rbox("vista_sign_peak_a", 0.02, 0.030, 1.06, 0.34, 0.016, 0.34, slate,
+         rotation=(0.0, math.pi / 4.0, 0.0))
+    rbox("vista_sign_peak_b", 0.38, 0.030, 1.00, 0.26, 0.016, 0.26, slate,
+         rotation=(0.0, math.pi / 4.0, 0.0))
+    for wave_i, wave_z in enumerate((0.86, 0.795, 0.73)):
+        box("vista_sign_wave", -0.05 + 0.07 * wave_i, 0.028, wave_z,
+            0.95 - 0.12 * wave_i, 0.014, 0.032, sea)
+
+    # Slanted cap roof on two short arms above the posts.
+    for px in (-0.68, 0.68):
+        rbox("vista_sign_roof_arm", px, 0.0, 1.60, 0.05, 0.42, 0.05, metal,
+             rotation=(0.16, 0.0, 0.0))
+    rbox("vista_sign_roof", 0.0, 0.02, 1.66, 1.78, 0.62, 0.045, dark,
+         rotation=(0.16, 0.0, 0.0))
+
+
+# --------------------------------------------------------------------------- #
 # detailed mast-arm traffic signals. Blender local convention:
 #   * origin at the pole base, Z up;
 #   * mast arm reaches along +X;
@@ -6108,6 +6158,7 @@ def main():
         (build_port_crane, "port_crane.glb"),
         (build_barge, "barge.glb"),
         (build_bleacher, "bleacher.glb"),
+        (build_vista_sign, "vista_sign.glb"),
     ):
         # Local model reviews can build one asset without regenerating
         # the whole city set, e.g. NITCHES_PROPS_ONLY=cottage_dune.glb.

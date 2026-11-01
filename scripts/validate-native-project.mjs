@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.25-native-alpha"'), 'Native project version metadata must match 0.3.25-native-alpha');
-assert(preset.includes('version/code=91'), 'Native 0.3.25 must bump Android versionCode to 91');
-assert(preset.includes('version/name="0.3.25-native-alpha"'), 'Native version name must be 0.3.25-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.25-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.25"') && preset.includes('application/product_version="0.3.25"'), 'Desktop file/product versions must match native 0.3.25');
+assert(project.includes('config/version="0.3.26-native-alpha"'), 'Native project version metadata must match 0.3.26-native-alpha');
+assert(preset.includes('version/code=92'), 'Native 0.3.26 must bump Android versionCode to 92');
+assert(preset.includes('version/name="0.3.26-native-alpha"'), 'Native version name must be 0.3.26-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.26-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.26"') && preset.includes('application/product_version="0.3.26"'), 'Desktop file/product versions must match native 0.3.26');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.25"') && preset.includes('application/product_version="0.3.25"'), 'Desktop Windows version metadata must match native 0.3.25');
+assert(preset.includes('application/file_version="0.3.26"') && preset.includes('application/product_version="0.3.26"'), 'Desktop Windows version metadata must match native 0.3.26');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1481,6 +1481,7 @@ const modelBudgets0310 = {
   'barn.glb': [800, 5],
   'watchtower.glb': [380, 4],
   'silo.glb': [1_950, 3],
+  'vista_sign.glb': [400, 6],
 };
 for (const [model0310, [triangleCap0310, expectedParts0310]] of Object.entries(modelBudgets0310)) {
   const modelBytes0310 = await readFile(`src/assets/models/props/${model0310}`);
@@ -1938,6 +1939,23 @@ for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0
   }
   console.log('0.3.24 detail floors OK (5 landmark models)');
 }
+
+// 0.3.26: scenic photo spots + corridor saturation (RichTown 7x7).
+// Eight authored vista points get gravel turnout pads snapped to
+// the nearest road, the new vista_sign GLB, view-facing benches,
+// hero-spot pergolas and flower/shrub/palm clusters; four scenic
+// corridors are saturation-planted; the spots appear as "Фото"
+// POIs on the world map/minimap and as two avatar tour shots.
+assert(syncScript.includes("'src/assets/models/props/vista_sign.glb', 'props/vista_sign.glb'"), 'Native asset sync must stage the 0.3.26 vista sign GLB');
+for (const marker of ['_build_rt7_scenic_0326', 'PHOTO_SPOTS_0326', 'get_photo_spot_entries', 'Rt7ScenicPads0326', 'Rt7ScenicSigns0326', 'rt7_scenic_photo_spots0326', 'res://assets/props/vista_sign.glb', '_scenic_plant_one_0326']) {
+  assert(worldScript.includes(marker), `Native 0.3.26 scenic world marker is missing: ${marker}`);
+}
+for (const marker of ['"Фото"', '"photo_" + String(spot.get', '01b_photo_corniche', '01c_photo_plaza']) {
+  assert(combinedRuntime.includes(marker), `Native 0.3.26 photo-spot runtime marker is missing: ${marker}`);
+}
+const buildProps0326 = await readFile('blender/build_props.py', 'utf8');
+assert(buildProps0326.includes('def build_vista_sign') && buildProps0326.includes('(build_vista_sign, "vista_sign.glb")'), 'Blender props must build the 0.3.26 vista sign');
+console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturation)');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
