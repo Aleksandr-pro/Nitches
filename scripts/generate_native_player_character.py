@@ -41,8 +41,11 @@ MATERIALS = [
     ("Lips", (0.46, 0.225, 0.175, 1.0), 0.0, 0.48),
     ("Pupil", (0.012, 0.010, 0.009, 1.0), 0.0, 0.18),
     ("Shoe sole - rubber", (0.115, 0.105, 0.095, 1.0), 0.0, 0.92),
+    # 0.3.30 append-only additions (textured photoreal pass).
+    ("Skin - face", (0.63, 0.37, 0.25, 1.0), 0.0, 0.62),  # -> white once textured
+    ("Fingernails", (0.76, 0.60, 0.52, 1.0), 0.0, 0.32),
 ]
-SKIN, JACKET, SHIRT, TROUSERS, HAIR, SHOES, METAL, EYES, IRIS, MOUTH, LIPS, PUPIL, SOLE = range(len(MATERIALS))
+SKIN, JACKET, SHIRT, TROUSERS, HAIR, SHOES, METAL, EYES, IRIS, MOUTH, LIPS, PUPIL, SOLE, FACE_SKIN, NAILS = range(len(MATERIALS))
 # 0.3.28: jointed limb hierarchy for procedural walk animation.
 # Geometry is still authored in body space by the add_* helpers;
 # add_mesh files it into the current limb bucket with positions
@@ -590,6 +593,9 @@ def add_hair_cap() -> None:
             az = math.atan2(math.sin(phi), math.cos(phi))
             theta = v * hair_rim_theta(az)
             inflate = 1.0 + 0.10 * math.sin(min(v, 1.0) * math.pi) * 0.12  # gentle mid-volume
+            # Strand grooves: fine wavy ridges running crown -> rim.
+            strand = math.sin(phi * 130.0 + 7.0 * value_noise(math.cos(phi) * 4.0 + 9.0, math.sin(phi) * 4.0, v * 3.0))
+            inflate *= 1.0 + 0.006 * strand
             x = cx + rx * math.sin(theta) * math.cos(phi) * inflate
             y = cy + ry * math.cos(theta)
             z = cz + rz * math.sin(theta) * math.sin(phi) * inflate
@@ -604,6 +610,43 @@ def add_hair_cap() -> None:
             ring.append((x, y, z))
         grid.append(ring)
     add_grid(HAIR, grid, True, hair_paint)
+
+
+def add_iris(ex: float) -> None:
+    """Domed iris annulus hugging the eyeball sphere, with a real pupil
+    hole and a black disc just behind it (true parallax at glancing
+    angles).  Planar UVs feed the radial-fibre iris texture."""
+    ec = (ex, 1.6935, -0.0960)
+    ball_r = 0.0128
+    segments = 28
+    radii = (0.0028, 0.0040, 0.0050, 0.0057, 0.0062)
+    positions, indices, uvs = [], [], []
+    for r in radii:
+        z = ec[2] - math.sqrt(ball_r * ball_r - r * r) - 0.00035
+        for col in range(segments + 1):
+            a = 2.0 * math.pi * col / segments
+            positions.append((ex + r * math.cos(a), 1.6935 + r * math.sin(a), z))
+            uvs.append((0.5 + 0.5 * math.cos(a) * r / 0.0062, 0.5 - 0.5 * math.sin(a) * r / 0.0062))
+    stride = segments + 1
+    for row in range(len(radii) - 1):
+        for col in range(segments):
+            a = row * stride + col
+            b = row * stride + col + 1
+            c = (row + 1) * stride + col + 1
+            d = (row + 1) * stride + col
+            indices.extend((a, b, c, a, c, d))
+    add_mesh(IRIS, positions, indices, None, uvs)
+    # Pupil: black disc between the iris plane and the ball surface.
+    positions = [(ex, 1.6935, -0.1090)]
+    indices = []
+    uvs = [(0.5, 0.5)]
+    for col in range(segments + 1):
+        a = 2.0 * math.pi * col / segments
+        positions.append((ex + 0.0030 * math.cos(a), 1.6935 + 0.0030 * math.sin(a), -0.1090))
+        uvs.append((0.5 + 0.5 * math.cos(a), 0.5 - 0.5 * math.sin(a)))
+    for col in range(segments):
+        indices.extend((0, col + 2, col + 1))
+    add_mesh(PUPIL, positions, indices, None, uvs)
 
 
 def add_lips() -> None:
@@ -628,7 +671,7 @@ def add_lips() -> None:
 
 def add_face() -> None:
     set_limb("Head")
-    add_ellipsoid(SKIN, HEAD_C, HEAD_R, 96, 64, head_deform, skin_paint)
+    add_ellipsoid(FACE_SKIN, HEAD_C, HEAD_R, 96, 64, head_deform, skin_paint)
     # Ears: flattened, half-sunk into the skull.
     for s in (-1.0, 1.0):
         def ear_deform(x, y, z, _xu, _yu, _zu, s=s):
@@ -641,13 +684,16 @@ def add_face() -> None:
             return (base[0] * (1.0 - 0.18 * w) * 1.04, base[1] * (1.0 - 0.22 * w), base[2] * (1.0 - 0.22 * w))
 
         add_ellipsoid(SKIN, (s * 0.1115, 1.685, 0.002), (0.0140, 0.033, 0.021), 28, 18, ear_deform, ear_paint)
+        # Helix rim: a C-curve half-sunk into the ear's outer face.
+        add_tube_path(SKIN, [(s * 0.1235, 1.702, 0.012), (s * 0.1245, 1.697, -0.006),
+                             (s * 0.1240, 1.685, -0.014), (s * 0.1225, 1.672, -0.010)],
+                      [(0.0, 0.0022), (0.5, 0.0028), (1.0, 0.0020)], 10, 10, 0.9, True, None, ear_paint)
     # Eyeballs (deeply sunk) behind skin eyelid caps, so only an almond
     # of sclera/iris shows; iris and pupil sit flush on the ball front.
     for s in (-1.0, 1.0):
         ex = s * 0.045
         add_ellipsoid(EYES, (ex, 1.6935, -0.0960), (0.0128, 0.0128, 0.0128), 28, 18)
-        add_ellipsoid(IRIS, (ex, 1.6935, -0.1060), (0.0062, 0.0062, 0.0030), 20, 12)
-        add_ellipsoid(PUPIL, (ex, 1.6935, -0.1078), (0.0030, 0.0030, 0.0016), 14, 9)
+        add_iris(ex)
 
         def upper_lid_deform(x, y, z, _xu, yu, _zu):
             if yu < 0.15:
@@ -707,17 +753,19 @@ def add_torso() -> None:
     def groove(phi):
         return 1.0 - 0.030 * ang_gauss(phi, -math.pi / 2.0, 0.10)
 
-    add_loft(JACKET, stations, 64, 0.78, True, True, groove, None, jacket_paint)
+    add_loft(JACKET, stations, 64, 0.78, True, True, groove, None, jacket_paint, (6.0, 3.0))
     # Standing collar band (hugs the narrowed torso top, no tray ring).
     collar = [((0.0, 1.505, 0.001), (0.160, 0.0, 0.0), (0.0, 0.0, 0.102)),
               ((0.0, 1.536, 0.001), (0.150, 0.0, 0.0), (0.0, 0.0, 0.096)),
               ((0.0, 1.562, 0.001), (0.138, 0.0, 0.0), (0.0, 0.0, 0.089))]
-    add_loft(JACKET, collar, 48, 0.85, False, False, None, None, lambda x, y, z: mul3(jacket_paint(x, y, z), 0.94))
+    add_loft(JACKET, collar, 48, 0.85, False, False, None, None, lambda x, y, z: mul3(jacket_paint(x, y, z), 0.94), (4.0, 0.4))
     # Shirt triangle at the throat (jacket stays closed).
     add_ellipsoid(SHIRT, (0.0, 1.516, -0.0765), (0.032, 0.037, 0.021), 24, 16, None, shirt_paint)
     # Neck with trapezius flare (Torso limb: stays with the body).
     add_tube_path(SKIN, [(0.0, 1.462, 0.006), (0.0, 1.540, 0.002), (0.0, 1.612, -0.001)],
                   [(0.0, 0.078), (0.45, 0.057), (1.0, 0.053)], 28, 10, 0.9, True, None,
+                  lambda x, y, z: mul3(skin_paint(x, y, z), 0.97))
+    add_ellipsoid(SKIN, (0.0, 1.576, -0.0435), (0.0155, 0.0135, 0.0115), 20, 14, None,
                   lambda x, y, z: mul3(skin_paint(x, y, z), 0.97))
     add_zipper()
     # Chest pocket flaps with muted mini-zips.
@@ -769,17 +817,17 @@ def add_arm(side: float) -> None:
         return (0.0, 0.0, 0.0035 * math.sin(t * math.pi))
 
     set_limb("UpperArm" + suffix)
-    add_ellipsoid(JACKET, (side * 0.326, 1.447, 0.0), (0.090, 0.094, 0.100), 32, 22, None, jacket_paint)
+    add_ellipsoid(JACKET, (side * 0.326, 1.447, 0.0), (0.090, 0.094, 0.100), 32, 22, None, jacket_paint, (2.0, 1.0))
     add_tube_path(JACKET, [(side * 0.318, 1.478, 0.0), shoulder, (side * 0.392, 1.300, -0.004), elbow],
-                  [(0.0, 0.096), (0.3, 0.085), (0.75, 0.072), (1.0, 0.064)], 28, 14, 0.92, True, fold, jacket_paint)
+                  [(0.0, 0.096), (0.3, 0.085), (0.75, 0.072), (1.0, 0.064)], 28, 14, 0.92, True, fold, jacket_paint, (2.0, 1.3))
     set_limb("Forearm" + suffix)
-    add_ellipsoid(JACKET, elbow, (0.068, 0.072, 0.068), 26, 18, None, jacket_paint)
+    add_ellipsoid(JACKET, elbow, (0.068, 0.072, 0.068), 26, 18, None, jacket_paint, (2.0, 1.0))
     add_tube_path(JACKET, [elbow, (side * 0.426, 1.010, -0.018), wrist],
-                  [(0.0, 0.064), (0.35, 0.057), (0.85, 0.047), (1.0, 0.046)], 26, 12, 0.94, True, fold, jacket_paint)
+                  [(0.0, 0.064), (0.35, 0.057), (0.85, 0.047), (1.0, 0.046)], 26, 12, 0.94, True, fold, jacket_paint, (2.0, 1.2))
     # Cuff band at the wrist (loft ring standing around the forearm axis).
     add_loft(JACKET, [((wrist[0], 0.904, wrist[2]), (0.054, 0.0, 0.0), (0.0, 0.0, 0.051)),
                       ((wrist[0], 0.864, wrist[2]), (0.052, 0.0, 0.0), (0.0, 0.0, 0.049))],
-             26, 1.0, False, False, None, None, lambda x, y, z: mul3(jacket_paint(x, y, z), 0.90))
+             26, 1.0, False, False, None, None, lambda x, y, z: mul3(jacket_paint(x, y, z), 0.90), (2.0, 0.3))
     add_hand(side, wrist)
 
 
@@ -804,11 +852,25 @@ def add_hand(side: float, wrist) -> None:
         mid = (bx, by - length * 0.55, bz + 0.004)
         tip = (bx, by - length, bz + 0.014)
         add_tube_path(SKIN, [(bx, by + 0.012, bz), mid, tip],
-                      [(0.0, 0.0088), (0.6, 0.0078), (1.0, 0.0062)], 14, 7, 0.95, True, None, skin_paint)
+                      [(0.0, 0.0088), (0.35, 0.0080), (0.42, 0.0074), (0.55, 0.0079), (0.62, 0.0072), (0.8, 0.0068), (1.0, 0.0062)],
+                      14, 10, 0.95, True, None, skin_paint)
+        # Fingernail: sheared cap on the dorsal (-Z) side of the fingertip.
+        nail_c = (bx, tip[1] + 0.009, tip[2] - 0.0045)
+
+        def nail_deform(x, y, z, _xu, _yu, _zu, nail_c=nail_c):
+            return x, y, z + 0.30 * (y - nail_c[1])
+
+        add_ellipsoid(NAILS, nail_c, (0.0060, 0.0082, 0.0030), 16, 10, nail_deform)
     # Thumb on the body's inner-front side of the palm.
     tx = palm_c[0] - side * 0.034
     add_tube_path(SKIN, [(tx, 0.820, -0.040), (tx - side * 0.010, 0.786, -0.047), (tx - side * 0.013, 0.756, -0.044)],
                   [(0.0, 0.0102), (0.6, 0.0088), (1.0, 0.0070)], 14, 7, 0.95, True, None, skin_paint)
+    thumb_nail_c = (tx - side * 0.012, 0.765, -0.0495)
+
+    def thumb_nail_deform(x, y, z, _xu, _yu, _zu, c=thumb_nail_c):
+        return x, y, z + 0.25 * (y - c[1])
+
+    add_ellipsoid(NAILS, thumb_nail_c, (0.0078, 0.0088, 0.0032), 16, 10, thumb_nail_deform)
 
 
 def add_leg(side: float) -> None:
@@ -818,15 +880,15 @@ def add_leg(side: float) -> None:
     ankle = (side * 0.155, 0.115, -0.005)
     set_limb("Thigh" + suffix)
     add_tube_path(TROUSERS, [(side * 0.132, 0.878, 0.0), hip, (side * 0.141, 0.650, 0.010), knee],
-                  [(0.0, 0.122), (0.3, 0.110), (0.75, 0.095), (1.0, 0.089)], 30, 16, 0.90, True, None, trousers_paint)
+                  [(0.0, 0.122), (0.3, 0.110), (0.75, 0.095), (1.0, 0.089)], 30, 16, 0.90, True, None, trousers_paint, (3.0, 1.6))
     set_limb("Shin" + suffix)
-    add_ellipsoid(TROUSERS, knee, (0.091, 0.094, 0.093), 28, 20, None, trousers_paint)
+    add_ellipsoid(TROUSERS, knee, (0.091, 0.094, 0.093), 28, 20, None, trousers_paint, (2.0, 1.0))
 
     def calf(t):
         return (0.0, 0.0, 0.011 * math.sin(math.pi * min(max(t * 1.25, 0.0), 1.0)) ** 1.5)
 
     add_tube_path(TROUSERS, [knee, (side * 0.150, 0.300, 0.008), ankle],
-                  [(0.0, 0.089), (0.25, 0.083), (0.7, 0.065), (1.0, 0.057)], 28, 14, 0.92, True, calf, trousers_paint)
+                  [(0.0, 0.089), (0.25, 0.083), (0.7, 0.065), (1.0, 0.057)], 28, 14, 0.92, True, calf, trousers_paint, (3.0, 1.5))
     set_limb("Foot" + suffix)
     add_shoe(side)
 
@@ -841,7 +903,7 @@ def add_shoe(side: float) -> None:
     ]
     stations = [((cx, 0.026 + h / 2.0, z), (w / 2.0, 0.0, 0.0), (0.0, h / 2.0, 0.0)) for z, w, h in last]
     add_loft(SHOES, stations, 40, 0.82, True, True, None,
-             lambda p: (p[0], max(p[1], 0.022), p[2]), leather_paint)
+             lambda p: (p[0], max(p[1], 0.022), p[2]), leather_paint, (1.0, 1.2))
     # Sole: slim slab with a mild toe spring and a real heel block.
     sole = [  # (z, width, bottom y, top y)
         (0.092, 0.058, 0.006, 0.034), (0.070, 0.087, 0.004, 0.035),
@@ -850,12 +912,12 @@ def add_shoe(side: float) -> None:
         (-0.205, 0.066, 0.011, 0.028), (-0.214, 0.038, 0.016, 0.028),
     ]
     stations = [((cx, (tb + tp) / 2.0, z), (w / 2.0, 0.0, 0.0), (0.0, (tp - tb) / 2.0, 0.0)) for z, w, tb, tp in sole]
-    add_loft(SOLE, stations, 36, 0.80, True, True, None, None, sole_paint)
+    add_loft(SOLE, stations, 36, 0.80, True, True, None, None, sole_paint, (1.0, 1.0))
     # Tongue + ivory laces across the instep.
     tongue = [((cx, 0.026 + hh + 0.0012, zz), (0.023, 0.0, 0.0), (0.0, 0.0035, 0.0)) for zz, hh in
               ((-0.012, 0.0805), (-0.055, 0.069), (-0.100, 0.0555), (-0.138, 0.0475))]
     add_loft(SHOES, tongue, 20, 0.9, True, True, None, None,
-             lambda x, y, z: mul3(leather_paint(x, y, z), 1.18))
+             lambda x, y, z: mul3(leather_paint(x, y, z), 1.18), (1.0, 1.0))
     for i in range(5):
         lz = -0.030 - i * 0.023
         top = 0.026 + (0.0744 - i * 0.0055)
@@ -874,7 +936,7 @@ def build_character() -> None:
             z += 0.006
         return x, y, z
 
-    add_ellipsoid(TROUSERS, (0.0, 0.875, 0.004), (0.258, 0.147, 0.154), 48, 32, hip_deform, trousers_paint)
+    add_ellipsoid(TROUSERS, (0.0, 0.875, 0.004), (0.258, 0.147, 0.154), 48, 32, hip_deform, trousers_paint, (5.0, 2.0))
     for side in (-1.0, 1.0):
         add_arm(side)
         add_leg(side)
