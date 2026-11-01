@@ -8359,6 +8359,7 @@ func _build_landmarks() -> void:
 	_build_rt7_stage6_0315(root)
 	_build_rt7_stage7_0316(root)
 	_build_rt7_stage8_0317(root)
+	_build_rt7_stage9_0318(root)
 
 
 ## 0.3.15 TZ stage 6: canal quay walls with mooring bollards and the
@@ -8366,6 +8367,86 @@ func _build_landmarks() -> void:
 ## batches on top of the landmark pass (quay concrete, bollard metal,
 ## soil, meadow, crop rows); the moored barges/cranes/silos of the
 ## stage ride the landmark model batches above.
+func _rt7_ridge_mesh0318(start: Vector3, axis_dir: Vector3, out_dir: Vector3, length_m: float, h_min: float, h_max: float, seed_v: int) -> ArrayMesh:
+	# One horizon ridge: a 4-point cross-section strip (front base,
+	# shoulder, crest, back base) with a seeded random-walk crest.
+	# axis_dir x out_dir must point +Y so faces wind upward.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var offs: Array[float] = [-170.0, -40.0, 0.0, 130.0]
+	var step_m := 130.0
+	var count := int(length_m / step_m) + 1
+	var crests: Array[float] = []
+	var crest: float = (h_min + h_max) * 0.5
+	for i in count:
+		crest = clampf(crest + rng.randf_range(-6.5, 6.5), h_min, h_max)
+		crests.append(crest)
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rows: Array = []
+	for i in count:
+		var centre: Vector3 = start + axis_dir * (float(i) * step_m)
+		var prof: Array[float] = [-3.0, crests[i] * 0.55, crests[i], -3.0]
+		var row: Array[Vector3] = []
+		for k in 4:
+			var p: Vector3 = centre + out_dir * offs[k]
+			p.y = prof[k]
+			row.append(p)
+		rows.append(row)
+	for i in range(count - 1):
+		var r0: Array = rows[i]
+		var r1: Array = rows[i + 1]
+		var v0: float = float(i) * step_m / 60.0
+		var v1: float = float(i + 1) * step_m / 60.0
+		for k in 3:
+			var a: Vector3 = r0[k]
+			var b: Vector3 = r1[k]
+			var c: Vector3 = r1[k + 1]
+			var d: Vector3 = r0[k + 1]
+			var u0: float = float(k) / 3.0
+			var u1: float = float(k + 1) / 3.0
+			_road_vertex(tool, a, Vector2(u0, v0))
+			_road_vertex(tool, b, Vector2(u0, v1))
+			_road_vertex(tool, c, Vector2(u1, v1))
+			_road_vertex(tool, a, Vector2(u0, v0))
+			_road_vertex(tool, c, Vector2(u1, v1))
+			_road_vertex(tool, d, Vector2(u1, v0))
+	tool.index()
+	tool.generate_normals()
+	return tool.commit()
+
+
+func _build_rt7_stage9_0318(root: Node3D) -> void:
+	if not _is_rt7:
+		return
+	# 0.3.18 (TZ stage 9): horizon closure.  The rt7 build list skips
+	# the legacy skyline backdrop, so at the 7x7 edges the terrain
+	# simply ended: open sea stopped at x=-3500, raw void past the
+	# dune field and the north/south borders.  Four seeded ridge
+	# strips (~350 tris each) just outside the playable bounds plus
+	# a sea extension plane close the horizon in every direction;
+	# fog does the blending.  No colliders (world bounds already
+	# fence the playable area), no shadows, no new assets.
+	var sand_near := _material("rt7_horizon_dune0318", "", "", Color(0.74, 0.61, 0.41), 1.0)
+	var sand_far := _material("rt7_horizon_dune_far0318", "", "", Color(0.79, 0.68, 0.50), 1.0)
+	var rock_mat := _material("rt7_horizon_rock0318", "", "", Color(0.42, 0.38, 0.34), 1.0)
+	_add_water_plane(root, Rect2(-6600.0, -3700.0, 3100.0, 7400.0), "Rt7SeaHorizon0318", 6, 20)
+	var ridge_specs: Array = [
+		# start, axis, outward, length, h_min, h_max, seed, material, name
+		[Vector3(3690.0, 0.0, -3850.0), Vector3(0.0, 0.0, 1.0), Vector3(1.0, 0.0, 0.0), 7700.0, 20.0, 38.0, 9101, sand_near, "Rt7HorizonDunesNear0318"],
+		[Vector3(4040.0, 0.0, -3850.0), Vector3(0.0, 0.0, 1.0), Vector3(1.0, 0.0, 0.0), 7700.0, 28.0, 52.0, 9202, sand_far, "Rt7HorizonDunesFar0318"],
+		[Vector3(-3850.0, 0.0, -3740.0), Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, -1.0), 7700.0, 30.0, 58.0, 9303, rock_mat, "Rt7HorizonNorth0318"],
+		[Vector3(3850.0, 0.0, 3740.0), Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), 7700.0, 30.0, 58.0, 9404, rock_mat, "Rt7HorizonSouth0318"],
+	]
+	for spec_variant in ridge_specs:
+		var spec: Array = spec_variant
+		var mesh := _rt7_ridge_mesh0318(spec[0], spec[1], spec[2], float(spec[3]), float(spec[4]), float(spec[5]), int(spec[6]))
+		if mesh != null:
+			_mesh_instance(root, mesh, spec[7], Transform3D.IDENTITY, String(spec[8]), false)
+	_enhancement_stats["rt7_stage9_horizon_ridges0318"] = 4
+	_enhancement_stats["rt7_stage9_sea_horizon0318"] = 1
+
+
 func _build_rt7_stage8_0317(root: Node3D) -> void:
 	if not _is_rt7:
 		return

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const requireAssets = process.argv.includes('--require-assets');
@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.17-native-alpha"'), 'Native project version metadata must match 0.3.17-native-alpha');
-assert(preset.includes('version/code=83'), 'Native 0.3.17 must bump Android versionCode to 83');
-assert(preset.includes('version/name="0.3.17-native-alpha"'), 'Native version name must be 0.3.17-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.17-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.18-native-alpha"'), 'Native project version metadata must match 0.3.18-native-alpha');
+assert(preset.includes('version/code=84'), 'Native 0.3.18 must bump Android versionCode to 84');
+assert(preset.includes('version/name="0.3.18-native-alpha"'), 'Native version name must be 0.3.18-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.18-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.17"') && preset.includes('application/product_version="0.3.17"'), 'Desktop Windows version metadata must match native 0.3.17');
+assert(preset.includes('application/file_version="0.3.18"') && preset.includes('application/product_version="0.3.18"'), 'Desktop Windows version metadata must match native 0.3.18');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1713,6 +1713,41 @@ for (const marker of ['_build_rt7_stage8_0317', 'Rt7LampGlow0317', 'Rt7LampPools
 }
 assert(mainScript.includes('Traffic removed: player vehicle only'), 'User rule: no AI/parked traffic - the 0.2.5 removal must stand');
 assert(!worldScript.includes('traffic_sedan') && !worldScript.includes('traffic_hatch'), 'User rule: no traffic-car models may be wired into the world');
+
+// 0.3.18: TZ stage 9 - optimization locks + horizon closure.  The
+// performance stack (adaptive render scale, 5-level governor,
+// directional/collider streaming) already ships; this stage locks
+// the model budgets as CI regression guards and closes the rt7
+// horizon (sea extension + dune/rock ridge ring) that the rt7
+// build list previously skipped.  Weak-phone verification stays a
+// device protocol (see docs/RICHTOWN_7X7_STATUS.md): these totals
+// keep the static budget from silently growing again.
+for (const marker of ['_build_rt7_stage9_0318', '_rt7_ridge_mesh0318', 'Rt7SeaHorizon0318', 'Rt7HorizonDunesNear0318', 'Rt7HorizonNorth0318', 'rt7_stage9_horizon_ridges0318']) {
+  assert(worldScript.includes(marker), `0.3.18 world-builder marker is missing: ${marker}`);
+}
+{
+  const propsDir0318 = 'src/assets/models/props';
+  const glbNames0318 = (await readdir(propsDir0318)).filter((n) => n.endsWith('.glb')).sort();
+  let totalBytes0318 = 0;
+  let totalTris0318 = 0;
+  for (const name0318 of glbNames0318) {
+    const bytes0318 = await readFile(path.join(propsDir0318, name0318));
+    totalBytes0318 += bytes0318.length;
+    const json0318 = parseGlbJson(bytes0318);
+    for (const mesh0318 of json0318.meshes ?? []) {
+      for (const prim0318 of mesh0318.primitives ?? []) {
+        if (prim0318.indices === undefined) continue;
+        const count0318 = json0318.accessors[prim0318.indices]?.count ?? 0;
+        const mode0318 = prim0318.mode ?? 4;
+        totalTris0318 += mode0318 === 4 ? Math.floor(count0318 / 3) : (mode0318 === 5 || mode0318 === 6 ? Math.max(count0318 - 2, 0) : 0);
+      }
+    }
+  }
+  assert(glbNames0318.length <= 62, `0.3.18 props budget: ${glbNames0318.length} GLBs > 62`);
+  assert(totalBytes0318 <= 24500000, `0.3.18 props budget: ${totalBytes0318} bytes > 24.5 MB`);
+  assert(totalTris0318 <= 390000, `0.3.18 props budget: ${totalTris0318} unique tris > 390k`);
+  console.log(`0.3.18 props budget: ${glbNames0318.length} GLBs, ${totalBytes0318} bytes, ${totalTris0318} unique tris`);
+}
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
