@@ -6906,6 +6906,16 @@ def build_airport_terminal():
     for i in range(21):
         fx = -180.0 + i * 18.0
         box("term_fin", fx, -32.8, 11, 1.1, 1.4, 21, metal)
+    # 0.3.20: intermediate curtain-wall mullions (6 m bays between the
+    # 18 m fins) so the two 376 m glass bands stop reading as single
+    # flat sheets at apron distance; airside gets the same grid.
+    mx = -186.0
+    while mx <= 186.0:
+        if abs((mx + 180.0) % 18.0) > 0.01:
+            box("term_mullion0320", mx, -32.85, 10.9, 0.32, 0.35, 20.4, metal)
+            box("term_mullion0320", mx, 32.85, 12.0, 0.32, 0.35, 13.6, metal)
+        mx += 6.0
+    box("term_sign_band0320", 0, -44.6, 8.4, 150, 0.5, 1.3, blue)
     for slab_i, (sy, sang) in enumerate(((-26.0, -0.34), (-13.0, -0.17), (0.0, 0.0), (13.0, 0.17), (26.0, 0.34))):
         slab_z = 25.2 - abs(sy) * 0.115
         rbox("term_roof_slab", 0, sy, slab_z, 386, 15.5, 1.1, metal, rotation=(sang, 0, 0))
@@ -6924,8 +6934,16 @@ def build_airport_terminal():
         panel("term_finger_glass", fx + 12.65, 56, 8, 44, 5, glass, "right")
         box("term_finger_roof", fx, 56, 13.6, 26, 50, 1.1, dark)
         box("term_finger_hvac", fx + 5, 48, 14.9, 7, 9, 1.6, dark)
-        rbox("term_jetbridge", fx - 13.8, 66, 4.6, 3.2, 11, 3.4, metal, rotation=(0, 0, 0.5))
-        rbox("term_jetbridge", fx + 13.8, 66, 4.6, 3.2, 11, 3.4, metal, rotation=(0, 0, -0.5))
+        # 0.3.20: telescopic jet bridges (rotunda, two tunnels, cab,
+        # bogie) instead of one rotated slab per gate.
+        for jb_sx in (-1.0, 1.0):
+            jx = fx + jb_sx * 13.2
+            cyl("term_jb_rotunda0320", jx, 62, 2.6, 2.0, 5.2, metal, vertices=12)
+            rbox("term_jb_tunnel0320", jx + jb_sx * 2.8, 66.5, 4.7, 3.0, 9.5, 2.9, metal, rotation=(0, 0, -jb_sx * 0.42))
+            rbox("term_jb_tunnel2_0320", jx + jb_sx * 6.1, 70.6, 4.55, 2.5, 7.5, 2.5, metal, rotation=(0, 0, -jb_sx * 0.42))
+            box("term_jb_cab0320", jx + jb_sx * 8.3, 73.4, 4.45, 3.4, 3.2, 2.7, glass)
+            cyl("term_jb_bogie0320", jx + jb_sx * 5.6, 69.8, 1.5, 0.55, 3.0, dark, vertices=8)
+            box("term_jb_leg0320", jx + jb_sx * 5.6, 69.8, 2.8, 0.5, 0.5, 2.6, metal)
 
 
 def build_atc_tower():
@@ -6945,6 +6963,27 @@ def build_atc_tower():
     box("atc_beacon", 0, 0, 47.3, 0.7, 0.7, 0.7, MATS["CityAccentRed"])
     # 0.3.10: base window band (was a blank plinth face).
     panel("atc_base_windows", 0, -7.56, 3.6, 9.0, 1.1, glass, "front")
+    # 0.3.20: cab gallery deck with a glazed railing band, a mid-cab
+    # transom ring, shaft slit windows following the taper, a rear
+    # base annex with its own door, entrance canopy and roof kit
+    # (radar bar + whip antennas), all inside the 15 x 15.25 x 53.7
+    # envelope (gallery radius 7.0 < base half-width 7.5).
+    cyl("atc_gallery0320", 0, 0, 40.72, 7.05, 0.35, metal, vertices=22)
+    _ct_lathe("atc_gallery_rail0320", [(6.98, 40.95), (6.98, 41.72)], glass, segments=26)
+    _ct_lathe("atc_gallery_toprail0320", [(7.02, 41.72), (7.02, 41.80)], metal, segments=26)
+    _ct_lathe("atc_cab_transom0320", [(6.30, 44.55), (6.30, 44.72)], metal, segments=22)
+    for slit_z in (14.0, 22.0, 30.0):
+        slit_r = 4.4 - 1.5 * (slit_z - 5.0) / 34.0
+        panel("atc_shaft_slit0320", 0, -(slit_r + 0.07), slit_z, 0.85, 1.7, glass, "front")
+    box("atc_annex0320", 0, 5.0, 1.7, 7.0, 4.6, 3.4, MATS["FacadeAccent"])
+    box("atc_annex_roof0320", 0, 5.0, 3.55, 7.5, 4.9, 0.3, MATS["RoofDark"])
+    panel("atc_annex_door0320", -1.8, 7.36, 1.45, 1.1, 2.7, MATS["WindowFrame"], "back")
+    panel("atc_annex_win0320", 1.6, 7.36, 2.1, 2.6, 1.2, glass, "back")
+    box("atc_canopy0320", 0, -7.0, 3.15, 5.0, 1.5, 0.22, metal)
+    box("atc_radar_mast0320", 2.5, 0, 47.3, 0.28, 0.28, 1.3, metal)
+    box("atc_radar_bar0320", 2.5, 0, 48.15, 3.4, 0.5, 0.35, metal)
+    for whip_x in (-3.4, 3.4):
+        cyl("atc_whip0320", whip_x, 1.8, 48.6, 0.05, 3.4, metal, vertices=6)
 
 
 def _build_hangar(width, length, wall_h, roof_h):
@@ -6963,6 +7002,15 @@ def _build_hangar(width, length, wall_h, roof_h):
     panel("hangar_door_seam", 0, door_y - 0.42, wall_h * 0.42, 0.4, wall_h * 0.8, clad, "front")
     for seam_x in (-0.30, -0.15, 0.15, 0.30):
         panel("hangar_door_leaf", width * seam_x, door_y - 0.46, wall_h * 0.42, 0.28, wall_h * 0.8, clad, "front")
+    # 0.3.20: four solid door leaves standing proud of the dark door
+    # backing, each with a glazed top row and a kick rail; the leaf
+    # fronts stay behind the old seam-panel plane (envelope-safe).
+    leaf_w = width * 0.74 / 4.0
+    for leaf_i in range(4):
+        lx = -width * 0.37 + leaf_w * (leaf_i + 0.5)
+        box("hangar_leaf0320", lx, door_y - 0.28, wall_h * 0.42, leaf_w - 0.22, 0.30, wall_h * 0.76, clad)
+        panel("hangar_leaf_glass0320", lx, door_y - 0.44, wall_h * 0.68, leaf_w - 1.3, wall_h * 0.16, glass, "front")
+        box("hangar_leaf_kick0320", lx, door_y - 0.36, wall_h * 0.10, leaf_w - 0.5, 0.16, 0.4, frame)
     box("hangar_skylight", 0, 0, wall_h + roof_h + 0.02, 2.2, length * 0.70, 0.18, glass)
     for sx in (-1.0, 1.0):
         panel("hangar_side_glass", sx * (width / 2.0 + 0.355), 0, wall_h * 0.72, length * 0.66, 1.7, glass, "right" if sx > 0.0 else "left")
@@ -6978,6 +7026,30 @@ def _build_hangar(width, length, wall_h, roof_h):
     for sx in (-1.0, 1.0):
         for rail_z in (wall_h * 0.72 - 0.95, wall_h * 0.72 + 0.95):
             box("hangar_glass_rail0314", sx * (width / 2.0 + 0.20), 0, rail_z, 0.3, length * 0.66, 0.22, clad)
+    # 0.3.20: structural pilasters down both flanks, standing seams
+    # across the roof slopes, eaves gutters with corner downpipes,
+    # apron floodlights on the front wall and a rear louvre + door.
+    bay = 9.5
+    py = -length / 2.0 + bay * 0.5
+    while py < length / 2.0 - 2.0:
+        for sx in (-1.0, 1.0):
+            box("hangar_pilaster0320", sx * (width / 2.0 + 0.16), py, 3.0 + (wall_h - 3.0) / 2.0, 0.5, 1.05, wall_h - 3.0, frame)
+        py += bay
+    slope_ang = math.atan2(roof_h, width / 2.0 + 0.8)
+    slope_len = math.hypot(width / 2.0 + 0.8, roof_h)
+    for sx in (-1.0, 1.0):
+        for seam_f in (0.20, 0.42, 0.64, 0.84):
+            sxp = sx * (width / 2.0 + 0.8) * (1.0 - seam_f)
+            zp = wall_h + roof_h * seam_f
+            rbox("hangar_roof_seam0320", sxp, 0, zp + 0.07, slope_len * 0.30, length + 1.2, 0.10, clad,
+                 rotation=(0, sx * slope_ang, 0))
+        box("hangar_gutter0320", sx * (width / 2.0 + 0.60), 0, wall_h + 0.12, 0.34, length + 1.5, 0.30, frame)
+        for dy in (-length / 2.0 - 0.55, length / 2.0 + 0.55):
+            box("hangar_downpipe0320", sx * (width / 2.0 + 0.55), dy, wall_h / 2.0, 0.22, 0.22, wall_h, frame)
+        box("hangar_flood_arm0320", sx * (width / 2.0 - 2.2), door_y + 0.28, wall_h - 0.9, 0.18, 0.55, 0.18, frame)
+        box("hangar_flood_head0320", sx * (width / 2.0 - 2.2), door_y + 0.02, wall_h - 1.25, 0.85, 0.30, 0.42, MATS["LampGlow"])
+    panel("hangar_rear_louvre0320", 0, length / 2.0 + 0.36, wall_h * 0.55, width * 0.4, 1.6, frame, "back")
+    box("hangar_rear_door0320", width * 0.28, length / 2.0 + 0.18, 1.6, 2.2, 0.35, 3.2, frame)
 
 
 def build_hangar_large():
@@ -7093,34 +7165,292 @@ def build_yacht_motor():
     _yacht_portholes("ym", 13.5, 4.3, 1.35, (-0.24, -0.06, 0.12, 0.3), glass)
 
 
+def _lathe_y_0320(name, profile, material, segments=24, cx=0.0, cz_base=0.0,
+                  angle0=0.0, angle1=math.tau, capped=True):
+    """Surface of revolution around Blender Y (aircraft fuselages,
+    engine nacelles).  profile = [(y, radius, centre_z_offset), ...]
+    ordered nose-to-tail; angle measured from +X toward +Z.  A partial
+    sweep gives fuselage-hugging bands (cockpit visor, livery belly)."""
+    b = MeshBuilder()
+    full = abs((angle1 - angle0) - math.tau) < 1e-6
+    n = segments if full else max(1, int(round(segments * (angle1 - angle0) / math.tau)))
+    steps = n if full else n + 1
+    rings = []
+    for (y, r, dz) in profile:
+        ring = []
+        for i in range(steps):
+            a = angle0 + (angle1 - angle0) * (i / float(n))
+            ring.append(b.add_vertex(Vector((cx + math.cos(a) * r, y, cz_base + dz + math.sin(a) * r))))
+        rings.append(ring)
+
+    def idx(ring, i):
+        return ring[i % n] if full else ring[i]
+
+    for r in range(len(rings) - 1):
+        v0 = profile[r][0] / 4.0
+        v1 = profile[r + 1][0] / 4.0
+        for i in range(n):
+            u0 = i / 4.0
+            u1 = (i + 1) / 4.0
+            b.quad(idx(rings[r], i), idx(rings[r + 1], i), idx(rings[r + 1], i + 1), idx(rings[r], i + 1),
+                   uvs=((u0, v0), (u0, v1), (u1, v1), (u1, v0)))
+    if capped and full:
+        y0, _r0, dz0 = profile[0]
+        c0 = b.add_vertex(Vector((cx, y0, cz_base + dz0)))
+        for i in range(n):
+            b.tri(c0, rings[0][i], rings[0][(i + 1) % n])
+        y1, _r1, dz1 = profile[-1]
+        c1 = b.add_vertex(Vector((cx, y1, cz_base + dz1)))
+        for i in range(n):
+            b.tri(c1, rings[-1][(i + 1) % n], rings[-1][i])
+    return b.build(name, material, smooth=True)
+
+
+def _loft_x_0320(name, stations, material, smooth=False):
+    """Loft a closed (y, z) section loop along X through stations
+    [(x, [(y, z), ...]), ...] ordered root-to-tip.  Wings, stabilizers,
+    fins, winglets, pylons and blade antennas are all the same
+    topology.  For a mirrored (-X) part pass negated x with the loop
+    order reversed."""
+    b = MeshBuilder()
+    rings = []
+    for (x, loop) in stations:
+        rings.append([b.add_vertex(Vector((x, y, z))) for (y, z) in loop])
+    count = len(stations[0][1])
+    for s in range(len(rings) - 1):
+        for i in range(count):
+            j = (i + 1) % count
+            b.quad(rings[s][i], rings[s + 1][i], rings[s + 1][j], rings[s][j])
+    for s, flip in ((0, False), (len(rings) - 1, True)):
+        loop = stations[s][1]
+        cx = stations[s][0]
+        cy = sum(p[0] for p in loop) / count
+        cz = sum(p[1] for p in loop) / count
+        c = b.add_vertex(Vector((cx, cy, cz)))
+        for i in range(count):
+            j = (i + 1) % count
+            if flip:
+                b.tri(c, rings[s][j], rings[s][i])
+            else:
+                b.tri(c, rings[s][i], rings[s][j])
+    return b.build(name, material, smooth=smooth)
+
+
+def _wing_section_0320(le_y, chord, z_base, thick):
+    return [
+        (le_y, z_base + 0.10 * thick),
+        (le_y + 0.28 * chord, z_base + 0.52 * thick),
+        (le_y + 0.62 * chord, z_base + 0.34 * thick),
+        (le_y + chord, z_base + 0.06 * thick),
+        (le_y + 0.55 * chord, z_base - 0.30 * thick),
+        (le_y + 0.18 * chord, z_base - 0.22 * thick),
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# parked narrow-body airliner, 45.0 m long / 38.41 m span / 12.19 m tail
+# (unchanged envelope; nose toward Blender -Y as the 0.3.2 original).
+#
+# 0.3.20 full rebuild: the 612-triangle 0.3.2 placeholder (straight tube,
+# cone nose, slab wings, one blue stripe) becomes a lathed fuselage with
+# a drooped nose and upswept tail, a glass cockpit visor with pillars,
+# ~106 individual passenger windows on the hull, outlined passenger and
+# cargo doors, lofted airfoil wings with flap-track fairings and blended
+# winglets, lathed engine nacelles with lips, fan faces and pylons, a
+# swept fin with dorsal fillet, and wheeled landing gear with doors and
+# hubs.  Materials stay in the 0.3.2 semantic set (+ CityAccentRed /
+# LampGlow detail lights, already used by other props).
+# --------------------------------------------------------------------------- #
 def build_airliner():
     white = MATS["CityWhitePaint"]
     blue = MATS["CityAccentBlue"]
     metal = MATS["PropsMetal"]
     frame = MATS["WindowFrame"]
     dark = MATS["RoofDark"]
+    glass = MATS["WindowGlassDark"]
+    red = MATS["CityAccentRed"]
+    glow = MATS["LampGlow"]
 
-    cyl("plane_fuselage", 0, 0.5, 4.4, 2.1, 33, white, vertices=16, rotation=(math.radians(90), 0, 0))
-    nose = cone("plane_nose", 0, -19.2, 4.4, 2.1, 0.4, 6.4, white, vertices=16)
-    nose.rotation_euler = (math.radians(90), 0, 0)
-    tail = cone("plane_tailcone", 0, 19.6, 5.1, 0.5, 2.05, 6.0, white, vertices=16)
-    tail.rotation_euler = (math.radians(90), 0, 0)
-    rbox("plane_cockpit", 0, -17.6, 5.75, 2.7, 2.4, 0.8, MATS["WindowGlassDark"], rotation=(math.radians(-32), 0, 0))
-    for sx in (-1.0, 1.0):
-        box("plane_stripe", sx * 1.98, 0.5, 5.15, 0.1, 28, 0.85, blue)
-        rbox("plane_wing", sx * 9.6, 2.4, 3.75, 19, 4.4, 0.42, metal, rotation=(0, 0, sx * 0.40))
-        rbox("plane_winglet", sx * 18.4, 6.1, 4.6, 0.35, 2.2, 1.9, blue, rotation=(0, 0, sx * 0.40))
-        cyl("plane_engine", sx * 6.8, -0.8, 2.65, 1.05, 4.6, white, vertices=10, rotation=(math.radians(90), 0, 0))
-        cyl("plane_intake", sx * 6.8, -3.15, 2.65, 0.88, 0.35, frame, vertices=10, rotation=(math.radians(90), 0, 0))
-        box("plane_pylon", sx * 6.8, -0.4, 3.6, 0.4, 2.6, 1.1, metal)
-        rbox("plane_tailplane", sx * 3.4, 19.8, 6.3, 7.5, 2.6, 0.35, metal, rotation=(0, 0, sx * 0.35))
-        cyl("plane_gear_leg", sx * 2.3, 2.5, 1.35, 0.3, 2.5, metal, vertices=8)
-        box("plane_gear_bogie", sx * 2.3, 2.5, 0.5, 0.65, 2.4, 0.9, dark)
-    box("plane_fin", 0, 18.2, 8.9, 0.45, 6.4, 6.6, blue)
-    rbox("plane_fin_sweep", 0, 15.6, 7.0, 0.45, 4.4, 3.4, blue, rotation=(math.radians(-38), 0, 0))
-    cyl("plane_gear_nose", 0, -13, 1.35, 0.26, 2.5, metal, vertices=8)
-    box("plane_gear_nosewheel", 0, -13, 0.45, 0.5, 1.1, 0.85, dark)
-    box("plane_apu", 0, 21.8, 5.4, 1.1, 1.6, 1.0, metal)
+    fuse_cz = 4.40
+    profile = [
+        (-22.40, 0.03, -0.55), (-22.10, 0.42, -0.48), (-21.40, 0.85, -0.38),
+        (-20.50, 1.28, -0.26), (-19.40, 1.64, -0.15), (-18.20, 1.88, -0.07),
+        (-16.80, 2.02, -0.02), (-15.20, 2.08, 0.00), (-13.50, 2.10, 0.00),
+        (10.00, 2.10, 0.00), (13.00, 2.08, 0.06), (15.50, 2.00, 0.22),
+        (17.80, 1.85, 0.48), (19.80, 1.60, 0.78), (21.20, 1.22, 1.02),
+        (22.10, 0.78, 1.16), (22.55, 0.40, 1.22), (22.60, 0.10, 1.24),
+    ]
+
+    def fuse_at(y):
+        for i in range(1, len(profile)):
+            if y <= profile[i][0]:
+                y0, r0, dz0 = profile[i - 1]
+                y1, r1, dz1 = profile[i]
+                t = 0.0 if y1 == y0 else (y - y0) / (y1 - y0)
+                return (r0 + (r1 - r0) * t, fuse_cz + dz0 + (dz1 - dz0) * t)
+        return (profile[-1][1], fuse_cz + profile[-1][2])
+
+    _lathe_y_0320("plane_fuselage", profile, white, segments=24, cz_base=fuse_cz)
+    # blue belly livery band (fore/aft of the centre fairing)
+    belly_profile = [(y, r + 0.02, dz) for (y, r, dz) in profile if -16.5 <= y <= 13.5]
+    _lathe_y_0320("plane_belly", belly_profile, blue, segments=24, cz_base=fuse_cz,
+                  angle0=math.pi * 1.5 - 0.85, angle1=math.pi * 1.5 + 0.85, capped=False)
+    # wing-body fairing bulge
+    fairing_profile = [(-4.5, 2.10, 0.0), (-3.0, 2.34, 0.0), (0.0, 2.44, 0.0),
+                       (3.5, 2.42, 0.0), (6.5, 2.28, 0.0), (8.5, 2.11, 0.0)]
+    _lathe_y_0320("plane_fairing", fairing_profile, white, segments=24, cz_base=fuse_cz,
+                  angle0=math.pi * 1.5 - 0.78, angle1=math.pi * 1.5 + 0.78, capped=False)
+
+    # cockpit visor: dark band hugging the nose slope + white pillars
+    visor_profile = []
+    for vy in (-20.35, -19.55, -18.75, -17.95):
+        vr, vcz = fuse_at(vy)
+        visor_profile.append((vy, vr + 0.02, vcz - fuse_cz))
+    _lathe_y_0320("plane_visor", visor_profile, glass, segments=20, cz_base=fuse_cz,
+                  angle0=math.pi / 2.0 - 0.92, angle1=math.pi / 2.0 + 0.92, capped=False)
+    for pa in (-0.62, -0.31, 0.0, 0.31, 0.62):
+        pillar_profile = []
+        for vy in (-20.35, -19.55, -18.75, -17.95):
+            vr, vcz = fuse_at(vy)
+            pillar_profile.append((vy, vr + 0.035, vcz - fuse_cz))
+        _lathe_y_0320("plane_visor_pillar", pillar_profile, white, segments=24, cz_base=fuse_cz,
+                      angle0=math.pi / 2.0 + pa - 0.026, angle1=math.pi / 2.0 + pa + 0.026, capped=False)
+
+    # passenger windows + door outlines on the hull surface
+    win_b = MeshBuilder()
+    door_b = MeshBuilder()
+
+    def hull_quad(builder, y0, y1, a0, a1, r_off, a_steps=2):
+        rows = []
+        for y in (y0, y1):
+            r, cz = fuse_at(y)
+            row = []
+            for s_i in range(a_steps + 1):
+                a = a0 + (a1 - a0) * (s_i / float(a_steps))
+                row.append(builder.add_vertex(Vector((math.cos(a) * (r + r_off), y, cz + math.sin(a) * (r + r_off)))))
+            rows.append(row)
+        for s_i in range(a_steps):
+            builder.quad(rows[0][s_i], rows[1][s_i], rows[1][s_i + 1], rows[0][s_i + 1])
+
+    for side in (1.0, -1.0):
+        a_c = 0.26 if side > 0 else math.pi - 0.26
+        wy = -15.40
+        while wy < 12.60:
+            if side > 0:
+                hull_quad(win_b, wy, wy + 0.27, a_c - 0.062, a_c + 0.062, 0.015)
+            else:
+                hull_quad(win_b, wy, wy + 0.27, a_c + 0.062, a_c - 0.062, 0.015)
+            wy += 0.54
+        # passenger doors: outline strips following the hull
+        for (dy, dw, dh) in ((-15.0, 0.86, 0.44), (-0.6, 0.60, 0.30), (0.75, 0.60, 0.30), (12.4, 0.86, 0.44)):
+            a_lo, a_hi = (a_c - dh, a_c + dh) if side > 0 else (a_c + dh, a_c - dh)
+            hull_quad(door_b, dy - dw / 2.0, dy - dw / 2.0 + 0.055, a_lo, a_hi, 0.02, a_steps=4)
+            hull_quad(door_b, dy + dw / 2.0 - 0.055, dy + dw / 2.0, a_lo, a_hi, 0.02, a_steps=4)
+            hull_quad(door_b, dy - dw / 2.0, dy + dw / 2.0, a_lo, a_lo + (0.026 if side > 0 else -0.026), 0.02)
+            hull_quad(door_b, dy - dw / 2.0, dy + dw / 2.0, a_hi - (0.026 if side > 0 else -0.026), a_hi, 0.02)
+    # right-side cargo door outlines (lower lobe)
+    for (cy, cw, chh) in ((-10.5, 3.4, 0.42), (8.5, 3.4, 0.42)):
+        a_c = -0.55
+        hull_quad(door_b, cy - cw / 2.0, cy - cw / 2.0 + 0.055, a_c - chh, a_c + chh, 0.02, a_steps=4)
+        hull_quad(door_b, cy + cw / 2.0 - 0.055, cy + cw / 2.0, a_c - chh, a_c + chh, 0.02, a_steps=4)
+        hull_quad(door_b, cy - cw / 2.0, cy + cw / 2.0, a_c - chh, a_c - chh + 0.026, 0.02)
+        hull_quad(door_b, cy - cw / 2.0, cy + cw / 2.0, a_c + chh - 0.026, a_c + chh, 0.02)
+    win_b.build("plane_windows", glass, smooth=True)
+    door_b.build("plane_door_outlines", frame, smooth=True)
+
+    # lofted wings with blended winglets and flap-track fairings
+    wing_stations = [
+        (1.10, -2.70, 7.60, 3.24, 0.66), (5.50, -1.15, 5.90, 3.55, 0.47),
+        (10.50, 0.55, 4.10, 3.90, 0.32), (15.00, 1.85, 2.75, 4.24, 0.22),
+        (18.75, 2.92, 1.80, 4.55, 0.15),
+    ]
+    for sx in (1.0, -1.0):
+        stations = []
+        for (x, le, chord, zb, t) in wing_stations:
+            loop = _wing_section_0320(le, chord, zb, t)
+            if sx < 0:
+                loop = list(reversed(loop))
+            stations.append((sx * x, loop))
+        _loft_x_0320("plane_wing", stations, white)
+        tip_loop = [(2.85, 4.56), (3.55, 6.05), (4.62, 6.10), (4.70, 4.60)]
+        wl_stations = [(sx * 18.65, tip_loop if sx > 0 else list(reversed(tip_loop))),
+                       (sx * 19.05, tip_loop if sx > 0 else list(reversed(tip_loop)))]
+        _loft_x_0320("plane_winglet", wl_stations, blue)
+        for (fx, fz) in ((5.5, 3.28), (9.5, 3.62), (13.5, 3.98)):
+            fair = cone("plane_flap_fairing", sx * fx, 4.55, fz, 0.17, 0.05, 1.70, white, vertices=8)
+            fair.rotation_euler = (math.radians(90), 0, 0)
+        # engines: lathed nacelle, lip ring, fan face, pylon
+        ex = sx * 6.90
+        nac_profile = [(-3.65, 1.00, 0.0), (-3.30, 1.13, 0.0), (-2.40, 1.16, 0.0),
+                       (-0.80, 1.08, 0.0), (0.80, 0.92, 0.0), (1.70, 0.74, 0.0), (2.10, 0.62, 0.0)]
+        _lathe_y_0320("plane_nacelle", nac_profile, white, segments=18, cx=ex, cz_base=2.42, capped=False)
+        lip_profile = [(-3.68, 0.99, 0.0), (-3.60, 1.03, 0.0), (-3.45, 0.94, 0.0)]
+        _lathe_y_0320("plane_intake_lip", lip_profile, metal, segments=18, cx=ex, cz_base=2.42, capped=False)
+        cyl("plane_fan", ex, -3.38, 2.42, 0.91, 0.10, frame, vertices=18, rotation=(math.radians(90), 0, 0))
+        sphere("plane_spinner", ex, -3.42, 2.42, 0.55, 0.50, 0.55, metal, segments=12, ring_count=8)
+        plug = cone("plane_exhaust", sx * 6.90, 2.05, 2.42, 0.34, 0.16, 0.80, metal, vertices=12)
+        plug.rotation_euler = (math.radians(90), 0, 0)
+        pylon_loop = [(-3.00, 3.10), (-0.70, 3.88), (1.00, 3.78), (1.45, 2.98)]
+        py_stations = [(ex - 0.14, pylon_loop), (ex + 0.14, pylon_loop)]
+        if sx < 0:
+            py_stations = [(ex - 0.14, list(reversed(pylon_loop))), (ex + 0.14, list(reversed(pylon_loop)))]
+        _loft_x_0320("plane_pylon", py_stations, white)
+
+    # tail: swept fin (blue, white cap), dorsal fillet, stabilizers
+    fin_loop = [(13.20, 5.55), (17.60, 12.04), (21.55, 12.19), (21.90, 6.40), (19.00, 5.90)]
+    _loft_x_0320("plane_fin", [(-0.17, fin_loop), (0.17, fin_loop)], blue)
+    fin_cap = [(17.42, 11.51), (17.60, 12.04), (21.55, 12.19), (21.66, 11.61)]
+    _loft_x_0320("plane_fin_cap", [(-0.185, fin_cap), (0.185, fin_cap)], white)
+    dorsal_loop = [(9.80, 6.30), (14.60, 8.55), (15.60, 6.15)]
+    _loft_x_0320("plane_dorsal", [(-0.13, dorsal_loop), (0.13, dorsal_loop)], white)
+    stab_stations = [(0.90, 17.90, 3.60, 6.05, 0.30), (3.80, 18.90, 2.60, 6.30, 0.20),
+                     (5.90, 19.55, 1.95, 6.47, 0.15), (6.90, 19.85, 1.65, 6.55, 0.12)]
+    for sx in (1.0, -1.0):
+        st_white = []
+        st_blue = []
+        for (x, le, chord, zb, t) in stab_stations:
+            loop = _wing_section_0320(le, chord, zb, t)
+            if sx < 0:
+                loop = list(reversed(loop))
+            if x <= 5.90:
+                st_white.append((sx * x, loop))
+            if x >= 5.90:
+                st_blue.append((sx * x, loop))
+        _loft_x_0320("plane_stab", st_white, white)
+        _loft_x_0320("plane_stab_tip", st_blue, blue)
+    tail_cone = cone("plane_apu", 0, 22.25, 5.66, 0.34, 0.14, 0.70, metal, vertices=10)
+    tail_cone.rotation_euler = (math.radians(90), 0, 0)
+    box("plane_tail_light", 0, 22.55, 5.66, 0.14, 0.10, 0.14, glow)
+
+    # landing gear: legs, wheels with hubs, doors
+    def wheel(wx, wy, wz, radius, width):
+        cyl("plane_wheel", wx, wy, wz, radius, width, dark, vertices=14, rotation=(0, math.radians(90), 0))
+        cyl("plane_hub", wx + width * 0.30, wy, wz, radius * 0.45, width * 0.72, metal, vertices=10, rotation=(0, math.radians(90), 0))
+
+    cyl("plane_nose_leg", 0, -14.20, 1.55, 0.11, 2.10, metal, vertices=10)
+    box("plane_nose_torque", 0, -14.05, 0.95, 0.10, 0.35, 0.55, metal)
+    wheel(-0.17, -14.20, 0.44, 0.42, 0.24)
+    wheel(0.17, -14.20, 0.44, 0.42, 0.24)
+    for sx in (1.0, -1.0):
+        rbox("plane_nose_door", sx * 0.22, -14.20, 1.70, 0.05, 1.50, 1.30, white, rotation=(0, sx * 0.22, 0))
+        cyl("plane_main_leg", sx * 2.35, 2.60, 1.75, 0.16, 2.30, metal, vertices=10)
+        stay = tube_between("plane_main_stay", (sx * 2.35, 2.60, 1.15), (sx * 3.10, 3.30, 2.90), 0.07, 0.07, metal, vertices=8)
+        wheel(sx * 2.35 - 0.21, 2.60, 0.59, 0.57, 0.34)
+        wheel(sx * 2.35 + 0.21, 2.60, 0.59, 0.57, 0.34)
+        box("plane_main_door", sx * 2.02, 2.60, 1.55, 0.05, 1.70, 1.15, white)
+
+    # antennas, pitots, beacons, tip lights
+    for (ay, ah) in ((-7.0, 0.42), (-0.5, 0.50), (5.5, 0.42)):
+        _r, acz = fuse_at(ay)
+        ant_loop = [(ay - 0.42, acz + 2.02), (ay + 0.10, acz + 2.02 + ah), (ay + 0.38, acz + 2.02)]
+        _loft_x_0320("plane_antenna", [(-0.035, ant_loop), (0.035, ant_loop)], white)
+    for sx in (1.0, -1.0):
+        tube_between("plane_pitot", (sx * 1.42, -19.60, 4.05), (sx * 1.58, -20.15, 3.98), 0.030, 0.018, metal, vertices=6)
+        box("plane_tip_light", sx * 19.125, 4.35, 4.80, 0.16, 0.42, 0.14, red if sx < 0 else glow)
+    _r, bcz = fuse_at(-0.5)
+    cyl("plane_beacon_top", 0, -0.5, bcz + 2.13, 0.09, 0.12, red, vertices=8)
+    cyl("plane_beacon_bottom", 0, 0.7, 1.92, 0.09, 0.12, red, vertices=8)
+
 
 
 def build_cooling_tower():
@@ -7310,6 +7640,14 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
     while ring_z < lower_top - 3.0:
         box("office_spandrel", 0, 0, ring_z, shaft_w + 0.4, shaft_w + 0.4, 1.05, spandrel)
         ring_z += 9.5 if detail_036 else 11.5
+    # 0.3.20: thin slab-edge rings every floor (~3.17 m) under the
+    # feature spandrel bands, so the glass shaft reads storey by
+    # storey instead of in 9.5 m jumps.  +0.24 proud of the glass
+    # stays inside the feature bands' +0.40 envelope.
+    slab_z = 9.17
+    while slab_z < lower_top - 1.4:
+        box("office_slab_edge0320", 0, 0, slab_z, shaft_w + 0.24, shaft_w + 0.24, 0.34, spandrel)
+        slab_z += 3.17
     for cx in (-shaft_w / 2.0, shaft_w / 2.0):
         for cy in (-shaft_w / 2.0, shaft_w / 2.0):
             box("office_corner_fin", cx, cy, 6 + (lower_top - 6) / 2.0, 1.15, 1.15, lower_top - 6, metal)
@@ -7331,6 +7669,10 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
         while ring_z < total_h - 6.0:
             box("office_spandrel_up", 0, 0, ring_z, top_w + 0.4, top_w + 0.4, 1.05, spandrel)
             ring_z += 9.5 if detail_036 else 11.5
+        slab_z = lower_top + 3.17
+        while slab_z < total_h - 4.6:
+            box("office_slab_edge_up0320", 0, 0, slab_z, top_w + 0.24, top_w + 0.24, 0.34, spandrel)
+            slab_z += 3.17
         box("office_setback_slab", 0, 0, lower_top + 0.35, shaft_w + 0.7, shaft_w + 0.7, 0.7, trim)
         if detail_036:
             # 0.3.8 (mid/high towers): the setback upper shaft keeps
@@ -7347,6 +7689,8 @@ def _build_office_tower(podium_w, shaft_w, total_h, setback_at, spire, detail_03
                 for fin_y in (-top_w * 0.25, top_w * 0.25):
                     box("office_upper_fin0313", sx * (top_w / 2.0 + 0.10), fin_y, lower_top + upper_h / 2.0, 0.34, 0.5, upper_h, metal)
     box("office_crown", 0, 0, total_h - 2.9, top_w + 1.2, top_w + 1.2, 2.2, trim)
+    # 0.3.20: lit crown band (night skyline read) on the crown face.
+    box("office_crown_light0320", 0, 0, total_h - 2.35, top_w + 1.28, top_w + 1.28, 0.34, MATS["LampGlow"])
     box("office_roof_box", -top_w * 0.16, 0, total_h - 0.9, top_w * 0.42, top_w * 0.5, 1.9, dark)
     box("office_hvac", top_w * 0.22, top_w * 0.18, total_h - 1.3, 4.5, 4.0, 1.2, metal)
     if detail_036:
@@ -7372,7 +7716,7 @@ def build_office_tower_high():
     _build_office_tower(38.0, 33.0, 96.0, 58.0, True, detail_036=True)
 
 
-def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
+def _build_midrise(width, depth, floors, detail_036=False, panel_038=False, recess_0320=False):
     plaster = MATS["HeroPlaster"]
     stone = MATS["HeroStone"]
     glass = MATS["FacadeGlass"]
@@ -7385,6 +7729,12 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
     box("mid_stair_glass", 0, -(depth / 2.0 + 0.25), 1.2 + body_h / 2.0, 4.6, 0.5, body_h - 1.5, glass)
     box("mid_door", 0, -(depth / 2.0 + 0.3), 1.9, 2.6, 0.4, 3.4, MATS["WindowFrame"])
     box("mid_canopy", 0, -(depth / 2.0 + 1.1), 3.9, 6.4, 2.4, 0.35, metal)
+    if recess_0320:
+        # 0.3.20: mullion grid over the full-height stair glazing.
+        for stair_mx in (-1.5, 0.0, 1.5):
+            box("mid_stair_mullion0320", stair_mx, -(depth / 2.0 + 0.56), 1.2 + body_h / 2.0, 0.15, 0.12, body_h - 1.5, metal)
+        for stair_f in range(1, floors):
+            box("mid_stair_transom0320", 0, -(depth / 2.0 + 0.56), 1.2 + stair_f * floor_h, 4.6, 0.12, 0.15, metal)
     for f in range(floors):
         fz = 1.2 + f * floor_h
         for sy in (-1.0, 1.0):
@@ -7392,7 +7742,12 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
             for bx in (-width * 0.29, width * 0.29):
                 box("mid_balcony_slab", bx, face_y + sy * 0.85, fz + 0.15, 5.4, 1.7, 0.22, MATS["HeroTrim"])
                 box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
-                if panel_038:
+                if recess_0320:
+                    # 0.3.20: recessed balcony doors (frame ring,
+                    # returns, glass at the wall plane) replace the
+                    # flat 0.3.8 panels on both street elevations.
+                    win_recess_0312("mid_balcony_door", bx, face_y, fz + 1.45, 3.6, 2.3, dark_glass, MATS["HeroTrim"], "back" if sy > 0.0 else "front", depth=0.22, frame_w=0.16)
+                elif panel_038:
                     # 0.3.8 (midrise_b): flat dark-glass slabs become
                     # outward panels on the old outer face; the
                     # plaster wall behind hides the back side.
@@ -7402,7 +7757,9 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
                 if detail_036:
                     box("mid_balcony_toprail", bx, face_y + sy * 1.66, fz + 1.22, 5.5, 0.16, 0.09, metal)
             for wx in (-width * 0.13, width * 0.13, -width * 0.44, width * 0.44):
-                if panel_038:
+                if recess_0320:
+                    win_recess_0312("mid_window", wx, face_y, fz + 1.7, 2.5, 1.6, dark_glass, MATS["HeroTrim"], "back" if sy > 0.0 else "front", depth=0.20, frame_w=0.13)
+                elif panel_038:
                     panel("mid_window", wx, face_y + sy * 0.22, fz + 1.7, 2.5, 1.6, dark_glass, "back" if sy > 0.0 else "front")
                 else:
                     box("mid_window", wx, face_y + sy * 0.12, fz + 1.7, 2.5, 0.2, 1.6, dark_glass)
@@ -7436,11 +7793,11 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False):
 
 
 def build_midrise_a():
-    _build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True)
+    _build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True, recess_0320=True)
 
 
 def build_midrise_b():
-    _build_midrise(30.0, 24.0, 10, detail_036=True, panel_038=True)
+    _build_midrise(30.0, 24.0, 10, detail_036=True, panel_038=True, recess_0320=True)
 
 
 def _build_warehouse(length, width, wall_h, roof_h, doors, detail_036=False):

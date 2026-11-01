@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.19-native-alpha"'), 'Native project version metadata must match 0.3.19-native-alpha');
-assert(preset.includes('version/code=85'), 'Native 0.3.19 must bump Android versionCode to 85');
-assert(preset.includes('version/name="0.3.19-native-alpha"'), 'Native version name must be 0.3.19-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.19-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.20-native-alpha"'), 'Native project version metadata must match 0.3.20-native-alpha');
+assert(preset.includes('version/code=86'), 'Native 0.3.20 must bump Android versionCode to 86');
+assert(preset.includes('version/name="0.3.20-native-alpha"'), 'Native version name must be 0.3.20-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.20-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.19"') && preset.includes('application/product_version="0.3.19"'), 'Desktop Windows version metadata must match native 0.3.19');
+assert(preset.includes('application/file_version="0.3.20"') && preset.includes('application/product_version="0.3.20"'), 'Desktop Windows version metadata must match native 0.3.20');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1347,7 +1347,7 @@ for (const [model037, [triangleCap037, expectedParts037]] of Object.entries(mode
 // balcony rails, container corrugation keeps its silhouette at a
 // wider pitch, and office_tower_mid/high plus warehouse_small gain
 // the detail their sibling variants already had.
-for (const marker of ['panel("cottage_window_glass"', 'panel("cottage_mashrabiya_core"', 'segments=12, ring_count=8', '_ct_lathe("stadium_bowl", profile, concrete, segments=36', 'def _build_midrise(width, depth, floors, detail_036=False, panel_038=False)', 'office_upper_corner_fin', 'panel("cont_data_plate"']) {
+for (const marker of ['panel("cottage_window_glass"', 'panel("cottage_mashrabiya_core"', 'segments=12, ring_count=8', '_ct_lathe("stadium_bowl", profile, concrete, segments=36', 'def _build_midrise(width, depth, floors, detail_036=False, panel_038=False, recess_0320=False)', 'office_upper_corner_fin', 'panel("cont_data_plate"']) {
   assert(blenderScript.includes(marker), `0.3.8 Blender marker is missing: ${marker}`);
 }
 for (const marker of ['sail_cottage_dune_triangles_0239", 0)) < 7500', 'sail_cottage_courtyard_triangles_0239", 0)) < 8500', 'sail_cottage_palm_triangles_0239", 0)) < 6500']) {
@@ -1357,12 +1357,12 @@ const modelBudgets038 = {
   'cottage_courtyard.glb': [11_500, 17],
   'cottage_dune.glb': [9_800, 17],
   'cottage_palm.glb': [9_200, 16],
-  'midrise_b.glb': [2_450, 8],
+  'midrise_b.glb': [5_600, 8],
   'stadium.glb': [2_350, 7],
   'container_blue.glb': [660, 4],
   'container_red.glb': [660, 4],
-  'office_tower_mid.glb': [720, 7],
-  'office_tower_high.glb': [830, 8],
+  'office_tower_mid.glb': [950, 8],
+  'office_tower_high.glb': [1_160, 9],
   'warehouse_small.glb': [830, 6],
 };
 for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(modelBudgets038)) {
@@ -1396,7 +1396,7 @@ for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(mode
 // townhouse_b wall-backed glass becomes panels on the old outer
 // faces, round timber/plaster posts become square posts, and the
 // school gains a name band and roof plant.
-for (const marker of ['panel("hero_window_frame"', 'panel("villa_window_frame"', 'wquad(frame, 0.0, 0.083', 'backing_out + 0.030', 'sphere("tower_flag_finial"', '_build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True)', 'panel("mall_storefront"', 'panel("school_win_front"', 'school_sign', 'panel("term_glass_upper"', 'win_recess_0312("villab_glass"', 'win_recess_0312("townb_window"']) {
+for (const marker of ['panel("hero_window_frame"', 'panel("villa_window_frame"', 'wquad(frame, 0.0, 0.083', 'backing_out + 0.030', 'sphere("tower_flag_finial"', '_build_midrise(34.0, 26.0, 7, detail_036=True, panel_038=True, recess_0320=True)', 'panel("mall_storefront"', 'panel("school_win_front"', 'school_sign', 'panel("term_glass_upper"', 'win_recess_0312("villab_glass"', 'win_recess_0312("townb_window"']) {
   assert(blenderScript.includes(marker), `0.3.9 Blender marker is missing: ${marker}`);
 }
 const modelBudgets039 = {
@@ -1404,10 +1404,10 @@ const modelBudgets039 = {
   'hero_building.glb': [22_500, 18],
   'townhouse.glb': [17_500, 22],
   'villa.glb': [12_600, 19],
-  'midrise_a.glb': [1_820, 8],
+  'midrise_a.glb': [4_050, 8],
   'shopping_mall.glb': [2_400, 9],
   'school.glb': [1_750, 11],
-  'airport_terminal.glb': [1_150, 5],
+  'airport_terminal.glb': [3_150, 5],
   'villa_b.glb': [700, 8],
   'townhouse_b.glb': [910, 9],
 };
@@ -1448,13 +1448,13 @@ const modelBudgets0310 = {
   'turbine_hall_short.glb': [720, 8],
   'storage_tank.glb': [620, 4],
   'radar_station.glb': [560, 6],
-  'airliner.glb': [660, 6],
+  'airliner.glb': [4_500, 8],
   'afv.glb': [570, 4],
   'greenhouse.glb': [730, 5],
   'chimney.glb': [410, 3],
-  'atc_tower.glb': [440, 6],
-  'hangar_large.glb': [330, 5],
-  'hangar_small.glb': [330, 5],
+  'atc_tower.glb': [800, 7],
+  'hangar_large.glb': [830, 6],
+  'hangar_small.glb': [780, 6],
   'port_crane.glb': [400, 7],
   'barge.glb': [400, 5],
   'bleacher.glb': [380, 4],
@@ -1607,7 +1607,7 @@ for (const [tex0313, minBytes0313] of [['user_brushed_metal_seamless.jpg', 50_00
       lowTris0313 += mode0313 === 4 ? Math.floor(count0313 / 3) : (mode0313 === 5 || mode0313 === 6 ? Math.max(count0313 - 2, 0) : 0);
     }
   }
-  assert(lowParts0313 === 7 && lowTris0313 <= 540, `0.3.13 office_tower_low budget blown: ${lowTris0313} tris / ${lowParts0313} parts`);
+  assert(lowParts0313 === 8 && lowTris0313 <= 660, `0.3.13 office_tower_low budget blown: ${lowTris0313} tris / ${lowParts0313} parts`);
 }
 
 // 0.3.14: TZ stage 5 (model part) - lived-in residential detail.
@@ -1756,6 +1756,39 @@ for (const marker of ['_build_rt7_stage9_0318', '_rt7_ridge_mesh0318', 'Rt7SeaHo
 // building footprints via _is_position_clear, not just roads.
 for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0.30, c2.y))', '_road_vertex(tool, centre_pts[si], Vector2(0.5, v0))', 'var d: float = 8.0 - carry', '_is_position_clear(spos, 3.4, 0.5)']) {
   assert(worldScript.includes(marker), `0.3.19 world-builder marker is missing: ${marker}`);
+}
+
+// 0.3.20: post-TZ model inventory pass.  The 0.3.2-era placeholder
+// tier (612-triangle airliner, flat-panel midrise windows, slab jet
+// bridges, bare hangar shells) is rebuilt in Blender inside the
+// exact original envelopes, so colliders/placements are untouched.
+// These floor asserts keep a placeholder from silently coming back.
+{
+  const buildProps0320 = await readFile('blender/build_props.py', 'utf8');
+  for (const marker0320 of ['_lathe_y_0320', '_loft_x_0320', 'plane_windows', 'term_mullion0320', 'term_jb_rotunda0320', 'atc_gallery0320', 'hangar_leaf0320', 'recess_0320', 'office_slab_edge0320', 'office_crown_light0320']) {
+    assert(buildProps0320.includes(marker0320), `0.3.20 build_props marker is missing: ${marker0320}`);
+  }
+  const floors0320 = {
+    'airliner.glb': 3500, 'airport_terminal.glb': 2600, 'atc_tower.glb': 650,
+    'hangar_large.glb': 680, 'hangar_small.glb': 640,
+    'midrise_a.glb': 3400, 'midrise_b.glb': 4800,
+    'office_tower_low.glb': 560, 'office_tower_mid.glb': 820, 'office_tower_high.glb': 1000,
+  };
+  for (const [name0320, floor0320] of Object.entries(floors0320)) {
+    const bytes0320 = await readFile(path.join('src/assets/models/props', name0320));
+    const json0320 = parseGlbJson(bytes0320);
+    let tris0320 = 0;
+    for (const mesh0320 of json0320.meshes ?? []) {
+      for (const prim0320 of mesh0320.primitives ?? []) {
+        if (prim0320.indices === undefined) continue;
+        const count0320 = json0320.accessors[prim0320.indices]?.count ?? 0;
+        const mode0320 = prim0320.mode ?? 4;
+        tris0320 += mode0320 === 4 ? Math.floor(count0320 / 3) : (mode0320 === 5 || mode0320 === 6 ? Math.max(count0320 - 2, 0) : 0);
+      }
+    }
+    assert(tris0320 >= floor0320, `0.3.20 detail floor: ${name0320} has ${tris0320} tris < ${floor0320} (placeholder regression?)`);
+  }
+  console.log('0.3.20 detail floors OK (10 rebuilt models)');
 }
 
 console.log('Native Godot project validation OK');
