@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.18-native-alpha"'), 'Native project version metadata must match 0.3.18-native-alpha');
-assert(preset.includes('version/code=84'), 'Native 0.3.18 must bump Android versionCode to 84');
-assert(preset.includes('version/name="0.3.18-native-alpha"'), 'Native version name must be 0.3.18-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.18-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.19-native-alpha"'), 'Native project version metadata must match 0.3.19-native-alpha');
+assert(preset.includes('version/code=85'), 'Native 0.3.19 must bump Android versionCode to 85');
+assert(preset.includes('version/name="0.3.19-native-alpha"'), 'Native version name must be 0.3.19-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.19-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.18"') && preset.includes('application/product_version="0.3.18"'), 'Desktop Windows version metadata must match native 0.3.18');
+assert(preset.includes('application/file_version="0.3.19"') && preset.includes('application/product_version="0.3.19"'), 'Desktop Windows version metadata must match native 0.3.19');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1747,6 +1747,15 @@ for (const marker of ['_build_rt7_stage9_0318', '_rt7_ridge_mesh0318', 'Rt7SeaHo
   assert(totalBytes0318 <= 24500000, `0.3.18 props budget: ${totalBytes0318} bytes > 24.5 MB`);
   assert(totalTris0318 <= 390000, `0.3.18 props budget: ${totalTris0318} unique tris > 390k`);
   console.log(`0.3.18 props budget: ${glbNames0318.length} GLBs, ${totalBytes0318} bytes, ${totalTris0318} unique tris`);
+}
+
+// 0.3.19: final TZ audit fixes.  Trail ribbons get an 8 m resample
+// and a cambered centre row (+0.30 m; edges +0.14 m) so dune crests
+// no longer poke through the packed-sand surface (measured up to
+// +15.8 cm on the flat 11 m ribbons), and bus shelters clear
+// building footprints via _is_position_clear, not just roads.
+for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0.30, c2.y))', '_road_vertex(tool, centre_pts[si], Vector2(0.5, v0))', 'var d: float = 8.0 - carry', '_is_position_clear(spos, 3.4, 0.5)']) {
+  assert(worldScript.includes(marker), `0.3.19 world-builder marker is missing: ${marker}`);
 }
 
 console.log('Native Godot project validation OK');
