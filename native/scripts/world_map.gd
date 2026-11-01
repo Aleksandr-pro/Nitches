@@ -655,6 +655,11 @@ func _build_pois() -> void:
                 park_name = "Пальметум Корниш"
             _add_poi("park_" + park_id, park_name, "Парк", rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5, 2)
 
+    if _world != null:
+        for spot_variant in _world.get_photo_spot_entries():
+            var spot: Dictionary = spot_variant
+            _add_poi("photo_" + String(spot.get("id", "spot")), String(spot.get("label", "Фото-точка")), "Фото", float(spot.get("x", 0.0)), float(spot.get("z", 0.0)), 2)
+
     _add_poi("race_boulevard", "Старт гонки: Центральный проспект", "Гонка", 0.0, 300.0, 2)
     _add_poi("race_corniche", "Старт гонки: Корниш", "Гонка", -2650.0, -300.0, 2)
     _add_poi("race_palm_bridge", "Старт гонки: Вантовый мост", "Гонка", 0.0, 1480.0, 2)

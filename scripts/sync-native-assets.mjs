@@ -33,6 +33,7 @@ const modelCopies = [
   ['src/assets/models/props/street_lamp.glb', 'props/street_lamp.glb'],
   ['src/assets/models/props/bus_shelter.glb', 'props/bus_shelter.glb'],
   ['src/assets/models/props/park_bench.glb', 'props/park_bench.glb'],
+  ['src/assets/models/props/vista_sign.glb', 'props/vista_sign.glb'],
   ['src/assets/models/props/park_pergola.glb', 'props/park_pergola.glb'],
   ['src/assets/models/props/traffic_signal_short.glb', 'props/traffic_signal_short.glb'],
   ['src/assets/models/props/traffic_signal_long.glb', 'props/traffic_signal_long.glb'],

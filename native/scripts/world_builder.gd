@@ -6351,6 +6351,8 @@ func _batched_model_base_range(path: String) -> float:
 		return 220.0
 	if path.ends_with("park_pergola.glb"):
 		return 320.0
+	if path.ends_with("vista_sign.glb"):
+		return 300.0
 	# 0.3.2 low-poly Blender city pack: individually cheap meshes, but
 	# thousands of instances, so detail yields to far-proxy massing.
 	# 0.3.3 trims the switchover a little further out only where the
@@ -8560,6 +8562,7 @@ func _build_landmarks() -> void:
 	_build_rt7_stage7_0316(root)
 	_build_rt7_stage8_0317(root)
 	_build_rt7_stage9_0318(root)
+	_build_rt7_scenic_0326(root)
 
 
 ## 0.3.15 TZ stage 6: canal quay walls with mooring bollards and the
@@ -8567,6 +8570,196 @@ func _build_landmarks() -> void:
 ## batches on top of the landmark pass (quay concrete, bollard metal,
 ## soil, meadow, crop rows); the moored barges/cranes/silos of the
 ## stage ride the landmark model batches above.
+## 0.3.26 scenic photo spots: eight authored Horizon-style vista
+## points.  Each entry is an anchor beside a road plus the view
+## target the spot faces; _build_rt7_scenic_0326 derives the exact
+## gravel turnout pad from the nearest road transform, so the
+## authored numbers only need to sit near the right road.
+const PHOTO_SPOTS_0326 := [
+	{"id": "corniche_sunset", "label": "Корниш на закате", "x": -2635.0, "z": 300.0, "vx": -3400.0, "vz": 260.0, "pergola": true},
+	{"id": "main_tower_plaza", "label": "Площадь главной башни", "x": 135.0, "z": 135.0, "vx": 0.0, "vz": 0.0, "pergola": false},
+	{"id": "opera_boulevard", "label": "Оперный бульвар", "x": -775.0, "z": 585.0, "vx": -700.0, "vz": 500.0, "pergola": false},
+	{"id": "cable_bridge", "label": "Вантовый мост", "x": 16.0, "z": 1400.0, "vx": 0.0, "vz": 1650.0, "pergola": false},
+	{"id": "airport_overlook", "label": "Аэропорт — смотровая", "x": -1965.0, "z": -2140.0, "vx": -1720.0, "vz": -1980.0, "pergola": false},
+	{"id": "npp_canal", "label": "АЭС и канал", "x": -2430.0, "z": 2270.0, "vx": -2100.0, "vz": 2600.0, "pergola": false},
+	{"id": "rich_hills", "label": "виллы Rich Hills", "x": 1405.0, "z": -985.0, "vx": 1500.0, "vz": -1100.0, "pergola": true},
+	{"id": "central_park", "label": "Центральный парк", "x": 215.0, "z": -618.0, "vx": 300.0, "vz": -720.0, "pergola": true},
+]
+
+
+## Photo-spot POIs for the world map / minimap (0.3.26).  Uses the
+## authored anchors so the map can bind before the scenic pass has
+## snapped the pads to the road network.
+func get_photo_spot_entries() -> Array:
+	var entries: Array = []
+	if String(data.get("layout", "")) != "richtown7":
+		return entries
+	for spot_variant in PHOTO_SPOTS_0326:
+		var spot: Dictionary = spot_variant
+		entries.append({
+			"id": String(spot.get("id", "spot")),
+			"label": String(spot.get("label", "Фото-точка")),
+			"x": float(spot.get("x", 0.0)),
+			"z": float(spot.get("z", 0.0)),
+		})
+	return entries
+
+
+## 0.3.26 scenic pass (RichTown 7x7 only, runtime-derived like
+## stages 6-9): gravel turnout pads with a vista sign, view-facing
+## benches, hero-spot pergolas and flower/shrub/palm clusters at
+## the eight photo spots, plus saturation planting along four
+## scenic corridors that read as bare verges today (the corniche
+## promenade, the opera boulevard, the central-park south walk
+## and the mosque approach).  Everything rides the existing
+## batched-model queue plus one chunked MultiMesh for the pads,
+## so the cost stays inside the established visibility budgets.
+func _build_rt7_scenic_0326(root: Node3D) -> void:
+	if not _is_rt7:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 260326
+	var pad_mesh := BoxMesh.new()
+	pad_mesh.size = Vector3.ONE
+	var pad_t: Array = []
+	var sign_t: Array = []
+	var bench_t: Array = []
+	var pergola_t: Array = []
+	var palm_t: Array = []
+	var flower_t: Array = []
+	var shrub_t: Array = []
+	var spots_built := 0
+	for spot_variant in PHOTO_SPOTS_0326:
+		var spot: Dictionary = spot_variant
+		var anchor := Vector3(float(spot.get("x", 0.0)), 0.0, float(spot.get("z", 0.0)))
+		var view_target := Vector3(float(spot.get("vx", 0.0)), 0.0, float(spot.get("vz", 0.0)))
+		var road_t := find_nearest_road_transform(anchor)
+		var road_pos := road_t.origin
+		var right := road_t.basis.x
+		right.y = 0.0
+		if right.length_squared() < 0.001:
+			continue
+		right = right.normalized()
+		var back := right.cross(Vector3.UP).normalized()
+		var road_dir := -back
+		var to_anchor := anchor - road_pos
+		to_anchor.y = 0.0
+		var side_sign := 1.0 if to_anchor.dot(right) >= 0.0 else -1.0
+		var pad_center := Vector3.ZERO
+		var pad_ok := false
+		for attempt in [[8.5, side_sign], [8.5, -side_sign], [6.0, side_sign], [6.0, -side_sign], [11.0, side_sign]]:
+			var candidate: Vector3 = road_pos + right * (float(attempt[0]) * float(attempt[1]))
+			candidate.y = height_at(candidate.x, candidate.z)
+			if String(get_surface_at(candidate).get("kind", "")) != "water":
+				pad_center = candidate
+				side_sign = float(attempt[1])
+				pad_ok = true
+				break
+		if not pad_ok:
+			continue
+		spots_built += 1
+		var pad_basis := Basis(right, Vector3.UP, back).scaled_local(Vector3(6.5, 0.18, 10.0))
+		pad_t.append(Transform3D(pad_basis, pad_center + Vector3(0.0, 0.02, 0.0)))
+		var view_dir := view_target - pad_center
+		view_dir.y = 0.0
+		if view_dir.length_squared() < 0.01:
+			view_dir = right * side_sign
+		view_dir = view_dir.normalized()
+		var view_yaw := atan2(-view_dir.x, -view_dir.z)
+		var has_pergola := bool(spot.get("pergola", false))
+		# The vista sign faces the road so it reads as you pull in;
+		# on pergola spots it shifts to the pad's far end instead.
+		var sign_pos := pad_center + right * (side_sign * 2.7)
+		if has_pergola:
+			sign_pos += road_dir * 4.1
+		sign_pos.y = height_at(sign_pos.x, sign_pos.z)
+		var to_road := road_pos - sign_pos
+		to_road.y = 0.0
+		var sign_yaw := atan2(-to_road.x, -to_road.z) if to_road.length_squared() > 0.01 else view_yaw
+		sign_t.append(make_transform(sign_pos, sign_yaw))
+		_add_box_collider(sign_pos + Vector3(0.0, 0.85, 0.0), Vector3(1.9, 1.7, 0.7), sign_yaw)
+		if has_pergola:
+			var pergola_pos := pad_center + right * (side_sign * 2.1)
+			pergola_pos.y = height_at(pergola_pos.x, pergola_pos.z)
+			pergola_t.append(make_transform(pergola_pos, view_yaw))
+		for bench_i in 2:
+			var bench_pos := Vector3.ZERO
+			if has_pergola:
+				bench_pos = pad_center + right * (side_sign * 2.1) + road_dir * (-0.95 + 1.9 * float(bench_i))
+			else:
+				bench_pos = pad_center + right * (side_sign * 2.45) + road_dir * (-2.6 + 5.2 * float(bench_i))
+			bench_pos.y = height_at(bench_pos.x, bench_pos.z)
+			bench_t.append(make_transform(bench_pos, view_yaw))
+		for palm_side in [-1.0, 1.0]:
+			var palm_pos: Vector3 = pad_center + right * (side_sign * 3.6) + road_dir * (4.4 * float(palm_side))
+			palm_pos.y = height_at(palm_pos.x, palm_pos.z)
+			if String(get_surface_at(palm_pos).get("kind", "")) == "water":
+				continue
+			palm_t.append(make_transform(palm_pos, rng.randf_range(0.0, TAU), Vector3.ONE * rng.randf_range(0.92, 1.08)))
+		_scenic_cluster_0326(rng, pad_center, 3.6, 8.6, 22, flower_t, shrub_t)
+
+	var corridor_planted := 0
+	var corridor_lines := [
+		[Vector2(-2662.0, -650.0), Vector2(-2662.0, 650.0), 10.0, 2.5, 6.5],
+		[Vector2(-792.0, 596.0), Vector2(-608.0, 404.0), 9.0, 9.0, 15.0],
+		[Vector2(140.0, -612.0), Vector2(470.0, -612.0), 9.0, 4.0, 13.0],
+		[Vector2(1008.0, 1478.0), Vector2(932.0, 1332.0), 9.0, 8.0, 14.0],
+	]
+	for line_variant in corridor_lines:
+		var line: Array = line_variant
+		var a: Vector2 = line[0]
+		var b: Vector2 = line[1]
+		var step_m := float(line[2])
+		var lat_min := float(line[3])
+		var lat_max := float(line[4])
+		var length_m := a.distance_to(b)
+		var dir2 := (b - a) / maxf(length_m, 0.01)
+		var lat2 := Vector2(-dir2.y, dir2.x)
+		var flip := 1.0
+		var t := rng.randf_range(2.0, 7.0)
+		while t < length_m:
+			var p2 := a + dir2 * t + lat2 * (rng.randf_range(lat_min, lat_max) * flip)
+			flip = -flip
+			corridor_planted += _scenic_plant_one_0326(rng, Vector3(p2.x, 0.0, p2.y), flower_t, shrub_t)
+			t += step_m * rng.randf_range(0.75, 1.3)
+
+	_add_multimesh(root, pad_mesh, _prop_material("CottageGravel"), pad_t, "Rt7ScenicPads0326", false, -1.0, 700.0, 260.0)
+	_add_batched_model(root, "res://assets/props/vista_sign.glb", sign_t, "Rt7ScenicSigns0326")
+	_add_batched_model(root, "res://assets/props/park_bench.glb", bench_t, "Rt7ScenicBenches0326")
+	_add_batched_model(root, "res://assets/props/park_pergola.glb", pergola_t, "Rt7ScenicPergolas0326")
+	_add_batched_model(root, "res://assets/props/palm_date.glb", palm_t, "Rt7ScenicPalms0326")
+	_add_batched_model(root, "res://assets/props/flower_clump.glb", flower_t, "Rt7ScenicFlowers0326")
+	_add_batched_model(root, "res://assets/props/ornamental_shrub.glb", shrub_t, "Rt7ScenicShrubs0326")
+	_enhancement_stats["rt7_scenic_photo_spots0326"] = spots_built
+	_enhancement_stats["rt7_scenic_signs0326"] = sign_t.size()
+	_enhancement_stats["rt7_scenic_pads0326"] = pad_t.size()
+	_enhancement_stats["rt7_scenic_plantings0326"] = palm_t.size() + flower_t.size() + shrub_t.size()
+	_enhancement_stats["rt7_scenic_corridor0326"] = corridor_planted
+
+
+func _scenic_plant_one_0326(rng: RandomNumberGenerator, pos: Vector3, flower_t: Array, shrub_t: Array) -> int:
+	pos.y = height_at(pos.x, pos.z)
+	var kind := String(get_surface_at(pos).get("kind", ""))
+	if kind == "water" or kind == "asphalt":
+		return 0
+	if not _is_position_clear(pos, 1.0, 1.6):
+		return 0
+	var xf := make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * rng.randf_range(0.85, 1.3))
+	if rng.randf() < 0.55:
+		flower_t.append(xf)
+	else:
+		shrub_t.append(xf)
+	return 1
+
+
+func _scenic_cluster_0326(rng: RandomNumberGenerator, center: Vector3, r_min: float, r_max: float, attempts: int, flower_t: Array, shrub_t: Array) -> void:
+	for attempt_i in attempts:
+		var ang := rng.randf_range(0.0, TAU)
+		var r := rng.randf_range(r_min, r_max)
+		var pos := center + Vector3(cos(ang) * r, 0.0, sin(ang) * r)
+		_scenic_plant_one_0326(rng, pos, flower_t, shrub_t)
+
+
 func _rt7_ridge_mesh0318(start: Vector3, axis_dir: Vector3, out_dir: Vector3, length_m: float, h_min: float, h_max: float, seed_v: int) -> ArrayMesh:
 	# One horizon ridge: a 4-point cross-section strip (front base,
 	# shoulder, crest, back base) with a seeded random-walk crest.
