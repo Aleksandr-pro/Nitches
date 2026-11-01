@@ -77,15 +77,18 @@ def set_limb(name: str) -> None:
     CURRENT_LIMB = name
 
 
-def add_mesh(material: int, positions, indices, colors=None) -> None:
+def add_mesh(material: int, positions, indices, colors=None, uvs=None) -> None:
     joint_x, joint_y, joint_z = LIMBS[CURRENT_LIMB][1]
-    bucket = LIMB_BUCKETS.setdefault((CURRENT_LIMB, material), {"positions": [], "indices": [], "colors": []})
+    bucket = LIMB_BUCKETS.setdefault((CURRENT_LIMB, material), {"positions": [], "indices": [], "colors": [], "uvs": []})
     offset = len(bucket["positions"])
     bucket["positions"].extend((x - joint_x, y - joint_y, z - joint_z) for x, y, z in positions)
     bucket["indices"].extend(offset + index for index in indices)
     if colors is None:
         colors = [(1.0, 1.0, 1.0)] * len(positions)
     bucket["colors"].extend(colors)
+    if uvs is None:
+        uvs = [(0.0, 0.0)] * len(positions)
+    bucket["uvs"].extend(uvs)
 
 
 # ---------------------------------------------------------------------------
@@ -164,16 +167,17 @@ def mul3(c, s):
 # calibrated against it.
 # ---------------------------------------------------------------------------
 
-def add_ellipsoid(material, center, radii, segments=32, rings=20, deformation=None, color_fn=None) -> None:
+def add_ellipsoid(material, center, radii, segments=32, rings=20, deformation=None, color_fn=None, uv_scale=(1.0, 1.0)) -> None:
     cx, cy, cz = center
     rx, ry, rz = radii
     positions = []
     indices = []
+    uvs = []
     for row in range(rings + 1):
         theta = math.pi * row / rings
         y_unit = math.cos(theta)
         ring_radius = math.sin(theta)
-        for col in range(segments):
+        for col in range(segments + 1):  # +1: duplicated UV seam column
             phi = 2.0 * math.pi * col / segments
             x_unit = math.cos(phi) * ring_radius
             z_unit = math.sin(phi) * ring_radius
@@ -183,37 +187,43 @@ def add_ellipsoid(material, center, radii, segments=32, rings=20, deformation=No
             if deformation:
                 x, y, z = deformation(x, y, z, x_unit, y_unit, z_unit)
             positions.append((x, y, z))
+            uvs.append((col / segments * uv_scale[0], row / rings * uv_scale[1]))
+    stride = segments + 1
     for row in range(rings):
         for col in range(segments):
-            a = row * segments + col
-            b = row * segments + (col + 1) % segments
-            c = (row + 1) * segments + (col + 1) % segments
-            d = (row + 1) * segments + col
+            a = row * stride + col
+            b = row * stride + col + 1
+            c = (row + 1) * stride + col + 1
+            d = (row + 1) * stride + col
             indices.extend((a, b, c, a, c, d))
-    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None)
+    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None, uvs)
 
 
-def add_grid(material, rows, closed_loop=True, color_fn=None) -> None:
+def add_grid(material, rows, closed_loop=True, color_fn=None, uv_scale=(1.0, 1.0)) -> None:
     """Triangulate a list of equal-length vertex rings."""
     positions = []
     indices = []
+    uvs = []
     segments = len(rows[0])
-    for ring in rows:
-        positions.extend(ring)
-    col_range = range(segments) if closed_loop else range(segments - 1)
+    stride = segments + 1 if closed_loop else segments
+    for ri, ring in enumerate(rows):
+        v = ri / max(len(rows) - 1, 1) * uv_scale[1]
+        ring_ext = list(ring) + [ring[0]] if closed_loop else list(ring)
+        for ci, pnt in enumerate(ring_ext):
+            positions.append(pnt)
+            uvs.append((ci / segments * uv_scale[0], v))
     for row in range(len(rows) - 1):
-        for col in col_range:
-            nxt = (col + 1) % segments
-            a = row * segments + col
-            b = row * segments + nxt
-            c = (row + 1) * segments + nxt
-            d = (row + 1) * segments + col
+        for col in range(stride - 1):
+            a = row * stride + col
+            b = row * stride + col + 1
+            c = (row + 1) * stride + col + 1
+            d = (row + 1) * stride + col
             indices.extend((a, b, c, a, c, d))
-    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None)
+    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None, uvs)
 
 
 def add_loft(material, stations, segments=32, power=1.0, cap_start=True, cap_end=True,
-             shape_fn=None, vertex_fn=None, color_fn=None) -> None:
+             shape_fn=None, vertex_fn=None, color_fn=None, uv_scale=(1.0, 1.0)) -> None:
     """Ring loft.  Each station is (origin, u_vec, v_vec); a ring point is
     origin + u*spow(cos phi) + v*spow(sin phi), so power < 1 squares the
     section (flat chest/front, shoe last) and power 1 keeps it elliptical."""
@@ -222,8 +232,11 @@ def add_loft(material, stations, segments=32, power=1.0, cap_start=True, cap_end
 
     positions = []
     indices = []
-    for origin, u_vec, v_vec in stations:
-        for col in range(segments):
+    uvs = []
+    stride = segments + 1
+    for si, (origin, u_vec, v_vec) in enumerate(stations):
+        vv = si / max(len(stations) - 1, 1) * uv_scale[1]
+        for col in range(stride):
             phi = 2.0 * math.pi * col / segments
             cu, cv = spow(math.cos(phi)), spow(math.sin(phi))
             mult = shape_fn(phi) if shape_fn else 1.0
@@ -233,25 +246,28 @@ def add_loft(material, stations, segments=32, power=1.0, cap_start=True, cap_end
             if vertex_fn:
                 p = vertex_fn(p)
             positions.append(p)
+            uvs.append((col / segments * uv_scale[0], vv))
     for row in range(len(stations) - 1):
         for col in range(segments):
-            a = row * segments + col
-            b = row * segments + (col + 1) % segments
-            c = (row + 1) * segments + (col + 1) % segments
-            d = (row + 1) * segments + col
+            a = row * stride + col
+            b = row * stride + col + 1
+            c = (row + 1) * stride + col + 1
+            d = (row + 1) * stride + col
             indices.extend((a, b, c, a, c, d))
     if cap_start:
         positions.append(stations[0][0])
+        uvs.append((0.5 * uv_scale[0], 0.0))
         start_center = len(positions) - 1
         for col in range(segments):
-            indices.extend((start_center, (col + 1) % segments, col))
+            indices.extend((start_center, col + 1, col))
     if cap_end:
         positions.append(stations[-1][0])
+        uvs.append((0.5 * uv_scale[0], uv_scale[1]))
         end_center = len(positions) - 1
-        end_row = (len(stations) - 1) * segments
+        end_row = (len(stations) - 1) * stride
         for col in range(segments):
-            indices.extend((end_center, end_row + col, end_row + (col + 1) % segments))
-    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None)
+            indices.extend((end_center, end_row + col, end_row + col + 1))
+    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None, uvs)
 
 
 def _catmull_rom(points, samples):
@@ -282,7 +298,7 @@ def _profile_value(profile, t):
 
 
 def add_tube_path(material, points, radius_profile, segments=20, samples=12, depth_ratio=0.92,
-                  rounded_caps=True, offset_fn=None, color_fn=None) -> None:
+                  rounded_caps=True, offset_fn=None, color_fn=None, uv_scale=(1.0, 1.0)) -> None:
     """Swept tube along a Catmull-Rom path with a (t, radius) profile."""
     centres = _catmull_rom(points, samples)
     # Frames: seed with the 0.3.28 helper choice, then parallel-transport.
@@ -333,7 +349,7 @@ def add_tube_path(material, points, radius_profile, segments=20, samples=12, dep
     rows = []
     for centre, _tg, n, b, radius in rings:
         ring = []
-        for col in range(segments):
+        for col in range(segments + 1):
             angle = 2.0 * math.pi * col / segments
             ca, sa = math.cos(angle), math.sin(angle)
             ring.append((centre[0] + radius * ca * n[0] + radius * depth_ratio * sa * b[0],
@@ -343,23 +359,28 @@ def add_tube_path(material, points, radius_profile, segments=20, samples=12, dep
 
     positions = []
     indices = []
-    for ring in rows:
+    uvs = []
+    stride = segments + 1
+    for ri, ring in enumerate(rows):
         positions.extend(ring)
+        vv = ri / max(len(rows) - 1, 1) * uv_scale[1]
+        uvs.extend((col / segments * uv_scale[0], vv) for col in range(stride))
     for row in range(len(rows) - 1):
         for col in range(segments):
-            a = row * segments + col
-            bb = row * segments + (col + 1) % segments
-            c = (row + 1) * segments + (col + 1) % segments
-            d = (row + 1) * segments + col
+            a = row * stride + col
+            bb = row * stride + col + 1
+            c = (row + 1) * stride + col + 1
+            d = (row + 1) * stride + col
             indices.extend((a, bb, c, a, c, d))
     positions.extend((rings[0][0], rings[-1][0]))
+    uvs.extend(((0.5 * uv_scale[0], 0.0), (0.5 * uv_scale[0], uv_scale[1])))
     start_center = len(positions) - 2
     end_center = len(positions) - 1
-    end_row = (len(rows) - 1) * segments
+    end_row = (len(rows) - 1) * stride
     for col in range(segments):
-        indices.extend((start_center, (col + 1) % segments, col))
-        indices.extend((end_center, end_row + col, end_row + (col + 1) % segments))
-    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None)
+        indices.extend((start_center, col + 1, col))
+        indices.extend((end_center, end_row + col, end_row + col + 1))
+    add_mesh(material, positions, indices, paint(positions, color_fn) if color_fn else None, uvs)
 
 
 def add_box(material, center, size, color_fn=None) -> None:
@@ -895,9 +916,24 @@ def write_glb() -> None:
         positions = bucket["positions"]
         indices = bucket["indices"]
         colors = bucket["colors"]
+        uvs = bucket["uvs"]
         if not positions or not indices:
             continue
         normals = make_normals(positions, indices)
+        # Weld normals of coincident vertices (duplicated UV-seam columns)
+        # so texture seams never shade as creases.
+        _groups = {}
+        for _i, _p in enumerate(positions):
+            _groups.setdefault((round(_p[0], 6), round(_p[1], 6), round(_p[2], 6)), []).append(_i)
+        for _idxs in _groups.values():
+            if len(_idxs) > 1:
+                _sx = sum(normals[_i][0] for _i in _idxs)
+                _sy = sum(normals[_i][1] for _i in _idxs)
+                _sz = sum(normals[_i][2] for _i in _idxs)
+                _ln = math.sqrt(_sx * _sx + _sy * _sy + _sz * _sz)
+                if _ln > 1e-8:
+                    for _i in _idxs:
+                        normals[_i] = (_sx / _ln, _sy / _ln, _sz / _ln)
         pflat = [v for p in positions for v in p]
         nflat = [v for n in normals for v in n]
         pos_raw = struct.pack("<%sf" % len(pflat), *pflat)
@@ -917,9 +953,12 @@ def write_glb() -> None:
         position_accessor = append_accessor(pos_raw, 5126, len(positions), "VEC3", 34962, mins, maxs)
         normal_accessor = append_accessor(norm_raw, 5126, len(normals), "VEC3", 34962)
         color_accessor = append_accessor(bytes(color_bytes), 5121, len(colors), "VEC4", 34962, normalized=True)
+        uvflat = [component for uv in uvs for component in uv]
+        uv_raw = struct.pack("<%sf" % len(uvflat), *uvflat)
+        uv_accessor = append_accessor(uv_raw, 5126, len(uvs), "VEC2", 34962)
         index_accessor = append_accessor(index_raw, index_component, len(indices), "SCALAR", 34963)
         meshes.append({"name": limb + "_" + MATERIALS[material_index][0], "primitives": [{
-            "attributes": {"POSITION": position_accessor, "NORMAL": normal_accessor, "COLOR_0": color_accessor},
+            "attributes": {"POSITION": position_accessor, "NORMAL": normal_accessor, "COLOR_0": color_accessor, "TEXCOORD_0": uv_accessor},
             "indices": index_accessor,
             "material": material_index,
             "mode": 4,
