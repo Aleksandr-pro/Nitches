@@ -358,21 +358,35 @@ jobs:
 
       - name: Publish direct-download APK (rolling prerelease)
         # Artifact downloads are always ZIP archives; a GitHub
-        # Release asset is served as the raw file, so the phone gets
-        # a direct .apk link that always points at the newest green
-        # build: releases/download/native-latest/NitchesHorizonNative.apk
-        # This repo uses IMMUTABLE releases: assets of a published
-        # release cannot be added or replaced (build-apk.yml does
-        # draft-then-manual-publish for the same reason).  So each
-        # build deletes the rolling release+tag, recreates it as a
-        # DRAFT with the APK attached, then publishes it.
+        # Release asset is served as the raw file.  This repo uses
+        # IMMUTABLE releases: a published release's assets cannot be
+        # replaced AND its tag_name is burned forever (422 "tag_name
+        # was used by an immutable release" when reusing a tag, even
+        # after deleting release+ref).  So a stable download URL can
+        # only come from GitHub's /releases/latest/download/<asset>
+        # redirect, which tracks the newest NON-prerelease release:
+        #   releases/latest/download/NitchesHorizonNative.apk
+        # Each build therefore publishes a fresh uniquely-tagged
+        # release (draft -> attach APK -> publish by release ID,
+        # because drafts are not resolvable by tag) and prunes all
+        # but the three newest native-* releases afterwards.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release delete native-latest --cleanup-tag --yes || true
-          gh release create native-latest --prerelease --draft \
-            --title "Nitches Native — последняя тестовая сборка (прямой APK)" \
-            --notes "Самая свежая успешная сборка. Файл NitchesHorizonNative.apk по постоянной ссылке всегда обновляется до актуального APK для установки с телефона." \
+          VER=$(grep -m1 'version/name=' native/export_presets.cfg | sed 's/.*="//; s/"//')
+          TAG="native-${VER}-${{ github.run_number }}"
+          for id in $(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '.[] | select(.draft and (.tag_name | startswith("native-"))) | .id'); do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id" || true
+          done
+          gh release create "$TAG" --draft \
+            --title "Nitches Native ${VER} — прямой APK" \
+            --notes "Самая свежая успешная сборка. Постоянная ссылка на актуальный APK: https://github.com/${{ github.repository }}/releases/latest/download/NitchesHorizonNative.apk" \
             "${{ env.APK_PATH }}"
-          gh release edit native-latest --draft=false
+          REL_ID=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq ".[] | select(.tag_name==\"$TAG\" and .draft) | .id" | head -1)
+          test -n "$REL_ID"
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$REL_ID" -F draft=false
+          gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '[.[] | select((.tag_name | startswith("native-")) and (.draft | not))] | sort_by(.created_at) | reverse | .[3:] | .[] | "\(.id) \(.tag_name)"' | while read -r old_id old_tag; do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$old_id" || true
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/$old_tag" || true
+          done
