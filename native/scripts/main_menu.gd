@@ -412,7 +412,7 @@ func get_smoke_state() -> Dictionary:
         "developer_mode": bool(_settings.get("developer_mode", false)),
         "control_type": String(_settings.get("control_type", "wheel")),
         "clean_menu_0234": true,
-        "multi_car_0240": _catalog_entries().size() == 4 and _garage_car_buttons.size() == 4,
+        "multi_car_0240": _catalog_entries().size() >= 4 and _garage_car_buttons.size() == _catalog_entries().size(),
         "catalog_cars": _catalog_entries().size(),
         "catalog_bound": _catalog_bound,
         "selected_car_id": _selected_car_id,
@@ -982,6 +982,8 @@ func _texture_for_car(car_id: String) -> Texture2D:
             path = "res://assets/ui/menu_camaro_ss_gameplay.jpg"
         "mercedes_560_sel":
             path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"
+        "bugatti_chiron_super_sport":
+            path = "res://assets/ui/menu_bugatti_chiron_gameplay.jpg"
         _:
             path = "res://assets/ui/menu_shelby_gameplay.jpg"
     var texture: Texture2D = MENU_SHELBY_TEXTURE
@@ -2277,7 +2279,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.3.30-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.3.31-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)

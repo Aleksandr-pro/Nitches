@@ -18,6 +18,7 @@ const modelCopies = [
   ['src/assets/models/cars/audi_r8_v10_plus.glb', 'vehicles/audi_r8_v10_plus.glb'],
   ['src/assets/models/cars/chevrolet_camaro_ss.glb', 'vehicles/chevrolet_camaro_ss.glb'],
   ['src/assets/models/cars/mercedes_benz_560_sel.glb', 'vehicles/mercedes_benz_560_sel.glb'],
+  ['src/assets/models/cars/bugatti_chiron_super_sport.glb', 'vehicles/bugatti_chiron_super_sport.glb'],
   ['src/assets/models/props/villa.glb', 'buildings/villa.glb'],
   ['src/assets/models/props/glass_tower.glb', 'buildings/glass_tower.glb'],
   ['src/assets/models/props/main_tower.glb', 'buildings/main_tower.glb'],
@@ -127,6 +128,7 @@ const recordedCarAudioBanks = {
   audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
   camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
   mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
+  bugatti_chiron: [900, 1602, 2000, 3735, 5000, 6478, 7000],
 };
 const recordedCarAudioCopies = Object.entries(recordedCarAudioBanks).flatMap(([bank, rpms]) => {
   const names = [

@@ -3077,6 +3077,11 @@ func _run_smoke_checks() -> void:
 			var gears_ok := int(gears_at_speed.get("120", 0)) >= 2 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= mini(3, last_gear)
 			if probe_id == "mercedes_560_sel":
 				gears_ok = gears_ok and int(gears_at_speed.get("70", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 3
+			if probe_id == "bugatti_chiron_super_sport":
+				# Supplied longtail gearing: 2nd alone spans ~87-154 km/h,
+				# so "3rd by 120" is not a trap-free invariant here; the
+				# car must still leave 1st by 120 and keep upshifting.
+				gears_ok = int(gears_at_speed.get("120", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= 3
 			if not gears_ok:
 				automatic_gears_ok = false
 		drivetrain_probe.free()
@@ -3209,8 +3214,9 @@ func _run_smoke_checks() -> void:
 	var audi_spec := catalog_by_id.get("audi_r8_v10_plus", {}) as Dictionary
 	var camaro_spec := catalog_by_id.get("chevrolet_camaro_ss", {}) as Dictionary
 	var mercedes_spec := catalog_by_id.get("mercedes_560_sel", {}) as Dictionary
-	if not bool(frontend_state.get("multi_car_0240", false)) or int(frontend_state.get("catalog_cars", 0)) != 4 or int(frontend_state.get("catalog_view_cars", 0)) != 4 or int(frontend_state.get("car_customization_slots", 0)) != 4 or int(frontend_state.get("car_stat_slots", 0)) != 4 or int(audi_spec.get("power_hp", 0)) != 610 or int(audi_spec.get("torque_nm", 0)) != 560 or int(audi_spec.get("top_speed_kmh", 0)) != 330 or int(camaro_spec.get("power_hp", 0)) != 455 or int(camaro_spec.get("torque_nm", 0)) != 617 or int(camaro_spec.get("top_speed_kmh", 0)) != 290 or int(mercedes_spec.get("power_hp", 0)) != 300 or int(mercedes_spec.get("torque_nm", 0)) != 455 or int(mercedes_spec.get("top_speed_kmh", 0)) != 250 or not bool(menu_state.get("multi_car_0240", false)) or int(menu_state.get("catalog_cars", 0)) != 4 or int(menu_state.get("store_cars", 0)) != 4 or not bool(steering_wheel_state.get("photo_steering_wheel_0240", false)) or not bool(steering_wheel_state.get("replaceable_per_car_0240", false)) or (steering_wheel_state.get("wheel_texture_size", Vector2.ZERO) as Vector2).x < 512.0 or not bool(vehicle_audio_state.get("multi_car_audio_0240", false)) or String(vehicle_audio_state.get("car_id", "")) != _selected_car_id:
-		failures.append("0.2.40 four-car catalogue / supplied models / photo steering wheel / per-car audio pass is incomplete: frontend=%s menu=%s wheel=%s audio=%s audi=%s camaro=%s mercedes=%s" % [str(frontend_state), str(menu_state), str(steering_wheel_state), str(vehicle_audio_state), str(audi_spec), str(camaro_spec), str(mercedes_spec)])
+	var bugatti_spec := catalog_by_id.get("bugatti_chiron_super_sport", {}) as Dictionary
+	if not bool(frontend_state.get("multi_car_0240", false)) or int(frontend_state.get("catalog_cars", 0)) != 5 or int(frontend_state.get("catalog_view_cars", 0)) != 5 or int(frontend_state.get("car_customization_slots", 0)) != 5 or int(frontend_state.get("car_stat_slots", 0)) != 5 or int(audi_spec.get("power_hp", 0)) != 610 or int(audi_spec.get("torque_nm", 0)) != 560 or int(audi_spec.get("top_speed_kmh", 0)) != 330 or int(camaro_spec.get("power_hp", 0)) != 455 or int(camaro_spec.get("torque_nm", 0)) != 617 or int(camaro_spec.get("top_speed_kmh", 0)) != 290 or int(mercedes_spec.get("power_hp", 0)) != 300 or int(mercedes_spec.get("torque_nm", 0)) != 455 or int(mercedes_spec.get("top_speed_kmh", 0)) != 250 or int(bugatti_spec.get("power_hp", 0)) != 1600 or int(bugatti_spec.get("torque_nm", 0)) != 1600 or int(bugatti_spec.get("top_speed_kmh", 0)) != 440 or not bool(menu_state.get("multi_car_0240", false)) or int(menu_state.get("catalog_cars", 0)) != 5 or int(menu_state.get("store_cars", 0)) != 5 or not bool(steering_wheel_state.get("photo_steering_wheel_0240", false)) or not bool(steering_wheel_state.get("replaceable_per_car_0240", false)) or (steering_wheel_state.get("wheel_texture_size", Vector2.ZERO) as Vector2).x < 512.0 or not bool(vehicle_audio_state.get("multi_car_audio_0240", false)) or String(vehicle_audio_state.get("car_id", "")) != _selected_car_id:
+		failures.append("0.2.40 catalogue (five cars since 0.3.31) / supplied models / photo steering wheel / per-car audio pass is incomplete: frontend=%s menu=%s wheel=%s audio=%s audi=%s camaro=%s mercedes=%s bugatti=%s" % [str(frontend_state), str(menu_state), str(steering_wheel_state), str(vehicle_audio_state), str(audi_spec), str(camaro_spec), str(mercedes_spec), str(bugatti_spec)])
 
 	# 0.3.25 parked-only enter/exit flow (ported from the
 	# arena/1f423e59 feature branch): verify movement blocks the
@@ -3416,6 +3422,10 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "08_city_aerial_sunset", "time": "sunset", "vehicle": "hide",
 			"camera": Vector3(-1500.0, 260.0, 900.0), "target": Vector3(0.0, 20.0, 0.0),
+		},
+		{
+			"name": "08a0_car_bugatti_chiron", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "bugatti_chiron_super_sport", "gameplay_camera": true, "marketing": true, "frames": 6,
 		},
 		{
 			"name": "08a_car_audi_r8", "time": "day", "hud": true, "vehicle": "spawn",

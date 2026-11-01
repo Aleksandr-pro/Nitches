@@ -1,0 +1,265 @@
+{
+  "bank": "bugatti_chiron",
+  "car": "Bugatti Chiron Super Sport 8.0 W16 quad-turbo",
+  "format": "mono WAV 32000 Hz 16-bit",
+  "audio_0242": true,
+  "anchors": [
+    {
+      "rpm": 900,
+      "cycles": 15,
+      "measured_rpm": 903.0,
+      "on": {
+        "file": "engine_on_0900.wav",
+        "seconds": 2.00072,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_0900.wav",
+        "seconds": 2.00072,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10b_idle",
+      "source_recording": "BMW M6 V10 start and idle",
+      "author": "Kinoton",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Kinoton/sounds/478597/",
+      "cylinders": 10,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v10b_idle loop at 1231 rpm, ratio 0.731, pulse rate scaled to 900 rpm by construction (comb spectral estimate 903, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "rpm": 1602,
+      "cycles": 33,
+      "measured_rpm": 1603.7,
+      "on": {
+        "file": "engine_on_1602.wav",
+        "seconds": 2.47266,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_1602.wav",
+        "seconds": 2.47266,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10a_idle",
+      "source_recording": "Lamborghini Huracan EVO 5.2 V10 start-up and idle",
+      "author": "JaimeLopes",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/JaimeLopes/sounds/564373/",
+      "cylinders": 10,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
+    },
+    {
+      "rpm": 2000,
+      "cycles": 15,
+      "measured_rpm": 2004.0,
+      "on": {
+        "file": "engine_on_2000.wav",
+        "seconds": 0.90031,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_2000.wav",
+        "seconds": 0.90031,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10b_idle",
+      "source_recording": "BMW M6 V10 start and idle",
+      "author": "Kinoton",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Kinoton/sounds/478597/",
+      "cylinders": 10,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v10b_idle loop at 1231 rpm, ratio 1.625, pulse rate scaled to 2000 rpm by construction (comb spectral estimate 2004, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "rpm": 3735,
+      "cycles": 11,
+      "measured_rpm": 3740.4,
+      "on": {
+        "file": "engine_on_3735.wav",
+        "seconds": 0.35341,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_3735.wav",
+        "seconds": 0.35341,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10a_rev",
+      "source_recording": "Lamborghini Huracan EVO 5.2 V10 start-up and idle",
+      "author": "JaimeLopes",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/JaimeLopes/sounds/564373/",
+      "cylinders": 10,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
+    },
+    {
+      "rpm": 5000,
+      "cycles": 25,
+      "measured_rpm": 5001.0,
+      "on": {
+        "file": "engine_on_5000.wav",
+        "seconds": 0.6,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_5000.wav",
+        "seconds": 0.6,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v10a_rev",
+      "source_recording": "Lamborghini Huracan EVO 5.2 V10 start-up and idle",
+      "author": "JaimeLopes",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/JaimeLopes/sounds/564373/",
+      "cylinders": 10,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v10a_rev loop at 3735 rpm, ratio 1.339, pulse rate scaled to 5000 rpm by construction (comb spectral estimate 5001, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    },
+    {
+      "rpm": 6478,
+      "cycles": 65,
+      "measured_rpm": 6479.5,
+      "on": {
+        "file": "engine_on_6478.wav",
+        "seconds": 1.204,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_6478.wav",
+        "seconds": 1.204,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8xsc_hi",
+      "source_recording": "Supercharged Holden V8 dyno run-up",
+      "author": "Ears68",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Ears68/sounds/177184/",
+      "cylinders": 8,
+      "derivation": "Recorded loop, trimmed to whole crank cycles and de-clicked at the seam."
+    },
+    {
+      "rpm": 7000,
+      "cycles": 65,
+      "measured_rpm": 7005.0,
+      "on": {
+        "file": "engine_on_7000.wav",
+        "seconds": 1.11422,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "off": {
+        "file": "engine_off_7000.wav",
+        "seconds": 1.11422,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      "source_clip": "v8xsc_hi",
+      "source_recording": "Supercharged Holden V8 dyno run-up",
+      "author": "Ears68",
+      "license": "CC0 1.0",
+      "url": "https://freesound.org/people/Ears68/sounds/177184/",
+      "cylinders": 8,
+      "derivation": "Pulse-synchronous TD-PSOLA (formant-preserving) derivation of the recorded v8xsc_hi loop at 6478 rpm, ratio 1.081, pulse rate scaled to 7000 rpm by construction (comb spectral estimate 7005, biased toward the parent envelope PSOLA preserves); no synthesized tone."
+    }
+  ],
+  "idle": {
+    "file": "engine_idle.wav",
+    "seconds": 1.46275,
+    "sample_rate": 32000,
+    "channels": 1,
+    "source_clip": "v10b_idle",
+    "source_rpm": 1231
+  },
+  "start": {
+    "file": "engine_start.wav",
+    "seconds": 1.62,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "Recorded CC0 starter motor (Therancher01, Freesound 610771) crossfaded into a pitch-ramped catch from this bank's own recorded idle/rev loop."
+  },
+  "stop": {
+    "file": "engine_stop.wav",
+    "seconds": 0.82,
+    "sample_rate": 32000,
+    "channels": 1,
+    "derivation": "This bank's recorded idle loop pitch-ramped 1.0x -> 0.38x and faded over the 0.82 s runtime shutdown."
+  },
+  "pops": {
+    "files": [
+      {
+        "file": "pop_01.wav",
+        "seconds": 0.09766,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_02.wav",
+        "seconds": 0.0585,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_03.wav",
+        "seconds": 0.09116,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_04.wav",
+        "seconds": 0.07472,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_05.wav",
+        "seconds": 0.11419,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_06.wav",
+        "seconds": 0.10384,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_07.wav",
+        "seconds": 0.05947,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_08.wav",
+        "seconds": 0.07191,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_09.wav",
+        "seconds": 0.09838,
+        "sample_rate": 32000,
+        "channels": 1
+      },
+      {
+        "file": "pop_10.wav",
+        "seconds": 0.07531,
+        "sample_rate": 32000,
+        "channels": 1
+      }
+    ],
+    "derivation": "Single exhaust pulses cut from this bank's own high-RPM recorded loops, enveloped and resequenced stochastically at runtime for overrun crackle."
+  },
+  "off_throttle_derivation": "Same recording as the matching on-throttle loop, cyclically low-pass filtered (no seam break) and set 4.5 dB quieter.",
+  "tire": "Shared recorded tire_squeal_loop.wav from the Shelby bank (Tom Haigh, CC BY 3.0)."
+}

@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.30-native-alpha"'), 'Native project version metadata must match 0.3.30-native-alpha');
-assert(preset.includes('version/code=96'), 'Native 0.3.30 must bump Android versionCode to 96');
-assert(preset.includes('version/name="0.3.30-native-alpha"'), 'Native version name must be 0.3.30-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.30-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.30"') && preset.includes('application/product_version="0.3.30"'), 'Desktop file/product versions must match native 0.3.30');
+assert(project.includes('config/version="0.3.31-native-alpha"'), 'Native project version metadata must match 0.3.31-native-alpha');
+assert(preset.includes('version/code=97'), 'Native 0.3.31 must bump Android versionCode to 97');
+assert(preset.includes('version/name="0.3.31-native-alpha"'), 'Native version name must be 0.3.31-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.31-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.31"') && preset.includes('application/product_version="0.3.31"'), 'Desktop file/product versions must match native 0.3.31');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.30"') && preset.includes('application/product_version="0.3.30"'), 'Desktop Windows version metadata must match native 0.3.30');
+assert(preset.includes('application/file_version="0.3.31"') && preset.includes('application/product_version="0.3.31"'), 'Desktop Windows version metadata must match native 0.3.31');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -351,12 +351,12 @@ assert(!worldScript.includes('{"x": 1150.0, "z": 80.0, "w": 30.0, "d": 62.0') &&
 for (const marker of ['class_name NativeCarCatalog', 'get_menu_cars', 'car_count', 'get_cars', 'car_selection_requested', 'bind_car_catalog', 'multi_car_0240', 'configure_car', 'switch_car', 'car_changed', 'configure_for_car', 'multi_car_audio_0240', 'photo_steering_wheel_0240', 'replaceable_per_car_0240', 'set_wheel_texture_path', 'set_steering_wheel_texture_path', '08a_car_audi_r8', '08b_car_camaro_ss', '08c_car_mercedes_560_sel', '08d_car_shelby_gt500', 'audi_r8_v10_plus', 'chevrolet_camaro_ss', 'mercedes_560_sel', '_car_customizations', '_car_stats', 'selected_car_id', '_load_car_model', '_license_plate_font_size']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.40 multi-car marker is missing: ${marker}`);
 }
-for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207], ['audi_r8_v10_plus', 610, 560, 330], ['chevrolet_camaro_ss', 455, 617, 290], ['mercedes_560_sel', 300, 455, 250]]) {
+for (const [carId, power, torque, topSpeed] of [['shelby_gt500', 365, 569, 207], ['audi_r8_v10_plus', 610, 560, 330], ['chevrolet_camaro_ss', 455, 617, 290], ['mercedes_560_sel', 300, 455, 250], ['bugatti_chiron_super_sport', 1600, 1600, 440]]) {
   assert(carCatalogScript.includes(`"id": "${carId}"`), `Native catalogue is missing ${carId}`);
   assert(carCatalogScript.includes(`"power_hp": ${power}`) && carCatalogScript.includes(`"torque_nm": ${torque}`) && carCatalogScript.includes(`"top_speed_kmh": ${topSpeed}`), `Native catalogue spec sheet drifted for ${carId}`);
 }
-assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
-assert(mainScript.includes('"car_id": "audi_r8_v10_plus"') && mainScript.includes('"car_id": "chevrolet_camaro_ss"') && mainScript.includes('"car_id": "mercedes_560_sel"') && mainScript.includes('catalog_by_id.get("mercedes_560_sel"') && !mainScript.includes('"car_id": "mercedes_benz_560_sel"') && !mainScript.includes('catalog_by_id.get("mercedes_benz_560_sel"') && mainMenuScript.includes('"mercedes_560_sel":\n            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"'), 'Native screenshot/menu code must use the exact catalogue car IDs, distinct from GLB filenames');
+assert(syncScript.includes('recordedCarAudioBanks') && syncScript.includes('steering_wheel_common.png') && syncScript.includes('audi_r8_v10_plus.glb') && syncScript.includes('chevrolet_camaro_ss.glb') && syncScript.includes('mercedes_benz_560_sel.glb') && syncScript.includes('bugatti_chiron_super_sport.glb'), 'Native asset sync must stage all 0.2.40 car GLBs, recorded banks and the photographic steering wheel');
+assert(mainScript.includes('"car_id": "audi_r8_v10_plus"') && mainScript.includes('"car_id": "chevrolet_camaro_ss"') && mainScript.includes('"car_id": "mercedes_560_sel"') && mainScript.includes('catalog_by_id.get("mercedes_560_sel"') && !mainScript.includes('"car_id": "mercedes_benz_560_sel"') && !mainScript.includes('catalog_by_id.get("mercedes_benz_560_sel"') && mainMenuScript.includes('"mercedes_560_sel":\n            path = "res://assets/ui/menu_mercedes_560_sel_gameplay.jpg"') && mainMenuScript.includes('"bugatti_chiron_super_sport":\n            path = "res://assets/ui/menu_bugatti_chiron_gameplay.jpg"'), 'Native screenshot/menu code must use the exact catalogue car IDs, distinct from GLB filenames');
 assert(audioCredits.includes('JaimeLopes') && audioCredits.includes('564373') && audioCredits.includes('637184') && audioCredits.includes('391671') && audioCredits.includes('610771') && audioCredits.includes('CC BY-SA 4.0') && mainMenuScript.includes('Altair78 (CC BY-SA 4.0)') && mainMenuScript.includes('docs/AUDIO_CREDITS.md'), 'Native 0.2.40 audio credits must preserve every supplied-car bank source and attribution/share-alike note');
 // 0.2.41 supplied-car hotfix: the automatic gearbox must use road-speed
 // coupled RPM (the 560 SEL first gear ends at 64.7 km/h and must not trap
@@ -686,7 +686,7 @@ for (const marker of [
   assert(combinedRuntime.includes(marker), `Native 0.2.19 marker is missing: ${marker}`);
 }
 
-for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/ui/boot_splash_richtown.jpg', 150_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
+for (const [relative, minimumSize] of [['src/assets/ui/menu_play_gameplay.jpg', 100_000], ['src/assets/ui/menu_shelby_gameplay.jpg', 100_000], ['src/assets/ui/menu_audi_r8_gameplay.jpg', 40_000], ['src/assets/ui/menu_camaro_ss_gameplay.jpg', 40_000], ['src/assets/ui/menu_mercedes_560_sel_gameplay.jpg', 40_000], ['src/assets/ui/menu_bugatti_chiron_gameplay.jpg', 40_000], ['src/assets/ui/menu_richtown_gameplay.jpg', 100_000], ['src/assets/ui/menu_world_gameplay.jpg', 100_000], ['src/assets/ui/boot_splash_richtown.jpg', 150_000], ['src/assets/audio/ui_click.wav', 1_000]]) {
   const info = await stat(relative);
   assert(info.size > minimumSize, `Native 0.2.36 canonical UI asset is unexpectedly small: ${relative}`);
   if (relative.endsWith('.jpg')) {
@@ -799,6 +799,7 @@ const suppliedCarAudioBanks = {
   audi_r8: [1231, 1602, 2400, 3735, 5200, 6800],
   camaro_ss: [635, 1050, 1444, 2265, 2900, 3747, 5000, 6478],
   mercedes_560_sel: [805, 999, 1444, 2265, 2900, 3747, 5000],
+  bugatti_chiron: [900, 1602, 2000, 3735, 5000, 6478, 7000],
 };
 const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([bank, rpms]) => [
   ...rpms.flatMap((rpm) => [
@@ -809,7 +810,7 @@ const suppliedCarAudioFiles = Object.entries(suppliedCarAudioBanks).flatMap(([ba
   `${bank}/engine_start.wav`,
   `${bank}/engine_stop.wav`,
 ]);
-assert(suppliedCarAudioFiles.length === 51, 'Native 0.2.42 must ship 42 supplied-car loops plus idle/start/stop for all three banks');
+assert(suppliedCarAudioFiles.length === 68, 'Native must ship 56 supplied-car loops plus idle/start/stop for all four banks (0.2.42 + 0.3.31 Bugatti)');
 for (const [bank, rpms] of Object.entries(suppliedCarAudioBanks)) {
   const manifest = JSON.parse(await readFile(`src/assets/audio/${bank}/bank_manifest.json`, 'utf8'));
   assert(manifest.bank === bank && manifest.format === 'mono WAV 32000 Hz 16-bit' && manifest.anchors.length === rpms.length, `${bank} audio manifest does not describe its complete mono bank`);
@@ -828,7 +829,7 @@ for (const name of suppliedCarAudioFiles) {
 // from its own recorded loops, plus a small secondary foley set
 // (wind/road/impact/whine/scrape) layered under the recorded
 // engine and tyre voices.
-const popBanks = ['shelby', 'audi_r8', 'camaro_ss', 'mercedes_560_sel'];
+const popBanks = ['shelby', 'audi_r8', 'camaro_ss', 'mercedes_560_sel', 'bugatti_chiron'];
 for (const bank of popBanks) {
   for (let i = 1; i <= 10; i += 1) {
     const source = `src/assets/audio/${bank}/pop_${String(i).padStart(2, '0')}.wav`;
@@ -863,6 +864,7 @@ const suppliedCars = [
   { stem: 'audi_r8_v10_plus', minimumBytes: 5_000_000, size: [1.966872, 1.200647, 4.426], materials: ['Paint', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireRubber'] },
   { stem: 'chevrolet_camaro_ss', minimumBytes: 3_500_000, size: [2.037753, 1.346721, 4.790135], materials: ['Paint', 'GlassWindow', 'LiveryTexture', 'TireRimTexture'] },
   { stem: 'mercedes_benz_560_sel', minimumBytes: 5_000_000, size: [1.955433, 1.559742, 5.16], materials: ['Paint', 'PaintSecondary', 'GlassWindow', 'Headlight', 'TailLight', 'RimMetal', 'TireTreadTexture'] },
+  { stem: 'bugatti_chiron_super_sport', minimumBytes: 6_500_000, size: [2.192357, 1.184783, 4.794], materials: ['Paint', 'PaintSecondary', 'GlassWindow', 'HeadlightTexture', 'TailLightTexture', 'RimMetal', 'TireTreadTexture'] },
 ];
 for (const car of suppliedCars) {
   const source = `src/assets/models/cars/${car.stem}.glb`;
@@ -888,6 +890,7 @@ if (requireAssets) {
     'assets/vehicles/audi_r8_v10_plus.glb',
     'assets/vehicles/chevrolet_camaro_ss.glb',
     'assets/vehicles/mercedes_benz_560_sel.glb',
+    'assets/vehicles/bugatti_chiron_super_sport.glb',
     'assets/buildings/villa.glb',
     'assets/buildings/glass_tower.glb',
     'assets/buildings/main_tower.glb',
@@ -1223,7 +1226,7 @@ for (const marker of ['export class RoomDO', '/api/register', 'PBKDF2', 'QUEST_P
   assert(serverScript.includes(marker), `0.2.61 server marker is missing: ${marker}`);
 }
 const carCatalogScript61 = await readText('scripts/car_catalog.gd');
-for (const marker of ['Shelbie GT500', 'Audo R8 V10 plus', 'Chevrole Kamaro SS', 'Mercedez-Bens 560 SEL', '"price_cr": 50000', '"price_cr": 95000', '"price_cr": 160000']) {
+for (const marker of ['Shelbie GT500', 'Audo R8 V10 plus', 'Chevrole Kamaro SS', 'Mercedez-Bens 560 SEL', 'Bygatti Shiron Super Sport', '"price_cr": 50000', '"price_cr": 95000', '"price_cr": 160000', '"price_cr": 350000']) {
   assert(carCatalogScript61.includes(marker), `0.2.61 catalog marker is missing: ${marker}`);
 }
 
@@ -2078,6 +2081,25 @@ console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturat
   assert(characterBytes0330.length < 7000000, `0.3.30 textured avatar GLB must stay under 7MB, got ${characterBytes0330.length}`);
   console.log('0.3.30 photoreal textured player character OK (world-space face paint, embedded PBR maps, append-only materials)');
 }
+
+
+// 0.3.31: fifth catalogue car — the owner-supplied Bugatti Chiron
+// Super Sport (Google Drive garage-scene .blend + textures.zip +
+// supplied spec sheet), converted by
+// scripts/blender_convert_bugatti_chiron.py to the same GLB contract
+// as the other supplied cars, with its own recorded audio bank
+// (deep multi-cylinder CC0 stand-ins for the W16; see
+// docs/AUDIO_CREDITS.md).  GLB/report/audio pins live in the shared
+// suppliedCars / suppliedCarAudioBanks blocks above.
+for (const marker0331 of ['"bugatti_chiron_super_sport": _bugatti_chiron()', '"audio_bank_id": "bugatti_chiron"', '"gear_ratios": [3.20, 2.188, 1.583, 1.167, 0.881, 0.690, 0.542]', '"final_drive": 2.671', '"mass_kg": 1975.0']) {
+  assert(carCatalogScript.includes(marker0331), `Native 0.3.31 Bugatti catalogue marker is missing: ${marker0331}`);
+}
+assert(combinedRuntime.includes('_apply_recorded_bank(\n\t			"bugatti_chiron", "res://assets/audio/bugatti_chiron"'), 'Native 0.3.31 Bugatti must select its own recorded bank in NativeVehicleAudio');
+assert(mainScript.includes('probe_id == "bugatti_chiron_super_sport"') && carCatalogScript.includes('"shift_up_rpm": 5800.0') && carCatalogScript.includes('"wheel_radius_m": 0.340'), 'Native 0.3.31 Bugatti gearing must land the supplied 403 km/h 6->7 marker with a trap-free probe expectation');
+assert(mainScript.includes('08a0_car_bugatti_chiron') && mainScript.includes('"car_id": "bugatti_chiron_super_sport"'), 'Native 0.3.31 screenshot tour must drive the Bugatti before the 08b stop');
+assert(syncScript.includes('bugatti_chiron: [900, 1602, 2000, 3735, 5000, 6478, 7000]'), 'Native 0.3.31 asset sync must stage the complete Bugatti bank');
+assert(audioCredits.includes('478597') && audioCredits.includes('177184') && audioCredits.includes('Bygatti'), 'Native 0.3.31 audio credits must document the Bugatti bank sources honestly');
+console.log('0.3.31 fifth car (Bygatti Shiron Super Sport) OK');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
