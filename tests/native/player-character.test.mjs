@@ -23,7 +23,7 @@ function readGlb(bytes) {
 const { json, binary } = readGlb(asset);
 
 test('player avatar is a detailed, valid glTF 2.0 human character', () => {
-  assert.ok(asset.length < 1_800_000, `expected a detailed single-instance asset under 1.8MB, got ${asset.length} bytes`);
+  assert.ok(asset.length < 7_000_000, `expected a textured single-instance asset under 7MB, got ${asset.length} bytes`);
   assert.equal(json.asset.version, '2.0');
   assert.equal(json.extras.heightMeters, 1.84);
   assert.ok(json.extras.triangleBudget >= 40_000 && json.extras.triangleBudget <= 90_000);
@@ -36,6 +36,13 @@ test('player avatar is a detailed, valid glTF 2.0 human character', () => {
   assert.ok(json.materials.some(({ name }) => name === 'Lips'));
   assert.ok(json.materials.some(({ name }) => name === 'Pupil'));
   assert.ok(json.materials.some(({ name }) => name === 'Shoe sole - rubber'));
+  // 0.3.30: append-only textured-face/nail materials and embedded PBR maps.
+  assert.ok(json.materials.some(({ name }) => name === 'Skin - face'));
+  assert.ok(json.materials.some(({ name }) => name === 'Fingernails'));
+  assert.ok((json.images ?? []).length >= 24, 'expected embedded PBR texture images');
+  assert.ok(json.meshes.every((mesh) => mesh.primitives.every((prim) => prim.attributes.TEXCOORD_0 !== undefined)), 'every primitive needs TEXCOORD_0');
+  const textured = json.materials.filter((m) => m.pbrMetallicRoughness?.baseColorTexture !== undefined).length;
+  assert.ok(textured >= 10, `expected at least 10 textured materials, got ${textured}`);
 });
 
 test('avatar geometry has valid indices, normals, and human-scale bounds', () => {
