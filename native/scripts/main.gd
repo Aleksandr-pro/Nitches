@@ -10,6 +10,7 @@ const VehicleScript := preload("res://scripts/vehicle_controller.gd")
 const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const AtmosphereFxScript := preload("res://scripts/atmosphere_fx.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const PlayerCharacterScene := preload("res://assets/characters/nitches_player.glb")
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
 const RouteGuideScript := preload("res://scripts/route_guide.gd")
@@ -151,6 +152,12 @@ var _camera_orbit_distance_scale := 1.0
 var _camera_drag_touch_index := -1
 var _camera_mouse_dragging := false
 var _camera_manual_timer := 999.0
+var _player_character: Node3D
+var _player_on_foot := false
+var _vehicle_mode_transitioning := false
+var _vehicle_mode_tween: Tween
+var _parked_duration := 0.0
+var _camera_mode_before_exit := CAMERA_CHASE
 
 
 func _ready() -> void:
@@ -326,6 +333,7 @@ func _bootstrap_create_camera_and_systems() -> void:
 	_hud.time_requested.connect(_cycle_time)
 	_hud.reset_requested.connect(_reset_vehicle_to_road)
 	_hud.menu_requested.connect(_show_menu)
+	_hud.vehicle_mode_requested.connect(_on_vehicle_mode_requested)
 
 
 func _bootstrap_create_profile_and_menu() -> void:
@@ -1259,6 +1267,8 @@ func _profile_view() -> Dictionary:
 func _show_menu() -> void:
 	if _smoke_mode or _screenshot_mode or _menu == null:
 		return
+	if _player_on_foot:
+		_finish_enter_vehicle()
 	if _map_open:
 		_hide_world_map()
 	_camera_drag_touch_index = -1
@@ -1285,6 +1295,8 @@ func _show_menu() -> void:
 
 
 func _enter_game() -> void:
+	if _player_on_foot:
+		_finish_enter_vehicle()
 	_has_entered_game = true
 	_set_garage_active(false)
 	_camera_drag_touch_index = -1
@@ -1310,6 +1322,8 @@ func _enter_game() -> void:
 func _show_world_map() -> void:
 	if _smoke_mode or _screenshot_mode or _map_open or _world_map == null:
 		return
+	if _player_on_foot:
+		_finish_enter_vehicle()
 	_camera_drag_touch_index = -1
 	_camera_mouse_dragging = false
 	_map_open = true
@@ -2157,6 +2171,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _in_menu:
 		return
+	if event is InputEventKey:
+		var vehicle_mode_key := event as InputEventKey
+		if vehicle_mode_key.pressed and not vehicle_mode_key.echo and vehicle_mode_key.keycode == KEY_F:
+			_on_vehicle_mode_requested()
+			get_viewport().set_input_as_handled()
+			return
 	if event.is_action_pressed(&"map_toggle"):
 		_show_world_map()
 		get_viewport().set_input_as_handled()
@@ -2331,9 +2351,148 @@ func _on_vehicle_reset_requested() -> void:
 	_reset_vehicle_to_road()
 
 
+func _vehicle_is_stopped() -> bool:
+	if _vehicle == null or not is_instance_valid(_vehicle):
+		return false
+	var planar_speed := Vector2(_vehicle.linear_velocity.x, _vehicle.linear_velocity.z).length()
+	return _vehicle.get_absolute_speed_kmh() < 0.6 and planar_speed < 0.16 and _vehicle.angular_velocity.length() < 0.16
+
+
+func _can_change_vehicle_mode() -> bool:
+	return _has_entered_game and not _in_menu and not _map_open and not _garage_active and not _world_switch_in_progress and not _vehicle_mode_transitioning and _vehicle_is_stopped()
+
+
+func _update_vehicle_mode_hud(delta: float) -> void:
+	if _vehicle_is_stopped():
+		_parked_duration += delta
+	else:
+		_parked_duration = 0.0
+	if _hud != null:
+		_hud.set_vehicle_interaction(_can_change_vehicle_mode() and _parked_duration >= 0.35, _player_on_foot)
+
+
+func _on_vehicle_mode_requested() -> void:
+	if not _can_change_vehicle_mode() or _parked_duration < 0.35:
+		return
+	if _player_on_foot:
+		_enter_vehicle()
+	else:
+		_exit_vehicle_to_player()
+
+
+func _exit_vehicle_to_player(animate: bool = true, bypass_parked_check: bool = false) -> bool:
+	if _player_on_foot or _vehicle_mode_transitioning or _vehicle == null or _world == null or _hud == null:
+		return false
+	if not bypass_parked_check and (not _can_change_vehicle_mode() or _parked_duration < 0.35):
+		return false
+	var character_model := PlayerCharacterScene.instantiate() as Node3D
+	if character_model == null:
+		push_error("Native player character GLB did not instantiate as Node3D")
+		return false
+
+	_player_on_foot = true
+	_vehicle_mode_transitioning = animate
+	_camera_mode_before_exit = _camera_mode
+	_camera_mode = CAMERA_CHASE
+	_vehicle.set_audio_camera_mode(_camera_mode)
+	_hud.reset_touch_controls()
+	_vehicle.linear_velocity = Vector3.ZERO
+	_vehicle.angular_velocity = Vector3.ZERO
+	_vehicle.freeze = true
+	_vehicle.set_physics_process(false)
+	_vehicle.set_process(false)
+
+	var car_transform := _vehicle.global_transform
+	var side := -car_transform.basis.x.normalized()
+	var car_width := float(_vehicle.get_car_definition().get("width_m", 1.9))
+	var position := car_transform.origin + side * (car_width * 0.5 + 0.42)
+	position.y = _world.height_at(position.x, position.z)
+	var actor := Node3D.new()
+	actor.name = "PlayerCharacter"
+	add_child(actor)
+	actor.add_child(character_model)
+	actor.global_position = position + (Vector3.UP * 0.14 if animate else Vector3.ZERO)
+	var look_target := car_transform.origin
+	look_target.y = position.y
+	actor.look_at(look_target, Vector3.UP)
+	_player_character = actor
+	_reset_camera_orbit()
+	_snap_camera = true
+	_hud.set_vehicle_interaction(false, true)
+
+	if animate:
+		actor.scale = Vector3.ONE * 0.12
+		_vehicle_mode_tween = create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_vehicle_mode_tween.tween_property(actor, "global_position", position, 0.28)
+		_vehicle_mode_tween.parallel().tween_property(actor, "scale", Vector3.ONE, 0.28)
+		_vehicle_mode_tween.finished.connect(_finish_vehicle_mode_transition)
+	else:
+		actor.scale = Vector3.ONE
+		_vehicle_mode_transitioning = false
+	return true
+
+
+func _enter_vehicle(animate: bool = true) -> bool:
+	if not _player_on_foot or _vehicle_mode_transitioning or _vehicle == null:
+		return false
+	if not _vehicle_is_stopped():
+		return false
+	var actor := _player_character
+	_vehicle_mode_transitioning = animate
+	if _hud != null:
+		_hud.set_vehicle_interaction(false, true)
+	if actor == null or not is_instance_valid(actor):
+		_finish_enter_vehicle()
+		return true
+	if animate:
+		var seat_position := _vehicle.global_position + Vector3.UP * 0.76
+		_vehicle_mode_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		_vehicle_mode_tween.tween_property(actor, "global_position", seat_position, 0.24)
+		_vehicle_mode_tween.parallel().tween_property(actor, "scale", Vector3.ZERO, 0.24)
+		_vehicle_mode_tween.finished.connect(_finish_vehicle_mode_transition)
+	else:
+		_finish_enter_vehicle()
+	return true
+
+
+func _finish_vehicle_mode_transition() -> void:
+	_vehicle_mode_tween = null
+	_vehicle_mode_transitioning = false
+	if _player_on_foot and _player_character != null and is_instance_valid(_player_character) and _player_character.scale.length_squared() < 0.01:
+		_finish_enter_vehicle()
+	elif _hud != null:
+		_hud.set_vehicle_interaction(_can_change_vehicle_mode() and _parked_duration >= 0.35, _player_on_foot)
+
+
+func _finish_enter_vehicle() -> void:
+	if _vehicle_mode_tween != null and is_instance_valid(_vehicle_mode_tween) and _vehicle_mode_tween.is_running():
+		_vehicle_mode_tween.kill()
+	_vehicle_mode_tween = null
+	if _player_character != null and is_instance_valid(_player_character):
+		var old_character := _player_character
+		_player_character = null
+		if old_character.get_parent() != null:
+			old_character.get_parent().remove_child(old_character)
+		old_character.queue_free()
+	_player_on_foot = false
+	_vehicle_mode_transitioning = false
+	if _vehicle != null:
+		_vehicle.freeze = false
+		_vehicle.set_physics_process(true)
+		_vehicle.set_process(true)
+		_vehicle.set_audio_camera_mode(_camera_mode_before_exit)
+	_camera_mode = _camera_mode_before_exit
+	_reset_camera_orbit()
+	_snap_camera = true
+	if _hud != null:
+		_hud.set_vehicle_interaction(_can_change_vehicle_mode() and _parked_duration >= 0.35, false)
+
+
 func _reset_vehicle_to_road() -> void:
 	if _world == null or _vehicle == null:
 		return
+	if _player_on_foot:
+		_finish_enter_vehicle()
 	var target := _world.find_nearest_road_transform(_vehicle.global_position)
 	_vehicle.reset_to_transform(target)
 	_reset_camera_orbit()
@@ -2377,6 +2536,7 @@ func _process(delta: float) -> void:
 		if _camera != null and not _camera.is_current():
 			_camera.make_current()
 		return
+	_update_vehicle_mode_hud(delta)
 	_accumulate_profile(delta)
 	if _route_guide != null:
 		_route_guide.update_route(delta)
@@ -2414,6 +2574,10 @@ func _update_camera(delta: float, snap: bool) -> void:
 	var speed_ratio := clampf(speed_kmh / maxf(float(_vehicle.get_spec_sheet().get("top_speed_kmh", 210)), 120.0), 0.0, 1.0)
 	var vehicle_transform := _vehicle.get_global_transform_interpolated()
 	var vehicle_position := vehicle_transform.origin
+	if _player_on_foot and _player_character != null and is_instance_valid(_player_character):
+		# Keep both the avatar and car in the parked on-foot camera frame;
+		# centring only on the rear bumper hides the person behind bodywork.
+		vehicle_position = vehicle_position.lerp(_player_character.global_position, 0.45)
 	var raw_follow_yaw := _vehicle_horizontal_yaw(vehicle_transform)
 	if snap or not _camera_smoothing_initialized or delta <= 0.0:
 		_camera_follow_yaw = raw_follow_yaw
@@ -2881,8 +3045,40 @@ func _run_smoke_checks() -> void:
 	if not bool(frontend_state.get("multi_car_0240", false)) or int(frontend_state.get("catalog_cars", 0)) != 4 or int(frontend_state.get("catalog_view_cars", 0)) != 4 or int(frontend_state.get("car_customization_slots", 0)) != 4 or int(frontend_state.get("car_stat_slots", 0)) != 4 or int(audi_spec.get("power_hp", 0)) != 610 or int(audi_spec.get("torque_nm", 0)) != 560 or int(audi_spec.get("top_speed_kmh", 0)) != 330 or int(camaro_spec.get("power_hp", 0)) != 455 or int(camaro_spec.get("torque_nm", 0)) != 617 or int(camaro_spec.get("top_speed_kmh", 0)) != 290 or int(mercedes_spec.get("power_hp", 0)) != 300 or int(mercedes_spec.get("torque_nm", 0)) != 455 or int(mercedes_spec.get("top_speed_kmh", 0)) != 250 or not bool(menu_state.get("multi_car_0240", false)) or int(menu_state.get("catalog_cars", 0)) != 4 or int(menu_state.get("store_cars", 0)) != 4 or not bool(steering_wheel_state.get("photo_steering_wheel_0240", false)) or not bool(steering_wheel_state.get("replaceable_per_car_0240", false)) or (steering_wheel_state.get("wheel_texture_size", Vector2.ZERO) as Vector2).x < 512.0 or not bool(vehicle_audio_state.get("multi_car_audio_0240", false)) or String(vehicle_audio_state.get("car_id", "")) != _selected_car_id:
 		failures.append("0.2.40 four-car catalogue / supplied models / photo steering wheel / per-car audio pass is incomplete: frontend=%s menu=%s wheel=%s audio=%s audi=%s camaro=%s mercedes=%s" % [str(frontend_state), str(menu_state), str(steering_wheel_state), str(vehicle_audio_state), str(audi_spec), str(camaro_spec), str(mercedes_spec)])
 
+	# 0.3.25 parked-only enter/exit flow (ported from the
+	# arena/1f423e59 feature branch): verify movement blocks the
+	# action, then spawn the original GLB avatar beside the parked
+	# car, hide driving controls, and remove it again when seated.
+	var vehicle_mode_state: Dictionary = _hud.get_smoke_state().get("vehicle_mode_button", {})
+	var vehicle_mode_rect: Rect2 = vehicle_mode_state.get("rect", Rect2())
+	var smoke_viewport_size: Vector2 = _hud.get_smoke_state().get("viewport_size", Vector2.ZERO)
+	if not bool(vehicle_mode_state.get("created", false)) or vehicle_mode_rect.size.x < 56.0 or vehicle_mode_rect.size.y < 56.0 or not _rect_is_on_screen(vehicle_mode_rect, smoke_viewport_size):
+		failures.append("0.3.25 exit/enter HUD icon button is missing, undersized or outside the screen safe area: %s" % str(vehicle_mode_state))
+	_vehicle.linear_velocity = Vector3(0.0, 0.0, -2.0)
+	var moving_vehicle_rejected := not _can_change_vehicle_mode()
+	_update_vehicle_mode_hud(0.0)
+	var moving_mode_state: Dictionary = _hud.get_smoke_state().get("vehicle_mode_button", {})
+	var mode_button_hidden_while_moving := not bool(moving_mode_state.get("visible", true))
+	_vehicle.linear_velocity = Vector3.ZERO
+	_vehicle.angular_velocity = Vector3.ZERO
+	_parked_duration = 1.0
+	_update_vehicle_mode_hud(0.0)
+	var parked_mode_state: Dictionary = _hud.get_smoke_state().get("vehicle_mode_button", {})
+	var mode_button_visible_when_parked := bool(parked_mode_state.get("visible", false))
+	var character_spawned := _exit_vehicle_to_player(false, true)
+	var character_in_scene := character_spawned and _player_character != null and is_instance_valid(_player_character) and _player_character.visible and _player_character.get_child_count() > 0
+	var character_near_car := character_in_scene and _player_character.global_position.distance_to(_vehicle.global_position) < 3.0
+	var foot_hud_state := _hud.get_smoke_state()
+	var foot_controls_hidden := bool(foot_hud_state.get("driving_controls_hidden_on_foot", false))
+	var vehicle_idle_on_foot := _vehicle.freeze and not _vehicle.is_physics_processing() and not _vehicle.is_processing()
+	var vehicle_reentered := _enter_vehicle(false)
+	var character_removed := vehicle_reentered and _player_character == null and get_node_or_null("PlayerCharacter") == null
+	var driver_controls_restored := not _player_on_foot and not _vehicle.freeze and _vehicle.is_physics_processing() and _vehicle.is_processing() and bool(_hud.get_smoke_state().get("driving_controls_visible", false))
+	if not moving_vehicle_rejected or not mode_button_hidden_while_moving or not mode_button_visible_when_parked or not character_in_scene or not character_near_car or not foot_controls_hidden or not vehicle_idle_on_foot or not character_removed or not driver_controls_restored:
+		failures.append("0.3.25 parked-only human character enter/exit pass failed: moving_rejected=%s hidden_while_moving=%s shown_when_parked=%s spawned=%s near_car=%s foot_controls_hidden=%s vehicle_idle=%s removed=%s controls_restored=%s" % [str(moving_vehicle_rejected), str(mode_button_hidden_while_moving), str(mode_button_visible_when_parked), str(character_in_scene), str(character_near_car), str(foot_controls_hidden), str(vehicle_idle_on_foot), str(character_removed), str(driver_controls_restored)])
+
 	if failures.is_empty():
-		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s" % [
+		print("[native-smoke] PASS world_geometry=%d vehicle_geometry=%d vehicle=%s camera=%s minimap=%s traffic=%s enhancements=%s vehicle_aabb=%s surface=%s gear=%s rpm=%.0f dynamic=%s speed_post=%s drive_base=%s smoothing=%s road_visual=%s render_quality=%s parked_exit=%s avatar=%s" % [
 			world_geometry_count,
 			vehicle_geometry_count,
 			str(_vehicle.global_position),
@@ -2900,6 +3096,8 @@ func _run_smoke_checks() -> void:
 			str(smoothing_state),
 			str(road_visual_state),
 			str(render_quality_state),
+			str(moving_vehicle_rejected),
+			str(character_in_scene),
 		])
 	_finish_smoke(failures)
 
@@ -2973,6 +3171,10 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "01_spawn_gameplay", "time": "day", "hud": true,
 			"vehicle": "spawn", "gameplay_camera": true, "frames": 6,
+		},
+		{
+			"name": "01a_driver_exit", "time": "day", "hud": true,
+			"vehicle": "spawn", "gameplay_camera": true, "avatar": true, "frames": 6,
 		},
 		{
 			"name": "02_mosque_east", "time": "day", "vehicle": "hide",
@@ -3117,6 +3319,8 @@ func _run_screenshot_tour() -> void:
 func _capture_screenshot(shot: Dictionary) -> bool:
 	var shot_started_ms := Time.get_ticks_msec()
 	var shot_name := String(shot.get("name", "shot"))
+	if _player_on_foot:
+		_finish_enter_vehicle()
 	var wanted_time_index := maxi(TIME_MODES.find(String(shot.get("time", "day"))), 0)
 	if wanted_time_index != _time_index:
 		_time_index = wanted_time_index
@@ -3147,6 +3351,11 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 			_vehicle.reset_to_transform(_world.find_nearest_road_transform(anchor))
 		_:
 			_vehicle.visible = false
+
+	if bool(shot.get("avatar", false)):
+		if not _exit_vehicle_to_player(false, true):
+			push_error("[native-screenshots] FAIL: player character could not appear beside the parked vehicle")
+			return false
 
 	if is_menu_shot:
 		_screenshot_free_camera = false
