@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.27-native-alpha"'), 'Native project version metadata must match 0.3.27-native-alpha');
-assert(preset.includes('version/code=93'), 'Native 0.3.27 must bump Android versionCode to 93');
-assert(preset.includes('version/name="0.3.27-native-alpha"'), 'Native version name must be 0.3.27-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.27-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.27"') && preset.includes('application/product_version="0.3.27"'), 'Desktop file/product versions must match native 0.3.27');
+assert(project.includes('config/version="0.3.28-native-alpha"'), 'Native project version metadata must match 0.3.28-native-alpha');
+assert(preset.includes('version/code=94'), 'Native 0.3.28 must bump Android versionCode to 94');
+assert(preset.includes('version/name="0.3.28-native-alpha"'), 'Native version name must be 0.3.28-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.28-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.28"') && preset.includes('application/product_version="0.3.28"'), 'Desktop file/product versions must match native 0.3.28');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -114,7 +114,7 @@ const playerCharacter = parseGlbJson(playerCharacterBytes);
 assert(playerCharacterBytes.readUInt32LE(8) === playerCharacterBytes.length, 'Player character GLB total length is invalid');
 assert(playerCharacter.extras?.heightMeters === 1.84 && playerCharacter.extras?.triangleBudget >= 5000 && playerCharacter.extras?.triangleBudget <= 10000, 'Player character GLB must stay within its 1.84m, medium-low-poly asset budget');
 assert(playerCharacter.meshes?.length >= 6 && playerCharacter.materials?.some((material) => material.name === 'Skin') && playerCharacter.materials?.some((material) => material.name === 'Hair - dark brown') && playerCharacter.materials?.some((material) => material.name === 'Trousers - charcoal blue'), 'Player character must include recognizable human anatomy and separate clothing materials');
-for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'look_target.y = position.y', 'vehicle_position = vehicle_position.lerp(_player_character.global_position, 0.45)', 'Tween.TRANS_BACK', '01a_driver_exit']) {
+for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'look_target.y = position.y', '_update_on_foot_camera', 'Tween.TRANS_BACK', '01a_driver_exit']) {
   assert(mainScript.includes(marker), `Native 0.3.25 parked-only character marker is missing: ${marker}`);
 }
 for (const marker of ['vehicle_mode_requested', 'set_vehicle_interaction', 'driving_controls_hidden_on_foot', '_make_icon_button("♟"']) {
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.27"') && preset.includes('application/product_version="0.3.27"'), 'Desktop Windows version metadata must match native 0.3.27');
+assert(preset.includes('application/file_version="0.3.28"') && preset.includes('application/product_version="0.3.28"'), 'Desktop Windows version metadata must match native 0.3.28');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1988,6 +1988,45 @@ console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturat
     assert(tris0327 >= floor0327, `0.3.27 detail floor: ${name0327} has ${tris0327} tris < ${floor0327} (placeholder regression?)`);
   }
   console.log('0.3.27 detail floors OK (mall + turbine halls)');
+}
+
+// 0.3.28: free on-foot walking.  The avatar GLB is rebuilt as a
+// translation-only limb hierarchy (same 6886 triangles, posed by
+// native/scripts/player_character.gd - no skeleton/skin) and the
+// player can walk/run/jump anywhere the analytic world says is
+// dry land clear of buildings, with a touch joystick, an orbit
+// camera around the avatar, a minimap that follows the person
+// and marks the parked car, and a hard "walk back to enter" rule.
+{
+  const characterScript0328 = await readFile('native/scripts/player_character.gd', 'utf8');
+  const joystickScript0328 = await readFile('native/scripts/touch_joystick.gd', 'utf8');
+  const generator0328 = await readFile('scripts/generate_native_player_character.py', 'utf8');
+  for (const marker0328 of ['class_name NativePlayerCharacter', 'func bind_model', 'func set_locomotion', 'func get_locomotion_state', '"ThighL"', '"ForearmR"', '"Torso"', '"Head"']) {
+    assert(characterScript0328.includes(marker0328), `0.3.28 player_character marker is missing: ${marker0328}`);
+  }
+  for (const marker0328 of ['class_name NativeTouchJoystick', 'func get_value', 'func release', 'InputEventScreenDrag']) {
+    assert(joystickScript0328.includes(marker0328), `0.3.28 touch_joystick marker is missing: ${marker0328}`);
+  }
+  for (const marker0328 of ['LIMB_BUCKETS', 'def set_limb', '"ThighL": ("Torso"', '"joints": list(LIMBS)']) {
+    assert(generator0328.includes(marker0328), `0.3.28 character generator marker is missing: ${marker0328}`);
+  }
+  for (const marker0328 of ['func _step_on_foot', 'func _get_on_foot_move_input', 'func _can_enter_vehicle', 'func _on_foot_can_stand', 'ON_FOOT_ENTER_RANGE_M', 'ON_FOOT_RUN_SPEED', '_on_foot_test_input', 'is_walkable_at', 'set_follow_override(actor)', 'set_follow_override(null)', 'far_enter_rejected', '01d_on_foot_walk', 'func get_on_foot_input', 'on_foot_controls_visible', 'OnFootJoystick', 'set_vehicle_marker_visible', '_show_vehicle_marker', 'func is_walkable_at']) {
+    assert(combinedRuntime.includes(marker0328), `0.3.28 locomotion marker is missing: ${marker0328}`);
+  }
+  const characterBytes0328 = await readFile('src/assets/models/characters/nitches_player.glb');
+  const characterJson0328 = parseGlbJson(characterBytes0328);
+  const nodeNames0328 = new Set((characterJson0328.nodes ?? []).map((node0328) => node0328.name));
+  for (const joint0328 of ['Torso', 'Head', 'ThighL', 'ShinL', 'FootL', 'ThighR', 'ShinR', 'FootR', 'UpperArmL', 'ForearmL', 'UpperArmR', 'ForearmR']) {
+    assert(nodeNames0328.has(joint0328), `0.3.28 avatar limb node is missing: ${joint0328}`);
+  }
+  let characterTris0328 = 0;
+  for (const mesh0328 of characterJson0328.meshes ?? []) {
+    for (const prim0328 of mesh0328.primitives ?? []) {
+      if (prim0328.indices !== undefined) characterTris0328 += Math.floor((characterJson0328.accessors[prim0328.indices]?.count ?? 0) / 3);
+    }
+  }
+  assert(characterTris0328 === 6886, `0.3.28 avatar must keep the exact 0.3.25 geometry budget: ${characterTris0328} tris != 6886`);
+  console.log('0.3.28 free on-foot walking OK (jointed avatar, joystick, orbit camera, walk-back-to-enter)');
 }
 
 console.log('Native Godot project validation OK');

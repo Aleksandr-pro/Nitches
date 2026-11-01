@@ -28,13 +28,45 @@ MATERIALS = [
     ("Mouth", (0.20, 0.075, 0.055, 1.0), 0.0, 0.8),
 ]
 SKIN, JACKET, SHIRT, TROUSERS, HAIR, SHOES, METAL, EYES, IRIS, MOUTH = range(len(MATERIALS))
-BUCKETS: list[dict] = [{"positions": [], "indices": []} for _ in MATERIALS]
+# 0.3.28: jointed limb hierarchy for procedural walk animation.
+# Geometry is still authored in body space by the add_* helpers;
+# add_mesh files it into the current limb bucket with positions
+# shifted into that limb's joint-local space.  The writer emits a
+# translation-only node hierarchy (bind rotations zero) so Godot
+# can pose limbs without a skeleton or skinning cost.  Limb
+# origins sit exactly on the joints used to author the limbs:
+# hips (+-0.135, 0.83), knees (+-0.145, 0.48), ankles
+# (+-0.155, 0.115), shoulders (+-0.333, 1.455), elbows
+# (+-0.423, 1.155).  The torso anchor is the hip-ellipsoid
+# centre (0, 0.875); the head pivots at the neck top (0, 1.595).
+LIMBS = {
+    "Torso": ("", (0.0, 0.875, 0.0)),
+    "Head": ("Torso", (0.0, 1.595, 0.0)),
+    "ThighL": ("Torso", (-0.135, 0.83, 0.0)),
+    "ShinL": ("ThighL", (-0.145, 0.48, 0.018)),
+    "FootL": ("ShinL", (-0.155, 0.115, -0.005)),
+    "ThighR": ("Torso", (0.135, 0.83, 0.0)),
+    "ShinR": ("ThighR", (0.145, 0.48, 0.018)),
+    "FootR": ("ShinR", (0.155, 0.115, -0.005)),
+    "UpperArmL": ("Torso", (-0.333, 1.455, 0.0)),
+    "ForearmL": ("UpperArmL", (-0.423, 1.155, -0.006)),
+    "UpperArmR": ("Torso", (0.333, 1.455, 0.0)),
+    "ForearmR": ("UpperArmR", (0.423, 1.155, -0.006)),
+}
+CURRENT_LIMB = "Torso"
+LIMB_BUCKETS = {}
+
+
+def set_limb(name: str) -> None:
+    global CURRENT_LIMB
+    CURRENT_LIMB = name
 
 
 def add_mesh(material: int, positions: list[tuple[float, float, float]], indices: list[int]) -> None:
-    bucket = BUCKETS[material]
+    joint_x, joint_y, joint_z = LIMBS[CURRENT_LIMB][1]
+    bucket = LIMB_BUCKETS.setdefault((CURRENT_LIMB, material), {"positions": [], "indices": []})
     offset = len(bucket["positions"])
-    bucket["positions"].extend(positions)
+    bucket["positions"].extend((x - joint_x, y - joint_y, z - joint_z) for x, y, z in positions)
     bucket["indices"].extend(offset + index for index in indices)
 
 
@@ -213,16 +245,22 @@ def build_character() -> None:
     # Hips and two separately modelled trouser legs leave a clear human silhouette.
     add_ellipsoid(TROUSERS, (0.0, 0.875, 0.0), (0.265, 0.15, 0.158), 16, 10)
     for side in (-1.0, 1.0):
+        suffix = "L" if side < 0 else "R"
         hip = (side * 0.135, 0.83, 0.0)
         knee = (side * 0.145, 0.48, 0.018)
         ankle = (side * 0.155, 0.115, -0.005)
+        set_limb("Thigh" + suffix)
         add_tube(TROUSERS, hip, knee, 0.125, 0.105, 0.88, 14)
+        set_limb("Shin" + suffix)
         add_ellipsoid(TROUSERS, knee, (0.108, 0.105, 0.105), 12, 8)
         add_tube(TROUSERS, knee, ankle, 0.101, 0.071, 0.90, 14)
+        set_limb("Foot" + suffix)
         add_ellipsoid(SHOES, (side * 0.155, 0.084, -0.074), (0.112, 0.072, 0.178), 14, 8)
         add_box(SHOES, (side * 0.155, 0.045, -0.075), (0.205, 0.024, 0.31))
         # A warm seam and understated pocket keep the outfit readable without textures.
+        set_limb("Thigh" + suffix)
         add_box(METAL, (side * 0.145, 0.842, -0.164), (0.10, 0.014, 0.009))
+    set_limb("Torso")
 
     # Shirt insert and folded lapels on the front of the jacket (front is -Z).
     add_box(SHIRT, (0.0, 1.295, -0.175), (0.145, 0.34, 0.025))
@@ -239,11 +277,14 @@ def build_character() -> None:
 
     # Relaxed arms angle slightly away from the body; hand and wrist are distinct.
     for side in (-1.0, 1.0):
+        suffix = "L" if side < 0 else "R"
         shoulder = (side * 0.333, 1.455, 0.0)
         elbow = (side * 0.423, 1.155, -0.006)
         wrist = (side * 0.414, 0.865, -0.028)
+        set_limb("UpperArm" + suffix)
         add_ellipsoid(JACKET, shoulder, (0.115, 0.128, 0.135), 12, 8)
         add_tube(JACKET, shoulder, elbow, 0.112, 0.082, 0.92, 14)
+        set_limb("Forearm" + suffix)
         add_ellipsoid(JACKET, elbow, (0.083, 0.088, 0.082), 12, 8)
         add_tube(JACKET, elbow, wrist, 0.081, 0.062, 0.94, 14)
         add_box(SHIRT, (side * 0.414, 0.891, -0.027), (0.136, 0.042, 0.13))
@@ -252,6 +293,7 @@ def build_character() -> None:
         add_ellipsoid(SKIN, (side * 0.365, 0.802, -0.055), (0.026, 0.052, 0.031), 10, 7)
 
     # Head: a tapered jaw, ears, eyes, brow, nose and mouth establish an unmistakably human face.
+    set_limb("Head")
     add_ellipsoid(SKIN, (0.0, 1.675, 0.0), (0.125, 0.148, 0.115), 20, 14, ellipsoid_deform)
     add_ellipsoid(SKIN, (-0.124, 1.671, 0.0), (0.024, 0.042, 0.026), 12, 8)
     add_ellipsoid(SKIN, (0.124, 1.671, 0.0), (0.024, 0.042, 0.026), 12, 8)
@@ -272,6 +314,7 @@ def build_character() -> None:
     add_triangle(HAIR, [(-0.015,1.712,-0.116), (0.063,1.744,-0.101), (0.002,1.767,-0.104)])
 
     # Fine waist, cuff and pocket details; all remain sub-pixel at driving range.
+    set_limb("Torso")
     add_box(METAL, (0.0, 0.933, -0.17), (0.43, 0.026, 0.014))
     add_box(METAL, (0.0, 0.932, -0.181), (0.042, 0.034, 0.012))
     for side in (-1.0, 1.0):
@@ -291,7 +334,6 @@ def write_glb() -> None:
     accessors = []
     meshes = []
     nodes = []
-    children = []
 
     def append_accessor(raw: bytes, component_type: int, count: int, accessor_type: str, target: int, minimum=None, maximum=None) -> int:
         align4(binary)
@@ -306,7 +348,8 @@ def write_glb() -> None:
         accessors.append(accessor)
         return len(accessors) - 1
 
-    for material_index, bucket in enumerate(BUCKETS):
+    limb_mesh_nodes = {limb: [] for limb in LIMBS}
+    for (limb, material_index), bucket in sorted(LIMB_BUCKETS.items()):
         positions = bucket["positions"]
         indices = bucket["indices"]
         if not positions or not indices:
@@ -322,15 +365,31 @@ def write_glb() -> None:
         position_accessor = append_accessor(pos_raw, 5126, len(positions), "VEC3", 34962, mins, maxs)
         normal_accessor = append_accessor(norm_raw, 5126, len(normals), "VEC3", 34962)
         index_accessor = append_accessor(index_raw, 5123, len(indices), "SCALAR", 34963)
-        meshes.append({"name": MATERIALS[material_index][0], "primitives": [{
+        meshes.append({"name": limb + "_" + MATERIALS[material_index][0], "primitives": [{
             "attributes": {"POSITION": position_accessor, "NORMAL": normal_accessor},
             "indices": index_accessor,
             "material": material_index,
             "mode": 4,
         }]})
         mesh_index = len(meshes) - 1
-        nodes.append({"name": MATERIALS[material_index][0], "mesh": mesh_index})
-        children.append(len(nodes) - 1)
+        nodes.append({"name": limb + "_" + MATERIALS[material_index][0], "mesh": mesh_index})
+        limb_mesh_nodes[limb].append(len(nodes) - 1)
+
+    # Limb nodes carry only the joint translation relative to their
+    # parent; rotations stay zero at bind so Godot poses them live.
+    limb_node_index = {}
+    for limb, (parent, joint) in LIMBS.items():
+        if parent:
+            parent_joint = LIMBS[parent][1]
+            relative = [joint[k] - parent_joint[k] for k in range(3)]
+        else:
+            relative = list(joint)
+        nodes.append({"name": limb, "translation": relative, "children": list(limb_mesh_nodes[limb])})
+        limb_node_index[limb] = len(nodes) - 1
+    for limb, (parent, _joint) in LIMBS.items():
+        if parent:
+            nodes[limb_node_index[parent]]["children"].append(limb_node_index[limb])
+    children = [limb_node_index["Torso"]]
 
     gltf = {
         "asset": {"version": "2.0", "generator": "Nitches procedural human character builder", "copyright": "Original Nitches character asset"},
@@ -346,7 +405,7 @@ def write_glb() -> None:
         "accessors": accessors,
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(binary)}],
-        "extras": {"purpose": "Native player avatar, spawned only when exiting a parked car", "heightMeters": 1.84, "triangleBudget": sum(len(b["indices"]) // 3 for b in BUCKETS)},
+        "extras": {"purpose": "Native player avatar, spawned only when exiting a parked car", "heightMeters": 1.84, "triangleBudget": sum(len(b["indices"]) // 3 for b in LIMB_BUCKETS.values()), "joints": list(LIMBS)},
     }
     json_bytes = json.dumps(gltf, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     while len(json_bytes) % 4:
