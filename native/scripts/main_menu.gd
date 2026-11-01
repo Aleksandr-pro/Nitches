@@ -412,7 +412,7 @@ func get_smoke_state() -> Dictionary:
         "developer_mode": bool(_settings.get("developer_mode", false)),
         "control_type": String(_settings.get("control_type", "wheel")),
         "clean_menu_0234": true,
-        "multi_car_0240": _catalog_entries().size() == 4 and _garage_car_buttons.size() == 4,
+        "multi_car_0240": _catalog_entries().size() >= 4 and _garage_car_buttons.size() == _catalog_entries().size(),
         "catalog_cars": _catalog_entries().size(),
         "catalog_bound": _catalog_bound,
         "selected_car_id": _selected_car_id,
