@@ -8691,7 +8691,7 @@ func _build_rt7_scenic_0326(root: Node3D) -> void:
 			bench_pos.y = height_at(bench_pos.x, bench_pos.z)
 			bench_t.append(make_transform(bench_pos, view_yaw))
 		for palm_side in [-1.0, 1.0]:
-			var palm_pos := pad_center + right * (side_sign * 3.6) + road_dir * (4.4 * palm_side)
+			var palm_pos: Vector3 = pad_center + right * (side_sign * 3.6) + road_dir * (4.4 * float(palm_side))
 			palm_pos.y = height_at(palm_pos.x, palm_pos.z)
 			if String(get_surface_at(palm_pos).get("kind", "")) == "water":
 				continue
