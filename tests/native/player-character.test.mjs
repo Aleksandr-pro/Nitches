@@ -22,16 +22,20 @@ function readGlb(bytes) {
 
 const { json, binary } = readGlb(asset);
 
-test('player avatar is a compact, valid glTF 2.0 human character', () => {
-  assert.ok(asset.length < 250_000, `expected a compact mobile asset, got ${asset.length} bytes`);
+test('player avatar is a detailed, valid glTF 2.0 human character', () => {
+  assert.ok(asset.length < 1_800_000, `expected a detailed single-instance asset under 1.8MB, got ${asset.length} bytes`);
   assert.equal(json.asset.version, '2.0');
   assert.equal(json.extras.heightMeters, 1.84);
-  assert.ok(json.extras.triangleBudget >= 5_000 && json.extras.triangleBudget <= 10_000);
+  assert.ok(json.extras.triangleBudget >= 40_000 && json.extras.triangleBudget <= 90_000);
   assert.ok(json.meshes.length >= 6);
   assert.ok(json.materials.some(({ name }) => name === 'Skin'));
   assert.ok(json.materials.some(({ name }) => name === 'Hair - dark brown'));
   assert.ok(json.materials.some(({ name }) => name === 'Trousers - charcoal blue'));
   assert.ok(json.materials.some(({ name }) => name === 'Eyes'));
+  // 0.3.29: append-only detailed-face/shoe materials.
+  assert.ok(json.materials.some(({ name }) => name === 'Lips'));
+  assert.ok(json.materials.some(({ name }) => name === 'Pupil'));
+  assert.ok(json.materials.some(({ name }) => name === 'Shoe sole - rubber'));
 });
 
 test('avatar geometry has valid indices, normals, and human-scale bounds', () => {

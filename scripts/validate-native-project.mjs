@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.28-native-alpha"'), 'Native project version metadata must match 0.3.28-native-alpha');
-assert(preset.includes('version/code=94'), 'Native 0.3.28 must bump Android versionCode to 94');
-assert(preset.includes('version/name="0.3.28-native-alpha"'), 'Native version name must be 0.3.28-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.28-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.28"') && preset.includes('application/product_version="0.3.28"'), 'Desktop file/product versions must match native 0.3.28');
+assert(project.includes('config/version="0.3.29-native-alpha"'), 'Native project version metadata must match 0.3.29-native-alpha');
+assert(preset.includes('version/code=95'), 'Native 0.3.29 must bump Android versionCode to 95');
+assert(preset.includes('version/name="0.3.29-native-alpha"'), 'Native version name must be 0.3.29-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.29-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.29"') && preset.includes('application/product_version="0.3.29"'), 'Desktop file/product versions must match native 0.3.29');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -112,7 +112,7 @@ assert(mainScript.includes('PlayerCharacterScene := preload("res://assets/charac
 const playerCharacterBytes = await readFile('src/assets/models/characters/nitches_player.glb');
 const playerCharacter = parseGlbJson(playerCharacterBytes);
 assert(playerCharacterBytes.readUInt32LE(8) === playerCharacterBytes.length, 'Player character GLB total length is invalid');
-assert(playerCharacter.extras?.heightMeters === 1.84 && playerCharacter.extras?.triangleBudget >= 5000 && playerCharacter.extras?.triangleBudget <= 10000, 'Player character GLB must stay within its 1.84m, medium-low-poly asset budget');
+assert(playerCharacter.extras?.heightMeters === 1.84 && playerCharacter.extras?.triangleBudget >= 40000 && playerCharacter.extras?.triangleBudget <= 90000, 'Player character GLB must stay within its 1.84m, detailed single-instance asset budget');
 assert(playerCharacter.meshes?.length >= 6 && playerCharacter.materials?.some((material) => material.name === 'Skin') && playerCharacter.materials?.some((material) => material.name === 'Hair - dark brown') && playerCharacter.materials?.some((material) => material.name === 'Trousers - charcoal blue'), 'Player character must include recognizable human anatomy and separate clothing materials');
 for (const marker of ['_vehicle_is_stopped', '_parked_duration >= 0.35', '_exit_vehicle_to_player', '_enter_vehicle', 'PlayerCharacter', '_vehicle.set_process(false)', 'mode_button_hidden_while_moving', 'look_target.y = position.y', '_update_on_foot_camera', 'Tween.TRANS_BACK', '01a_driver_exit']) {
   assert(mainScript.includes(marker), `Native 0.3.25 parked-only character marker is missing: ${marker}`);
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.28"') && preset.includes('application/product_version="0.3.28"'), 'Desktop Windows version metadata must match native 0.3.28');
+assert(preset.includes('application/file_version="0.3.29"') && preset.includes('application/product_version="0.3.29"'), 'Desktop Windows version metadata must match native 0.3.29');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1991,7 +1991,9 @@ console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturat
 }
 
 // 0.3.28: free on-foot walking.  The avatar GLB is rebuilt as a
-// translation-only limb hierarchy (same 6886 triangles, posed by
+// translation-only limb hierarchy (0.3.29 later rebuilt the same
+// 12-joint hierarchy at detailed density - see the block below;
+// originally the same 6886 triangles, posed by
 // native/scripts/player_character.gd - no skeleton/skin) and the
 // player can walk/run/jump anywhere the analytic world says is
 // dry land clear of buildings, with a touch joystick, an orbit
@@ -2025,8 +2027,31 @@ console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturat
       if (prim0328.indices !== undefined) characterTris0328 += Math.floor((characterJson0328.accessors[prim0328.indices]?.count ?? 0) / 3);
     }
   }
-  assert(characterTris0328 === 6886, `0.3.28 avatar must keep the exact 0.3.25 geometry budget: ${characterTris0328} tris != 6886`);
+  assert(characterTris0328 >= 40000 && characterTris0328 <= 90000, `Avatar must keep the 0.3.29 detailed geometry budget (was the exact 6886 of 0.3.25-0.3.28): ${characterTris0328} tris outside 40000-90000`);
   console.log('0.3.28 free on-foot walking OK (jointed avatar, joystick, orbit camera, walk-back-to-enter)');
+}
+
+// 0.3.29: photoreal-detailed player character.  Same 12-joint
+// translation-only hierarchy and gameplay contract, but the
+// generator now spends a single-instance ~64k-triangle budget:
+// skull-deformation face (nose/brow/cheek/chin, eyelid caps),
+// one-piece swept hair cap, closed jacket with muted zipper,
+// fingered hands, lofted shoes with rubber soles, COLOR_0
+// tint x grain on every vertex, append-only materials.
+{
+  const characterBytes0329 = await readFile('src/assets/models/characters/nitches_player.glb');
+  const characterJson0329 = parseGlbJson(characterBytes0329);
+  const generator0329 = await readFile('scripts/generate_native_player_character.py', 'utf8');
+  for (const marker0329 of ['def add_tube_path', 'def add_hair_cap', 'def head_deform', '"Shoe sole - rubber"', '"Lips"', '"Pupil"', 'COLOR_0']) {
+    assert(generator0329.includes(marker0329), `0.3.29 character generator marker is missing: ${marker0329}`);
+  }
+  for (const mat0329 of ['Lips', 'Pupil', 'Shoe sole - rubber']) {
+    assert(characterJson0329.materials?.some((material0329) => material0329.name === mat0329), `0.3.29 avatar material is missing: ${mat0329}`);
+  }
+  const hasColor0329 = (characterJson0329.meshes ?? []).every((mesh0329) => (mesh0329.primitives ?? []).every((prim0329) => prim0329.attributes?.COLOR_0 !== undefined));
+  assert(hasColor0329, '0.3.29 avatar must carry COLOR_0 tint x grain on every primitive');
+  assert(characterBytes0329.length < 1800000, `0.3.29 avatar GLB must stay under 1.8MB, got ${characterBytes0329.length}`);
+  console.log('0.3.29 detailed player character OK (skull-deformation face, COLOR_0 grain, append-only materials)');
 }
 
 console.log('Native Godot project validation OK');
