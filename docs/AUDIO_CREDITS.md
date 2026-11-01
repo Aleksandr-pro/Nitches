@@ -92,6 +92,29 @@ is kept in each bank's `bank_manifest.json`.
   <https://freesound.org/people/PritzProductions/sounds/241083/>
 - Game directory: `src/assets/audio/mercedes_560_sel/`.
 
+### Bugatti Chiron Super Sport (in game: Bygatti Shiron Super Sport) — CC0 sources (0.3.31)
+
+No openly licensed W16 recording exists, so the bank voices the car
+with the deepest multi-cylinder CC0 material from the same clip pool,
+pitched low: V10 loops under 5000 rpm and a supercharged-V8 top end.
+As everywhere in this build the perceived pitch follows the recorded
+pulse rate (PSOLA derivations are labelled per anchor in
+`bank_manifest.json`); nothing is a synthesized engine tone, and no
+clip is claimed to be a real W16 recording.
+
+- 900 and 2000 rpm/idle: BMW M6 V10 start and idle by **Kinoton**,
+  Freesound **478597**, CC0 1.0:
+  <https://freesound.org/people/Kinoton/sounds/478597/>
+- 1602, 3735 and 5000 rpm: Lamborghini Huracan EVO 5.2 V10 by
+  **JaimeLopes**, Freesound **564373**, CC0 1.0 (link above).
+- 6478 and 7000 rpm: supercharged Holden V8 dyno run-up by
+  **Ears68**, Freesound **177184**, CC0 1.0:
+  <https://freesound.org/people/Ears68/sounds/177184/>
+- Starter layer inside `engine_start.wav`: the shared CC0 starter
+  recording by **Therancher01**, Freesound **610771** (as in every
+  supplied-car bank).
+- Game directory: `src/assets/audio/bugatti_chiron/`.
+
 ## Tyre squeal — CC BY 3.0
 
 - “Car Tire Squeal Skid Loop” by **Tom Haigh / audible-edge**.
