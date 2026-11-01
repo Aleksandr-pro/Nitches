@@ -8149,6 +8149,39 @@ def build_shopping_mall():
     for sx in (-113.38, 113.38):
         box("mall_storefront_rail0313", sx, 0, 5.82, 0.34, 106.0, 0.30, metal)
         box("mall_storefront_rail0313", sx, 0, 1.38, 0.34, 106.0, 0.30, metal)
+    # 0.3.27: tenant fascia rhythm + stone storefront piers.  The
+    # 200 m glass panels read as one flat strip; alternating brand
+    # colour fascia panels (2-tri quads) give the bay rhythm real
+    # malls read by, and chunkier stone piers every second mullion
+    # carry the elevation at street distance.
+    fascia_mats = (blue, red, accent)
+    fascia_i = 0
+    fx = -81.25
+    while fx <= 81.26:
+        fmat = fascia_mats[fascia_i % 3]
+        for sy in (-63.34, 63.34):
+            panel("mall_fascia0327", fx, sy, 6.25, 11.4, 0.6, fmat, "back" if sy > 0.0 else "front")
+        fascia_i += 1
+        fx += 12.5
+    fy = -42.0
+    while fy <= 42.1:
+        fmat = fascia_mats[fascia_i % 3]
+        for sx in (-113.34, 113.34):
+            panel("mall_fascia0327", sx, fy, 6.25, 10.9, 0.6, fmat, "right" if sx > 0.0 else "left")
+        fascia_i += 1
+        fy += 12.0
+    px = -87.5
+    while px <= 87.6:
+        if abs(px) > 20.0:
+            for sy in (-63.38, 63.38):
+                box("mall_pier0327", px, sy, 3.6, 0.95, 0.5, 4.4, accent)
+        px += 25.0
+    py = -48.0
+    while py <= 48.1:
+        if abs(py) > 20.0:
+            for sx in (-113.38, 113.38):
+                box("mall_pier0327", sx, py, 3.6, 0.5, 0.95, 4.4, accent)
+        py += 24.0
     box("mall_mid_cornice", 0, 0, 7.05, 228.0, 128.0, 0.9, accent)
     box("mall_upper_mass", 0, 0, 11.3, 224.0, 124.0, 7.6, main_mat)
     for sy in (-62.10, 62.10):
@@ -8189,6 +8222,12 @@ def build_shopping_mall():
             box("mall_entrance_sign", 0, sign * 63.8, 6.9, 30.0, 0.5, 0.9, blue)
             for cx in (-14.0, 14.0):
                 cyl("mall_entrance_column", cx, sign * 64.2, 3.3, 0.35, 5.6, metal, vertices=8)
+            # 0.3.27: door leafs read through the entrance glass.
+            for dx in (-8.5, 0.0, 8.5):
+                box("mall_entrance_mullion0327", dx, sign * 64.1, 3.4, 0.22, 0.3, 4.8, metal)
+            for dx in (-12.75, -4.25, 4.25, 12.75):
+                panel("mall_entrance_door0327", dx, sign * 64.26, 2.45, 3.9, 2.9, dark, "back" if sign > 0.0 else "front")
+            box("mall_canopy_fascia0327", 0, sign * 64.85, 5.9, 38.0, 0.25, 0.55, blue)
         else:
             box("mall_entrance_glass", sign * 113.6, 0, 3.4, 1.2, 34.0, 4.8, glass)
             box("mall_entrance_canopy", sign * 112.75, 0, 5.9, 4.5, 38.0, 0.5, metal)
@@ -8196,6 +8235,12 @@ def build_shopping_mall():
             box("mall_entrance_sign", sign * 113.8, 0, 6.9, 0.5, 30.0, 0.9, blue)
             for cy in (-14.0, 14.0):
                 cyl("mall_entrance_column", sign * 114.2, cy, 3.3, 0.35, 5.6, metal, vertices=8)
+            # 0.3.27: door leafs read through the entrance glass.
+            for dy in (-8.5, 0.0, 8.5):
+                box("mall_entrance_mullion0327", sign * 114.1, dy, 3.4, 0.3, 0.22, 4.8, metal)
+            for dy in (-12.75, -4.25, 4.25, 12.75):
+                panel("mall_entrance_door0327", sign * 114.26, dy, 2.45, 3.9, 2.9, dark, "right" if sign > 0.0 else "left")
+            box("mall_canopy_fascia0327", sign * 114.85, 0, 5.9, 0.25, 38.0, 0.55, blue)
 
     entrance(-1.0, True)
     entrance(1.0, True)
@@ -8217,6 +8262,25 @@ def build_shopping_mall():
         box("mall_hvac", hx, hy, 16.8, 10.0, 6.0, 1.4, dark)
     for vx, vy in ((-52.0, -30.0), (52.0, 30.0), (-52.0, 30.0), (52.0, -30.0)):
         cyl("mall_roof_vent", vx, vy, 16.9, 1.2, 1.6, metal, vertices=10)
+    # 0.3.27: skylight mullion grids so the atria read as glazed
+    # roofs from the air instead of pale slabs, fan rings on the
+    # HVAC boxes, a light coping cap on the parapet, and canopies
+    # + bumpers for the loading dock doors.
+    for ax in (-70.0, 0.0, 70.0):
+        for gx in (-12.0, -6.0, 6.0, 12.0):
+            box("mall_atrium_grid0327", ax + gx, 0, 17.94, 0.28, 24.0, 0.1, metal)
+        for gy in (-6.0, 6.0):
+            box("mall_atrium_grid0327", ax, gy, 17.94, 36.0, 0.28, 0.1, metal)
+    for hx, hy in ((-100.0, -40.0), (-35.0, 42.0), (35.0, -42.0), (100.0, 40.0), (-100.0, 38.0), (100.0, -38.0)):
+        cyl("mall_hvac_fan0327", hx, hy, 17.62, 1.7, 0.24, metal, vertices=10)
+    for sy in (-63.9, 63.9):
+        box("mall_parapet_cap0327", 0, sy, 17.69, 229.0, 1.5, 0.18, concrete)
+    for sx in (-113.9, 113.9):
+        box("mall_parapet_cap0327", sx, 0, 17.69, 1.5, 129.0, 0.18, concrete)
+    for dx in (-80.0, -58.0, 58.0, 80.0):
+        box("mall_dock_canopy0327", dx, 64.25, 5.25, 7.5, 1.3, 0.22, metal)
+        for bx in (-2.2, 2.2):
+            box("mall_dock_bumper0327", dx + bx, 63.85, 0.95, 0.45, 0.35, 0.9, dark)
 
 
 def _build_turbine_hall(length, height):
@@ -8276,6 +8340,35 @@ def _build_turbine_hall(length, height):
     for cx in (-19.5, 19.5):
         for cy in (-(half - 1.5), half - 1.5):
             box("turbine_safety_light", cx, cy, height - 0.3, 0.5, 0.5, 0.5, red)
+    # 0.3.27: cladding girts between the ribs, mullion rhythm on
+    # the roof monitor, segmented equipment doors with a window
+    # row, personnel-door canopies, stack caps, gooseneck vent
+    # caps and eaves coping - the flat industrial read becomes
+    # panelled sheet-metal construction.
+    for gz in (1.0 + wall_h * 0.38, 1.0 + wall_h * 0.72):
+        for sx in (-20.2, 20.2):
+            box("turbine_girt0327", sx, 0, gz, 0.3, length - 4.0, 0.35, metal)
+    mon_y = -length * 0.31 + 6.5
+    while mon_y < length * 0.31 - 3.0:
+        for sx in (-6.05, 6.05):
+            box("turbine_monitor_mullion0327", sx, mon_y, height - 0.85, 0.16, 0.3, 1.34, metal)
+        mon_y += 13.0
+    for ey in (-length * 0.31, length * 0.31):
+        panel("turbine_monitor_end0327", 0, ey + (0.06 if ey > 0.0 else -0.06), height - 0.85, 11.6, 1.2, glass, "back" if ey > 0.0 else "front")
+    for sy in (-(half - 0.8), half - 0.8):
+        sgn = 1.0 if sy > 0 else -1.0
+        for rz in (2.7, 4.5, 6.3):
+            box("turbine_door_rail0327", -4.0, sy + sgn * 0.33, rz, 13.6, 0.16, 0.3, metal)
+        box("turbine_door_header0327", -4.0, sy, 8.25, 15.0, 0.7, 0.5, metal)
+        for wx in (-9.4, -6.2, -3.0, 0.2):
+            panel("turbine_door_window0327", wx, sy + sgn * 0.26, 5.6, 1.7, 0.7, glass, "back" if sy > 0 else "front")
+        box("turbine_door_canopy0327", 10.0, sy + sgn * 0.3, 4.35, 3.2, 0.8, 0.16, metal)
+    for i, sy in enumerate(stack_ys):
+        cone("turbine_stack_cap0327", -10.0 if i % 2 == 0 else 10.0, sy, height - 0.19, 1.22, 0.5, 0.38, metal, vertices=8)
+    for vx, vy in ((-14.0, -half * 0.45), (14.0, half * 0.45), (14.0, -half * 0.15), (-14.0, half * 0.15)):
+        box("turbine_vent_cap0327", vx, vy, height - 0.38, 3.4, 2.6, 0.45, metal)
+    for sx in (-20.7, 20.7):
+        box("turbine_coping0327", sx, 0, height - 1.42, 0.5, length, 0.24, metal)
 
 
 def build_turbine_hall_long():
