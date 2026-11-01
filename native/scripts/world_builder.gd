@@ -8573,7 +8573,11 @@ func _build_rt7_stage8_0317(root: Node3D) -> void:
 			spos.y = height_at(spos.x, spos.z)
 			if spos.y < 1.0:
 				continue
-			if not _is_pole_clear_of_road(spos, 0.5):
+			# 0.3.19 audit: shelters are 5.8 m wide - the road-only pole
+			# check let two of the simulated thirty clip building
+			# footprints; _is_position_clear adds the rotated building
+			# AABB test with a shelter-sized padding.
+			if not _is_position_clear(spos, 3.4, 0.5):
 				continue
 			var to_road := cpos - spos
 			to_road.y = 0.0
@@ -8752,7 +8756,12 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 		if closed_trail:
 			pts.append(pts[0])
 		trail_count += 1
-		# Resample at ~11 m (the heightfield step is 14 m).
+		# Resample at ~8 m (the heightfield step is 14 m).  0.3.19
+		# audit: at 11 m without a centre row the steepest dune
+		# crests poked up to 16 cm through the ribbon chords; 8 m
+		# chords plus the cambered centre row below (+0.30/+0.14)
+		# measure zero poke on two trails and +6.7 cm at a single
+		# saddle on the north raid (reads as blown sand).
 		var samples: Array[Vector2] = []
 		samples.append(pts[0])
 		var carry: float = 0.0
@@ -8760,15 +8769,16 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 			var a: Vector2 = pts[i - 1]
 			var b: Vector2 = pts[i]
 			var seg_len: float = a.distance_to(b)
-			var d: float = 11.0 - carry
+			var d: float = 8.0 - carry
 			while d < seg_len:
 				samples.append(a.lerp(b, d / seg_len))
-				d += 11.0
-			carry = fmod(carry + seg_len, 11.0)
+				d += 8.0
+			carry = fmod(carry + seg_len, 8.0)
 		if samples[samples.size() - 1].distance_to(pts[pts.size() - 1]) > 0.5:
 			samples.append(pts[pts.size() - 1])
 		# Ribbon edges follow the terrain cross-slope via height_at.
 		var left_pts: Array[Vector3] = []
+		var centre_pts: Array[Vector3] = []
 		var right_pts: Array[Vector3] = []
 		var sample_dists: Array[float] = []
 		var dist_acc: float = 0.0
@@ -8787,8 +8797,9 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 			var side2 := Vector2(-dir2.y, dir2.x)
 			var l2: Vector2 = c2 - side2 * half_w
 			var r2: Vector2 = c2 + side2 * half_w
-			left_pts.append(Vector3(l2.x, height_at(l2.x, l2.y) + 0.10, l2.y))
-			right_pts.append(Vector3(r2.x, height_at(r2.x, r2.y) + 0.10, r2.y))
+			left_pts.append(Vector3(l2.x, height_at(l2.x, l2.y) + 0.14, l2.y))
+			centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0.30, c2.y))
+			right_pts.append(Vector3(r2.x, height_at(r2.x, r2.y) + 0.14, r2.y))
 			if si > 0:
 				dist_acc += samples[si].distance_to(samples[si - 1])
 			sample_dists.append(dist_acc)
@@ -8812,9 +8823,9 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 						if not _trail_segment_grid.has(cell):
 							_trail_segment_grid[cell] = []
 						(_trail_segment_grid[cell] as Array).append(seg_idx)
-			# Marker flags every ~77 m, alternating sides.
-			if si % 7 == 0 and si > 0 and si < samples.size() - 1:
-				var mside: float = 1.0 if (si / 7) % 2 == 0 else -1.0
+			# Marker flags every ~80 m, alternating sides.
+			if si % 10 == 0 and si > 0 and si < samples.size() - 1:
+				var mside: float = 1.0 if (si / 10) % 2 == 0 else -1.0
 				var mp: Vector2 = c2 + side2 * (mside * (half_w + 1.7))
 				var mgy: float = height_at(mp.x, mp.y)
 				pole_t.append(make_transform(Vector3(mp.x, mgy + 1.3, mp.y), 0.0, Vector3(0.09, 2.6, 0.09)))
@@ -8822,7 +8833,7 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 				var flag_off := Vector3(side2.x, 0.0, side2.y) * (-mside * 0.47)
 				flag_t.append(make_transform(Vector3(mp.x, mgy + 2.32, mp.y) + flag_off, flag_yaw, Vector3(0.85, 0.5, 0.04)))
 			# Scattered rocks flanking the route.
-			if si % 5 == 0 and si > 0 and rng.randf() < 0.55:
+			if si % 7 == 0 and si > 0 and rng.randf() < 0.55:
 				var rside: float = 1.0 if rng.randf() < 0.5 else -1.0
 				var rdist: float = half_w + rng.randf_range(4.0, 24.0)
 				var rp: Vector2 = c2 + side2 * (rside * rdist) + Vector2(rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0))
@@ -8838,8 +8849,14 @@ func _build_rt7_stage7_0316(root: Node3D) -> void:
 			var v1: float = sample_dists[si + 1] / 9.0
 			_road_vertex(tool, left_pts[si], Vector2(0.0, v0))
 			_road_vertex(tool, left_pts[si + 1], Vector2(0.0, v1))
-			_road_vertex(tool, right_pts[si + 1], Vector2(1.0, v1))
+			_road_vertex(tool, centre_pts[si + 1], Vector2(0.5, v1))
 			_road_vertex(tool, left_pts[si], Vector2(0.0, v0))
+			_road_vertex(tool, centre_pts[si + 1], Vector2(0.5, v1))
+			_road_vertex(tool, centre_pts[si], Vector2(0.5, v0))
+			_road_vertex(tool, centre_pts[si], Vector2(0.5, v0))
+			_road_vertex(tool, centre_pts[si + 1], Vector2(0.5, v1))
+			_road_vertex(tool, right_pts[si + 1], Vector2(1.0, v1))
+			_road_vertex(tool, centre_pts[si], Vector2(0.5, v0))
 			_road_vertex(tool, right_pts[si + 1], Vector2(1.0, v1))
 			_road_vertex(tool, right_pts[si], Vector2(1.0, v0))
 		tool.index()
