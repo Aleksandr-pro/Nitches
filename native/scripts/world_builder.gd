@@ -37,6 +37,7 @@ var _gf_scatter_trees_acc := 0
 var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
+const ISLAND_TERRAIN_CHUNK_M_0322 := 448.0
 const STREAM_CELL_M := 64.0
 # 0.2.44: foliage density queries (atmosphere shafts, rustle audio)
 # run against a build-time spatial grid instead of scanning every
@@ -3832,48 +3833,69 @@ func _build_terrain() -> void:
 	var min_z := _f(_terrain, "minZ", -500.0)
 	var step := _f(_terrain, "stepM", 10.0)
 
-	var tools: Dictionary = {}
-	for kind in ["grass", "sand", "concrete", "plaza", "rock"]:
-		var tool := SurfaceTool.new()
-		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-		tools[kind] = tool
-
-	for iz in range(rows - 1):
-		for ix in range(cols - 1):
-			var x0 := min_x + float(ix) * step
-			var z0 := min_z + float(iz) * step
-			var x1 := x0 + step
-			var z1 := z0 + step
-			var p00 := Vector3(x0, _grid_height(ix, iz), z0)
-			var p10 := Vector3(x1, _grid_height(ix + 1, iz), z0)
-			var p11 := Vector3(x1, _grid_height(ix + 1, iz + 1), z1)
-			var p01 := Vector3(x0, _grid_height(ix, iz + 1), z1)
-			var center := (p00 + p11) * 0.5
-			var slope := maxf(abs(p10.y - p00.y), abs(p01.y - p00.y)) / step
-			var kind := _terrain_class(center.x, center.z, center.y, slope, ix, iz)
-			var tool := tools[kind] as SurfaceTool
-			# Godot front faces are clockwise as seen from the camera side.
-			# For a ground plane viewed from above, the geometric cross
-			# product therefore points down. The reversed pre-0.2.2 order
-			# was back-face culled on the phone, leaving only sky below the
-			# horizon. Keep this order paired with get_road_visual_state().
-			for vertex in [p00, p10, p11, p00, p11, p01]:
-				_terrain_vertex(tool, vertex)
-
 	var terrain_root := Node3D.new()
 	terrain_root.name = "Terrain"
 	add_child(terrain_root)
 	_terrain_meshes.clear()
-	for kind in tools.keys():
-		var tool := tools[kind] as SurfaceTool
-		tool.index()
-		tool.generate_normals()
-		tool.generate_tangents()
-		var mesh := tool.commit()
-		if mesh != null:
-			_terrain_meshes[String(kind)] = mesh
-			var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s" % String(kind), false)
-			instance.custom_aabb = _active_aabb
+	# 0.3.22: the legacy (non-7x7) RichTown path still committed the
+	# heightfield as five world-spanning meshes behind one world-size
+	# custom AABB, so frustum culling could never retire any of it and
+	# the GPU processed the whole grid every frame.  Mirror the
+	# chunked desert/7x7 builder: identical grid triangulation,
+	# materials and winding, committed in ~448 m blocks with
+	# per-block AABBs so only visible terrain is submitted.
+	var chunk_cells := maxi(int(ISLAND_TERRAIN_CHUNK_M_0322 / step), 1)
+	var chunk_count := 0
+	for cz0 in range(0, rows - 1, chunk_cells):
+		for cx0 in range(0, cols - 1, chunk_cells):
+			var tools: Dictionary = {}
+			var min_y := INF
+			var max_y := -INF
+			var iz_end := mini(cz0 + chunk_cells, rows - 1)
+			var ix_end := mini(cx0 + chunk_cells, cols - 1)
+			for iz in range(cz0, iz_end):
+				for ix in range(cx0, ix_end):
+					var x0 := min_x + float(ix) * step
+					var z0 := min_z + float(iz) * step
+					var x1 := x0 + step
+					var z1 := z0 + step
+					var p00 := Vector3(x0, _grid_height(ix, iz), z0)
+					var p10 := Vector3(x1, _grid_height(ix + 1, iz), z0)
+					var p11 := Vector3(x1, _grid_height(ix + 1, iz + 1), z1)
+					var p01 := Vector3(x0, _grid_height(ix, iz + 1), z1)
+					min_y = minf(min_y, minf(minf(p00.y, p10.y), minf(p11.y, p01.y)))
+					max_y = maxf(max_y, maxf(maxf(p00.y, p10.y), maxf(p11.y, p01.y)))
+					var center := (p00 + p11) * 0.5
+					var slope := maxf(abs(p10.y - p00.y), abs(p01.y - p00.y)) / step
+					var kind := _terrain_class(center.x, center.z, center.y, slope, ix, iz)
+					if not tools.has(kind):
+						var new_tool := SurfaceTool.new()
+						new_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+						tools[kind] = new_tool
+					var tool := tools[kind] as SurfaceTool
+					# Godot front faces are clockwise as seen from the camera side.
+					# For a ground plane viewed from above, the geometric cross
+					# product therefore points down. The reversed pre-0.2.2 order
+					# was back-face culled on the phone, leaving only sky below the
+					# horizon. Keep this order paired with get_road_visual_state().
+					for vertex in [p00, p10, p11, p00, p11, p01]:
+						_terrain_vertex(tool, vertex)
+			for kind in tools.keys():
+				var tool := tools[kind] as SurfaceTool
+				tool.index()
+				tool.generate_normals()
+				tool.generate_tangents()
+				var mesh := tool.commit()
+				if mesh == null:
+					continue
+				if not _terrain_meshes.has(String(kind)):
+					_terrain_meshes[String(kind)] = mesh
+				var instance := _mesh_instance(terrain_root, mesh, _terrain_material(String(kind)), Transform3D.IDENTITY, "Terrain_%s_%d_%d" % [String(kind), cx0, cz0], false)
+				instance.custom_aabb = AABB(
+					Vector3(min_x + float(cx0) * step, min_y - 2.0, min_z + float(cz0) * step),
+					Vector3(float(ix_end - cx0) * step, (max_y - min_y) + 4.0, float(iz_end - cz0) * step))
+				chunk_count += 1
+	_enhancement_stats["island_terrain_chunks_0322"] = chunk_count
 	_enhancement_stats["terrain_meshes"] = _terrain_meshes.size()
 	_enhancement_stats["premium_boulevard_paving"] = _terrain_meshes.has("plaza")
 	_enhancement_stats["ground_winding_godot_cw"] = bool(get_road_visual_state().get("ground_winding_godot_cw", false)) if _road_mesh != null else false
@@ -12758,8 +12780,11 @@ func _build_desert_terrain() -> void:
 					var p10 := Vector3(x1, _grid_height(ix + 1, iz), z0)
 					var p11 := Vector3(x1, _grid_height(ix + 1, iz + 1), z1)
 					var p01 := Vector3(x0, _grid_height(ix, iz + 1), z1)
-					min_y = minf(min_y, minf(p00.y, p11.y))
-					max_y = maxf(max_y, maxf(p10.y, p01.y))
+					# 0.3.22: bound all four corners (the old split
+					# min/max could undershoot a crest corner and
+					# cull a chunk whose ridge was still visible).
+					min_y = minf(min_y, minf(minf(p00.y, p10.y), minf(p11.y, p01.y)))
+					max_y = maxf(max_y, maxf(maxf(p00.y, p10.y), maxf(p11.y, p01.y)))
 					var center := (p00 + p11) * 0.5
 					var slope := maxf(absf(p10.y - p00.y), absf(p01.y - p00.y)) / step
 					var kind := _terrain_class(center.x, center.z, center.y, slope, ix, iz)
