@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.22-native-alpha"'), 'Native project version metadata must match 0.3.22-native-alpha');
-assert(preset.includes('version/code=88'), 'Native 0.3.22 must bump Android versionCode to 88');
-assert(preset.includes('version/name="0.3.22-native-alpha"'), 'Native version name must be 0.3.22-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.22-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.23-native-alpha"'), 'Native project version metadata must match 0.3.23-native-alpha');
+assert(preset.includes('version/code=89'), 'Native 0.3.23 must bump Android versionCode to 89');
+assert(preset.includes('version/name="0.3.23-native-alpha"'), 'Native version name must be 0.3.23-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.23-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.22"') && preset.includes('application/product_version="0.3.22"'), 'Desktop Windows version metadata must match native 0.3.22');
+assert(preset.includes('application/file_version="0.3.23"') && preset.includes('application/product_version="0.3.23"'), 'Desktop Windows version metadata must match native 0.3.23');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1863,6 +1863,24 @@ for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0
     assert(tris0322 >= floor0322, `0.3.22 detail floor: ${name0322} has ${tris0322} tris < ${floor0322}`);
   }
   console.log('0.3.22 perf/weight pass OK (chunked island terrain, textureless cafe, recessed midrise sides)');
+}
+
+// 0.3.23: loading-speed pass.  _is_position_clear() scanned every
+// building/pool/landmark per call (fresh Basis + height sample per
+// entry); the infill pass issues thousands of calls, freezing phone
+// loading for 2-3 minutes at "Возводим здания".  A spatial
+// clearance index (96 m cells, precomputed centres/bases/extents)
+// now pre-filters candidates while the exact original predicates
+// decide, so placements are bit-identical (verified by offline
+// simulation: 4000 tight sample points, 0 mismatches, ~3 candidates
+// per query instead of 1979).  Oversized paddings and the
+// pool-sanitize relocation loop keep the legacy live scan.
+{
+  const wb0323 = await readFile('native/scripts/world_builder.gd', 'utf8');
+  for (const marker0323 of ['CLEARANCE_CELL_M_0323', 'CLEARANCE_MAX_PADDING_M_0323', '_rebuild_clearance_index_0323', '_is_position_clear_indexed_0323', '_is_position_clear_scan_0323', '_sync_clearance_infill_0323', 'clearance_index_entries_0323', '_is_position_clear(point, 0.35, 0.0, true, pool_index, false)']) {
+    assert(wb0323.includes(marker0323), `0.3.23 world_builder marker is missing: ${marker0323}`);
+  }
+  console.log('0.3.23 loading pass OK (spatial clearance index)');
 }
 
 console.log('Native Godot project validation OK');
