@@ -386,7 +386,12 @@ jobs:
           REL_ID=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq ".[] | select(.tag_name==\"$TAG\" and .draft) | .id" | head -1)
           test -n "$REL_ID"
           gh api -X PATCH "repos/${{ github.repository }}/releases/$REL_ID" -F draft=false
-          gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '[.[] | select((.tag_name | startswith("native-")) and (.draft | not))] | sort_by(.created_at) | reverse | .[3:] | .[] | "\(.id) \(.tag_name)"' | while read -r old_id old_tag; do
+          # Prune by build number parsed from the tag, NOT created_at:
+          # re-running an old workflow re-creates its release with a
+          # fresh created_at, and the created_at sort then evicted the
+          # genuinely newest builds (0.3.23 runs 252-254 lost their
+          # releases that way).  Run numbers only ever increase.
+          gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '[.[] | select((.tag_name | startswith("native-")) and (.draft | not))] | sort_by((.tag_name | split("-") | last | tonumber? // 0)) | reverse | .[3:] | .[] | "\(.id) \(.tag_name)"' | while read -r old_id old_tag; do
             gh api -X DELETE "repos/${{ github.repository }}/releases/$old_id" || true
             gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/$old_tag" || true
           done
