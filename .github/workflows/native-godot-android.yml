@@ -36,6 +36,8 @@ env:
   GODOT_STATUS: 'stable'
   PROJECT_PATH: native
   APK_PATH: native/build/android/NitchesHorizonNative.apk
+  WINDOWS_EXE: native/build/windows/NitchesHorizonNative.exe
+  LINUX_BIN: native/build/linux/NitchesHorizonNative.x86_64
 
 jobs:
   build-native-apk:
@@ -357,7 +359,87 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      - name: Publish direct-download APK (rolling prerelease)
+      - name: Export Windows and Linux desktop builds
+        run: |
+          set -euo pipefail
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          if ! ls "$TEMPLATE_DIR"/windows_release*.exe >/dev/null 2>&1 || ! ls "$TEMPLATE_DIR"/linux_release* >/dev/null 2>&1; then
+            curl -fL --retry 3 --output "$RUNNER_TEMP/godot-templates.tpz" \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            rm -rf "$RUNNER_TEMP/godot-templates"
+            mkdir -p "$RUNNER_TEMP/godot-templates"
+            unzip -q -o "$RUNNER_TEMP/godot-templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+            cp -a "$RUNNER_TEMP/godot-templates/templates/." "$TEMPLATE_DIR/"
+          fi
+          ls "$TEMPLATE_DIR"/windows_release*.exe
+          ls "$TEMPLATE_DIR"/linux_release*
+          mkdir -p "$(dirname "$WINDOWS_EXE")" "$(dirname "$LINUX_BIN")" "$RUNNER_TEMP/native-logs"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-release Windows build/windows/NitchesHorizonNative.exe \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/export-windows.log"
+          "$GODOT_BIN" --headless --path "$PROJECT_PATH" \
+            --export-release Linux build/linux/NitchesHorizonNative.x86_64 \
+            2>&1 | tee "$RUNNER_TEMP/native-logs/export-linux.log"
+          test -s "$WINDOWS_EXE"
+          test -s "$LINUX_BIN"
+          test "$(head -c 2 "$WINDOWS_EXE")" = "MZ"
+          chmod +x "$LINUX_BIN"
+          ls -lh "$WINDOWS_EXE" "$LINUX_BIN"
+
+      - name: Package desktop ZIPs (install-and-play)
+        run: |
+          set -euo pipefail
+          VER=$(grep -m1 'version/name=' native/export_presets.cfg | sed 's/.*="//; s/"//')
+          cat > "$RUNNER_TEMP/PC-README.txt" <<EOF
+          Nitches Horizon Native ${VER} — ПК-версия (та же игра, что на телефоне)
+
+          ЗАПУСК
+          Windows: запустите NitchesHorizonNative.exe. Сборка не подписана,
+          поэтому SmartScreen может один раз показать предупреждение —
+          «Подробнее» -> «Выполнить в любом случае».
+          Linux: запустите NitchesHorizonNative.x86_64 (при необходимости
+          выполните: chmod +x NitchesHorizonNative.x86_64).
+
+          УПРАВЛЕНИЕ
+          W/A/S/D или стрелки — газ/руль/тормоз
+          SPACE — ручник/дрифт (пешком — прыжок), SHIFT — нитро (N2O) / бег
+          F — выйти из машины / сесть обратно (пешком: джойстик мышью или WASD)
+          C — камера, T — время суток, R — сброс на дорогу
+          F11 — полный экран. Сенсорные кнопки на экране тоже нажимаются мышью.
+
+          ТРЕБОВАНИЯ: 64-битная Windows 10/11 или Linux, видеокарта с Vulkan.
+          EOF
+          cp "$RUNNER_TEMP/PC-README.txt" "native/build/windows/PC-README.txt"
+          cp "$RUNNER_TEMP/PC-README.txt" "native/build/linux/PC-README.txt"
+          (cd native/build/windows && zip -9 -r "$GITHUB_WORKSPACE/NitchesHorizonNative-windows.zip" .)
+          (cd native/build/linux && zip -9 -r "$GITHUB_WORKSPACE/NitchesHorizonNative-linux.zip" .)
+          ls -lh "$GITHUB_WORKSPACE"/NitchesHorizonNative-*.zip
+          sha256sum "$GITHUB_WORKSPACE"/NitchesHorizonNative-*.zip | tee "$RUNNER_TEMP/desktop-sha256.txt"
+          {
+            echo "## Native desktop builds"
+            echo ""
+            echo '```text'
+            cat "$RUNNER_TEMP/desktop-sha256.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Windows desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-windows
+          path: NitchesHorizonNative-windows.zip
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload Linux desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NitchesHorizonNative-linux
+          path: NitchesHorizonNative-linux.zip
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish direct-download release (APK + Windows + Linux)
         # Artifact downloads are always ZIP archives; a GitHub
         # Release asset is served as the raw file.  This repo uses
         # IMMUTABLE releases: a published release's assets cannot be
@@ -367,8 +449,14 @@ jobs:
         # only come from GitHub's /releases/latest/download/<asset>
         # redirect, which tracks the newest NON-prerelease release:
         #   releases/latest/download/NitchesHorizonNative.apk
-        # Each build therefore publishes a fresh uniquely-tagged
-        # release (draft -> attach APK -> publish by release ID,
+        #   releases/latest/download/NitchesHorizonNative-windows.zip
+        #   releases/latest/download/NitchesHorizonNative-linux.zip
+        # All three assets MUST live in the same release: the
+        # redirect resolves every asset against the single newest
+        # release, so a split APK-only / desktop-only pair would
+        # 404 whichever asset the newest release lacks.  Each build
+        # therefore publishes a fresh uniquely-tagged release
+        # (draft -> attach all assets -> publish by release ID,
         # because drafts are not resolvable by tag) and prunes all
         # but the three newest native-* releases afterwards.
         env:
@@ -381,9 +469,11 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/releases/$id" || true
           done
           gh release create "$TAG" --draft \
-            --title "Nitches Native ${VER} — прямой APK" \
-            --notes "Самая свежая успешная сборка. Постоянная ссылка на актуальный APK: https://github.com/${{ github.repository }}/releases/latest/download/NitchesHorizonNative.apk" \
-            "${{ env.APK_PATH }}"
+            --title "Nitches Native ${VER} — Android + Windows + Linux" \
+            --notes "Самая свежая успешная сборка. Постоянные ссылки: APK — https://github.com/${{ github.repository }}/releases/latest/download/NitchesHorizonNative.apk ; Windows — https://github.com/${{ github.repository }}/releases/latest/download/NitchesHorizonNative-windows.zip ; Linux — https://github.com/${{ github.repository }}/releases/latest/download/NitchesHorizonNative-linux.zip" \
+            "${{ env.APK_PATH }}" \
+            "NitchesHorizonNative-windows.zip" \
+            "NitchesHorizonNative-linux.zip"
           REL_ID=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq ".[] | select(.tag_name==\"$TAG\" and .draft) | .id" | head -1)
           test -n "$REL_ID"
           gh api -X PATCH "repos/${{ github.repository }}/releases/$REL_ID" -F draft=false
