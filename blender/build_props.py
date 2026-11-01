@@ -7866,7 +7866,15 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False, rece
             face_y = sy * (depth / 2.0)
             for bx in (-width * 0.29, width * 0.29):
                 box("mid_balcony_slab", bx, face_y + sy * 0.85, fz + 0.15, 5.4, 1.7, 0.22, MATS["HeroTrim"])
-                box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
+                if panel_038:
+                    # 0.3.22: the glass balustrade becomes one outward
+                    # quad on the old box's outer face (the solid top
+                    # rail above and the slab below hide its zero
+                    # thickness); the saved triangles fund the
+                    # recessed side windows below.
+                    panel("mid_balcony_rail", bx, face_y + sy * 1.73, fz + 0.72, 5.4, 0.95, glass, "back" if sy > 0.0 else "front")
+                else:
+                    box("mid_balcony_rail", bx, face_y + sy * 1.66, fz + 0.72, 5.4, 0.14, 0.95, glass)
                 if recess_0320:
                     # 0.3.20: recessed balcony doors (frame ring,
                     # returns, glass at the wall plane) replace the
@@ -7893,7 +7901,12 @@ def _build_midrise(width, depth, floors, detail_036=False, panel_038=False, rece
         for sx in (-1.0, 1.0):
             for wy in (-depth * 0.28, 0.0, depth * 0.28):
                 if panel_038:
-                    panel("mid_side_window", sx * (width / 2.0 + 0.22), wy, fz + 1.7, 2.2, 1.6, dark_glass, "right" if sx > 0.0 else "left")
+                    # 0.3.22: side elevations get the same recessed
+                    # treatment as the street facades (0.3.20) -- the
+                    # 0.3.8 flat glass stickers on the +0.22 plane
+                    # read as decals at grazing angles and showed an
+                    # air gap against the 0.3.12 piers.
+                    win_recess_0312("mid_side_window", sx * (width / 2.0), wy, fz + 1.7, 2.2, 1.6, dark_glass, MATS["HeroTrim"], "right" if sx > 0.0 else "left", depth=0.20, frame_w=0.13)
                 else:
                     box("mid_side_window", sx * (width / 2.0 + 0.12), wy, fz + 1.7, 0.2, 2.2, 1.6, dark_glass)
     # 0.3.12: full-height facade piers between the window columns,

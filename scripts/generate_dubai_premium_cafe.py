@@ -7,6 +7,7 @@ origin and faces local +X, so NativeWorldBuilder can place it with make_transfor
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -17,9 +18,11 @@ from trimesh.visual.texture import TextureVisuals
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "src/assets/models/props/dubai_premium_cafe.glb"
 
-# Material names mirror NativeWorldBuilder._prop_material(). Albedo and normal
-# maps are embedded in the GLB as well, so the model remains textured when an
-# agent imports it outside this project's custom material remapping.
+# Material names mirror NativeWorldBuilder._prop_material(). 0.3.22: the
+# shipped GLB no longer embeds the albedo/normal maps -- the game remaps
+# every Cafe* material to its own copies of the same textures, so the
+# embedded ~1.8 MB was dead APK weight. CAFE_EMBED_TEXTURES=1 restores
+# the self-contained export for external viewers.
 MATERIALS = {
     "CafeTravertine": {"color": [245, 238, 222, 255], "metallic": 0.0, "roughness": 0.78, "base": "user_travertine.jpg", "normal": "user_travertine_normal.jpg", "uv_scale": 0.22},
     "CafeLimestone": {"color": [248, 242, 229, 255], "metallic": 0.0, "roughness": 0.88, "base": "user_stone_tiles_beige.jpg", "normal": None, "uv_scale": 0.24},
@@ -460,8 +463,77 @@ for material_name, meshes in parts.items():
     merged.metadata["name"] = material_name
     scene.add_geometry(merged, geom_name=material_name, node_name=material_name)
 
+def _strip_glb_textures_0322(glb_bytes):
+    """Remove embedded images/textures/samplers from a GLB (0.3.22).
+
+    Keeps material names, base-colour factors, metallic/roughness,
+    emissive and alpha settings; only the texture payloads and their
+    references go away, so the semantic material remap in
+    NativeWorldBuilder is unaffected."""
+    import json as _json
+    import struct as _struct
+
+    assert glb_bytes[:4] == b"glTF"
+    json_len = _struct.unpack("<I", glb_bytes[12:16])[0]
+    gltf = _json.loads(glb_bytes[20:20 + json_len])
+    bin_off = 20 + json_len
+    bin_len = _struct.unpack("<I", glb_bytes[bin_off:bin_off + 4])[0]
+    bin_data = glb_bytes[bin_off + 8:bin_off + 8 + bin_len]
+
+    image_views = {img["bufferView"] for img in gltf.get("images", []) if "bufferView" in img}
+    view_remap = {}
+    new_views = []
+    new_bin = bytearray()
+    for index, view in enumerate(gltf.get("bufferViews", [])):
+        if index in image_views:
+            continue
+        start = view.get("byteOffset", 0)
+        chunk = bin_data[start:start + view["byteLength"]]
+        new_bin.extend(b"\x00" * ((-len(new_bin)) % 4))
+        new_view = dict(view)
+        new_view["byteOffset"] = len(new_bin)
+        new_bin.extend(chunk)
+        view_remap[index] = len(new_views)
+        new_views.append(new_view)
+    gltf["bufferViews"] = new_views
+    for accessor in gltf.get("accessors", []):
+        if "bufferView" in accessor:
+            accessor["bufferView"] = view_remap[accessor["bufferView"]]
+    for key in ("images", "textures", "samplers"):
+        gltf.pop(key, None)
+    for material in gltf.get("materials", []):
+        pbr = material.get("pbrMetallicRoughness", {})
+        pbr.pop("baseColorTexture", None)
+        pbr.pop("metallicRoughnessTexture", None)
+        material.pop("normalTexture", None)
+        material.pop("occlusionTexture", None)
+        material.pop("emissiveTexture", None)
+    for key in ("extensionsUsed", "extensionsRequired"):
+        if key in gltf:
+            gltf[key] = [e for e in gltf[key] if e != "KHR_texture_transform"]
+    if gltf.get("buffers"):
+        gltf["buffers"][0]["byteLength"] = len(new_bin)
+    json_bytes = _json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    json_bytes += b" " * ((-len(json_bytes)) % 4)
+    bin_bytes = bytes(new_bin) + b"\x00" * ((-len(new_bin)) % 4)
+    total = 12 + 8 + len(json_bytes) + 8 + len(bin_bytes)
+    out = bytearray()
+    out.extend(b"glTF")
+    out.extend(_struct.pack("<II", 2, total))
+    out.extend(_struct.pack("<I", len(json_bytes)))
+    out.extend(b"JSON")
+    out.extend(json_bytes)
+    out.extend(_struct.pack("<I", len(bin_bytes)))
+    out.extend(b"BIN\x00")
+    out.extend(bin_bytes)
+    return bytes(out)
+
+
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-OUTPUT.write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=True))
+_glb_bytes = trimesh.exchange.gltf.export_glb(scene, include_normals=True)
+if os.environ.get("CAFE_EMBED_TEXTURES") != "1":
+    _glb_bytes = _strip_glb_textures_0322(_glb_bytes)
+OUTPUT.write_bytes(_glb_bytes)
 
 bounds = scene.bounds
 size = bounds[1] - bounds[0]

@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.21-native-alpha"'), 'Native project version metadata must match 0.3.21-native-alpha');
-assert(preset.includes('version/code=87'), 'Native 0.3.21 must bump Android versionCode to 87');
-assert(preset.includes('version/name="0.3.21-native-alpha"'), 'Native version name must be 0.3.21-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.21-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.22-native-alpha"'), 'Native project version metadata must match 0.3.22-native-alpha');
+assert(preset.includes('version/code=88'), 'Native 0.3.22 must bump Android versionCode to 88');
+assert(preset.includes('version/name="0.3.22-native-alpha"'), 'Native version name must be 0.3.22-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.22-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.21"') && preset.includes('application/product_version="0.3.21"'), 'Desktop Windows version metadata must match native 0.3.21');
+assert(preset.includes('application/file_version="0.3.22"') && preset.includes('application/product_version="0.3.22"'), 'Desktop Windows version metadata must match native 0.3.22');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -709,7 +709,7 @@ assert(data.landmarks.filter((l) => l.kind === 'rt7-crane').length >= 3, 'RichTo
 assert(data.spawn.x === 5 && data.spawn.z === 640, 'Unexpected RichTown 7x7 spawn point');
 
 const detailedCafeInfo = await stat('src/assets/models/props/dubai_premium_cafe.glb');
-assert(detailedCafeInfo.size > 2_500_000, 'Native 0.2.19 must use the detailed 2.86 MB PR #61 Dubai Premium Cafe, not the earlier lightweight GLB');
+assert(detailedCafeInfo.size > 1_200_000 && detailedCafeInfo.size < 1_600_000, 'Native 0.3.22 must keep the detailed PR #61 Dubai Premium Cafe geometry without its embedded texture payload (expected ~1.36 MB)');
 const operaInfo = await stat('src/assets/models/props/opera_house.glb');
 assert(operaInfo.size > 250_000, 'Native 0.2.20 RichTown Opera GLB is unexpectedly small');
 const operaBytes = await readFile('src/assets/models/props/opera_house.glb');
@@ -1357,7 +1357,7 @@ const modelBudgets038 = {
   'cottage_courtyard.glb': [11_500, 17],
   'cottage_dune.glb': [9_800, 17],
   'cottage_palm.glb': [9_200, 16],
-  'midrise_b.glb': [5_600, 8],
+  'midrise_b.glb': [6_600, 8],
   'stadium.glb': [2_350, 7],
   'container_blue.glb': [660, 4],
   'container_red.glb': [660, 4],
@@ -1404,7 +1404,7 @@ const modelBudgets039 = {
   'hero_building.glb': [22_500, 18],
   'townhouse.glb': [17_500, 22],
   'villa.glb': [12_600, 19],
-  'midrise_a.glb': [4_050, 8],
+  'midrise_a.glb': [4_750, 8],
   'shopping_mall.glb': [2_400, 9],
   'school.glb': [1_750, 11],
   'airport_terminal.glb': [3_150, 5],
@@ -1823,6 +1823,46 @@ for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0
     assert(tris0321 >= floor0321, `0.3.21 detail floor: ${name0321} has ${tris0321} tris < ${floor0321} (placeholder regression?)`);
   }
   console.log('0.3.21 detail floors OK (8 rebuilt models)');
+}
+
+// 0.3.22: performance + weight pass.  The legacy island terrain is
+// chunked like the desert/7x7 builder (frustum-culled ~448 m blocks
+// instead of five world-spanning meshes behind a world-size AABB),
+// and the desert/7x7 chunk AABB now bounds all four corners.  The
+// Dubai cafe sheds its ~1.5 MB of embedded textures (the game remaps
+// every Cafe* material to its own copies of the same photos), and
+// midrise side windows get the recessed treatment the street
+// facades received in 0.3.20, funded by single-quad balcony glass.
+{
+  const wb0322 = await readFile('native/scripts/world_builder.gd', 'utf8');
+  for (const marker0322 of ['ISLAND_TERRAIN_CHUNK_M_0322', 'island_terrain_chunks_0322', 'minf(minf(p00.y, p10.y), minf(p11.y, p01.y))']) {
+    assert(wb0322.includes(marker0322), `0.3.22 world_builder marker is missing: ${marker0322}`);
+  }
+  const cafeGen0322 = await readFile('scripts/generate_dubai_premium_cafe.py', 'utf8');
+  assert(cafeGen0322.includes('_strip_glb_textures_0322'), '0.3.22 cafe generator must strip embedded textures by default');
+  const buildProps0322 = await readFile('blender/build_props.py', 'utf8');
+  for (const marker0322 of ['win_recess_0312("mid_side_window"', 'panel("mid_balcony_rail"']) {
+    assert(buildProps0322.includes(marker0322), `0.3.22 build_props marker is missing: ${marker0322}`);
+  }
+  const cafeJson0322 = parseGlbJson(await readFile('src/assets/models/props/dubai_premium_cafe.glb'));
+  assert((cafeJson0322.images ?? []).length === 0, '0.3.22 cafe GLB must not embed textures (the game remaps Cafe* materials)');
+  assert((cafeJson0322.materials ?? []).length === 12, '0.3.22 cafe GLB must keep its 12 semantic materials');
+  const floors0322 = { 'midrise_a.glb': 4400, 'midrise_b.glb': 6200, 'dubai_premium_cafe.glb': 11500 };
+  for (const [name0322, floor0322] of Object.entries(floors0322)) {
+    const bytes0322 = await readFile(path.join('src/assets/models/props', name0322));
+    const json0322 = parseGlbJson(bytes0322);
+    let tris0322 = 0;
+    for (const mesh0322 of json0322.meshes ?? []) {
+      for (const prim0322 of mesh0322.primitives ?? []) {
+        if (prim0322.indices === undefined) continue;
+        const count0322 = json0322.accessors[prim0322.indices]?.count ?? 0;
+        const mode0322 = prim0322.mode ?? 4;
+        tris0322 += mode0322 === 4 ? Math.floor(count0322 / 3) : (mode0322 === 5 || mode0322 === 6 ? Math.max(count0322 - 2, 0) : 0);
+      }
+    }
+    assert(tris0322 >= floor0322, `0.3.22 detail floor: ${name0322} has ${tris0322} tris < ${floor0322}`);
+  }
+  console.log('0.3.22 perf/weight pass OK (chunked island terrain, textureless cafe, recessed midrise sides)');
 }
 
 console.log('Native Godot project validation OK');
