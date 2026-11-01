@@ -39,7 +39,7 @@ props_out/port_crane.glb: meshes=7 tris=2142 size=26.00x56.82x57.33m minY=0.00 m
 props_out/radar_station.glb: meshes=6 tris=1052 size=25.30x18.00x18.00m minY=0.00 mats=ConcreteLight,CityWhitePaint,FacadeMain,RoofDark,WindowFrame,PropsMetal
 props_out/reactor.glb: meshes=6 tris=1820 size=66.27x41.50x46.50m minY=0.00 mats=ConcreteLight,PropsMetal,CityWhitePaint,FacadeAccent,RoofDark,WindowGlassDark
 props_out/school.glb: meshes=11 tris=1682 size=80.00x14.15x90.00m minY=0.00 mats=TownStone,TownPlaster,RoofDark,WindowGlassDark,TownTrim,TownRoof,TownDoorAccent,PropsMetal,CityAccentRed,CityFieldGreen,CityWhitePaint
-props_out/shopping_mall.glb: meshes=9 tris=2304 size=230.00x18.00x130.00m minY=0.00 mats=ConcreteLight,FacadeMain,FacadeGlass,PropsMetal,FacadeAccent,LampGlow,CityAccentBlue,CityAccentRed,RoofDark
+props_out/shopping_mall.glb: meshes=9 tris=3480 size=230.00x18.00x130.00m minY=0.00 mats=ConcreteLight,FacadeMain,FacadeGlass,PropsMetal,CityAccentBlue,CityAccentRed,FacadeAccent,LampGlow,RoofDark
 props_out/silo.glb: meshes=3 tris=1820 size=13.00x18.50x13.60m minY=0.00 mats=ConcreteLight,CityWhitePaint,PropsMetal
 props_out/stadium.glb: meshes=7 tris=2296 size=310.60x59.30x264.60m minY=0.00 mats=ConcreteLight,CityAccentRed,PropsMetal,WindowFrame,CityFieldGreen,CityWhitePaint,LampGlow
 props_out/storage_tank.glb: meshes=4 tris=2056 size=23.85x14.45x23.40m minY=0.00 mats=ConcreteLight,CityWhitePaint,PropsMetal,CityAccentRed
@@ -48,8 +48,8 @@ props_out/townhouse.glb: meshes=22 tris=16668 size=18.87x11.05x16.36m minY=0.00 
 props_out/townhouse_b.glb: meshes=9 tris=868 size=18.98x11.70x16.37m minY=0.00 mats=TownStone,TownPlaster,TownTrim,TownRoof,WindowGlassDark,TownGarage,TownDoor,TownDoorAccent,LampGlow
 props_out/traffic_signal_long.glb: meshes=8 tris=4900 size=8.05x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
 props_out/traffic_signal_short.glb: meshes=8 tris=3296 size=5.55x6.13x0.84m minY=0.00 mats=SignalMetal,SignalHousing,SignalReflector,SignalRedOn,SignalAmberOff,SignalGreenOff,SignalCable,ConcreteLight
-props_out/turbine_hall_long.glb: meshes=8 tris=900 size=42.00x26.00x170.00m minY=0.00 mats=ConcreteLight,FacadeMain,RoofDark,FacadeGlass,PropsMetal,FacadeAccent,CityAccentBlue,CityAccentRed
-props_out/turbine_hall_short.glb: meshes=8 tris=704 size=42.00x20.00x110.00m minY=0.00 mats=ConcreteLight,FacadeMain,RoofDark,FacadeGlass,PropsMetal,FacadeAccent,CityAccentBlue,CityAccentRed
+props_out/turbine_hall_long.glb: meshes=8 tris=1464 size=42.00x26.00x170.00m minY=0.00 mats=ConcreteLight,FacadeMain,RoofDark,FacadeGlass,PropsMetal,FacadeAccent,CityAccentBlue,CityAccentRed
+props_out/turbine_hall_short.glb: meshes=8 tris=1168 size=42.00x20.00x110.00m minY=0.00 mats=ConcreteLight,FacadeMain,RoofDark,FacadeGlass,PropsMetal,FacadeAccent,CityAccentBlue,CityAccentRed
 props_out/villa.glb: meshes=19 tris=12002 size=19.20x8.84x15.24m minY=0.00 mats=VillaGranite,VillaPlaster,VillaStone,WindowFrame,VillaLimestone,RoofDark,RoofGravel,VillaInterior,VillaCurtain,LampGlow,VillaGlass,PropsMetal,VillaWood,VillaDeck,VillaHedge,VillaPavement,SolarCell,VillaMulch,VillaLawn
 props_out/villa_b.glb: meshes=8 tris=646 size=19.20x9.10x15.24m minY=0.00 mats=VillaGranite,VillaPlaster,RoofDark,VillaStone,VillaWood,VillaGlass,TownGarage,LampGlow
 props_out/vista_sign.glb: meshes=6 tris=284 size=1.78x1.73x0.62m minY=0.00 mats=RoofDark,PropsMetal,VistaAccent0326,VistaFace0326,VistaSlate0326,VistaSea0326
