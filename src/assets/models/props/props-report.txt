@@ -4,6 +4,7 @@ props_out/airport_terminal.glb: meshes=5 tris=1138 size=386.00x26.25x126.00m min
 props_out/atc_tower.glb: meshes=6 tris=400 size=15.00x53.70x15.25m minY=0.00 mats=FacadeAccent,WindowFrame,ConcreteLight,PropsMetal,FacadeGlass,CityAccentRed
 props_out/barge.glb: meshes=5 tris=344 size=8.74x6.80x55.00m minY=0.00 mats=RoofDark,CityAccentRed,PropsMetal,CityWhitePaint,WindowGlassDark
 props_out/barn.glb: meshes=5 tris=298 size=31.60x13.20x18.87m minY=0.00 mats=CityBarnRed,RoofDark,CityWhitePaint,WindowGlassDark,PropsMetal
+props_out/bleacher.glb: meshes=4 tris=324 size=14.74x5.36x5.10m minY=0.00 mats=ConcreteLight,CityAccentRed,PropsMetal,RoofDark
 props_out/bus_shelter.glb: meshes=6 tris=3604 size=5.75x3.06x2.35m minY=0.00 mats=RoofDark,PropsMetal,SolarCell,PropsGlass,LampGlow,PropsWood
 props_out/chimney.glb: meshes=3 tris=372 size=19.00x131.40x19.00m minY=0.00 mats=ConcreteLight,CityAccentRed,WindowFrame
 props_out/container_blue.glb: meshes=4 tris=634 size=12.59x2.82x2.65m minY=0.00 mats=CityAccentBlue,RoofDark,PropsMetal,CityWhitePaint

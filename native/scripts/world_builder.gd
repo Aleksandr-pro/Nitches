@@ -183,6 +183,11 @@ var _road_segment_ends: Array[Vector3] = []
 var _road_segment_half_widths: Array[float] = []
 var _road_segment_ids: Array[String] = []
 var _road_segment_surfaces: Array[String] = []
+# 0.3.16 (TZ stage 7): off-road trail segments for the tyre model.
+var _trail_segment_starts: Array[Vector3] = []
+var _trail_segment_ends: Array[Vector3] = []
+var _trail_segment_half_widths: Array[float] = []
+var _trail_segment_grid: Dictionary = {}
 var _road_segment_grid: Dictionary = {}
 var _road_junction_subsegments_0236 := 0
 var _multimesh_chunk_count := 0
@@ -947,6 +952,27 @@ func _road_clearance_xz(point: Vector3) -> float:
 	return best_clearance
 
 
+## 0.3.16 (TZ stage 7): clearance to the nearest marked off-road
+## trail segment (own 120 m grid; trails never enter the road index,
+## so routing, markings and junction logic stay untouched).
+func _trail_grid_cell(x: float, z: float) -> Vector2i:
+	return Vector2i(floori(x / 120.0), floori(z / 120.0))
+
+
+func _trail_clearance_xz(point: Vector3) -> float:
+	if _trail_segment_grid.is_empty():
+		return 1000.0
+	var candidates: Array = _trail_segment_grid.get(_trail_grid_cell(point.x, point.z), [])
+	if candidates.is_empty():
+		return 1000.0
+	var best_clearance := 1000.0
+	for index_variant in candidates:
+		var i := int(index_variant)
+		var clearance := _distance_to_segment_xz(point, _trail_segment_starts[i], _trail_segment_ends[i]) - _trail_segment_half_widths[i]
+		best_clearance = minf(best_clearance, clearance)
+	return best_clearance
+
+
 ## Clearance to every road *except* one named road.  0.2.24 uses this to
 ## cut real openings in curbs, sidewalk slabs, gutters and lane paint
 ## wherever another carriageway crosses or joins mid-segment; the old
@@ -1187,6 +1213,15 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 		if _is_desert:
 			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.70, "rolling_resistance": 0.055}
 		return {"kind": "sidewalk", "label": "БЕТОН", "mu": 0.93, "rolling_resistance": 0.021}
+
+	# 0.3.16 (TZ stage 7): the drift-arena pad is paved, and the marked
+	# dune trails are packed sand — grippier than loose dune sand
+	# (0.57) but short of asphalt, so the marked line is the fast line.
+	if _is_rt7:
+		if _in_zone(world_position.x, world_position.z, "drift"):
+			return {"kind": "asphalt", "label": "АСФАЛЬТ", "mu": 1.16, "rolling_resistance": 0.014}
+		if world_position.x > 2350.0 and _trail_clearance_xz(world_position) <= 0.0:
+			return {"kind": "packed_sand", "label": "ПЕСОК", "mu": 0.72, "rolling_resistance": 0.052}
 
 	var h := height_at(world_position.x, world_position.z)
 	var is_water := false
@@ -8322,6 +8357,7 @@ func _build_landmarks() -> void:
 	_add_multimesh(root, s34_box, gold, s34_gold_t, "Stage34Flags0311", false, -1.0, 520.0, 260.0)
 	_enhancement_stats["rt7_stage34_batches_0311"] = 8
 	_build_rt7_stage6_0315(root)
+	_build_rt7_stage7_0316(root)
 
 
 ## 0.3.15 TZ stage 6: canal quay walls with mooring bollards and the
@@ -8329,6 +8365,347 @@ func _build_landmarks() -> void:
 ## batches on top of the landmark pass (quay concrete, bollard metal,
 ## soil, meadow, crop rows); the moored barges/cranes/silos of the
 ## stage ride the landmark model batches above.
+func _rt7_rock_mesh0316() -> ArrayMesh:
+	# One jittered octahedron (32 flat-faceted triangles) shared by all
+	# desert rocks; per-instance scale/rotation does the variation.
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners: Array[Vector3] = [
+		Vector3(1.0, 0.0, 0.0), Vector3(-1.0, 0.0, 0.0),
+		Vector3(0.0, 1.0, 0.0), Vector3(0.0, -1.0, 0.0),
+		Vector3(0.0, 0.0, 1.0), Vector3(0.0, 0.0, -1.0),
+	]
+	var jit: Array = [1.0, 0.82, 0.64, 0.55, 0.92, 0.78]
+	var faces: Array = [
+		[2, 4, 0], [2, 0, 5], [2, 5, 1], [2, 1, 4],
+		[3, 0, 4], [3, 5, 0], [3, 1, 5], [3, 4, 1],
+	]
+	for face_variant in faces:
+		var face: Array = face_variant
+		var ia := int(face[0])
+		var ib := int(face[1])
+		var ic := int(face[2])
+		var pa: Vector3 = corners[ia] * float(jit[ia])
+		var pb: Vector3 = corners[ib] * float(jit[ib])
+		var pc: Vector3 = corners[ic] * float(jit[ic])
+		var mab: Vector3 = (pa + pb) * 0.5
+		var mbc: Vector3 = (pb + pc) * 0.5
+		var mca: Vector3 = (pc + pa) * 0.5
+		mab = mab.normalized() * mab.length() * 1.08
+		mbc = mbc.normalized() * mbc.length() * 1.08
+		mca = mca.normalized() * mca.length() * 1.08
+		tool.add_vertex(pa)
+		tool.add_vertex(mab)
+		tool.add_vertex(mca)
+		tool.add_vertex(mab)
+		tool.add_vertex(pb)
+		tool.add_vertex(mbc)
+		tool.add_vertex(mca)
+		tool.add_vertex(mbc)
+		tool.add_vertex(pc)
+		tool.add_vertex(mab)
+		tool.add_vertex(mbc)
+		tool.add_vertex(mca)
+	tool.generate_normals()
+	return tool.commit()
+
+
+func _build_rt7_stage7_0316(root: Node3D) -> void:
+	if not _is_rt7:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7040316
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = Vector3.ONE
+	var cyl_mesh := CylinderMesh.new()
+	cyl_mesh.top_radius = 0.5
+	cyl_mesh.bottom_radius = 0.5
+	cyl_mesh.height = 1.0
+	cyl_mesh.radial_segments = 10
+	var cone_mesh := CylinderMesh.new()
+	cone_mesh.top_radius = 0.05
+	cone_mesh.bottom_radius = 0.17
+	cone_mesh.height = 0.55
+	cone_mesh.radial_segments = 10
+	var rock_mesh := _rt7_rock_mesh0316()
+
+	var packed_mat := _material("rt7_trail_packed0316", "", "", Color(0.60, 0.47, 0.31), 1.0)
+	var pole_mat := _material("rt7_trail_pole0316", "", "", Color(0.85, 0.86, 0.87), 0.6)
+	var flag_mat := _material("rt7_trail_flag0316", "", "", Color(1.0, 0.42, 0.05), 0.7)
+	var rock_mat := _material("rt7_desert_rock0316", "", "", Color(0.45, 0.39, 0.33), 1.0)
+	var tyre_mat := _material("rt7_tyre0316", "", "", Color(0.07, 0.07, 0.08), 0.95)
+	var tyre_w_mat := _material("rt7_tyre_white0316", "", "", Color(0.88, 0.88, 0.86), 0.9)
+	var cone_mat := _material("rt7_cone0316", "", "", Color(1.0, 0.45, 0.08), 0.75)
+	var paint_w := _material("rt7_drift_paint_w0316", "", "", Color(0.92, 0.93, 0.94), 0.9)
+	var paint_o := _material("rt7_drift_paint_o0316", "", "", Color(1.0, 0.50, 0.10), 0.9)
+	var banner_mat := _material("rt7_banner0316", "", "", Color(0.85, 0.16, 0.10), 0.7)
+
+	# --- Trails: packed-sand ribbons, physics segments, flags, rocks -----
+	var pole_t: Array = []
+	var flag_t: Array = []
+	var banner_pole_t: Array = []
+	var banner_t: Array = []
+	var rock_t: Array = []
+	_trail_segment_starts.clear()
+	_trail_segment_ends.clear()
+	_trail_segment_half_widths.clear()
+	_trail_segment_grid.clear()
+	var trail_count := 0
+	for trail_variant in data.get("trails", []):
+		var trail: Dictionary = trail_variant
+		var raw_points: Array = trail.get("points", [])
+		if raw_points.size() < 2:
+			continue
+		var width_m: float = float(trail.get("widthM", 9.0))
+		var half_w: float = width_m * 0.5
+		var closed_trail: bool = bool(trail.get("closed", false))
+		var pts: Array[Vector2] = []
+		for p_variant in raw_points:
+			var p: Array = p_variant
+			if p.size() >= 2:
+				pts.append(Vector2(float(p[0]), float(p[1])))
+		if pts.size() < 2:
+			continue
+		if closed_trail:
+			pts.append(pts[0])
+		trail_count += 1
+		# Resample at ~11 m (the heightfield step is 14 m).
+		var samples: Array[Vector2] = []
+		samples.append(pts[0])
+		var carry: float = 0.0
+		for i in range(1, pts.size()):
+			var a: Vector2 = pts[i - 1]
+			var b: Vector2 = pts[i]
+			var seg_len: float = a.distance_to(b)
+			var d: float = 11.0 - carry
+			while d < seg_len:
+				samples.append(a.lerp(b, d / seg_len))
+				d += 11.0
+			carry = fmod(carry + seg_len, 11.0)
+		if samples[samples.size() - 1].distance_to(pts[pts.size() - 1]) > 0.5:
+			samples.append(pts[pts.size() - 1])
+		# Ribbon edges follow the terrain cross-slope via height_at.
+		var left_pts: Array[Vector3] = []
+		var right_pts: Array[Vector3] = []
+		var sample_dists: Array[float] = []
+		var dist_acc: float = 0.0
+		for si in samples.size():
+			var c2: Vector2 = samples[si]
+			var dir2 := Vector2.RIGHT
+			if si == 0:
+				dir2 = samples[1] - samples[0]
+			elif si == samples.size() - 1:
+				dir2 = samples[si] - samples[si - 1]
+			else:
+				dir2 = samples[si + 1] - samples[si - 1]
+			if dir2.length_squared() < 0.0001:
+				dir2 = Vector2.RIGHT
+			dir2 = dir2.normalized()
+			var side2 := Vector2(-dir2.y, dir2.x)
+			var l2: Vector2 = c2 - side2 * half_w
+			var r2: Vector2 = c2 + side2 * half_w
+			left_pts.append(Vector3(l2.x, height_at(l2.x, l2.y) + 0.10, l2.y))
+			right_pts.append(Vector3(r2.x, height_at(r2.x, r2.y) + 0.10, r2.y))
+			if si > 0:
+				dist_acc += samples[si].distance_to(samples[si - 1])
+			sample_dists.append(dist_acc)
+			# Physics segment + grid registration.
+			if si > 0:
+				var seg_a := Vector3(samples[si - 1].x, 0.0, samples[si - 1].y)
+				var seg_b := Vector3(c2.x, 0.0, c2.y)
+				var seg_idx := _trail_segment_starts.size()
+				_trail_segment_starts.append(seg_a)
+				_trail_segment_ends.append(seg_b)
+				_trail_segment_half_widths.append(half_w)
+				var min_x: float = minf(seg_a.x, seg_b.x) - half_w - 2.0
+				var max_x: float = maxf(seg_a.x, seg_b.x) + half_w + 2.0
+				var min_z: float = minf(seg_a.z, seg_b.z) - half_w - 2.0
+				var max_z: float = maxf(seg_a.z, seg_b.z) + half_w + 2.0
+				var cell_a := _trail_grid_cell(min_x, min_z)
+				var cell_b := _trail_grid_cell(max_x, max_z)
+				for gx in range(cell_a.x, cell_b.x + 1):
+					for gz in range(cell_a.y, cell_b.y + 1):
+						var cell := Vector2i(gx, gz)
+						if not _trail_segment_grid.has(cell):
+							_trail_segment_grid[cell] = []
+						(_trail_segment_grid[cell] as Array).append(seg_idx)
+			# Marker flags every ~77 m, alternating sides.
+			if si % 7 == 0 and si > 0 and si < samples.size() - 1:
+				var mside: float = 1.0 if (si / 7) % 2 == 0 else -1.0
+				var mp: Vector2 = c2 + side2 * (mside * (half_w + 1.7))
+				var mgy: float = height_at(mp.x, mp.y)
+				pole_t.append(make_transform(Vector3(mp.x, mgy + 1.3, mp.y), 0.0, Vector3(0.09, 2.6, 0.09)))
+				var flag_yaw: float = atan2(-side2.y, side2.x)
+				var flag_off := Vector3(side2.x, 0.0, side2.y) * (-mside * 0.47)
+				flag_t.append(make_transform(Vector3(mp.x, mgy + 2.32, mp.y) + flag_off, flag_yaw, Vector3(0.85, 0.5, 0.04)))
+			# Scattered rocks flanking the route.
+			if si % 5 == 0 and si > 0 and rng.randf() < 0.55:
+				var rside: float = 1.0 if rng.randf() < 0.5 else -1.0
+				var rdist: float = half_w + rng.randf_range(4.0, 24.0)
+				var rp: Vector2 = c2 + side2 * (rside * rdist) + Vector2(rng.randf_range(-3.0, 3.0), rng.randf_range(-3.0, 3.0))
+				var rscale: float = rng.randf_range(0.7, 2.4)
+				rock_t.append(make_transform(
+					Vector3(rp.x, height_at(rp.x, rp.y) - 0.22 * rscale, rp.y),
+					rng.randf_range(0.0, TAU),
+					Vector3(rscale, rscale * 0.72, rscale * rng.randf_range(0.8, 1.1))))
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for si in range(samples.size() - 1):
+			var v0: float = sample_dists[si] / 9.0
+			var v1: float = sample_dists[si + 1] / 9.0
+			_road_vertex(tool, left_pts[si], Vector2(0.0, v0))
+			_road_vertex(tool, left_pts[si + 1], Vector2(0.0, v1))
+			_road_vertex(tool, right_pts[si + 1], Vector2(1.0, v1))
+			_road_vertex(tool, left_pts[si], Vector2(0.0, v0))
+			_road_vertex(tool, right_pts[si + 1], Vector2(1.0, v1))
+			_road_vertex(tool, right_pts[si], Vector2(1.0, v0))
+		tool.index()
+		tool.generate_normals()
+		var ribbon := tool.commit()
+		if ribbon != null:
+			_mesh_instance(root, ribbon, packed_mat, Transform3D.IDENTITY, "TrailRibbon0316_%d" % trail_count, false)
+		# Start banner (and a finish banner on point-to-point routes).
+		var banner_ends: Array = [0]
+		if not closed_trail:
+			banner_ends.append(samples.size() - 1)
+		for end_variant in banner_ends:
+			var end_i := int(end_variant)
+			var bc: Vector2 = samples[end_i]
+			var bdir := Vector2.RIGHT
+			if end_i == 0:
+				bdir = samples[1] - samples[0]
+			else:
+				bdir = samples[end_i] - samples[end_i - 1]
+			if bdir.length_squared() < 0.0001:
+				bdir = Vector2.RIGHT
+			bdir = bdir.normalized()
+			var bside := Vector2(-bdir.y, bdir.x)
+			var bgy: float = height_at(bc.x, bc.y)
+			for s_i in 2:
+				var s_sign: float = -1.0 if s_i == 0 else 1.0
+				var bp: Vector2 = bc + bside * (s_sign * (half_w + 0.8))
+				banner_pole_t.append(make_transform(Vector3(bp.x, height_at(bp.x, bp.y) + 2.3, bp.y), 0.0, Vector3(0.2, 4.6, 0.2)))
+			var banner_yaw: float = atan2(-bside.y, bside.x)
+			banner_t.append(make_transform(Vector3(bc.x, bgy + 4.35, bc.y), banner_yaw, Vector3(width_m + 2.2, 0.95, 0.14)))
+	_add_multimesh(root, box_mesh, pole_mat, pole_t, "TrailPoles0316", false, -1.0, 160.0, 260.0)
+	_add_multimesh(root, box_mesh, flag_mat, flag_t, "TrailFlags0316", false, -1.0, 160.0, 260.0)
+	_add_multimesh(root, box_mesh, pole_mat, banner_pole_t, "TrailBannerPoles0316", true, -1.0, 340.0, 400.0)
+	_add_multimesh(root, box_mesh, banner_mat, banner_t, "TrailBanners0316", true, -1.0, 340.0, 400.0)
+	_add_multimesh(root, rock_mesh, rock_mat, rock_t, "DesertRocks0316", true, -1.0, 240.0, 260.0)
+
+	# --- Drift arena (340x340 m flat at zone "drift") ----------------------
+	var dc := Vector2(2670.0, -250.0)
+	var pad_y: float = height_at(dc.x, dc.y) + 0.12
+	var disc_tool := SurfaceTool.new()
+	disc_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var disc_seg := 72
+	var centre3 := Vector3(dc.x, pad_y, dc.y)
+	for i in disc_seg:
+		var a0: float = TAU * float(i) / float(disc_seg)
+		var a1: float = TAU * float(i + 1) / float(disc_seg)
+		var p0 := Vector3(dc.x + cos(a0) * 125.0, pad_y, dc.y + sin(a0) * 125.0)
+		var p1 := Vector3(dc.x + cos(a1) * 125.0, pad_y, dc.y + sin(a1) * 125.0)
+		_road_vertex(disc_tool, centre3, Vector2(centre3.x, centre3.z) / 18.0)
+		_road_vertex(disc_tool, p1, Vector2(p1.x, p1.z) / 18.0)
+		_road_vertex(disc_tool, p0, Vector2(p0.x, p0.z) / 18.0)
+	disc_tool.index()
+	disc_tool.generate_normals()
+	disc_tool.generate_tangents()
+	var disc := disc_tool.commit()
+	if disc != null:
+		_mesh_instance(root, disc, _create_asphalt_material(), Transform3D.IDENTITY, "DriftPad0316", false)
+	# Painted drift rings + centre spot.
+	var ring_specs: Array = [
+		[0.0, 6.0, paint_o], [30.0, 31.2, paint_w], [60.0, 61.2, paint_o], [95.0, 96.5, paint_w],
+	]
+	var ring_tool_w := SurfaceTool.new()
+	ring_tool_w.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ring_tool_o := SurfaceTool.new()
+	ring_tool_o.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for spec_variant in ring_specs:
+		var spec: Array = spec_variant
+		var r_in: float = float(spec[0])
+		var r_out: float = float(spec[1])
+		var rtool: SurfaceTool = ring_tool_o if spec[2] == paint_o else ring_tool_w
+		var rseg := 72
+		for i in rseg:
+			var ra0: float = TAU * float(i) / float(rseg)
+			var ra1: float = TAU * float(i + 1) / float(rseg)
+			var in0 := Vector3(dc.x + cos(ra0) * r_in, pad_y + 0.03, dc.y + sin(ra0) * r_in)
+			var in1 := Vector3(dc.x + cos(ra1) * r_in, pad_y + 0.03, dc.y + sin(ra1) * r_in)
+			var out0 := Vector3(dc.x + cos(ra0) * r_out, pad_y + 0.03, dc.y + sin(ra0) * r_out)
+			var out1 := Vector3(dc.x + cos(ra1) * r_out, pad_y + 0.03, dc.y + sin(ra1) * r_out)
+			_road_vertex(rtool, in0, Vector2(in0.x, in0.z) / 18.0)
+			_road_vertex(rtool, in1, Vector2(in1.x, in1.z) / 18.0)
+			_road_vertex(rtool, out1, Vector2(out1.x, out1.z) / 18.0)
+			_road_vertex(rtool, in0, Vector2(in0.x, in0.z) / 18.0)
+			_road_vertex(rtool, out1, Vector2(out1.x, out1.z) / 18.0)
+			_road_vertex(rtool, out0, Vector2(out0.x, out0.z) / 18.0)
+	for tool_pair in [[ring_tool_w, paint_w, "DriftRingsWhite0316"], [ring_tool_o, paint_o, "DriftRingsOrange0316"]]:
+		var rtool2: SurfaceTool = tool_pair[0]
+		rtool2.index()
+		rtool2.generate_normals()
+		var ring_mesh := rtool2.commit()
+		if ring_mesh != null:
+			_mesh_instance(root, ring_mesh, tool_pair[1], Transform3D.IDENTITY, String(tool_pair[2]), false)
+	# Tyre-stack border with a west entry gap; every 5th stack painted.
+	var tyre_t: Array = []
+	var tyre_w_t: Array = []
+	for i in 100:
+		var ta: float = TAU * float(i) / 100.0
+		var tx: float = dc.x + cos(ta) * 121.0
+		var tz: float = dc.y + sin(ta) * 121.0
+		if tx < dc.x - 100.0 and absf(tz + 215.0) < 26.0:
+			continue
+		var tt := make_transform(Vector3(tx, pad_y + 0.36, tz), 0.0, Vector3(0.85, 0.72, 0.85))
+		if i % 5 == 0:
+			tyre_w_t.append(tt)
+		else:
+			tyre_t.append(tt)
+	_add_multimesh(root, cyl_mesh, tyre_mat, tyre_t, "DriftTyres0316", true, -1.0, 260.0, 300.0)
+	_add_multimesh(root, cyl_mesh, tyre_w_mat, tyre_w_t, "DriftTyresWhite0316", true, -1.0, 260.0, 300.0)
+	# Cone course: outer circle, inner ring, slalom line.
+	var cone_t: Array = []
+	for i in 12:
+		var ca: float = TAU * float(i) / 12.0
+		cone_t.append(make_transform(Vector3(dc.x + cos(ca) * 45.0, pad_y + 0.28, dc.y + sin(ca) * 45.0), ca, Vector3.ONE))
+	for i in 6:
+		var ca2: float = TAU * float(i) / 6.0 + 0.3
+		cone_t.append(make_transform(Vector3(dc.x + cos(ca2) * 18.0, pad_y + 0.28, dc.y + sin(ca2) * 18.0), ca2, Vector3.ONE))
+	for i in range(-5, 6):
+		var sz: float = 14.0 if i % 2 == 0 else -14.0
+		cone_t.append(make_transform(Vector3(dc.x + float(i) * 16.0, pad_y + 0.28, dc.y + sz), 0.0, Vector3.ONE))
+	_add_multimesh(root, cone_mesh, cone_mat, cone_t, "DriftCones0316", false, -1.0, 180.0, 300.0)
+	# Floodlights on the diagonals.
+	var flood_pole_t: Array = []
+	var flood_head_t: Array = []
+	var diag: float = 97.6
+	for sx_i in 2:
+		for sz_i in 2:
+			var fsx: float = -1.0 if sx_i == 0 else 1.0
+			var fsz: float = -1.0 if sz_i == 0 else 1.0
+			var fp := Vector2(dc.x + fsx * diag, dc.y + fsz * diag)
+			var fgy: float = height_at(fp.x, fp.y)
+			flood_pole_t.append(make_transform(Vector3(fp.x, fgy + 5.5, fp.y), 0.0, Vector3(0.3, 11.0, 0.3)))
+			var to_c: Vector2 = (dc - fp).normalized()
+			var head_yaw: float = atan2(-to_c.x, -to_c.y)
+			flood_head_t.append(make_transform(Vector3(fp.x, fgy + 11.15, fp.y), head_yaw, Vector3(1.7, 0.65, 0.35)))
+	_add_multimesh(root, cyl_mesh, pole_mat, flood_pole_t, "DriftFloodPoles0316", true, -1.0, 420.0, 400.0)
+	_add_multimesh(root, box_mesh, tyre_mat, flood_head_t, "DriftFloodHeads0316", true, -1.0, 420.0, 400.0)
+	# Spectator grandstands (Blender prop), facing the pad.
+	_add_batched_model(root, "res://assets/props/bleacher.glb", [
+		make_transform(Vector3(2518.0, pad_y - 0.12, -250.0), PI * 0.5),
+		make_transform(Vector3(2822.0, pad_y - 0.12, -250.0), -PI * 0.5),
+	], "DriftBleachers0316")
+
+	_enhancement_stats["rt7_stage7_trails0316"] = trail_count
+	_enhancement_stats["rt7_stage7_trail_segments0316"] = _trail_segment_starts.size()
+	_enhancement_stats["rt7_stage7_flags0316"] = pole_t.size()
+	_enhancement_stats["rt7_stage7_rocks0316"] = rock_t.size()
+	_enhancement_stats["rt7_stage7_tyres0316"] = tyre_t.size() + tyre_w_t.size()
+	_enhancement_stats["rt7_stage7_cones0316"] = cone_t.size()
+
+
 func _build_rt7_stage6_0315(root: Node3D) -> void:
 	if not _is_rt7:
 		return

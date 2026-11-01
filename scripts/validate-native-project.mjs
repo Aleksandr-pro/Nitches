@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.15-native-alpha"'), 'Native project version metadata must match 0.3.15-native-alpha');
-assert(preset.includes('version/code=81'), 'Native 0.3.15 must bump Android versionCode to 81');
-assert(preset.includes('version/name="0.3.15-native-alpha"'), 'Native version name must be 0.3.15-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.15-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.16-native-alpha"'), 'Native project version metadata must match 0.3.16-native-alpha');
+assert(preset.includes('version/code=82'), 'Native 0.3.16 must bump Android versionCode to 82');
+assert(preset.includes('version/name="0.3.16-native-alpha"'), 'Native version name must be 0.3.16-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.16-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.15"') && preset.includes('application/product_version="0.3.15"'), 'Desktop Windows version metadata must match native 0.3.15');
+assert(preset.includes('application/file_version="0.3.16"') && preset.includes('application/product_version="0.3.16"'), 'Desktop Windows version metadata must match native 0.3.16');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -917,6 +917,7 @@ if (requireAssets) {
     'assets/props/greenhouse.glb',
     'assets/props/port_crane.glb',
     'assets/props/barge.glb',
+    'assets/props/bleacher.glb',
     'assets/vegetation/plants.glb',
     'assets/vegetation/palm_date.glb',
     'assets/vegetation/palm_royal.glb',
@@ -1456,6 +1457,7 @@ const modelBudgets0310 = {
   'hangar_small.glb': [330, 5],
   'port_crane.glb': [400, 7],
   'barge.glb': [400, 5],
+  'bleacher.glb': [380, 4],
   'barn.glb': [330, 5],
   'watchtower.glb': [380, 4],
   'silo.glb': [200, 3],
@@ -1672,6 +1674,30 @@ assert(data.landmarks.filter((l) => l.kind === 'rt7-barge').length >= 10, '0.3.1
 assert(data.landmarks.filter((l) => l.kind === 'rt7-tank').length >= 15, '0.3.15 farm silos + port fuel tanks must ship in the world data');
 assert(Array.isArray(data.fields) && data.fields.length >= 18, '0.3.15 farm fields must ship in the world data');
 assert(data.buildings.filter((b) => b.model === 'container_red' || b.model === 'container_blue').length >= 210, '0.3.15 container terminal rows must ship in the world data');
+
+// 0.3.16: TZ stage 7 - eastern dune desert.  Three off-road routes
+// ship as waypoint polylines in data["trails"] (two loops + the north
+// raid); the runtime lays packed-sand ribbons over the raw dunes,
+// plants marker flags/start banners/rocks and registers trail
+// segments so the tyre model grants packed-sand grip on the marked
+// line.  The flat drift zone becomes a paved arena: asphalt disc
+// with painted rings, tyre-stack border, cone course, floodlights
+// and two Blender grandstands (324 tris, 4 parts).  Trails never
+// enter the road network, and every pre-0.3.16 placement stays
+// byte-identical (append-only data).
+for (const marker of ['build_bleacher', 'bleacher_tiers0316', 'bleacher_roof0316']) {
+  assert(blenderScript.includes(marker), `0.3.16 Blender marker is missing: ${marker}`);
+}
+for (const marker of ['_build_rt7_stage7_0316', '_trail_clearance_xz', 'TrailFlags0316', 'DriftPad0316', 'DriftBleachers0316', 'rt7_stage7_trails0316']) {
+  assert(worldScript.includes(marker), `0.3.16 world-builder marker is missing: ${marker}`);
+}
+assert(minimapScript.includes('_trails'), '0.3.16 minimap must draw the off-road trails');
+assert(syncScript.includes('props/bleacher.glb'), '0.3.16 sync must stage the drift-arena grandstand GLB');
+assert(Array.isArray(data.trails) && data.trails.length === 3, '0.3.16 must ship three off-road dune routes');
+assert(data.trails.filter((t) => t.closed).length === 2, '0.3.16 must ship two closed dune loops');
+assert(data.trails.reduce((n, t) => n + t.points.length, 0) >= 24, '0.3.16 trails must carry their waypoints');
+assert(data.trails.every((t) => t.points.every((p) => p[0] >= 2400)), '0.3.16 trails must stay in the eastern dune desert');
+assert(data.stats.trails === 3, '0.3.16 generator stats must count the trails');
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

@@ -18,6 +18,7 @@ const VIEW_RADIUS_M := 260.0
 const STATIC_CACHE_SIZE := 2048
 
 var _roads: Array = []
+var _trails: Array = []  # 0.3.16: off-road dune routes (RichTown 7x7)
 var _parks: Array = []
 var _pois: Array = []
 var _world_bounds := Rect2(520.0, -500.0, 980.0, 1000.0)
@@ -61,6 +62,7 @@ func bind(world: NativeWorldBuilder, vehicle: NativeVehicle) -> void:
         var min_z := float(bounds.get("minZ", -500.0))
         var max_x := float(bounds.get("maxX", 1500.0))
         var max_z := float(bounds.get("maxZ", 500.0))
+        _trails = (_data.get("trails", []) as Array).duplicate(true)
         set_world_data(
             _data.get("roads", []),
             Rect2(min_x, min_z, max_x - min_x, max_z - min_z),
@@ -122,6 +124,7 @@ func _build_static_cache() -> void:
     cache_control.name = "StaticMinimapCanvas0237"
     cache_control._static_cache_mode = true
     cache_control._roads = _roads.duplicate(true)
+    cache_control._trails = _trails.duplicate(true)
     cache_control._parks = _parks.duplicate(true)
     cache_control._world_bounds = _world_bounds
     viewport.add_child(cache_control)
@@ -304,6 +307,27 @@ func _draw_static_cache() -> void:
         draw_polyline(points, Color(0.62, 0.70, 0.80, 0.96), road_width, true)
         draw_polyline(points, Color(0.95, 0.97, 1.0, 0.30), 1.2, true)
 
+    # 0.3.16: off-road trails as tan tracks over the dunes.
+    for trail in _trails:
+        if not (trail is Dictionary):
+            continue
+        var trail_data := trail as Dictionary
+        var waypoints: Array = trail_data.get("points", [])
+        if waypoints.size() < 2:
+            continue
+        var tpoints := PackedVector2Array()
+        for wp_variant in waypoints:
+            var wp: Array = wp_variant
+            if wp.size() < 2:
+                continue
+            tpoints.append(_static_world_to_cache(Vector2(float(wp[0]), float(wp[1]))))
+        if bool(trail_data.get("closed", false)) and tpoints.size() > 2:
+            tpoints.append(tpoints[0])
+        if tpoints.size() < 2:
+            continue
+        draw_polyline(tpoints, Color(0.30, 0.20, 0.10, 0.85), 4.4, true)
+        draw_polyline(tpoints, Color(0.92, 0.72, 0.42, 0.95), 2.6, true)
+
 
 func _draw_cached_world() -> bool:
     if not _static_cache_ready or _static_cache_texture == null:
@@ -361,6 +385,29 @@ func _draw_vector_world() -> void:
         _draw_clipped_line(a, b, Color(0.02, 0.03, 0.05, 0.85), road_width + 2.0)
         _draw_clipped_line(a, b, Color(0.62, 0.70, 0.80, 0.96), road_width)
         _draw_clipped_line(a, b, Color(0.95, 0.97, 1.0, 0.30), 1.0)
+
+    # 0.3.16: off-road trails (vector fallback path).
+    for trail in _trails:
+        if not (trail is Dictionary):
+            continue
+        var trail_data2 := trail as Dictionary
+        var waypoints2: Array = trail_data2.get("points", [])
+        if waypoints2.size() < 2:
+            continue
+        var seg_count: int = waypoints2.size() if bool(trail_data2.get("closed", false)) else waypoints2.size() - 1
+        for i in range(seg_count):
+            var first2: Array = waypoints2[i]
+            var second2: Array = waypoints2[(i + 1) % waypoints2.size()]
+            if first2.size() < 2 or second2.size() < 2:
+                continue
+            var from2 := Vector2(float(first2[0]), float(first2[1]))
+            var to2 := Vector2(float(second2[0]), float(second2[1]))
+            if from2.distance_to(_player_position) > VIEW_RADIUS_M * 2.2 and to2.distance_to(_player_position) > VIEW_RADIUS_M * 2.2:
+                continue
+            var a3 := _world_to_map(from2)
+            var b3 := _world_to_map(to2)
+            _draw_clipped_line(a3, b3, Color(0.30, 0.20, 0.10, 0.85), 4.0)
+            _draw_clipped_line(a3, b3, Color(0.92, 0.72, 0.42, 0.95), 2.4)
 
 
 

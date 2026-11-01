@@ -1418,6 +1418,58 @@ for (cx0_15, cx1_15, cz0_15, cz1_15) in _field_cells0315:
             _fz15 += 105.0
         _fx15 += 150.0
 print(f"Stage6 0.3.15: terminal_containers={terminal0315} fields={len(fields)}")
+# ---------------------------------------------------------------------------
+# 0.3.16 (TZ stage 7): three off-road dune routes in the eastern desert.
+# Trails are waypoint polylines, NOT roads: no corridor is stamped into
+# the heightfield (the dunes stay raw), the runtime lays a packed-sand
+# ribbon over the terrain and plants marker flags, and the tyre model
+# grants packed-sand grip on the ribbon vs loose sand off it.  Two
+# loops and one point-to-point raid; every route starts at the paved
+# network edge (Highway 1 x=2400 line or the drift arena apron).
+trails = [
+    {
+        "id": "rt7-trail-dune-ring",
+        "name": "Кольцо дюн",
+        "widthM": 9,
+        "closed": True,
+        "points": [[2880, -250], [2980, -430], [3180, -260], [3260, 80],
+                   [3150, 420], [2920, 560], [2700, 430], [2620, 120],
+                   [2670, -60]],
+    },
+    {
+        "id": "rt7-trail-north-raid",
+        "name": "Северный рейд",
+        "widthM": 9,
+        "closed": False,
+        "points": [[2445, -2400], [2680, -2250], [2950, -2050], [3220, -1850],
+                   [3300, -1450], [3150, -1100], [2980, -940], [2960, -720],
+                   [2780, -620], [2720, -420]],
+    },
+    {
+        "id": "rt7-trail-south-serpentine",
+        "name": "Южный серпантин",
+        "widthM": 9,
+        "closed": True,
+        "points": [[2445, 1900], [2720, 2050], [3000, 1900], [3250, 2150],
+                   [3300, 2550], [3050, 2850], [2720, 2950], [2500, 2650],
+                   [2445, 2250]],
+    },
+]
+_s7_clash = 0
+for _t in trails:
+    _pts = [(float(x), float(z)) for x, z in _t["points"]]
+    if _t["closed"]:
+        _pts = _pts + [_pts[0]]
+    for (_sx, _sz) in resample(_pts, 22.0):
+        for _b in buildings:
+            _r = max(_b["w"], _b["d"]) * 0.5 + 16.0
+            if abs(_sx - _b["x"]) < _r and abs(_sz - _b["z"]) < _r:
+                _s7_clash += 1
+        for _l in landmarks:
+            if abs(_sx - _l["x"]) < 26.0 and abs(_sz - _l["z"]) < 26.0:
+                _s7_clash += 1
+print(f"Stage7 0.3.16: trails {len(trails)}, waypoint/building clashes {_s7_clash}")
+
 
 # --------------------------------------------------------------------------
 # Zones / districts / spawn / stats
@@ -1506,6 +1558,7 @@ data = {
     "lamps": lamps,
     "benches": benches,
     "fields": fields,
+    "trails": trails,
     "stats": {
         "terrainVertices": N * N,
         "roadEdges": len(roads),
@@ -1524,6 +1577,7 @@ data = {
         "lamps": len(lamps),
         "benches": len(benches),
         "fields": len(fields),
+        "trails": len(trails),
     },
 }
 
