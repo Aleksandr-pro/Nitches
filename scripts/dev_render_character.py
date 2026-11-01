@@ -20,6 +20,7 @@ from mathutils import Vector
 
 GLB = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("src/assets/models/characters/nitches_player.glb")
 OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/home/user/nitches-char")
+FILTER = [f for f in sys.argv[3].split(",") if f] if len(sys.argv) > 3 else []
 OUT.mkdir(parents=True, exist_ok=True)
 
 # --- clean scene ------------------------------------------------------------
@@ -90,6 +91,8 @@ scene.camera = cam
 
 
 def shoot(name, location, target, lens=42, res=(900, 1350)):
+    if FILTER and not any(name.startswith(f) for f in FILTER):
+        return
     cam.location = location
     direction = Vector(target) - Vector(location)
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
@@ -108,6 +111,7 @@ def set_pose(pose_deg):
     for name in JOINTS:
         obj = bpy.data.objects.get(name)
         if obj:
+            obj.rotation_mode = "XYZ"  # glTF import leaves QUATERNION mode
             obj.rotation_euler = (math.radians(pose_deg.get(name, 0.0)), 0.0, 0.0)
     bpy.context.view_layer.update()
 

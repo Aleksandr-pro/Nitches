@@ -43,7 +43,7 @@ MATERIALS = [
     ("Trousers - charcoal blue", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     ("Hair - dark brown", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     ("Shoes - dark leather", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
-    ("Warm metal details", (0.54, 0.31, 0.095, 1.0), 0.38, 0.42),
+    ("Warm metal details", (0.40, 0.39, 0.37, 1.0), 0.62, 0.38),
     ("Eyes", (1.0, 1.0, 1.0, 1.0), 0.0, 0.12),
     ("Iris", (1.0, 1.0, 1.0, 1.0), 0.0, 0.30),
     ("Mouth", (0.20, 0.075, 0.055, 1.0), 0.0, 0.8),
@@ -53,7 +53,7 @@ MATERIALS = [
     ("Shoe sole - rubber", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     # 0.3.30 append-only additions (textured photoreal pass).
     ("Skin - face", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
-    ("Fingernails", (0.76, 0.60, 0.52, 1.0), 0.0, 0.32),
+    ("Fingernails", (0.52, 0.33, 0.27, 1.0), 0.0, 0.42),
 ]
 SKIN, JACKET, SHIRT, TROUSERS, HAIR, SHOES, METAL, EYES, IRIS, MOUTH, LIPS, PUPIL, SOLE, FACE_SKIN, NAILS = range(len(MATERIALS))
 # 0.3.28: jointed limb hierarchy for procedural walk animation.
@@ -586,6 +586,8 @@ def hair_rim_theta(phi: float) -> float:
     rim += 0.19 * ang_gauss(phi, -2.96, 0.30)                # sideburn L
     rim += 0.09 * ang_gauss(phi, -2.30, 0.55)                # swept fringe falls left
     rim += -0.05 * ang_gauss(phi, -0.80, 0.55)               # parting side sits higher
+    rim += -0.055 * ang_gauss(phi, -1.05, 0.26)              # temple recession R
+    rim += -0.055 * ang_gauss(phi, -2.09, 0.26)              # temple recession L
     return min(rim, 1.88)
 
 
@@ -605,7 +607,7 @@ def add_hair_cap() -> None:
             inflate = 1.0 + 0.10 * math.sin(min(v, 1.0) * math.pi) * 0.12  # gentle mid-volume
             # Strand grooves: fine wavy ridges running crown -> rim.
             strand = math.sin(phi * 130.0 + 7.0 * value_noise(math.cos(phi) * 4.0 + 9.0, math.sin(phi) * 4.0, v * 3.0))
-            inflate *= 1.0 + 0.006 * strand
+            inflate *= 1.0 + 0.0015 * strand
             x = cx + rx * math.sin(theta) * math.cos(phi) * inflate
             y = cy + ry * math.cos(theta)
             z = cz + rz * math.sin(theta) * math.sin(phi) * inflate
@@ -619,24 +621,24 @@ def add_hair_cap() -> None:
                 z = cz + (z - cz) * 0.985
             ring.append((x, y, z))
         grid.append(ring)
-    add_grid(HAIR, grid, True, hair_paint)
+    add_grid(HAIR, grid, True)
 
 
 def add_iris(ex: float) -> None:
     """Domed iris annulus hugging the eyeball sphere, with a real pupil
     hole and a black disc just behind it (true parallax at glancing
     angles).  Planar UVs feed the radial-fibre iris texture."""
-    ec = (ex, 1.6935, -0.0960)
+    ec = (ex, 1.6935, -0.0942)
     ball_r = 0.0128
     segments = 28
-    radii = (0.0028, 0.0040, 0.0050, 0.0057, 0.0062)
+    radii = (0.0025, 0.0036, 0.0046, 0.0053, 0.0059)
     positions, indices, uvs = [], [], []
     for r in radii:
         z = ec[2] - math.sqrt(ball_r * ball_r - r * r) - 0.00035
         for col in range(segments + 1):
             a = 2.0 * math.pi * col / segments
             positions.append((ex + r * math.cos(a), 1.6935 + r * math.sin(a), z))
-            uvs.append((0.5 + 0.5 * math.cos(a) * r / 0.0062, 0.5 - 0.5 * math.sin(a) * r / 0.0062))
+            uvs.append((0.5 + 0.5 * math.cos(a) * r / 0.0059, 0.5 - 0.5 * math.sin(a) * r / 0.0059))
     stride = segments + 1
     for row in range(len(radii) - 1):
         for col in range(segments):
@@ -647,12 +649,12 @@ def add_iris(ex: float) -> None:
             indices.extend((a, b, c, a, c, d))
     add_mesh(IRIS, positions, indices, None, uvs)
     # Pupil: black disc between the iris plane and the ball surface.
-    positions = [(ex, 1.6935, -0.1090)]
+    positions = [(ex, 1.6935, -0.1072)]
     indices = []
     uvs = [(0.5, 0.5)]
     for col in range(segments + 1):
         a = 2.0 * math.pi * col / segments
-        positions.append((ex + 0.0030 * math.cos(a), 1.6935 + 0.0030 * math.sin(a), -0.1090))
+        positions.append((ex + 0.0027 * math.cos(a), 1.6935 + 0.0027 * math.sin(a), -0.1072))
         uvs.append((0.5 + 0.5 * math.cos(a), 0.5 - 0.5 * math.sin(a)))
     for col in range(segments):
         indices.extend((0, col + 2, col + 1))
@@ -702,7 +704,7 @@ def add_face() -> None:
     # of sclera/iris shows; iris and pupil sit flush on the ball front.
     for s in (-1.0, 1.0):
         ex = s * 0.045
-        add_ellipsoid(EYES, (ex, 1.6935, -0.0960), (0.0128, 0.0128, 0.0128), 28, 18)
+        add_ellipsoid(EYES, (ex, 1.6935, -0.0942), (0.0128, 0.0128, 0.0128), 28, 18)
         add_iris(ex)
 
         def upper_lid_deform(x, y, z, _xu, yu, _zu):
@@ -774,16 +776,16 @@ def add_torso() -> None:
     # Neck with trapezius flare (Torso limb: stays with the body).
     add_tube_path(SKIN, [(0.0, 1.462, 0.006), (0.0, 1.540, 0.002), (0.0, 1.612, -0.001)],
                   [(0.0, 0.078), (0.45, 0.057), (1.0, 0.053)], 28, 10, 0.9, True, None,
-                  lambda x, y, z: mul3(skin_paint(x, y, z), 0.97))
+                  lambda x, y, z: mul3(skin_paint(x, y, z), 0.97), (2.0, 1.5))
     add_ellipsoid(SKIN, (0.0, 1.576, -0.0435), (0.0155, 0.0135, 0.0115), 20, 14, None,
                   lambda x, y, z: mul3(skin_paint(x, y, z), 0.97))
     add_zipper()
     # Chest pocket flaps with muted mini-zips.
     for s in (-1.0, 1.0):
-        add_ellipsoid(JACKET, (s * 0.187, 1.098, -0.137), (0.049, 0.031, 0.011), 24, 14, None,
+        add_ellipsoid(JACKET, (s * 0.187, 1.098, -0.128), (0.056, 0.026, 0.007), 24, 14, None,
                       lambda x, y, z: mul3(jacket_paint(x, y, z), 0.96))
-        add_box(METAL, (s * 0.187, 1.142, -0.140), (0.078, 0.005, 0.005),
-                lambda x, y, z: (0.5, 0.5, 0.5))
+        add_box(METAL, (s * 0.187, 1.138, -0.132), (0.052, 0.0045, 0.004),
+                lambda x, y, z: (0.36, 0.36, 0.36))
 
 
 def add_zipper() -> None:
@@ -827,16 +829,17 @@ def add_arm(side: float) -> None:
         return (0.0, 0.0, 0.0035 * math.sin(t * math.pi))
 
     set_limb("UpperArm" + suffix)
-    add_ellipsoid(JACKET, (side * 0.326, 1.447, 0.0), (0.090, 0.094, 0.100), 32, 22, None, jacket_paint, (2.0, 1.0))
+    add_ellipsoid(JACKET, (side * 0.326, 1.447, 0.0), (0.087, 0.089, 0.094), 32, 22, None, jacket_paint, (2.0, 1.0))
     add_tube_path(JACKET, [(side * 0.318, 1.478, 0.0), shoulder, (side * 0.392, 1.300, -0.004), elbow],
                   [(0.0, 0.096), (0.3, 0.085), (0.75, 0.072), (1.0, 0.064)], 28, 14, 0.92, True, fold, jacket_paint, (2.0, 1.3))
     set_limb("Forearm" + suffix)
-    add_ellipsoid(JACKET, elbow, (0.068, 0.072, 0.068), 26, 18, None, jacket_paint, (2.0, 1.0))
+    add_ellipsoid(JACKET, elbow, (0.064, 0.068, 0.064), 26, 18, None, jacket_paint, (2.0, 1.0))
     add_tube_path(JACKET, [elbow, (side * 0.426, 1.010, -0.018), wrist],
                   [(0.0, 0.064), (0.35, 0.057), (0.85, 0.047), (1.0, 0.046)], 26, 12, 0.94, True, fold, jacket_paint, (2.0, 1.2))
     # Cuff band at the wrist (loft ring standing around the forearm axis).
-    add_loft(JACKET, [((wrist[0], 0.904, wrist[2]), (0.054, 0.0, 0.0), (0.0, 0.0, 0.051)),
-                      ((wrist[0], 0.864, wrist[2]), (0.052, 0.0, 0.0), (0.0, 0.0, 0.049))],
+    add_loft(JACKET, [((wrist[0], 0.906, wrist[2]), (0.0545, 0.0, 0.0), (0.0, 0.0, 0.0515)),
+                      ((wrist[0], 0.882, wrist[2]), (0.0535, 0.0, 0.0), (0.0, 0.0, 0.0505)),
+                      ((wrist[0], 0.858, wrist[2]), (0.0475, 0.0, 0.0), (0.0, 0.0, 0.0450))],
              26, 1.0, False, False, None, None, lambda x, y, z: mul3(jacket_paint(x, y, z), 0.90), (2.0, 0.3))
     add_hand(side, wrist)
 
@@ -865,22 +868,22 @@ def add_hand(side: float, wrist) -> None:
                       [(0.0, 0.0088), (0.35, 0.0080), (0.42, 0.0074), (0.55, 0.0079), (0.62, 0.0072), (0.8, 0.0068), (1.0, 0.0062)],
                       14, 10, 0.95, True, None, skin_paint)
         # Fingernail: sheared cap on the dorsal (-Z) side of the fingertip.
-        nail_c = (bx, tip[1] + 0.009, tip[2] - 0.0045)
+        nail_c = (bx, tip[1] + 0.009, tip[2] - 0.0040)
 
         def nail_deform(x, y, z, _xu, _yu, _zu, nail_c=nail_c):
             return x, y, z + 0.30 * (y - nail_c[1])
 
-        add_ellipsoid(NAILS, nail_c, (0.0060, 0.0082, 0.0030), 16, 10, nail_deform)
+        add_ellipsoid(NAILS, nail_c, (0.0058, 0.0078, 0.0024), 16, 10, nail_deform)
     # Thumb on the body's inner-front side of the palm.
     tx = palm_c[0] - side * 0.034
     add_tube_path(SKIN, [(tx, 0.820, -0.040), (tx - side * 0.010, 0.786, -0.047), (tx - side * 0.013, 0.756, -0.044)],
                   [(0.0, 0.0102), (0.6, 0.0088), (1.0, 0.0070)], 14, 7, 0.95, True, None, skin_paint)
-    thumb_nail_c = (tx - side * 0.012, 0.765, -0.0495)
+    thumb_nail_c = (tx - side * 0.012, 0.765, -0.0488)
 
     def thumb_nail_deform(x, y, z, _xu, _yu, _zu, c=thumb_nail_c):
         return x, y, z + 0.25 * (y - c[1])
 
-    add_ellipsoid(NAILS, thumb_nail_c, (0.0078, 0.0088, 0.0032), 16, 10, thumb_nail_deform)
+    add_ellipsoid(NAILS, thumb_nail_c, (0.0074, 0.0084, 0.0026), 16, 10, thumb_nail_deform)
 
 
 def add_leg(side: float) -> None:
@@ -890,9 +893,9 @@ def add_leg(side: float) -> None:
     ankle = (side * 0.155, 0.115, -0.005)
     set_limb("Thigh" + suffix)
     add_tube_path(TROUSERS, [(side * 0.132, 0.878, 0.0), hip, (side * 0.141, 0.650, 0.010), knee],
-                  [(0.0, 0.122), (0.3, 0.110), (0.75, 0.095), (1.0, 0.089)], 30, 16, 0.90, True, None, trousers_paint, (3.0, 1.6))
+                  [(0.0, 0.126), (0.3, 0.112), (0.75, 0.095), (1.0, 0.089)], 30, 16, 0.90, True, None, trousers_paint, (3.0, 1.6))
     set_limb("Shin" + suffix)
-    add_ellipsoid(TROUSERS, knee, (0.091, 0.094, 0.093), 28, 20, None, trousers_paint, (2.0, 1.0))
+    add_ellipsoid(TROUSERS, knee, (0.086, 0.089, 0.087), 28, 20, None, trousers_paint, (2.0, 1.0))
 
     def calf(t):
         return (0.0, 0.0, 0.011 * math.sin(math.pi * min(max(t * 1.25, 0.0), 1.0)) ** 1.5)
@@ -932,7 +935,7 @@ def add_shoe(side: float) -> None:
         lz = -0.030 - i * 0.023
         top = 0.026 + (0.0744 - i * 0.0055)
         add_tube_path(SHIRT, [(cx - 0.030, top - 0.007, lz), (cx, top + 0.0015, lz - 0.002), (cx + 0.030, top - 0.007, lz)],
-                      [(0.0, 0.0034), (1.0, 0.0034)], 10, 5, 0.8, True, None, shirt_paint)
+                      [(0.0, 0.0034), (1.0, 0.0034)], 10, 5, 0.8, True, None, lambda x, y, z: mul3(shirt_paint(x, y, z), 0.60))
 
 
 def build_character() -> None:
@@ -946,7 +949,7 @@ def build_character() -> None:
             z += 0.006
         return x, y, z
 
-    add_ellipsoid(TROUSERS, (0.0, 0.875, 0.004), (0.258, 0.147, 0.154), 48, 32, hip_deform, trousers_paint, (5.0, 2.0))
+    add_ellipsoid(TROUSERS, (0.0, 0.870, 0.004), (0.258, 0.158, 0.154), 48, 32, hip_deform, trousers_paint, (5.0, 2.0))
     for side in (-1.0, 1.0):
         add_arm(side)
         add_leg(side)
@@ -1087,7 +1090,7 @@ def _make_face_textures():
         return _gauss_np(X, Y, Z, c, sgm)
 
     front = _smooth_np((-Z - 0.015) / 0.055)
-    base = np.array([0.807, 0.636, 0.533])
+    base = np.array([0.795, 0.592, 0.464])
     tone = 0.93 + 0.14 * _fbm_tile(H, W, 4, 3, rng)
     tone *= 0.965 + 0.07 * _fbm_tile(H, W, 18, 14, rng)
     alb = np.ones((H, W, 3)) * base[None, None, :] * tone[:, :, None]
@@ -1107,30 +1110,34 @@ def _make_face_textures():
     alb *= (1.0 - 0.55 * np.clip(nos, 0.0, 1.0))[:, :, None]
     # Freckles across the nose band and cheeks.
     freck_n = _tile_noise(H, W, 90, 90, rng)
-    freck = _smooth_np((freck_n - 0.76) / 0.16)
+    freck = _smooth_np((freck_n - 0.80) / 0.16)
     band = _smooth_np((0.030 - np.abs(Y - 1.666)) / 0.018) * _smooth_np((0.085 - np.abs(X)) / 0.02) * front
-    k = (freck * band * 0.55)[:, :, None]
+    k = (freck * band * 0.40)[:, :, None]
     alb = alb * (1.0 - k) + np.array([0.52, 0.35, 0.24])[None, None, :] * k
     # Moles (asymmetry sells a real face).
     for c, sg, dark in (((0.058, 1.649, -0.089), 0.0017, 0.62), ((-0.037, 1.603, -0.091), 0.0014, 0.55),
                         ((0.021, 1.716, -0.105), 0.0012, 0.5)):
         alb *= (1.0 - dark * G(c, (sg, sg, sg)))[:, :, None]
     # Five-o'clock shadow: jaw, chin, jawline sides, light moustache zone.
-    jaw = _smooth_np((1.646 - Y) / 0.02) * _smooth_np((Y - 1.546) / 0.012)
+    jaw = _smooth_np((1.640 - Y) / 0.02) * _smooth_np((Y - 1.546) / 0.012)
     sides = _smooth_np((np.abs(X) - 0.052) / 0.02) * _smooth_np((1.676 - Y) / 0.02) * _smooth_np((Y - 1.596) / 0.02)
     mous = _smooth_np((1.634 - Y) / 0.004) * _smooth_np((Y - 1.6195) / 0.004) * _smooth_np((0.032 - np.abs(X)) / 0.007)
     lip_metric = (X / 0.033) ** 2 + ((Y - 1.6115) / 0.0145) ** 2
     lip_clear = _smooth_np((lip_metric - 1.1) / 0.7)
     stub_mask = np.clip(jaw + sides + 0.7 * mous, 0.0, 1.0) * front * lip_clear
-    speck = _tile_noise(H, W, 330, 330, rng)
-    dots = _smooth_np((speck - 0.52) / 0.22)
-    k = (stub_mask * (0.22 + 0.58 * dots))[:, :, None]
+    speck = rng.random((H, W))
+    dots = _smooth_np((speck - 0.72) / 0.20)
+    dots = 0.5 * dots + 0.125 * (np.roll(dots, 1, 0) + np.roll(dots, -1, 0) + np.roll(dots, 1, 1) + np.roll(dots, -1, 1))
+    k = (stub_mask * (0.10 + 0.40 * dots))[:, :, None]
     alb = alb * (1.0 - k) + np.array([0.38, 0.35, 0.34])[None, None, :] * k
-    # Pores.
-    pore_n = _tile_noise(H, W, 250, 250, rng)
-    pore = _smooth_np((pore_n - 0.60) / 0.25)
+    # Pores: fine grain + sparse 1-2px dots (value-noise blobs read as craters).
+    grain_f = _fbm_tile(H, W, 170, 170, rng, octaves=2)
+    alb *= (0.982 + 0.036 * grain_f)[:, :, None]
+    wht = rng.random((H, W))
+    draw = _smooth_np((wht - 0.90) / 0.08)
+    pore = (2.0 * draw + np.roll(draw, 1, 0) + np.roll(draw, -1, 0) + np.roll(draw, 1, 1) + np.roll(draw, -1, 1)) / 6.0
     pore_zone = 0.45 + 0.55 * np.clip(G((0.0, 1.67, -0.11), (0.045, 0.07, 0.03)) + G((0.0, 1.75, -0.08), (0.07, 0.035, 0.04)), 0.0, 1.0)
-    alb *= (1.0 - 0.13 * pore * pore_zone)[:, :, None]
+    alb *= (1.0 - 0.20 * pore * pore_zone)[:, :, None]
     # Forehead lines (albedo shade; grooves go to the height field too).
     fl = np.zeros((H, W))
     for ly in (1.7435, 1.7565):
@@ -1139,8 +1146,8 @@ def _make_face_textures():
     alb *= (1.0 - 0.05 * np.clip(fl, 0.0, 1.0))[:, :, None]
 
     # Height field -> normal map (pores, lines, stubble, crow's feet).
-    height = -0.8 * pore * pore_zone + 0.35 * dots * stub_mask - 0.8 * np.clip(fl, 0.0, 1.0)
-    height += 0.25 * (_fbm_tile(H, W, 60, 48, rng) - 0.5)
+    height = -0.55 * pore * pore_zone + 0.12 * dots * stub_mask - 0.5 * np.clip(fl, 0.0, 1.0) + 0.10 * (grain_f - 0.5)
+    height += 0.10 * (_fbm_tile(H, W, 60, 48, rng) - 0.5)
     for (ux, vx, sgn) in ((0.8175, 0.4661, 1.0), (0.6825, 0.4661, -1.0)):
         for ang in (-0.5, -0.05, 0.4):
             du = (uu - (ux + sgn * 0.016)) * 0.64
@@ -1148,7 +1155,7 @@ def _make_face_textures():
             along = sgn * du * np.cos(ang) - dv * np.sin(ang)
             perp = sgn * du * np.sin(ang) + dv * np.cos(ang)
             line = np.exp(-((perp / 0.0016) ** 2)) * np.exp(-(((along - 0.011) / 0.009) ** 2)) * (along > 0)
-            height -= 0.55 * line
+            height -= 0.40 * line
             alb *= (1.0 - 0.04 * line)[:, :, None]
     # Roughness: shiny T-zone, matte stubble.
     tzone = np.clip(G((0.0, 1.748, -0.085), (0.075, 0.038, 0.045)) + G((0.0, 1.668, -0.112), (0.022, 0.055, 0.020)), 0.0, 1.0)
@@ -1156,7 +1163,7 @@ def _make_face_textures():
 
     return {
         "albedo": _encode_image(alb, "jpeg"),
-        "normal": _encode_image(_normal_from_height(_down2(height), 1.7), "png"),
+        "normal": _encode_image(_normal_from_height(_down2(height), 1.0), "png"),
         "rough": _encode_image(_pack_rough(_down2(rough)), "png"),
     }
 
@@ -1164,36 +1171,51 @@ def _make_face_textures():
 def _make_skin_textures():
     H = W = 512
     rng = np.random.default_rng(20261102)
-    base = np.array([0.807, 0.636, 0.533])
+    base = np.array([0.795, 0.592, 0.464])
     tone = 0.94 + 0.12 * _fbm_tile(H, W, 5, 5, rng, wrap_y=True)
     alb = np.ones((H, W, 3)) * base[None, None, :] * tone[:, :, None]
-    pore_n = _tile_noise(H, W, 200, 200, rng, wrap_y=True)
-    pore = _smooth_np((pore_n - 0.60) / 0.25)
-    alb *= (1.0 - 0.11 * pore)[:, :, None]
+    grain_f = _fbm_tile(H, W, 150, 150, rng, octaves=2, wrap_y=True)
+    wht = rng.random((H, W))
+    draw = _smooth_np((wht - 0.90) / 0.08)
+    pore = (2.0 * draw + np.roll(draw, 1, 0) + np.roll(draw, -1, 0) + np.roll(draw, 1, 1) + np.roll(draw, -1, 1)) / 6.0
+    alb *= (0.985 + 0.03 * grain_f)[:, :, None]
+    alb *= (1.0 - 0.16 * pore)[:, :, None]
     fine = _fbm_tile(H, W, 40, 40, rng, wrap_y=True)
-    alb *= (0.97 + 0.06 * fine)[:, :, None]
-    height = -0.8 * pore + 0.3 * (fine - 0.5)
+    alb *= (0.98 + 0.04 * fine)[:, :, None]
+    height = -0.45 * pore + 0.14 * (grain_f - 0.5) + 0.10 * (fine - 0.5)
     rough = 0.60 + 0.07 * (_fbm_tile(H, W, 12, 12, rng, wrap_y=True) - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.4), "png"),
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 0.9), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
 def _make_hair_textures():
     H, W = 512, 1024
     rng = np.random.default_rng(20261103)
-    base = np.array([0.302, 0.256, 0.225])
-    strands = _tile_noise(H, W, 300, 4, rng)
-    clumps = _tile_noise(H, W, 90, 3, rng)
-    bright = (0.62 + 0.62 * strands) * (0.82 + 0.36 * clumps)
+    base = np.array([0.225, 0.160, 0.118])
+    # Fine ~1px strands: smoothed 1D column noise resampled through a
+    # slow flow warp (value-noise streaks read as wide metal flutes).
+    def _strand_field(scale, warp_amp, smooth_passes):
+        n1d = rng.random(4096)
+        for _ in range(smooth_passes):
+            n1d = 0.25 * np.roll(n1d, 1) + 0.5 * n1d + 0.25 * np.roll(n1d, -1)
+        warp = (_fbm_tile(H, W, 20, 5, rng) - 0.5) * warp_amp
+        sx = (np.arange(W)[None, :] * scale + warp) % 4096.0
+        i0 = np.floor(sx).astype(int)
+        frac = sx - i0
+        return n1d[i0] * (1.0 - frac) + n1d[(i0 + 1) % 4096] * frac
+
+    strand_mix = 0.68 * _strand_field(2.0, 90.0, 2) + 0.32 * _strand_field(5.0, 150.0, 1)
+    clumps = _tile_noise(H, W, 60, 3, rng)
+    bright = (0.68 + 0.48 * strand_mix) * (0.86 + 0.28 * clumps)
     alb = np.ones((H, W, 3)) * base[None, None, :] * bright[:, :, None]
-    light_strands = _smooth_np((strands - 0.92) / 0.07)
-    k = (light_strands * 0.4)[:, :, None]
-    alb = alb * (1.0 - k) + np.array([0.45, 0.37, 0.28])[None, None, :] * k
+    light_strands = _smooth_np((strand_mix - 0.90) / 0.08)
+    k = (light_strands * 0.22)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.44, 0.33, 0.22])[None, None, :] * k
     vv = np.linspace(0.0, 1.0, H)[:, None]
-    alb *= (1.0 - 0.18 * _smooth_np((vv - 0.88) / 0.1))[:, :, None]  # darker hairline rim
-    height = strands * 0.8 + clumps * 0.3
-    rough = 0.58 - 0.20 * strands + 0.05 * (_fbm_tile(H, W, 16, 4, rng) - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.5), "png"),
+    alb *= (1.0 - 0.22 * _smooth_np((vv - 0.88) / 0.1))[:, :, None]  # darker hairline rim
+    height = strand_mix * 0.55 + clumps * 0.2
+    rough = 0.65 - 0.09 * strand_mix + 0.04 * (_fbm_tile(H, W, 16, 4, rng) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 0.9), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
@@ -1203,40 +1225,40 @@ def _make_fabric_textures(base_rgb, seed, twill=False, rough_base=0.8):
     uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
     vv = np.linspace(0.0, 1.0, H, endpoint=False)[:, None].repeat(W, axis=1)
     if twill:
-        weave = 0.5 + 0.5 * np.sin(2.0 * np.pi * ((uu + vv) * 70.0))
-        weave = weave * 0.65 + 0.35 * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 140.0))
+        weave = 0.5 + 0.5 * np.sin(2.0 * np.pi * ((uu + vv) * 55.0))
+        weave = weave * 0.65 + 0.35 * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 110.0))
     else:
-        weave = (0.5 + 0.5 * np.sin(2.0 * np.pi * uu * 110.0)) * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 110.0))
+        weave = (0.5 + 0.5 * np.sin(2.0 * np.pi * uu * 80.0)) * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 80.0))
     tone = 0.92 + 0.16 * _fbm_tile(H, W, 6, 6, rng, wrap_y=True)
-    alb = np.ones((H, W, 3)) * np.array(base_rgb)[None, None, :] * tone[:, :, None] * (0.90 + 0.18 * weave)[:, :, None]
+    alb = np.ones((H, W, 3)) * np.array(base_rgb)[None, None, :] * tone[:, :, None] * (0.95 + 0.09 * weave)[:, :, None]
     if twill:  # denim flecks
         fleck = _smooth_np((_tile_noise(H, W, 260, 260, rng, wrap_y=True) - 0.93) / 0.06)
         alb *= (1.0 + 0.25 * fleck)[:, :, None]
-    height = weave + 0.25 * (_fbm_tile(H, W, 30, 30, rng, wrap_y=True) - 0.5)
+    height = 0.55 * weave + 0.2 * (_fbm_tile(H, W, 30, 30, rng, wrap_y=True) - 0.5)
     rough = rough_base + 0.08 * (_fbm_tile(H, W, 10, 10, rng, wrap_y=True) - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.1), "png"),
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 0.55), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
 def _make_leather_textures():
     H = W = 512
     rng = np.random.default_rng(20261104)
-    base = np.array([0.244, 0.228, 0.215])
+    base = np.array([0.172, 0.160, 0.150])
     r1 = 1.0 - np.abs(2.0 * _fbm_tile(H, W, 10, 10, rng, octaves=3, wrap_y=True) - 1.0)
     r2 = 1.0 - np.abs(2.0 * _fbm_tile(H, W, 26, 26, rng, octaves=3, wrap_y=True) - 1.0)
     cells = 0.62 * r1 + 0.38 * r2
-    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.72 + 0.55 * cells)[:, :, None]
+    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.80 + 0.38 * cells)[:, :, None]
     scuff = _smooth_np((_tile_noise(H, W, 90, 90, rng, wrap_y=True) - 0.90) / 0.08)
     alb *= (1.0 + 0.20 * scuff)[:, :, None]
     rough = 0.46 + 0.22 * (1.0 - cells) + 0.05 * (_fbm_tile(H, W, 14, 14, rng, wrap_y=True) - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(cells, 1.6), "png"),
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(cells, 1.1), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
 def _make_sole_textures():
     H = W = 512
     rng = np.random.default_rng(20261105)
-    base = np.array([0.375, 0.359, 0.343])
+    base = np.array([0.228, 0.218, 0.207])
     uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
     vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
     tone = 0.9 + 0.2 * _fbm_tile(H, W, 10, 10, rng, wrap_y=True)
@@ -1249,14 +1271,14 @@ def _make_sole_textures():
     alb *= (0.92 + 0.16 * speck)[:, :, None]
     height = -1.2 * band * bars + 0.3 * (speck - 0.5)
     rough = 0.92 + 0.05 * (_fbm_tile(H, W, 8, 8, rng, wrap_y=True) - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.8), "png"),
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.3), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
 def _make_sclera_texture():
     H = W = 256
     rng = np.random.default_rng(20261106)
-    base = np.array([0.968, 0.948, 0.914])
+    base = np.array([0.930, 0.905, 0.862])
     alb = np.ones((H, W, 3)) * base[None, None, :]
     uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
     vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
@@ -1282,40 +1304,40 @@ def _make_iris_texture():
     fibres = fibre_tex[np.clip((R * 255).astype(int), 0, 255), np.clip((A * 255).astype(int), 0, 255)]
     fleck_tex = _tile_noise(256, 256, 46, 4, rng)
     flecks = fleck_tex[np.clip((R * 255).astype(int), 0, 255), np.clip((A * 255).astype(int), 0, 255)]
-    inner = np.array([0.23, 0.13, 0.06])
-    mid = np.array([0.40, 0.25, 0.11])
-    outer = np.array([0.29, 0.17, 0.08])
+    inner = np.array([0.155, 0.088, 0.038])
+    mid = np.array([0.265, 0.158, 0.068])
+    outer = np.array([0.185, 0.108, 0.048])
     grad = np.ones((H, W, 3)) * inner[None, None, :]
     m1 = _smooth_np((R - 0.45) / 0.25)[:, :, None]
     grad = grad * (1.0 - m1) + mid[None, None, :] * m1
     m2 = _smooth_np((R - 0.75) / 0.2)[:, :, None]
     grad = grad * (1.0 - m2) + outer[None, None, :] * m2
-    alb = grad * (0.68 + 0.62 * fibres)[:, :, None]
+    alb = grad * (0.72 + 0.50 * fibres)[:, :, None]
     amber = _smooth_np((flecks - 0.80) / 0.15) * _smooth_np((0.85 - np.abs(R - 0.62)) / 0.3)
-    k = (amber * 0.55)[:, :, None]
-    alb = alb * (1.0 - k) + np.array([0.60, 0.41, 0.16])[None, None, :] * k
+    k = (amber * 0.35)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.46, 0.31, 0.115])[None, None, :] * k
     collar = np.exp(-(((R - (0.62 + 0.045 * np.sin(A * 2.0 * np.pi * 36.0))) / 0.035) ** 2))
-    alb *= (1.0 - 0.45 * collar)[:, :, None]
+    alb *= (1.0 - 0.30 * collar)[:, :, None]
     alb *= (1.0 - 0.75 * _smooth_np((R - 0.90) / 0.08))[:, :, None]  # limbal ring
-    alb = np.where((R < 0.452)[:, :, None], np.array([0.008, 0.008, 0.008])[None, None, :], alb)
-    alb = np.where((R > 1.0)[:, :, None], np.array([0.29, 0.17, 0.08])[None, None, :], alb)
+    alb = np.where((R < 0.424)[:, :, None], np.array([0.008, 0.008, 0.008])[None, None, :], alb)
+    alb = np.where((R > 1.0)[:, :, None], np.array([0.185, 0.108, 0.048])[None, None, :], alb)
     return {"albedo": _encode_image(alb, "jpeg")}
 
 
 def _make_lips_textures():
     H = W = 256
     rng = np.random.default_rng(20261108)
-    base = np.array([0.703, 0.508, 0.453])
-    lines = _tile_noise(H, W, 150, 3, rng)
-    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.86 + 0.26 * lines)[:, :, None]
+    base = np.array([0.660, 0.450, 0.392])
+    lines = _tile_noise(H, W, 190, 26, rng)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.94 + 0.10 * lines)[:, :, None]
     uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
     vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
     du = np.abs(((uu - 0.75 + 0.5) % 1.0) - 0.5)
     centre = np.exp(-((du / 0.16) ** 2 + ((vv - 0.5) / 0.30) ** 2))
     k = (centre * 0.35)[:, :, None]
-    alb = alb * (1.0 - k) + np.array([0.63, 0.38, 0.32])[None, None, :] * k
+    alb = alb * (1.0 - k) + np.array([0.575, 0.330, 0.275])[None, None, :] * k
     rough = 0.60 - 0.22 * centre + 0.05 * (lines - 0.5)
-    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(lines, 1.2), "png"),
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(lines, 0.7), "png"),
             "rough": _encode_image(_pack_rough(rough), "png")}
 
 
