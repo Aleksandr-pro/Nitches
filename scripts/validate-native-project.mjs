@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.26-native-alpha"'), 'Native project version metadata must match 0.3.26-native-alpha');
-assert(preset.includes('version/code=92'), 'Native 0.3.26 must bump Android versionCode to 92');
-assert(preset.includes('version/name="0.3.26-native-alpha"'), 'Native version name must be 0.3.26-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.26-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.26"') && preset.includes('application/product_version="0.3.26"'), 'Desktop file/product versions must match native 0.3.26');
+assert(project.includes('config/version="0.3.27-native-alpha"'), 'Native project version metadata must match 0.3.27-native-alpha');
+assert(preset.includes('version/code=93'), 'Native 0.3.27 must bump Android versionCode to 93');
+assert(preset.includes('version/name="0.3.27-native-alpha"'), 'Native version name must be 0.3.27-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.27-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.27"') && preset.includes('application/product_version="0.3.27"'), 'Desktop file/product versions must match native 0.3.27');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.26"') && preset.includes('application/product_version="0.3.26"'), 'Desktop Windows version metadata must match native 0.3.26');
+assert(preset.includes('application/file_version="0.3.27"') && preset.includes('application/product_version="0.3.27"'), 'Desktop Windows version metadata must match native 0.3.27');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1425,7 +1425,7 @@ const modelBudgets039 = {
   'townhouse.glb': [17_500, 22],
   'villa.glb': [12_600, 19],
   'midrise_a.glb': [4_750, 8],
-  'shopping_mall.glb': [2_400, 9],
+  'shopping_mall.glb': [3_650, 9],
   'school.glb': [1_750, 11],
   'airport_terminal.glb': [3_150, 5],
   'villa_b.glb': [700, 8],
@@ -1464,8 +1464,8 @@ for (const marker of ['panel("hangar_door_rail"', 'panel("turbine_louver"', 'seg
 const modelBudgets0310 = {
   'cooling_tower.glb': [1_900, 2],
   'reactor.glb': [1_950, 6],
-  'turbine_hall_long.glb': [920, 8],
-  'turbine_hall_short.glb': [720, 8],
+  'turbine_hall_long.glb': [1_620, 8],
+  'turbine_hall_short.glb': [1_320, 8],
   'storage_tank.glb': [2_200, 4],
   'radar_station.glb': [1_150, 6],
   'airliner.glb': [4_500, 8],
@@ -1766,7 +1766,7 @@ for (const marker of ['_build_rt7_stage9_0318', '_rt7_ridge_mesh0318', 'Rt7SeaHo
   }
   assert(glbNames0318.length <= 62, `0.3.18 props budget: ${glbNames0318.length} GLBs > 62`);
   assert(totalBytes0318 <= 24500000, `0.3.18 props budget: ${totalBytes0318} bytes > 24.5 MB`);
-  assert(totalTris0318 <= 395000, `0.3.18 props budget (0.3.24: single-instance landmark detail): ${totalTris0318} unique tris > 395k`);
+  assert(totalTris0318 <= 398000, `0.3.18 props budget (0.3.24/0.3.27: single-instance landmark detail): ${totalTris0318} unique tris > 398k`);
   console.log(`0.3.18 props budget: ${glbNames0318.length} GLBs, ${totalBytes0318} bytes, ${totalTris0318} unique tris`);
 }
 
@@ -1956,6 +1956,39 @@ for (const marker of ['"Фото"', '"photo_" + String(spot.get', '01b_photo_cor
 const buildProps0326 = await readFile('blender/build_props.py', 'utf8');
 assert(buildProps0326.includes('def build_vista_sign') && buildProps0326.includes('(build_vista_sign, "vista_sign.glb")'), 'Blender props must build the 0.3.26 vista sign');
 console.log('0.3.26 scenic photo spots OK (8 spots, vista sign, corridor saturation)');
+
+// 0.3.27: mall + turbine-hall detail pass.  The mall's flat
+// storefront strips gain a tenant fascia rhythm, stone piers,
+// readable entrance door leafs, skylight mullion grids, HVAC
+// fan rings, a parapet coping cap and dressed dock doors; the
+// NPP turbine halls gain cladding girts, a mullioned roof
+// monitor, segmented equipment doors with window rows, door
+// canopies, stack caps, gooseneck vent caps and eaves coping.
+// Envelopes and material sets (part counts) are unchanged.
+// All three are single-instance buildings, so the unique-tris
+// lock moves 395k -> 398k for +2.2k tris of detail.
+{
+  const buildProps0327 = await readFile('blender/build_props.py', 'utf8');
+  for (const marker0327 of ['mall_fascia0327', 'mall_pier0327', 'mall_entrance_door0327', 'mall_canopy_fascia0327', 'mall_atrium_grid0327', 'mall_hvac_fan0327', 'mall_parapet_cap0327', 'mall_dock_canopy0327', 'turbine_girt0327', 'turbine_monitor_mullion0327', 'turbine_monitor_end0327', 'turbine_door_rail0327', 'turbine_door_window0327', 'turbine_stack_cap0327', 'turbine_vent_cap0327', 'turbine_coping0327']) {
+    assert(buildProps0327.includes(marker0327), `0.3.27 build_props marker is missing: ${marker0327}`);
+  }
+  const floors0327 = { 'shopping_mall.glb': 2900, 'turbine_hall_long.glb': 1250, 'turbine_hall_short.glb': 1000 };
+  for (const [name0327, floor0327] of Object.entries(floors0327)) {
+    const bytes0327 = await readFile(path.join('src/assets/models/props', name0327));
+    const json0327 = parseGlbJson(bytes0327);
+    let tris0327 = 0;
+    for (const mesh0327 of json0327.meshes ?? []) {
+      for (const prim0327 of mesh0327.primitives ?? []) {
+        if (prim0327.indices === undefined) continue;
+        const count0327 = json0327.accessors[prim0327.indices]?.count ?? 0;
+        const mode0327 = prim0327.mode ?? 4;
+        tris0327 += mode0327 === 4 ? Math.floor(count0327 / 3) : (mode0327 === 5 || mode0327 === 6 ? Math.max(count0327 - 2, 0) : 0);
+      }
+    }
+    assert(tris0327 >= floor0327, `0.3.27 detail floor: ${name0327} has ${tris0327} tris < ${floor0327} (placeholder regression?)`);
+  }
+  console.log('0.3.27 detail floors OK (mall + turbine halls)');
+}
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));
