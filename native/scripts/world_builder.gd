@@ -38,6 +38,8 @@ var _active_aabb := WORLD_AABB
 const FALLBACK_SPAWN_POSITION := Vector3(760.0, 5.205, 330.0)
 const MULTIMESH_CHUNK_SIZE_M := 220.0
 const ISLAND_TERRAIN_CHUNK_M_0322 := 448.0
+const CLEARANCE_CELL_M_0323 := 96.0
+const CLEARANCE_MAX_PADDING_M_0323 := 8.0
 const STREAM_CELL_M := 64.0
 # 0.2.44: foliage density queries (atmosphere shafts, rustle audio)
 # run against a build-time spatial grid instead of scanning every
@@ -201,6 +203,12 @@ var _generic_gable_batches: Dictionary = {}
 var _generic_batch_instances := 0
 var _far_proxy_sphere_mesh: SphereMesh
 var _infill_buildings: Array[Dictionary] = []
+# 0.3.23: spatial clearance index state (see _rebuild_clearance_index_0323).
+var _clearance_grid_0323: Dictionary = {}
+var _clearance_entries_0323: Array[Dictionary] = []
+var _clearance_sizes_0323 := Vector3i(-1, -1, -1)
+var _clearance_infill_indexed_0323 := 0
+var _clearance_ready_0323 := false
 var _reflection_probes: Array[ReflectionProbe] = []
 var _skyline_root: Node3D
 var _skyline_materials: Array[ShaderMaterial] = []
@@ -1135,9 +1143,176 @@ func _subdivide_road_points_for_junctions(
 	return result
 
 
-func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float, include_generated_buildings: bool = true, excluded_pool_index: int = -1) -> bool:
+## 0.3.23 clearance index.  _is_position_clear() used to scan every
+## building, infill building, pool and landmark in the world for
+## every call -- constructing a Basis and sampling the heightfield
+## per entry.  The infill pass alone issues thousands of calls, so
+## phone loading froze for minutes at "Возводим здания" while CI
+## (desktop CPU) did the same work in seconds.  The grid below only
+## pre-filters candidates: entries carry precomputed centres,
+## inverse bases and half-extents, and the exact original geometric
+## predicates still decide, so every placement decision is
+## bit-identical to the full scan.  Entries are inserted into every
+## cell their footprint can influence at the maximum indexed
+## padding; larger paddings keep the legacy scan.
+func _clearance_cell_0323(x: float, z: float) -> Vector2i:
+	return Vector2i(floori(x / CLEARANCE_CELL_M_0323), floori(z / CLEARANCE_CELL_M_0323))
+
+
+func _clearance_rect_reach_0323(hw: float, hd: float) -> float:
+	var a := hw + CLEARANCE_MAX_PADDING_M_0323
+	var b := hd + CLEARANCE_MAX_PADDING_M_0323
+	return sqrt(a * a + b * b)
+
+
+func _clearance_add_entry_0323(entry: Dictionary, reach: float) -> void:
+	var entry_index := _clearance_entries_0323.size()
+	_clearance_entries_0323.append(entry)
+	var cx := float(entry.get("cx", 0.0))
+	var cz := float(entry.get("cz", 0.0))
+	var min_cell := _clearance_cell_0323(cx - reach, cz - reach)
+	var max_cell := _clearance_cell_0323(cx + reach, cz + reach)
+	for cell_x in range(min_cell.x, max_cell.x + 1):
+		for cell_z in range(min_cell.y, max_cell.y + 1):
+			var cell := Vector2i(cell_x, cell_z)
+			if not _clearance_grid_0323.has(cell):
+				_clearance_grid_0323[cell] = []
+			(_clearance_grid_0323[cell] as Array).append(entry_index)
+
+
+func _rebuild_clearance_index_0323() -> void:
+	_clearance_grid_0323.clear()
+	_clearance_entries_0323.clear()
+	for building_variant in data.get("buildings", []):
+		var building: Dictionary = building_variant
+		var w := _f(building, "w", 20.0)
+		var d := _f(building, "d", 16.0)
+		_clearance_add_entry_0323({
+			"kind": "b",
+			"cx": _f(building, "x"), "cz": _f(building, "z"),
+			"inv_basis": Basis(Vector3.UP, -_f(building, "rotY")),
+			"hw": w * 0.5, "hd": d * 0.5,
+		}, _clearance_rect_reach_0323(w * 0.5, d * 0.5))
+	var pools: Array = data.get("pools", [])
+	for pool_index in pools.size():
+		var pool: Dictionary = pools[pool_index]
+		var pw := _f(pool, "w", 8.0) + 1.3
+		var pd := _f(pool, "d", 5.0) + 1.3
+		_clearance_add_entry_0323({
+			"kind": "p", "pool_index": pool_index,
+			"cx": _f(pool, "x"), "cz": _f(pool, "z"),
+			"inv_basis": Basis(Vector3.UP, -_f(pool, "rotY")),
+			"hw": pw * 0.5, "hd": pd * 0.5,
+		}, _clearance_rect_reach_0323(pw * 0.5, pd * 0.5))
+	for landmark_variant in data.get("landmarks", []):
+		var landmark: Dictionary = landmark_variant
+		var lm_kind := String(landmark.get("kind", ""))
+		if lm_kind == "rt-opera":
+			_clearance_add_entry_0323({
+				"kind": "lr", "cx": _f(landmark, "x"), "cz": _f(landmark, "z"),
+				"hw": 28.0, "hd": 26.0,
+			}, _clearance_rect_reach_0323(28.0, 26.0))
+		elif lm_kind == "rt-mosque":
+			_clearance_add_entry_0323({
+				"kind": "lr", "cx": _f(landmark, "x"), "cz": _f(landmark, "z"),
+				"hw": 19.2, "hd": 18.0,
+			}, _clearance_rect_reach_0323(19.2, 18.0))
+		else:
+			var radius := maxf(_f(landmark, "r", 18.0), 14.0)
+			_clearance_add_entry_0323({
+				"kind": "lc", "cx": _f(landmark, "x"), "cz": _f(landmark, "z"),
+				"r": radius,
+			}, radius + CLEARANCE_MAX_PADDING_M_0323)
+	_clearance_sizes_0323 = Vector3i(
+		(data.get("buildings", []) as Array).size(),
+		(data.get("pools", []) as Array).size(),
+		(data.get("landmarks", []) as Array).size())
+	_clearance_infill_indexed_0323 = 0
+	_clearance_ready_0323 = true
+	_enhancement_stats["clearance_index_entries_0323"] = _clearance_entries_0323.size()
+	_enhancement_stats["clearance_index_cells_0323"] = _clearance_grid_0323.size()
+
+
+func _ensure_clearance_index_0323() -> void:
+	var sizes := Vector3i(
+		(data.get("buildings", []) as Array).size(),
+		(data.get("pools", []) as Array).size(),
+		(data.get("landmarks", []) as Array).size())
+	if _clearance_ready_0323 and sizes == _clearance_sizes_0323:
+		return
+	_rebuild_clearance_index_0323()
+
+
+func _sync_clearance_infill_0323() -> void:
+	if _infill_buildings.size() < _clearance_infill_indexed_0323:
+		_rebuild_clearance_index_0323()
+	while _clearance_infill_indexed_0323 < _infill_buildings.size():
+		var building: Dictionary = _infill_buildings[_clearance_infill_indexed_0323]
+		var footprint_w := _f(building, "w", 20.0)
+		var footprint_d := _f(building, "d", 16.0)
+		match String(building.get("model", "generic")):
+			"glass":
+				footprint_w = maxf(footprint_w, 34.0)
+				footprint_d = maxf(footprint_d, 34.0)
+			"hero":
+				footprint_w = maxf(footprint_w, 32.4)
+				footprint_d = maxf(footprint_d, 32.4)
+			"townhouse":
+				footprint_w = maxf(footprint_w, 18.87)
+				footprint_d = maxf(footprint_d, 18.87)
+		_clearance_add_entry_0323({
+			"kind": "i",
+			"cx": _f(building, "x"), "cz": _f(building, "z"),
+			"hw": footprint_w * 0.5, "hd": footprint_d * 0.5,
+		}, _clearance_rect_reach_0323(footprint_w * 0.5, footprint_d * 0.5))
+		_clearance_infill_indexed_0323 += 1
+
+
+func _invalidate_clearance_index_0323() -> void:
+	_clearance_ready_0323 = false
+
+
+func _is_position_clear_indexed_0323(point: Vector3, building_padding: float, include_generated_buildings: bool, excluded_pool_index: int) -> bool:
+	_ensure_clearance_index_0323()
+	if include_generated_buildings:
+		_sync_clearance_infill_0323()
+	var candidates: Array = _clearance_grid_0323.get(_clearance_cell_0323(point.x, point.z), [])
+	for index_variant in candidates:
+		var entry: Dictionary = _clearance_entries_0323[int(index_variant)]
+		var kind := String(entry.get("kind", ""))
+		if kind == "i" and not include_generated_buildings:
+			continue
+		if kind == "p" and int(entry.get("pool_index", -1)) == excluded_pool_index:
+			continue
+		var dx := point.x - float(entry.get("cx", 0.0))
+		var dz := point.z - float(entry.get("cz", 0.0))
+		if kind == "lc":
+			var radius := float(entry.get("r", 14.0)) + building_padding
+			if dx * dx + dz * dz < radius * radius:
+				return false
+		elif kind == "lr" or kind == "i":
+			if absf(dx) <= float(entry.get("hw", 0.0)) + building_padding and absf(dz) <= float(entry.get("hd", 0.0)) + building_padding:
+				return false
+		else:
+			var local: Vector3 = (entry.get("inv_basis", Basis.IDENTITY) as Basis) * Vector3(dx, 0.0, dz)
+			if absf(local.x) <= float(entry.get("hw", 0.0)) + building_padding and absf(local.z) <= float(entry.get("hd", 0.0)) + building_padding:
+				return false
+	return true
+
+
+func _is_position_clear(point: Vector3, building_padding: float, minimum_road_clearance: float, include_generated_buildings: bool = true, excluded_pool_index: int = -1, use_index_0323: bool = true) -> bool:
 	if _road_clearance_xz(point) < minimum_road_clearance:
 		return false
+	# 0.3.23: the indexed path only pre-filters candidates (see
+	# _build_clearance_index_0323); the exact original predicates in
+	# _is_position_clear_scan_0323 still decide any oversized-padding
+	# call and the pool-sanitize relocation loop, which mutates the
+	# very data it queries and must keep live-dictionary semantics.
+	if use_index_0323 and building_padding <= CLEARANCE_MAX_PADDING_M_0323:
+		return _is_position_clear_indexed_0323(point, building_padding, include_generated_buildings, excluded_pool_index)
+	return _is_position_clear_scan_0323(point, building_padding, include_generated_buildings, excluded_pool_index)
+
+func _is_position_clear_scan_0323(point: Vector3, building_padding: float, include_generated_buildings: bool, excluded_pool_index: int) -> bool:
 	for building_variant in data.get("buildings", []):
 		var building: Dictionary = building_variant
 		var center := _item_position(building)
@@ -3630,6 +3805,7 @@ func _sanitize_canonical_buildings_0237() -> void:
 	_enhancement_stats["canonical_buildings_relocated_0237"] = relocated
 	_enhancement_stats["canonical_buildings_unresolved_0237"] = unresolved
 	_enhancement_stats["canonical_building_min_clearance_0237"] = minimum_after
+	_invalidate_clearance_index_0323()
 
 
 ## Same audit for exported pools: one Palm Island pool lay across
@@ -3673,7 +3849,7 @@ func _sanitize_canonical_pools_0237() -> void:
 						var fz: float = fz_variant
 						var point := candidate + basis * Vector3(fx * size.x, 0.0, fz * size.y)
 						point.y = height_at(point.x, point.z)
-						if not _is_position_clear(point, 0.35, 0.0, true, pool_index):
+						if not _is_position_clear(point, 0.35, 0.0, true, pool_index, false):
 							clear_of_objects = false
 							break
 					if not clear_of_objects:
@@ -3698,6 +3874,7 @@ func _sanitize_canonical_pools_0237() -> void:
 	_enhancement_stats["canonical_pool_min_clearance_0237"] = minimum_after
 	_enhancement_stats["canonical_pool_rim_clearance_0238"] = unresolved == 0
 	_enhancement_stats["canonical_pool_self_excluded_0238"] = true
+	_invalidate_clearance_index_0323()
 
 
 func _grid_height(ix: int, iz: int) -> float:
@@ -7755,6 +7932,7 @@ func _build_infill_buildings(parent: Node) -> void:
 	for item in accepted:
 		all_buildings.append(item)
 	data["buildings"] = all_buildings
+	_invalidate_clearance_index_0323()
 
 
 func _get_sail_mesh() -> ArrayMesh:
