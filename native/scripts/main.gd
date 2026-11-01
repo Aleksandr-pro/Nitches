@@ -3080,7 +3080,7 @@ func _run_smoke_checks() -> void:
 	# 0.3.26 scenic photo spots: eight turnout pads with vista
 	# signs, saturation planting at the spots and along the
 	# scenic corridors, and matching world-map POI entries.
-	if is_rt7 and (int(enhancement_stats.get("rt7_scenic_photo_spots0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_signs0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_pads0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_plantings0326", 0)) < 100 or int(enhancement_stats.get("rt7_scenic_corridor0326", 0)) < 30 or _world.get_photo_spot_entries().size() != 8):
+	if is_rt7 and (int(enhancement_stats.get("rt7_scenic_photo_spots0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_signs0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_pads0326", 0)) < 8 or int(enhancement_stats.get("rt7_scenic_plantings0326", 0)) < 120 or int(enhancement_stats.get("rt7_scenic_corridor0326", 0)) < 50 or _world.get_photo_spot_entries().size() != 8):
 		failures.append("0.3.26 scenic photo spots / saturation pass is incomplete: spots=%s signs=%s pads=%s plantings=%s corridor=%s entries=%d" % [str(enhancement_stats.get("rt7_scenic_photo_spots0326", 0)), str(enhancement_stats.get("rt7_scenic_signs0326", 0)), str(enhancement_stats.get("rt7_scenic_pads0326", 0)), str(enhancement_stats.get("rt7_scenic_plantings0326", 0)), str(enhancement_stats.get("rt7_scenic_corridor0326", 0)), _world.get_photo_spot_entries().size()])
 
 	if failures.is_empty():

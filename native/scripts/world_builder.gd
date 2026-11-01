@@ -8696,14 +8696,14 @@ func _build_rt7_scenic_0326(root: Node3D) -> void:
 			if String(get_surface_at(palm_pos).get("kind", "")) == "water":
 				continue
 			palm_t.append(make_transform(palm_pos, rng.randf_range(0.0, TAU), Vector3.ONE * rng.randf_range(0.92, 1.08)))
-		_scenic_cluster_0326(rng, pad_center, 4.0, 7.2, 10, flower_t, shrub_t)
+		_scenic_cluster_0326(rng, pad_center, 3.6, 8.6, 22, flower_t, shrub_t)
 
 	var corridor_planted := 0
 	var corridor_lines := [
-		[Vector2(-2662.0, -650.0), Vector2(-2662.0, 650.0), 15.0, 2.5, 6.5],
-		[Vector2(-792.0, 596.0), Vector2(-608.0, 404.0), 13.0, 9.0, 15.0],
-		[Vector2(140.0, -612.0), Vector2(470.0, -612.0), 13.0, 4.0, 10.0],
-		[Vector2(1008.0, 1478.0), Vector2(932.0, 1332.0), 13.0, 8.0, 14.0],
+		[Vector2(-2662.0, -650.0), Vector2(-2662.0, 650.0), 10.0, 2.5, 6.5],
+		[Vector2(-792.0, 596.0), Vector2(-608.0, 404.0), 9.0, 9.0, 15.0],
+		[Vector2(140.0, -612.0), Vector2(470.0, -612.0), 9.0, 4.0, 13.0],
+		[Vector2(1008.0, 1478.0), Vector2(932.0, 1332.0), 9.0, 8.0, 14.0],
 	]
 	for line_variant in corridor_lines:
 		var line: Array = line_variant
@@ -8742,7 +8742,7 @@ func _scenic_plant_one_0326(rng: RandomNumberGenerator, pos: Vector3, flower_t: 
 	var kind := String(get_surface_at(pos).get("kind", ""))
 	if kind == "water" or kind == "asphalt":
 		return 0
-	if not _is_position_clear(pos, 1.4, 2.4):
+	if not _is_position_clear(pos, 1.0, 1.6):
 		return 0
 	var xf := make_transform(pos, rng.randf_range(0.0, TAU), Vector3.ONE * rng.randf_range(0.85, 1.3))
 	if rng.randf() < 0.55:
