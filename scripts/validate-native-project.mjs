@@ -97,10 +97,10 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.20-native-alpha"'), 'Native project version metadata must match 0.3.20-native-alpha');
-assert(preset.includes('version/code=86'), 'Native 0.3.20 must bump Android versionCode to 86');
-assert(preset.includes('version/name="0.3.20-native-alpha"'), 'Native version name must be 0.3.20-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.20-native-alpha'), 'Main menu version label must match the native export version');
+assert(project.includes('config/version="0.3.21-native-alpha"'), 'Native project version metadata must match 0.3.21-native-alpha');
+assert(preset.includes('version/code=87'), 'Native 0.3.21 must bump Android versionCode to 87');
+assert(preset.includes('version/name="0.3.21-native-alpha"'), 'Native version name must be 0.3.21-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.21-native-alpha'), 'Main menu version label must match the native export version');
 for (const name of ['skyline_rich_town_near.png', 'skyline_rich_town_far.png']) {
   assert(syncScript.includes(`'${name}'`), `Native asset sync must stage ${name}`);
   const png = await readFile(path.join('src/assets/textures/realworld', name));
@@ -159,7 +159,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.20"') && preset.includes('application/product_version="0.3.20"'), 'Desktop Windows version metadata must match native 0.3.20');
+assert(preset.includes('application/file_version="0.3.21"') && preset.includes('application/product_version="0.3.21"'), 'Desktop Windows version metadata must match native 0.3.21');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -1363,7 +1363,7 @@ const modelBudgets038 = {
   'container_red.glb': [660, 4],
   'office_tower_mid.glb': [950, 8],
   'office_tower_high.glb': [1_160, 9],
-  'warehouse_small.glb': [830, 6],
+  'warehouse_small.glb': [1_200, 6],
 };
 for (const [model038, [triangleCap038, expectedParts038]] of Object.entries(modelBudgets038)) {
   const modelBytes038 = await readFile(`src/assets/models/props/${model038}`);
@@ -1446,11 +1446,11 @@ const modelBudgets0310 = {
   'reactor.glb': [850, 6],
   'turbine_hall_long.glb': [920, 8],
   'turbine_hall_short.glb': [720, 8],
-  'storage_tank.glb': [620, 4],
-  'radar_station.glb': [560, 6],
+  'storage_tank.glb': [2_200, 4],
+  'radar_station.glb': [1_150, 6],
   'airliner.glb': [4_500, 8],
-  'afv.glb': [570, 4],
-  'greenhouse.glb': [730, 5],
+  'afv.glb': [1_600, 4],
+  'greenhouse.glb': [980, 5],
   'chimney.glb': [410, 3],
   'atc_tower.glb': [800, 7],
   'hangar_large.glb': [830, 6],
@@ -1458,9 +1458,9 @@ const modelBudgets0310 = {
   'port_crane.glb': [400, 7],
   'barge.glb': [400, 5],
   'bleacher.glb': [380, 4],
-  'barn.glb': [330, 5],
+  'barn.glb': [800, 5],
   'watchtower.glb': [380, 4],
-  'silo.glb': [200, 3],
+  'silo.glb': [1_950, 3],
 };
 for (const [model0310, [triangleCap0310, expectedParts0310]] of Object.entries(modelBudgets0310)) {
   const modelBytes0310 = await readFile(`src/assets/models/props/${model0310}`);
@@ -1789,6 +1789,40 @@ for (const marker of ['centre_pts.append(Vector3(c2.x, height_at(c2.x, c2.y) + 0
     assert(tris0320 >= floor0320, `0.3.20 detail floor: ${name0320} has ${tris0320} tris < ${floor0320} (placeholder regression?)`);
   }
   console.log('0.3.20 detail floors OK (10 rebuilt models)');
+}
+
+// 0.3.21: industrial/agro/military detail pass - the next crude
+// tier after 0.3.20 (storage tank and silo fully rebuilt with
+// course rings/corrugation and caged ladders; warehouse dock gear,
+// skylights and office glazing; barn battens/seams; greenhouse end
+// frames and vent flaps; AFV running-gear/turret detail; radar
+// dome seams and comms dish).  Same envelope discipline as 0.3.20.
+{
+  const buildProps0321 = await readFile('blender/build_props.py', 'utf8');
+  for (const marker0321 of ['_caged_ladder_0321', 'tank_course0321', 'silo_auger0321', 'wh_skylight0321', 'wh_leveler0321', 'wh_office_win0321', 'barn_batten0321', 'gh_vent_flap0321', 'afv_smoke0321', 'radar_dish0321']) {
+    assert(buildProps0321.includes(marker0321), `0.3.21 build_props marker is missing: ${marker0321}`);
+  }
+  const floors0321 = {
+    'storage_tank.glb': 1750, 'silo.glb': 1550,
+    'warehouse_large.glb': 1200, 'warehouse_small.glb': 980,
+    'barn.glb': 650, 'greenhouse.glb': 820,
+    'afv.glb': 1300, 'radar_station.glb': 920,
+  };
+  for (const [name0321, floor0321] of Object.entries(floors0321)) {
+    const bytes0321 = await readFile(path.join('src/assets/models/props', name0321));
+    const json0321 = parseGlbJson(bytes0321);
+    let tris0321 = 0;
+    for (const mesh0321 of json0321.meshes ?? []) {
+      for (const prim0321 of mesh0321.primitives ?? []) {
+        if (prim0321.indices === undefined) continue;
+        const count0321 = json0321.accessors[prim0321.indices]?.count ?? 0;
+        const mode0321 = prim0321.mode ?? 4;
+        tris0321 += mode0321 === 4 ? Math.floor(count0321 / 3) : (mode0321 === 5 || mode0321 === 6 ? Math.max(count0321 - 2, 0) : 0);
+      }
+    }
+    assert(tris0321 >= floor0321, `0.3.21 detail floor: ${name0321} has ${tris0321} tris < ${floor0321} (placeholder regression?)`);
+  }
+  console.log('0.3.21 detail floors OK (8 rebuilt models)');
 }
 
 console.log('Native Godot project validation OK');
