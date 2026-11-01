@@ -19,6 +19,7 @@ on:
       - 'scripts/generate_richtown7_world.py'
       - 'scripts/sync-native-assets.mjs'
       - 'scripts/generate_dubai_premium_cafe.py'
+      - 'scripts/generate_native_player_character.py'
       - 'scripts/validate-native-project.mjs'
       - 'scripts/check-lfs-assets.mjs'
       - 'src/world/realWorld.js'
