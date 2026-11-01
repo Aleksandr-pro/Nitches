@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Build the detailed human character GLB for the native Godot game.
 
-0.3.29: full procedural rewrite for close-range realism.  Still uses
-only Python's standard library (CI regenerates without Blender), but
-the single-instance avatar now spends ~60k triangles: the face is
-carried by skull deformation (nose/brow/cheek/chin gaussian bumps,
-eye-socket dimples) instead of glued-on balls, the hair is one cap
-with a smooth swept hairline, the jacket is a shaped loft with a
-closed muted-metal zipper, hands have curled fingers, and shoes are
-lofted over a real side profile with a separate rubber sole.
-COLOR_0 (normalized ubyte VEC4) carries tint x procedural grain so
-surfaces have variation and roughness read without textures.
+0.3.29: full procedural rewrite for close-range realism (~64k tris):
+skull-deformation face, one-piece swept hair cap, shaped jacket loft
+with a closed muted zipper, fingered hands, lofted shoes.
+
+0.3.30: photoreal texture pass.  Every surface now carries
+procedurally synthesised PBR maps (albedo / tangent normal /
+roughness): a face painted in world space over the deformed skull
+(pores, freckles, moles, stubble, forehead lines, crow's feet),
+radial-fibre irises behind real pupil holes, veined sclera, strand
+hair, fabric weaves, denim twill, cell-grain leather, treaded
+soles - plus fingernails, ear helices and an Adam's apple.
+Requires numpy + Pillow (no CI workflow executes this script; the
+committed GLB is the artefact).  Output is seed-deterministic.
 
 Joint layout, material order (append-only) and the translation-only
 node hierarchy are unchanged from 0.3.28 so player_character.gd can
@@ -18,31 +21,38 @@ pose the same 12 joints procedurally.
 """
 from __future__ import annotations
 
+import io
 import json
 import math
 import struct
 from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "src/assets/models/characters/nitches_player.glb"
 
+# 0.3.30: textured materials carry white factors - the synthesised
+# maps below own the colour/roughness (authored to match the old
+# factor hues, converted linear -> sRGB in the texture builders).
 MATERIALS = [
-    ("Skin", (0.63, 0.37, 0.25, 1.0), 0.0, 0.62),
-    ("Jacket - deep teal", (0.055, 0.16, 0.15, 1.0), 0.0, 0.74),
-    ("Shirt - warm ivory", (0.78, 0.70, 0.55, 1.0), 0.0, 0.84),
-    ("Trousers - charcoal blue", (0.075, 0.105, 0.14, 1.0), 0.0, 0.9),
-    ("Hair - dark brown", (0.072, 0.050, 0.038, 1.0), 0.0, 0.82),
-    ("Shoes - dark leather", (0.045, 0.039, 0.034, 1.0), 0.0, 0.38),
+    ("Skin", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
+    ("Jacket - deep teal", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
+    ("Shirt - warm ivory", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
+    ("Trousers - charcoal blue", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
+    ("Hair - dark brown", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
+    ("Shoes - dark leather", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     ("Warm metal details", (0.54, 0.31, 0.095, 1.0), 0.38, 0.42),
-    ("Eyes", (0.93, 0.89, 0.82, 1.0), 0.0, 0.22),
-    ("Iris", (0.12, 0.065, 0.035, 1.0), 0.0, 0.25),
+    ("Eyes", (1.0, 1.0, 1.0, 1.0), 0.0, 0.12),
+    ("Iris", (1.0, 1.0, 1.0, 1.0), 0.0, 0.30),
     ("Mouth", (0.20, 0.075, 0.055, 1.0), 0.0, 0.8),
     # 0.3.29 append-only additions; existing indices must never move.
-    ("Lips", (0.46, 0.225, 0.175, 1.0), 0.0, 0.48),
+    ("Lips", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     ("Pupil", (0.012, 0.010, 0.009, 1.0), 0.0, 0.18),
-    ("Shoe sole - rubber", (0.115, 0.105, 0.095, 1.0), 0.0, 0.92),
+    ("Shoe sole - rubber", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     # 0.3.30 append-only additions (textured photoreal pass).
-    ("Skin - face", (0.63, 0.37, 0.25, 1.0), 0.0, 0.62),  # -> white once textured
+    ("Skin - face", (1.0, 1.0, 1.0, 1.0), 0.0, 1.0),
     ("Fingernails", (0.76, 0.60, 0.52, 1.0), 0.0, 0.32),
 ]
 SKIN, JACKET, SHIRT, TROUSERS, HAIR, SHOES, METAL, EYES, IRIS, MOUTH, LIPS, PUPIL, SOLE, FACE_SKIN, NAILS = range(len(MATERIALS))
@@ -671,7 +681,7 @@ def add_lips() -> None:
 
 def add_face() -> None:
     set_limb("Head")
-    add_ellipsoid(FACE_SKIN, HEAD_C, HEAD_R, 96, 64, head_deform, skin_paint)
+    add_ellipsoid(FACE_SKIN, HEAD_C, HEAD_R, 96, 64, head_deform)
     # Ears: flattened, half-sunk into the skull.
     for s in (-1.0, 1.0):
         def ear_deform(x, y, z, _xu, _yu, _zu, s=s):
@@ -944,6 +954,388 @@ def build_character() -> None:
     set_limb("Torso")
 
 
+# ---------------------------------------------------------------------------
+# 0.3.30 photoreal texture synthesis (numpy + Pillow, seed-deterministic).
+# All maps are authored in sRGB byte terms for albedo / linear for
+# normal+roughness, matching the hues the flat factors had pre-0.3.30.
+# Face maps are painted in world space over the *deformed* skull so
+# freckles/stubble/wrinkles land exactly on the sculpted features.
+# ---------------------------------------------------------------------------
+
+def _tile_noise(h, w, cells_x, cells_y, rng, wrap_y=False):
+    """Value noise sampled on an h x w grid; always tiles in x."""
+    rows = cells_y if wrap_y else cells_y + 1
+    lat = rng.random((rows, cells_x))
+    xs = np.linspace(0.0, cells_x, w, endpoint=False)
+    ys = np.linspace(0.0, cells_y, h, endpoint=False) if wrap_y else np.linspace(0.0, cells_y, h, endpoint=True)
+    x0 = np.floor(xs).astype(np.int64)
+    fx = xs - x0
+    y0 = np.floor(ys).astype(np.int64)
+    fy = ys - y0
+    x1 = (x0 + 1) % cells_x
+    y1 = (y0 + 1) % cells_y if wrap_y else np.minimum(y0 + 1, cells_y)
+    fx = fx * fx * (3.0 - 2.0 * fx)
+    fy = fy * fy * (3.0 - 2.0 * fy)
+    top = lat[y0][:, x0] * (1.0 - fx) + lat[y0][:, x1] * fx
+    bot = lat[y1][:, x0] * (1.0 - fx) + lat[y1][:, x1] * fx
+    return top * (1.0 - fy[:, None]) + bot * fy[:, None]
+
+
+def _fbm_tile(h, w, cells_x, cells_y, rng, octaves=4, wrap_y=False):
+    total = np.zeros((h, w))
+    weight_sum = 0.0
+    amp = 1.0
+    cx, cy = cells_x, cells_y
+    for _ in range(octaves):
+        total += amp * _tile_noise(h, w, cx, cy, rng, wrap_y)
+        weight_sum += amp
+        amp *= 0.5
+        cx *= 2
+        cy *= 2
+    return total / weight_sum
+
+
+def _smooth_np(t):
+    t = np.clip(t, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _gauss_np(X, Y, Z, c, sgm):
+    return np.exp(-(((X - c[0]) / sgm[0]) ** 2 + ((Y - c[1]) / sgm[1]) ** 2 + ((Z - c[2]) / sgm[2]) ** 2))
+
+
+def _normal_from_height(hgt, strength):
+    gx = (np.roll(hgt, -1, axis=1) - np.roll(hgt, 1, axis=1)) * strength
+    gy = (np.roll(hgt, -1, axis=0) - np.roll(hgt, 1, axis=0)) * strength
+    nx, ny, nz = -gx, -gy, np.ones_like(hgt)
+    inv = 1.0 / np.sqrt(nx * nx + ny * ny + nz * nz)
+    return np.stack([nx * inv * 0.5 + 0.5, ny * inv * 0.5 + 0.5, nz * inv * 0.5 + 0.5], axis=-1)
+
+
+def _pack_rough(gray):
+    return np.stack([np.ones_like(gray), np.clip(gray, 0.0, 1.0), np.zeros_like(gray)], axis=-1)
+
+
+def _encode_image(rgb, kind):
+    arr = np.clip(rgb * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    img = Image.fromarray(arr, "RGB")
+    buf = io.BytesIO()
+    if kind == "jpeg":
+        img.save(buf, "JPEG", quality=90)
+        return buf.getvalue(), "image/jpeg"
+    img.save(buf, "PNG", optimize=True)
+    return buf.getvalue(), "image/png"
+
+
+def _down2(a):
+    h, w = a.shape
+    return a.reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
+
+
+def _bump_np(X, Y, Z, c, sgm, d, amp):
+    w = _gauss_np(X, Y, Z, c, sgm) * amp
+    return X + d[0] * w, Y + d[1] * w, Z + d[2] * w
+
+
+def head_deform_np(X, Y, Z, Yu):
+    """Vectorised twin of head_deform() so face textures painted in
+    world space land on the sculpted surface texel-exactly."""
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.720, 0.095), (0.085, 0.075, 0.045), (0.0, 0.1, 1.0), 0.0075)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.765, -0.075), (0.070, 0.045, 0.040), (0.0, 0.0, 1.0), -0.0035)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.713, -0.100), (0.078, 0.015, 0.030), (0.0, 0.0, -1.0), 0.0042)
+    for s in (-1.0, 1.0):
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.045, 1.693, -0.098), (0.020, 0.0135, 0.018), (0.0, 0.0, -1.0), -0.0045)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.688, -0.104), (0.0082, 0.027, 0.012), (0.0, 0.0, -1.0), 0.0075)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.652, -0.106), (0.0095, 0.0085, 0.0105), (0.0, -0.18, -1.0), 0.0152)
+    for s in (-1.0, 1.0):
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.0145, 1.643, -0.104), (0.0085, 0.0075, 0.009), (s * 0.35, 0.0, -1.0), 0.0050)
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.077, 1.676, -0.058), (0.030, 0.021, 0.028), (s * 0.75, 0.0, -0.66), 0.0045)
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.073, 1.640, -0.052), (0.026, 0.018, 0.024), (s * 0.75, 0.0, -0.66), -0.0032)
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.027, 1.626, -0.096), (0.0075, 0.019, 0.011), (0.0, 0.0, -1.0), -0.0017)
+        X, Y, Z = _bump_np(X, Y, Z, (s * 0.056, 1.602, -0.008), (0.020, 0.024, 0.035), (s * 1.0, 0.0, 0.0), 0.0028)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.627, -0.098), (0.009, 0.008, 0.012), (0.0, 0.0, -1.0), -0.0014)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.609, -0.094), (0.030, 0.011, 0.016), (0.0, 0.0, -1.0), 0.0022)
+    X, Y, Z = _bump_np(X, Y, Z, (0.0, 1.570, -0.080), (0.020, 0.013, 0.014), (0.0, -0.3, -1.0), 0.0062)
+    t = np.clip((1.662 - Y) / 0.115, 0.0, 1.0)
+    ts = t * t * (3.0 - 2.0 * t)
+    X = X * (1.0 - 0.20 * ts)
+    Z = HEAD_C[2] + (Z - HEAD_C[2]) * (1.0 - 0.08 * ts) + 0.004 * ts
+    tuck = np.clip((1.556 - Y) / 0.03, 0.0, 1.0)
+    X = X * (1.0 - 0.22 * tuck)
+    Z = HEAD_C[2] + (Z - HEAD_C[2]) * (1.0 - 0.20 * tuck)
+    Y = Y - 0.005 * np.where(Yu > 0.72, (Yu - 0.72) / 0.28, 0.0)
+    return X, Y, Z
+
+
+def _make_face_textures():
+    H = W = 1024
+    rng = np.random.default_rng(20261101)
+    uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
+    vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
+    theta = vv * np.pi
+    phi = uu * 2.0 * np.pi
+    st, ct = np.sin(theta), np.cos(theta)
+    Xu = np.cos(phi) * st
+    Yu = ct
+    Zu = np.sin(phi) * st
+    X = HEAD_C[0] + HEAD_R[0] * Xu
+    Y = HEAD_C[1] + HEAD_R[1] * Yu
+    Z = HEAD_C[2] + HEAD_R[2] * Zu
+    X, Y, Z = head_deform_np(X, Y, Z, Yu)
+
+    def G(c, sgm):
+        return _gauss_np(X, Y, Z, c, sgm)
+
+    front = _smooth_np((-Z - 0.015) / 0.055)
+    base = np.array([0.807, 0.636, 0.533])
+    tone = 0.93 + 0.14 * _fbm_tile(H, W, 4, 3, rng)
+    tone *= 0.965 + 0.07 * _fbm_tile(H, W, 18, 14, rng)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * tone[:, :, None]
+
+    # Warm blood-flow zones: cheeks, nose, eye corners, chin.
+    warm = (G((-0.066, 1.660, -0.072), (0.034, 0.027, 0.032)) + G((0.066, 1.660, -0.072), (0.034, 0.027, 0.032))
+            + G((0.0, 1.652, -0.120), (0.020, 0.018, 0.016)) + 0.6 * G((0.0, 1.575, -0.088), (0.022, 0.016, 0.018)))
+    warm = np.clip(warm, 0.0, 1.2)
+    alb[:, :, 0] *= 1.0 + 0.09 * warm
+    alb[:, :, 1] *= 1.0 - 0.06 * warm
+    alb[:, :, 2] *= 1.0 - 0.07 * warm
+    # Eye-socket soft shadow so lids blend into the skull.
+    sock = G((-0.045, 1.693, -0.100), (0.023, 0.016, 0.020)) + G((0.045, 1.693, -0.100), (0.023, 0.016, 0.020))
+    alb *= (1.0 - 0.10 * np.clip(sock, 0.0, 1.0))[:, :, None]
+    # Nostril shadow.
+    nos = G((-0.0115, 1.639, -0.118), (0.008, 0.006, 0.009)) + G((0.0115, 1.639, -0.118), (0.008, 0.006, 0.009))
+    alb *= (1.0 - 0.55 * np.clip(nos, 0.0, 1.0))[:, :, None]
+    # Freckles across the nose band and cheeks.
+    freck_n = _tile_noise(H, W, 90, 90, rng)
+    freck = _smooth_np((freck_n - 0.76) / 0.16)
+    band = _smooth_np((0.030 - np.abs(Y - 1.666)) / 0.018) * _smooth_np((0.085 - np.abs(X)) / 0.02) * front
+    k = (freck * band * 0.55)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.52, 0.35, 0.24])[None, None, :] * k
+    # Moles (asymmetry sells a real face).
+    for c, sg, dark in (((0.058, 1.649, -0.089), 0.0017, 0.62), ((-0.037, 1.603, -0.091), 0.0014, 0.55),
+                        ((0.021, 1.716, -0.105), 0.0012, 0.5)):
+        alb *= (1.0 - dark * G(c, (sg, sg, sg)))[:, :, None]
+    # Five-o'clock shadow: jaw, chin, jawline sides, light moustache zone.
+    jaw = _smooth_np((1.646 - Y) / 0.02) * _smooth_np((Y - 1.546) / 0.012)
+    sides = _smooth_np((np.abs(X) - 0.052) / 0.02) * _smooth_np((1.676 - Y) / 0.02) * _smooth_np((Y - 1.596) / 0.02)
+    mous = _smooth_np((1.634 - Y) / 0.004) * _smooth_np((Y - 1.6195) / 0.004) * _smooth_np((0.032 - np.abs(X)) / 0.007)
+    lip_metric = (X / 0.033) ** 2 + ((Y - 1.6115) / 0.0145) ** 2
+    lip_clear = _smooth_np((lip_metric - 1.1) / 0.7)
+    stub_mask = np.clip(jaw + sides + 0.7 * mous, 0.0, 1.0) * front * lip_clear
+    speck = _tile_noise(H, W, 330, 330, rng)
+    dots = _smooth_np((speck - 0.52) / 0.22)
+    k = (stub_mask * (0.22 + 0.58 * dots))[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.38, 0.35, 0.34])[None, None, :] * k
+    # Pores.
+    pore_n = _tile_noise(H, W, 250, 250, rng)
+    pore = _smooth_np((pore_n - 0.60) / 0.25)
+    pore_zone = 0.45 + 0.55 * np.clip(G((0.0, 1.67, -0.11), (0.045, 0.07, 0.03)) + G((0.0, 1.75, -0.08), (0.07, 0.035, 0.04)), 0.0, 1.0)
+    alb *= (1.0 - 0.13 * pore * pore_zone)[:, :, None]
+    # Forehead lines (albedo shade; grooves go to the height field too).
+    fl = np.zeros((H, W))
+    for ly in (1.7435, 1.7565):
+        fl += np.exp(-(((Y - ly) / 0.0016) ** 2))
+    fl *= front * (1.0 - _smooth_np((np.abs(X) - 0.052) / 0.03))
+    alb *= (1.0 - 0.05 * np.clip(fl, 0.0, 1.0))[:, :, None]
+
+    # Height field -> normal map (pores, lines, stubble, crow's feet).
+    height = -0.8 * pore * pore_zone + 0.35 * dots * stub_mask - 0.8 * np.clip(fl, 0.0, 1.0)
+    height += 0.25 * (_fbm_tile(H, W, 60, 48, rng) - 0.5)
+    for (ux, vx, sgn) in ((0.8175, 0.4661, 1.0), (0.6825, 0.4661, -1.0)):
+        for ang in (-0.5, -0.05, 0.4):
+            du = (uu - (ux + sgn * 0.016)) * 0.64
+            dv = vv - vx
+            along = sgn * du * np.cos(ang) - dv * np.sin(ang)
+            perp = sgn * du * np.sin(ang) + dv * np.cos(ang)
+            line = np.exp(-((perp / 0.0016) ** 2)) * np.exp(-(((along - 0.011) / 0.009) ** 2)) * (along > 0)
+            height -= 0.55 * line
+            alb *= (1.0 - 0.04 * line)[:, :, None]
+    # Roughness: shiny T-zone, matte stubble.
+    tzone = np.clip(G((0.0, 1.748, -0.085), (0.075, 0.038, 0.045)) + G((0.0, 1.668, -0.112), (0.022, 0.055, 0.020)), 0.0, 1.0)
+    rough = 0.58 - 0.18 * tzone + 0.10 * stub_mask + 0.06 * (_fbm_tile(H, W, 24, 18, rng) - 0.5)
+
+    return {
+        "albedo": _encode_image(alb, "jpeg"),
+        "normal": _encode_image(_normal_from_height(_down2(height), 1.7), "png"),
+        "rough": _encode_image(_pack_rough(_down2(rough)), "png"),
+    }
+
+
+def _make_skin_textures():
+    H = W = 512
+    rng = np.random.default_rng(20261102)
+    base = np.array([0.807, 0.636, 0.533])
+    tone = 0.94 + 0.12 * _fbm_tile(H, W, 5, 5, rng, wrap_y=True)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * tone[:, :, None]
+    pore_n = _tile_noise(H, W, 200, 200, rng, wrap_y=True)
+    pore = _smooth_np((pore_n - 0.60) / 0.25)
+    alb *= (1.0 - 0.11 * pore)[:, :, None]
+    fine = _fbm_tile(H, W, 40, 40, rng, wrap_y=True)
+    alb *= (0.97 + 0.06 * fine)[:, :, None]
+    height = -0.8 * pore + 0.3 * (fine - 0.5)
+    rough = 0.60 + 0.07 * (_fbm_tile(H, W, 12, 12, rng, wrap_y=True) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.4), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def _make_hair_textures():
+    H, W = 512, 1024
+    rng = np.random.default_rng(20261103)
+    base = np.array([0.302, 0.256, 0.225])
+    strands = _tile_noise(H, W, 300, 4, rng)
+    clumps = _tile_noise(H, W, 90, 3, rng)
+    bright = (0.62 + 0.62 * strands) * (0.82 + 0.36 * clumps)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * bright[:, :, None]
+    light_strands = _smooth_np((strands - 0.92) / 0.07)
+    k = (light_strands * 0.4)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.45, 0.37, 0.28])[None, None, :] * k
+    vv = np.linspace(0.0, 1.0, H)[:, None]
+    alb *= (1.0 - 0.18 * _smooth_np((vv - 0.88) / 0.1))[:, :, None]  # darker hairline rim
+    height = strands * 0.8 + clumps * 0.3
+    rough = 0.58 - 0.20 * strands + 0.05 * (_fbm_tile(H, W, 16, 4, rng) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.5), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def _make_fabric_textures(base_rgb, seed, twill=False, rough_base=0.8):
+    H = W = 512
+    rng = np.random.default_rng(seed)
+    uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
+    vv = np.linspace(0.0, 1.0, H, endpoint=False)[:, None].repeat(W, axis=1)
+    if twill:
+        weave = 0.5 + 0.5 * np.sin(2.0 * np.pi * ((uu + vv) * 70.0))
+        weave = weave * 0.65 + 0.35 * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 140.0))
+    else:
+        weave = (0.5 + 0.5 * np.sin(2.0 * np.pi * uu * 110.0)) * (0.5 + 0.5 * np.sin(2.0 * np.pi * vv * 110.0))
+    tone = 0.92 + 0.16 * _fbm_tile(H, W, 6, 6, rng, wrap_y=True)
+    alb = np.ones((H, W, 3)) * np.array(base_rgb)[None, None, :] * tone[:, :, None] * (0.90 + 0.18 * weave)[:, :, None]
+    if twill:  # denim flecks
+        fleck = _smooth_np((_tile_noise(H, W, 260, 260, rng, wrap_y=True) - 0.93) / 0.06)
+        alb *= (1.0 + 0.25 * fleck)[:, :, None]
+    height = weave + 0.25 * (_fbm_tile(H, W, 30, 30, rng, wrap_y=True) - 0.5)
+    rough = rough_base + 0.08 * (_fbm_tile(H, W, 10, 10, rng, wrap_y=True) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.1), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def _make_leather_textures():
+    H = W = 512
+    rng = np.random.default_rng(20261104)
+    base = np.array([0.244, 0.228, 0.215])
+    r1 = 1.0 - np.abs(2.0 * _fbm_tile(H, W, 10, 10, rng, octaves=3, wrap_y=True) - 1.0)
+    r2 = 1.0 - np.abs(2.0 * _fbm_tile(H, W, 26, 26, rng, octaves=3, wrap_y=True) - 1.0)
+    cells = 0.62 * r1 + 0.38 * r2
+    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.72 + 0.55 * cells)[:, :, None]
+    scuff = _smooth_np((_tile_noise(H, W, 90, 90, rng, wrap_y=True) - 0.90) / 0.08)
+    alb *= (1.0 + 0.20 * scuff)[:, :, None]
+    rough = 0.46 + 0.22 * (1.0 - cells) + 0.05 * (_fbm_tile(H, W, 14, 14, rng, wrap_y=True) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(cells, 1.6), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def _make_sole_textures():
+    H = W = 512
+    rng = np.random.default_rng(20261105)
+    base = np.array([0.375, 0.359, 0.343])
+    uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
+    vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
+    tone = 0.9 + 0.2 * _fbm_tile(H, W, 10, 10, rng, wrap_y=True)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * tone[:, :, None]
+    du = np.abs(((uu - 0.75 + 0.5) % 1.0) - 0.5)
+    band = _smooth_np((0.17 - du) / 0.045)
+    bars = _smooth_np((np.sin(2.0 * np.pi * vv * 9.0) - 0.25) / 0.4)
+    alb *= (1.0 - 0.35 * band * bars)[:, :, None]
+    speck = _tile_noise(H, W, 240, 240, rng, wrap_y=True)
+    alb *= (0.92 + 0.16 * speck)[:, :, None]
+    height = -1.2 * band * bars + 0.3 * (speck - 0.5)
+    rough = 0.92 + 0.05 * (_fbm_tile(H, W, 8, 8, rng, wrap_y=True) - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(height, 1.8), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def _make_sclera_texture():
+    H = W = 256
+    rng = np.random.default_rng(20261106)
+    base = np.array([0.968, 0.948, 0.914])
+    alb = np.ones((H, W, 3)) * base[None, None, :]
+    uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
+    vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
+    du = np.abs(((uu - 0.75 + 0.5) % 1.0) - 0.5)
+    dist = np.sqrt((du * 0.8) ** 2 + ((vv - 0.5) * 1.2) ** 2)
+    veins = _smooth_np((1.0 - np.abs(2.0 * _fbm_tile(H, W, 5, 4, rng, octaves=3) - 1.0) - 0.90) / 0.08)
+    vein_mask = _smooth_np((dist - 0.05) / 0.10) * (1.0 - _smooth_np((dist - 0.30) / 0.12))
+    k = (veins * vein_mask * 0.75)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.66, 0.30, 0.26])[None, None, :] * k
+    alb *= (1.0 - 0.05 * _smooth_np((dist - 0.18) / 0.15))[:, :, None]
+    return {"albedo": _encode_image(alb, "jpeg")}
+
+
+def _make_iris_texture():
+    H = W = 256
+    rng = np.random.default_rng(20261107)
+    yy, xx = np.mgrid[0:H, 0:W]
+    dx = (xx / (W - 1) - 0.5) * 2.0
+    dy = (yy / (H - 1) - 0.5) * 2.0
+    R = np.sqrt(dx * dx + dy * dy)
+    A = (np.arctan2(dy, dx) / (2.0 * np.pi)) % 1.0
+    fibre_tex = _tile_noise(256, 256, 110, 3, rng)
+    fibres = fibre_tex[np.clip((R * 255).astype(int), 0, 255), np.clip((A * 255).astype(int), 0, 255)]
+    fleck_tex = _tile_noise(256, 256, 46, 4, rng)
+    flecks = fleck_tex[np.clip((R * 255).astype(int), 0, 255), np.clip((A * 255).astype(int), 0, 255)]
+    inner = np.array([0.23, 0.13, 0.06])
+    mid = np.array([0.40, 0.25, 0.11])
+    outer = np.array([0.29, 0.17, 0.08])
+    grad = np.ones((H, W, 3)) * inner[None, None, :]
+    m1 = _smooth_np((R - 0.45) / 0.25)[:, :, None]
+    grad = grad * (1.0 - m1) + mid[None, None, :] * m1
+    m2 = _smooth_np((R - 0.75) / 0.2)[:, :, None]
+    grad = grad * (1.0 - m2) + outer[None, None, :] * m2
+    alb = grad * (0.68 + 0.62 * fibres)[:, :, None]
+    amber = _smooth_np((flecks - 0.80) / 0.15) * _smooth_np((0.85 - np.abs(R - 0.62)) / 0.3)
+    k = (amber * 0.55)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.60, 0.41, 0.16])[None, None, :] * k
+    collar = np.exp(-(((R - (0.62 + 0.045 * np.sin(A * 2.0 * np.pi * 36.0))) / 0.035) ** 2))
+    alb *= (1.0 - 0.45 * collar)[:, :, None]
+    alb *= (1.0 - 0.75 * _smooth_np((R - 0.90) / 0.08))[:, :, None]  # limbal ring
+    alb = np.where((R < 0.452)[:, :, None], np.array([0.008, 0.008, 0.008])[None, None, :], alb)
+    alb = np.where((R > 1.0)[:, :, None], np.array([0.29, 0.17, 0.08])[None, None, :], alb)
+    return {"albedo": _encode_image(alb, "jpeg")}
+
+
+def _make_lips_textures():
+    H = W = 256
+    rng = np.random.default_rng(20261108)
+    base = np.array([0.703, 0.508, 0.453])
+    lines = _tile_noise(H, W, 150, 3, rng)
+    alb = np.ones((H, W, 3)) * base[None, None, :] * (0.86 + 0.26 * lines)[:, :, None]
+    uu = np.linspace(0.0, 1.0, W, endpoint=False)[None, :].repeat(H, axis=0)
+    vv = np.linspace(0.0, 1.0, H)[:, None].repeat(W, axis=1)
+    du = np.abs(((uu - 0.75 + 0.5) % 1.0) - 0.5)
+    centre = np.exp(-((du / 0.16) ** 2 + ((vv - 0.5) / 0.30) ** 2))
+    k = (centre * 0.35)[:, :, None]
+    alb = alb * (1.0 - k) + np.array([0.63, 0.38, 0.32])[None, None, :] * k
+    rough = 0.60 - 0.22 * centre + 0.05 * (lines - 0.5)
+    return {"albedo": _encode_image(alb, "jpeg"), "normal": _encode_image(_normal_from_height(lines, 1.2), "png"),
+            "rough": _encode_image(_pack_rough(rough), "png")}
+
+
+def build_material_textures():
+    """material index -> {'albedo'|'normal'|'rough': (bytes, mime)}"""
+    return {
+        SKIN: _make_skin_textures(),
+        FACE_SKIN: _make_face_textures(),
+        JACKET: _make_fabric_textures((0.255, 0.435, 0.421), 20261110, twill=False, rough_base=0.78),
+        SHIRT: _make_fabric_textures((0.892, 0.847, 0.763), 20261111, twill=False, rough_base=0.85),
+        TROUSERS: _make_fabric_textures((0.308, 0.359, 0.409), 20261112, twill=True, rough_base=0.90),
+        HAIR: _make_hair_textures(),
+        SHOES: _make_leather_textures(),
+        SOLE: _make_sole_textures(),
+        EYES: _make_sclera_texture(),
+        IRIS: _make_iris_texture(),
+        LIPS: _make_lips_textures(),
+    }
+
+
 def align4(data: bytearray) -> None:
     while len(data) % 4:
         data.append(0)
@@ -1045,17 +1437,53 @@ def write_glb() -> None:
             nodes[limb_node_index[parent]]["children"].append(limb_node_index[limb])
     children = [limb_node_index["Torso"]]
 
+    # 0.3.30: synthesised PBR maps (image bufferViews carry no target).
+    tex_by_mat = build_material_textures()
+    images, textures = [], []
+    samplers = [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]
+
+    def append_image(data: bytes, mime: str) -> int:
+        align4(binary)
+        offset = len(binary)
+        binary.extend(data)
+        buffer_views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(data)})
+        images.append({"bufferView": len(buffer_views) - 1, "mimeType": mime})
+        textures.append({"sampler": 0, "source": len(images) - 1})
+        return len(textures) - 1
+
+    mat_textures = {}
+    for mat_index, maps in sorted(tex_by_mat.items()):
+        entry = {}
+        if "albedo" in maps:
+            entry["baseColorTexture"] = {"index": append_image(*maps["albedo"])}
+        if "rough" in maps:
+            entry["metallicRoughnessTexture"] = {"index": append_image(*maps["rough"])}
+        if "normal" in maps:
+            entry["normalTexture"] = {"index": append_image(*maps["normal"])}
+        mat_textures[mat_index] = entry
+
+    def material_json(index, name, color, metallic, roughness):
+        pbr = {"baseColorFactor": color, "metallicFactor": metallic, "roughnessFactor": roughness}
+        extra = mat_textures.get(index, {})
+        if "baseColorTexture" in extra:
+            pbr["baseColorTexture"] = extra["baseColorTexture"]
+        if "metallicRoughnessTexture" in extra:
+            pbr["metallicRoughnessTexture"] = extra["metallicRoughnessTexture"]
+        mat = {"name": name, "pbrMetallicRoughness": pbr, "doubleSided": True}
+        if "normalTexture" in extra:
+            mat["normalTexture"] = extra["normalTexture"]
+        return mat
+
     gltf = {
-        "asset": {"version": "2.0", "generator": "Nitches procedural human character builder", "copyright": "Original Nitches character asset"},
+        "asset": {"version": "2.0", "generator": "Nitches procedural human character builder (0.3.30 textured)", "copyright": "Original Nitches character asset"},
         "scene": 0,
         "scenes": [{"name": "Nitches Player Character", "nodes": [len(nodes)]}],
         "nodes": nodes + [{"name": "NitchesPlayerCharacter", "children": children}],
         "meshes": meshes,
-        "materials": [{
-            "name": name,
-            "pbrMetallicRoughness": {"baseColorFactor": color, "metallicFactor": metallic, "roughnessFactor": roughness},
-            "doubleSided": True,
-        } for name, color, metallic, roughness in MATERIALS],
+        "materials": [material_json(i, *mat) for i, mat in enumerate(MATERIALS)],
+        "images": images,
+        "textures": textures,
+        "samplers": samplers,
         "accessors": accessors,
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(binary)}],
