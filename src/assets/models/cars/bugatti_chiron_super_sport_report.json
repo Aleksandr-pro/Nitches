@@ -1,0 +1,142 @@
+{
+  "car": "bugatti_chiron_super_sport",
+  "input": "uploads_files_4478463_Underground+Garage+Scene.blend",
+  "output": "bugatti_chiron_super_sport.glb",
+  "outputBytes": 7173172,
+  "inputTriangles": 186684,
+  "finalTriangles": 186684,
+  "finalMeshObjects": [
+    "Wheel_RR_Spin",
+    "Wheel_FR_Spin",
+    "Wheel_RL_Spin",
+    "Wheel_FL_Spin",
+    "Body"
+  ],
+  "materials": [
+    "BadgeTexture",
+    "BlackTrim",
+    "BrakeCaliper",
+    "BrakeDisc",
+    "CarbonTrim",
+    "Chrome",
+    "GlassWindow",
+    "GrilleTexture",
+    "GrilleTexture2",
+    "GrilleTexture3",
+    "HeadlightTexture",
+    "InteriorCloth",
+    "InteriorDark",
+    "InteriorGlow",
+    "Paint",
+    "PaintSecondary",
+    "RimMetal",
+    "TailLight",
+    "TailLightTexture",
+    "TireTreadTexture"
+  ],
+  "boundsBlender": {
+    "min": [
+      -1.096179,
+      -2.321988,
+      0.0
+    ],
+    "max": [
+      1.096178,
+      2.472012,
+      1.184783
+    ],
+    "sizeXYZ": [
+      2.192357,
+      4.794,
+      1.184783
+    ]
+  },
+  "boundsGltfSizeXYZ": [
+    2.192357,
+    1.184783,
+    4.794
+  ],
+  "wheelbaseM": 2.723687,
+  "frontTrackM": 1.754074,
+  "rearTrackM": 1.678676,
+  "wheels": {
+    "FL": {
+      "blenderHub": [
+        0.877037,
+        -1.361843,
+        0.344863
+      ],
+      "gltfHub": [
+        0.877037,
+        0.344863,
+        1.361843
+      ],
+      "tireSizeBlender": [
+        0.315827,
+        0.682691,
+        0.688058
+      ],
+      "radiusM": 0.344029,
+      "spinTriangles": 7013
+    },
+    "FR": {
+      "blenderHub": [
+        -0.877037,
+        -1.361843,
+        0.344863
+      ],
+      "gltfHub": [
+        -0.877037,
+        0.344863,
+        1.361843
+      ],
+      "tireSizeBlender": [
+        0.315827,
+        0.682691,
+        0.688058
+      ],
+      "radiusM": 0.344029,
+      "spinTriangles": 7013
+    },
+    "RL": {
+      "blenderHub": [
+        0.839338,
+        1.361843,
+        0.359396
+      ],
+      "gltfHub": [
+        0.839338,
+        0.359396,
+        -1.361843
+      ],
+      "tireSizeBlender": [
+        0.373175,
+        0.714149,
+        0.718792
+      ],
+      "radiusM": 0.359396,
+      "spinTriangles": 8277
+    },
+    "RR": {
+      "blenderHub": [
+        -0.839338,
+        1.361843,
+        0.359396
+      ],
+      "gltfHub": [
+        -0.839338,
+        0.359396,
+        -1.361843
+      ],
+      "tireSizeBlender": [
+        0.373175,
+        0.714149,
+        0.718792
+      ],
+      "radiusM": 0.359396,
+      "spinTriangles": 8277
+    }
+  },
+  "bodyTriangles": 156104,
+  "root": "BugattiChironSuperSport"
+}
