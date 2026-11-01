@@ -3418,6 +3418,10 @@ func _run_screenshot_tour() -> void:
 			"camera": Vector3(-1500.0, 260.0, 900.0), "target": Vector3(0.0, 20.0, 0.0),
 		},
 		{
+			"name": "08a0_car_bugatti_chiron", "time": "day", "hud": true, "vehicle": "spawn",
+			"car_id": "bugatti_chiron_super_sport", "gameplay_camera": true, "marketing": true, "frames": 6,
+		},
+		{
 			"name": "08a_car_audi_r8", "time": "day", "hud": true, "vehicle": "spawn",
 			"car_id": "audi_r8_v10_plus", "gameplay_camera": true, "marketing": true, "frames": 6,
 		},

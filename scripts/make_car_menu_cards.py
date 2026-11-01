@@ -15,6 +15,7 @@ from PIL import Image
 
 
 CARDS = {
+    "08a0_car_bugatti_chiron.png": "menu_bugatti_chiron_gameplay.jpg",
     "08a_car_audi_r8.png": "menu_audi_r8_gameplay.jpg",
     "08b_car_camaro_ss.png": "menu_camaro_ss_gameplay.jpg",
     "08c_car_mercedes_560_sel.png": "menu_mercedes_560_sel_gameplay.jpg",

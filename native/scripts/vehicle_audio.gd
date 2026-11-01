@@ -226,6 +226,16 @@ func configure_for_car(car_id: String) -> void:
 			# W126 luxury brief: muffled note, soft slushbox shifts and
 			# only the rarest, deepest burble on a hard lift.
 			_apply_character(0.18, 2600.0, -6.0, 0.8, -6.0, 0.78, -9.0, 6000.0)
+		"bugatti_chiron_super_sport":
+			_apply_recorded_bank(
+				"bugatti_chiron", "res://assets/audio/bugatti_chiron",
+				[900, 1602, 2000, 3735, 5000, 6478, 7000], [15, 33, 15, 11, 25, 65, 65],
+				0.77, 0.62, 1.30, 7100.0, 1150.0, 1500.0, 0.5
+			)
+			# Quad-turbo W16: dense low voice (deep multi-cylinder CC0
+			# recordings pitched down), smooth turbo-muffled lift-off,
+			# firm DCT shift thunks.
+			_apply_character(0.7, 2600.0, 0.8, 0.95, -5.0, 1.05, -8.0, 7100.0)
 		_:
 			_apply_shelby_bank()
 
