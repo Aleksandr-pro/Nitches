@@ -2095,6 +2095,7 @@ for (const marker0331 of ['"bugatti_chiron_super_sport": _bugatti_chiron()', '"a
   assert(carCatalogScript.includes(marker0331), `Native 0.3.31 Bugatti catalogue marker is missing: ${marker0331}`);
 }
 assert(combinedRuntime.includes('_apply_recorded_bank(\n\t			"bugatti_chiron", "res://assets/audio/bugatti_chiron"'), 'Native 0.3.31 Bugatti must select its own recorded bank in NativeVehicleAudio');
+assert(mainScript.includes('probe_id == "bugatti_chiron_super_sport"') && carCatalogScript.includes('"shift_up_rpm": 5800.0') && carCatalogScript.includes('"wheel_radius_m": 0.340'), 'Native 0.3.31 Bugatti gearing must land the supplied 403 km/h 6->7 marker with a trap-free probe expectation');
 assert(mainScript.includes('08a0_car_bugatti_chiron') && mainScript.includes('"car_id": "bugatti_chiron_super_sport"'), 'Native 0.3.31 screenshot tour must drive the Bugatti before the 08b stop');
 assert(syncScript.includes('bugatti_chiron: [900, 1602, 2000, 3735, 5000, 6478, 7000]'), 'Native 0.3.31 asset sync must stage the complete Bugatti bank');
 assert(audioCredits.includes('478597') && audioCredits.includes('177184') && audioCredits.includes('Bygatti'), 'Native 0.3.31 audio credits must document the Bugatti bank sources honestly');

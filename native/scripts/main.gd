@@ -3077,6 +3077,11 @@ func _run_smoke_checks() -> void:
 			var gears_ok := int(gears_at_speed.get("120", 0)) >= 2 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= mini(3, last_gear)
 			if probe_id == "mercedes_560_sel":
 				gears_ok = gears_ok and int(gears_at_speed.get("70", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 3
+			if probe_id == "bugatti_chiron_super_sport":
+				# Supplied longtail gearing: 2nd alone spans ~87-154 km/h,
+				# so "3rd by 120" is not a trap-free invariant here; the
+				# car must still leave 1st by 120 and keep upshifting.
+				gears_ok = int(gears_at_speed.get("120", 0)) >= 1 and int(gears_at_speed.get("180", 0)) >= 2 and int(gears_at_speed.get("240", 0)) >= 3
 			if not gears_ok:
 				automatic_gears_ok = false
 		drivetrain_probe.free()

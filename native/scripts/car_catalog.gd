@@ -557,7 +557,9 @@ static func _bugatti_chiron() -> Dictionary:
 		"wheelbase_m": 2.724,
 		"front_track_m": 1.754,
 		"rear_track_m": 1.679,
-		"wheel_radius_m": 0.352,
+		# Loaded (deflected) rolling radius; unloaded GLB radii are
+		# 0.344 front / 0.359 rear per the conversion report.
+		"wheel_radius_m": 0.340,
 		"wheel_ray_y": 0.56,
 		"body_collision_size": Vector3(1.98, 0.55, 4.55),
 		"body_collision_position": Vector3(0.0, 0.47, 0.04),
@@ -574,8 +576,10 @@ static func _bugatti_chiron() -> Dictionary:
 		"final_drive": 2.671,
 		"idle_rpm": 950.0,
 		"redline_rpm": 7100.0,
-		"shift_up_rpm": 6800.0,
-		"shift_down_rpm": 2400.0,
+		# With the supplied ratios/final drive/radius this lands the
+		# 6->7 upshift at the supplied 403 km/h validation marker.
+		"shift_up_rpm": 5800.0,
+		"shift_down_rpm": 2600.0,
 		"torque_curve": [
 			Vector2(950.0, 0.62), Vector2(1500.0, 0.85), Vector2(2000.0, 1.00),
 			Vector2(4000.0, 1.00), Vector2(6000.0, 1.00), Vector2(7000.0, 1.00),
