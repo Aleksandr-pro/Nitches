@@ -30,6 +30,7 @@ var _world: NativeWorldBuilder
 var _vehicle: NativeVehicle
 var _data: Dictionary = {}
 var _static_cache_mode := false
+var _show_vehicle_marker := false  # 0.3.28: parked-car marker while on foot
 var _static_cache_viewport: SubViewport
 var _static_cache_texture: Texture2D
 var _static_cache_ready := false
@@ -159,6 +160,11 @@ func set_player(world_position: Vector3, forward: Vector3) -> void:
     var flat := Vector2(forward.x, forward.z)
     if flat.length() > 0.001:
         _player_forward = flat.normalized()
+    queue_redraw()
+
+
+func set_vehicle_marker_visible(value: bool) -> void:
+    _show_vehicle_marker = value
     queue_redraw()
 
 
@@ -471,6 +477,18 @@ func _draw() -> void:
         elif category in ["Кафе", "Инфраструктура", "Достопримечательность"]:
             color = Color(1.0, 0.48, 0.30)
         draw_circle(point, 3.4, color)
+
+    # 0.3.28: while on foot the parked car keeps its own marker,
+    # clamped to the rim when it lies beyond the visible radius so
+    # the way back to the car is always readable.
+    if _show_vehicle_marker and _vehicle != null:
+        var car_point := _world_to_map(Vector2(_vehicle.global_position.x, _vehicle.global_position.z))
+        var car_offset := car_point - centre
+        var car_limit := radius - 16.0
+        if car_offset.length() > car_limit:
+            car_point = centre + car_offset.normalized() * car_limit
+        draw_circle(car_point, 7.0, Color(1.0, 1.0, 1.0, 0.95))
+        draw_circle(car_point, 4.6, Color(1.0, 0.58, 0.10, 1.0))
 
     # The vehicle marker is always centred and points up because the
     # world rotates underneath it in heading-up mode.

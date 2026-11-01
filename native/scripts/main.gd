@@ -11,6 +11,10 @@ const SpeedPostScript := preload("res://scripts/speed_post.gd")
 const AtmosphereFxScript := preload("res://scripts/atmosphere_fx.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const PlayerCharacterScene := preload("res://assets/characters/nitches_player.glb")
+const PlayerCharacterScript := preload("res://scripts/player_character.gd")
+const ON_FOOT_ENTER_RANGE_M := 4.5
+const ON_FOOT_WALK_SPEED := 2.3
+const ON_FOOT_RUN_SPEED := 5.5
 const MainMenuScript := preload("res://scripts/main_menu.gd")
 const WorldMapScript := preload("res://scripts/world_map.gd")
 const RouteGuideScript := preload("res://scripts/route_guide.gd")
@@ -152,11 +156,17 @@ var _camera_orbit_distance_scale := 1.0
 var _camera_drag_touch_index := -1
 var _camera_mouse_dragging := false
 var _camera_manual_timer := 999.0
-var _player_character: Node3D
+var _player_character: NativePlayerCharacter
 var _player_on_foot := false
 var _vehicle_mode_transitioning := false
 var _vehicle_mode_tween: Tween
 var _parked_duration := 0.0
+var _on_foot_heading := 0.0
+var _on_foot_velocity_y := 0.0
+var _on_foot_grounded := true
+var _on_foot_test_input: Dictionary = {}
+var _on_foot_camera_position := Vector3.ZERO
+var _on_foot_camera_initialized := false
 var _camera_mode_before_exit := CAMERA_CHASE
 
 
@@ -2368,16 +2378,166 @@ func _update_vehicle_mode_hud(delta: float) -> void:
 	else:
 		_parked_duration = 0.0
 	if _hud != null:
-		_hud.set_vehicle_interaction(_can_change_vehicle_mode() and _parked_duration >= 0.35, _player_on_foot)
+		var can_change := _can_enter_vehicle() if _player_on_foot else (_can_change_vehicle_mode() and _parked_duration >= 0.35)
+		_hud.set_vehicle_interaction(can_change, _player_on_foot)
+
+
+## 0.3.28: entering needs the avatar back at the car - walking
+## away must not teleport the player into the driver seat.
+func _can_enter_vehicle() -> bool:
+	if not _player_on_foot or _vehicle_mode_transitioning or _vehicle == null:
+		return false
+	if not _has_entered_game or _in_menu or _map_open or _garage_active or _world_switch_in_progress:
+		return false
+	if _player_character == null or not is_instance_valid(_player_character):
+		return false
+	return _player_character.global_position.distance_to(_vehicle.global_position) <= ON_FOOT_ENTER_RANGE_M
+
+
+## 0.3.28: merges HUD touch controls with the keyboard driving
+## axes (WASD/arrows move, Space jumps, Shift runs).  Smoke and
+## screenshot runs inject `_on_foot_test_input` to drive the exact
+## same code path deterministically.
+func _get_on_foot_move_input() -> Dictionary:
+	if not _on_foot_test_input.is_empty():
+		return _on_foot_test_input
+	var move := Vector2.ZERO
+	var run := false
+	var jump := false
+	if _hud != null:
+		var touch := _hud.get_on_foot_input()
+		move = touch.get("move", Vector2.ZERO) as Vector2
+		run = bool(touch.get("run", false))
+		jump = bool(touch.get("jump", false))
+	if InputMap.has_action(&"steer_left"):
+		move += Input.get_vector(&"steer_left", &"steer_right", &"accelerate", &"brake_reverse")
+		if Input.is_action_pressed(&"boost"):
+			run = true
+		if Input.is_action_just_pressed(&"handbrake"):
+			jump = true
+	if move.length() > 1.0:
+		move = move.normalized()
+	return {"move": move, "run": run, "jump": jump}
+
+
+func _on_foot_can_stand(at: Vector3) -> bool:
+	if _world == null:
+		return false
+	var bounds: Dictionary = _world.get_world_data().get("bounds", {})
+	if not bounds.is_empty():
+		if at.x < float(bounds.get("minX", -1.0e9)) + 1.0 or at.x > float(bounds.get("maxX", 1.0e9)) - 1.0 or at.z < float(bounds.get("minZ", -1.0e9)) + 1.0 or at.z > float(bounds.get("maxZ", 1.0e9)) - 1.0:
+			return false
+	return _world.is_walkable_at(at)
+
+
+## 0.3.28: manual kinematic locomotion for the avatar.  Ground
+## height and walkability come from the same analytic world data
+## the car uses (`height_at`, building-clearance index), so no
+## physics body or navigation mesh is needed; axis-separated
+## retries give wall sliding along building footprints.  Bridge
+## decks and prop tops are out of scope for this first pass -
+## the avatar follows the terrain heightfield.
+func _step_on_foot(delta: float) -> void:
+	if not _player_on_foot or _vehicle_mode_transitioning or delta <= 0.0:
+		return
+	if _player_character == null or not is_instance_valid(_player_character) or _world == null or _camera == null:
+		return
+	if not _has_entered_game or _in_menu or _map_open or _garage_active or _world_switch_in_progress:
+		_player_character.set_locomotion(0.0, true, delta)
+		return
+	var input := _get_on_foot_move_input()
+	var move_vec: Vector2 = input.get("move", Vector2.ZERO)
+	var wants_run := bool(input.get("run", false))
+	var wants_jump := bool(input.get("jump", false))
+	# Camera-relative wish direction projected on the ground plane.
+	var cam_basis := _camera.global_transform.basis
+	var cam_forward := -cam_basis.z
+	cam_forward.y = 0.0
+	var cam_right := cam_basis.x
+	cam_right.y = 0.0
+	if cam_forward.length_squared() < 0.0001 or cam_right.length_squared() < 0.0001:
+		cam_forward = -_player_character.global_transform.basis.z
+		cam_forward.y = 0.0
+		cam_right = Vector3(cam_forward.z, 0.0, -cam_forward.x)
+	cam_forward = cam_forward.normalized()
+	cam_right = cam_right.normalized()
+	var wish := cam_right * move_vec.x - cam_forward * move_vec.y
+	var wish_magnitude := minf(wish.length(), 1.0)
+	var wish_direction := wish.normalized() if wish_magnitude > 0.001 else Vector3.ZERO
+	var speed := (ON_FOOT_RUN_SPEED if wants_run else ON_FOOT_WALK_SPEED) * wish_magnitude
+	var start := _player_character.global_position
+	var next := start + wish_direction * speed * delta
+	if not _on_foot_can_stand(next):
+		var slide_x := Vector3(next.x, start.y, start.z)
+		var slide_z := Vector3(start.x, start.y, next.z)
+		if _on_foot_can_stand(slide_x):
+			next = slide_x
+		elif _on_foot_can_stand(slide_z):
+			next = slide_z
+		else:
+			next = start
+	# Vertical: jump impulse plus gravity, snapped to the terrain.
+	# Small drops snap to the ground; larger ones become a fall.
+	var ground_y := _world.height_at(next.x, next.z)
+	if _on_foot_grounded and wants_jump:
+		_on_foot_velocity_y = 4.8
+		_on_foot_grounded = false
+	if not _on_foot_grounded:
+		_on_foot_velocity_y -= 12.5 * delta
+		next.y = start.y + _on_foot_velocity_y * delta
+		if next.y <= ground_y:
+			next.y = ground_y
+			_on_foot_velocity_y = 0.0
+			_on_foot_grounded = true
+	elif start.y - ground_y > 0.55:
+		_on_foot_grounded = false
+		_on_foot_velocity_y = 0.0
+		next.y = start.y
+	else:
+		next.y = ground_y
+	_player_character.global_position = next
+	if wish_direction.length_squared() > 0.0001 and speed > 0.05:
+		var target_yaw := atan2(-wish_direction.x, -wish_direction.z)
+		_on_foot_heading = lerp_angle(_on_foot_heading, target_yaw, 1.0 - exp(-11.0 * delta))
+	_player_character.rotation.y = _on_foot_heading
+	var actual_speed := Vector2(next.x - start.x, next.z - start.z).length() / delta
+	_player_character.set_locomotion(actual_speed, _on_foot_grounded, delta)
+
+
+## 0.3.28: third-person orbit around the avatar, reusing the
+## chase camera's orbit yaw/pitch/distance controls (touch drag,
+## Q/E, right stick) with absolutes: exit seeds the orbit behind
+## the avatar, after that the player orbits freely.
+func _update_on_foot_camera(delta: float, snap: bool) -> void:
+	var target := _player_character.global_position + Vector3.UP * 1.45
+	var distance := 4.6 * _camera_orbit_distance_scale
+	var total_pitch := clampf(0.30 + _camera_orbit_pitch, 0.03, 1.15)
+	var height := tan(total_pitch) * distance
+	var orbit_basis := Basis(Vector3.UP, _camera_orbit_yaw)
+	var desired := target + orbit_basis * Vector3(0.0, height, distance)
+	if _world != null:
+		desired.y = maxf(desired.y, _world.height_at(desired.x, desired.z) + 0.35)
+	desired = _get_safe_camera_position(desired, _player_character.global_position)
+	if snap or not _on_foot_camera_initialized or delta <= 0.0:
+		_on_foot_camera_position = desired
+		_on_foot_camera_initialized = true
+	else:
+		_on_foot_camera_position = _on_foot_camera_position.lerp(desired, 1.0 - exp(-14.0 * delta))
+	_camera.global_position = _on_foot_camera_position
+	_camera.look_at(target, Vector3.UP)
+	_camera.fov = lerpf(_camera.fov, 58.0, 1.0 if snap else clampf(delta * 4.5, 0.0, 1.0))
+	if _speed_post != null:
+		_speed_post.set_speed_ratio(0.0)
 
 
 func _on_vehicle_mode_requested() -> void:
+	if _player_on_foot:
+		if _can_enter_vehicle():
+			_enter_vehicle()
+		return
 	if not _can_change_vehicle_mode() or _parked_duration < 0.35:
 		return
-	if _player_on_foot:
-		_enter_vehicle()
-	else:
-		_exit_vehicle_to_player()
+	_exit_vehicle_to_player()
 
 
 func _exit_vehicle_to_player(animate: bool = true, bypass_parked_check: bool = false) -> bool:
@@ -2407,17 +2567,23 @@ func _exit_vehicle_to_player(animate: bool = true, bypass_parked_check: bool = f
 	var car_width := float(_vehicle.get_car_definition().get("width_m", 1.9))
 	var position := car_transform.origin + side * (car_width * 0.5 + 0.42)
 	position.y = _world.height_at(position.x, position.z)
-	var actor := Node3D.new()
+	var actor: NativePlayerCharacter = PlayerCharacterScript.new()
 	actor.name = "PlayerCharacter"
 	add_child(actor)
-	actor.add_child(character_model)
+	actor.bind_model(character_model)
 	actor.global_position = position + (Vector3.UP * 0.14 if animate else Vector3.ZERO)
 	var look_target := car_transform.origin
 	look_target.y = position.y
 	actor.look_at(look_target, Vector3.UP)
 	_player_character = actor
+	_on_foot_heading = actor.rotation.y
+	_on_foot_velocity_y = 0.0
+	_on_foot_grounded = true
+	_on_foot_camera_initialized = false
 	_reset_camera_orbit()
+	_camera_orbit_yaw = _on_foot_heading
 	_snap_camera = true
+	_hud.set_follow_override(actor)
 	_hud.set_vehicle_interaction(false, true)
 
 	if animate:
@@ -2485,6 +2651,7 @@ func _finish_enter_vehicle() -> void:
 	_reset_camera_orbit()
 	_snap_camera = true
 	if _hud != null:
+		_hud.set_follow_override(null)
 		_hud.set_vehicle_interaction(_can_change_vehicle_mode() and _parked_duration >= 0.35, false)
 
 
@@ -2537,6 +2704,7 @@ func _process(delta: float) -> void:
 			_camera.make_current()
 		return
 	_update_vehicle_mode_hud(delta)
+	_step_on_foot(delta)
 	_accumulate_profile(delta)
 	if _route_guide != null:
 		_route_guide.update_route(delta)
@@ -2569,15 +2737,14 @@ func _vehicle_horizontal_yaw(vehicle_transform: Transform3D) -> float:
 func _update_camera(delta: float, snap: bool) -> void:
 	if _camera == null or _vehicle == null:
 		return
+	if _player_on_foot and _player_character != null and is_instance_valid(_player_character):
+		_update_on_foot_camera(delta, snap)
+		return
 
 	var speed_kmh := _vehicle.get_absolute_speed_kmh()
 	var speed_ratio := clampf(speed_kmh / maxf(float(_vehicle.get_spec_sheet().get("top_speed_kmh", 210)), 120.0), 0.0, 1.0)
 	var vehicle_transform := _vehicle.get_global_transform_interpolated()
 	var vehicle_position := vehicle_transform.origin
-	if _player_on_foot and _player_character != null and is_instance_valid(_player_character):
-		# Keep both the avatar and car in the parked on-foot camera frame;
-		# centring only on the rear bumper hides the person behind bodywork.
-		vehicle_position = vehicle_position.lerp(_player_character.global_position, 0.45)
 	var raw_follow_yaw := _vehicle_horizontal_yaw(vehicle_transform)
 	if snap or not _camera_smoothing_initialized or delta <= 0.0:
 		_camera_follow_yaw = raw_follow_yaw
@@ -3071,6 +3238,26 @@ func _run_smoke_checks() -> void:
 	var foot_hud_state := _hud.get_smoke_state()
 	var foot_controls_hidden := bool(foot_hud_state.get("driving_controls_hidden_on_foot", false))
 	var vehicle_idle_on_foot := _vehicle.freeze and not _vehicle.is_physics_processing() and not _vehicle.is_processing()
+	# 0.3.28: run away from the car on injected input - the avatar
+	# must actually cover ground with the gait engaged, entering
+	# from far away must be refused, and walking back must allow it.
+	var on_foot_controls_shown := bool(foot_hud_state.get("on_foot_controls_visible", false))
+	_update_camera(0.016, true)
+	var walk_start := _player_character.global_position
+	_on_foot_test_input = {"move": Vector2(0.0, -1.0), "run": true, "jump": false}
+	for walk_step in 90:
+		_step_on_foot(1.0 / 60.0)
+	_on_foot_test_input = {}
+	var walk_distance := walk_start.distance_to(_player_character.global_position)
+	var locomotion_state := _player_character.get_locomotion_state()
+	_on_vehicle_mode_requested()
+	var far_enter_rejected := _player_on_foot
+	var return_spot := _vehicle.global_position + Vector3(1.6, 0.0, 0.0)
+	return_spot.y = _world.height_at(return_spot.x, return_spot.z)
+	_player_character.global_position = return_spot
+	var near_enter_allowed := _can_enter_vehicle()
+	if not on_foot_controls_shown or walk_distance < 4.0 or not bool(locomotion_state.get("has_limbs", false)) or float(locomotion_state.get("move_weight", 0.0)) < 0.5 or not far_enter_rejected or not near_enter_allowed:
+		failures.append("0.3.28 free on-foot locomotion failed: controls_shown=%s moved=%.2f limbs=%s move_weight=%s far_rejected=%s near_allowed=%s" % [str(on_foot_controls_shown), walk_distance, str(locomotion_state.get("has_limbs", false)), str(locomotion_state.get("move_weight", 0.0)), str(far_enter_rejected), str(near_enter_allowed)])
 	var vehicle_reentered := _enter_vehicle(false)
 	var character_removed := vehicle_reentered and _player_character == null and get_node_or_null("PlayerCharacter") == null
 	var driver_controls_restored := not _player_on_foot and not _vehicle.freeze and _vehicle.is_physics_processing() and _vehicle.is_processing() and bool(_hud.get_smoke_state().get("driving_controls_visible", false))
@@ -3181,6 +3368,12 @@ func _run_screenshot_tour() -> void:
 		{
 			"name": "01a_driver_exit", "time": "day", "hud": true,
 			"vehicle": "spawn", "gameplay_camera": true, "avatar": true, "frames": 6,
+		},
+		{
+			"name": "01d_on_foot_walk", "time": "sunset", "hud": true,
+			"vehicle": "road", "vehicle_at": Vector3(-2635.0, 0.0, 300.0),
+			"gameplay_camera": true, "avatar": true, "avatar_yaw_deg": 90.0,
+			"walk_seconds": 1.7, "frames": 6,
 		},
 		{
 			"name": "01b_photo_corniche", "time": "sunset", "hud": true,
@@ -3374,6 +3567,19 @@ func _capture_screenshot(shot: Dictionary) -> bool:
 		if not _exit_vehicle_to_player(false, true):
 			push_error("[native-screenshots] FAIL: player character could not appear beside the parked vehicle")
 			return false
+		if shot.has("avatar_yaw_deg") and _player_character != null:
+			var avatar_yaw := deg_to_rad(float(shot.get("avatar_yaw_deg", 0.0)))
+			_on_foot_heading = avatar_yaw
+			_player_character.rotation.y = avatar_yaw
+			_camera_orbit_yaw = avatar_yaw
+		var walk_seconds := float(shot.get("walk_seconds", 0.0))
+		if walk_seconds > 0.0 and _player_character != null:
+			_update_camera(0.016, true)
+			_on_foot_test_input = {"move": Vector2(0.0, -1.0), "run": false, "jump": false}
+			for walk_step in int(round(walk_seconds * 60.0)):
+				_step_on_foot(1.0 / 60.0)
+			_on_foot_test_input = {}
+			_snap_camera = true
 
 	if is_menu_shot:
 		_screenshot_free_camera = false

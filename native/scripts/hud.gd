@@ -21,6 +21,7 @@ signal ignition_requested
 signal vehicle_mode_requested
 
 const MinimapScript := preload("res://scripts/minimap.gd")
+const JoystickScript := preload("res://scripts/touch_joystick.gd")
 const SteeringWheelScript := preload("res://scripts/steering_wheel.gd")
 const DashboardGaugeScript := preload("res://scripts/dashboard_gauge.gd")
 const TouchPedalScript := preload("res://scripts/touch_pedal.gd")
@@ -48,6 +49,12 @@ var _sound_button: Button
 var _pause_button: Button
 var _reset_button: Button
 var _vehicle_mode_button: Button
+var _joystick: NativeTouchJoystick
+var _run_button: Button
+var _jump_button: Button
+var _run_toggled := false
+var _jump_queued := false
+var _follow_override: Node3D
 var _vehicle_mode_ready := false
 var _player_on_foot := false
 var _performance_label: Label
@@ -142,6 +149,13 @@ func apply_control_preferences(control_type: String, wheel_size_multiplier: floa
         _drift_button.visible = not _player_on_foot
     if _ignition_button != null:
         _ignition_button.visible = not _player_on_foot
+    if _joystick != null:
+        _joystick.visible = _player_on_foot
+    if _jump_button != null:
+        _jump_button.visible = _player_on_foot
+    if _run_button != null:
+        _run_button.visible = _player_on_foot
+        _run_button.modulate = Color(1.0, 0.78, 0.45, 1.0) if _run_toggled else Color.WHITE
     _layout_hud()
 
 
@@ -150,6 +164,11 @@ func set_vehicle_interaction(can_change_mode: bool, player_on_foot: bool) -> voi
         return
     if player_on_foot and not _player_on_foot:
         reset_touch_controls()
+    elif not player_on_foot and _player_on_foot:
+        _run_toggled = false
+        _jump_queued = false
+        if _joystick != null:
+            _joystick.release()
     _vehicle_mode_ready = can_change_mode
     _player_on_foot = player_on_foot
     if _vehicle_mode_button != null:
@@ -178,7 +197,41 @@ func set_steering_wheel_texture_path(path: String) -> void:
         _wheel.set_wheel_texture_path(path)
 
 
+func _on_jump_button_pressed() -> void:
+    _jump_queued = true
+
+
+func _on_run_button_pressed() -> void:
+    _run_toggled = not _run_toggled
+    if _run_button != null:
+        _run_button.modulate = Color(1.0, 0.78, 0.45, 1.0) if _run_toggled else Color.WHITE
+
+
+## 0.3.28: polled by main while the player is on foot.  `jump` is
+## an edge (consumed on read); `run` is a toggle; `move` is the
+## raw stick vector in screen space (y down).
+func get_on_foot_input() -> Dictionary:
+    var jump := _jump_queued
+    _jump_queued = false
+    return {
+        "move": _joystick.get_value() if _joystick != null else Vector2.ZERO,
+        "run": _run_toggled,
+        "jump": jump,
+    }
+
+
+## 0.3.28: while set, the minimap and district label track the
+## avatar instead of the parked car, and the car gets a marker.
+func set_follow_override(node: Node3D) -> void:
+    _follow_override = node
+    if _minimap != null:
+        _minimap.set_vehicle_marker_visible(node != null)
+
+
 func reset_touch_controls() -> void:
+    if _joystick != null:
+        _joystick.release()
+    _jump_queued = false
     if _vehicle != null:
         for action_name in _touch_buttons.keys():
             _vehicle.set_touch_input(action_name, false)
@@ -281,6 +334,26 @@ func _build_ui() -> void:
     _vehicle_mode_button.tooltip_text = "Выйти из машины"
     _vehicle_mode_button.visible = false
     _vehicle_mode_button.pressed.connect(func() -> void: vehicle_mode_requested.emit())
+
+    # 0.3.28: on-foot controls - analogue stick bottom-left where
+    # the wheel sits, round jump/run buttons under the right thumb
+    # where the nitro/drift pair lives while driving.
+    _joystick = JoystickScript.new()
+    _joystick.name = "OnFootJoystick"
+    _joystick.visible = false
+    _root.add_child(_joystick)
+
+    _jump_button = _make_icon_button("↑", 38)
+    _jump_button.name = "OnFootJumpButton"
+    _jump_button.tooltip_text = "Прыжок"
+    _jump_button.visible = false
+    _jump_button.pressed.connect(_on_jump_button_pressed)
+
+    _run_button = _make_icon_button("»", 38)
+    _run_button.name = "OnFootRunButton"
+    _run_button.tooltip_text = "Бег вкл/выкл"
+    _run_button.visible = false
+    _run_button.pressed.connect(_on_run_button_pressed)
 
     _district_label = Label.new()
     _district_label.name = "DistrictNotice"
@@ -422,6 +495,8 @@ func _layout_hud() -> void:
     var wheel_size := clampf(wheel_base * _wheel_size_multiplier, 196.0, minf(vw * 0.38, vh * 0.66))
     var wheel_rect := Rect2(Vector2(maxf(vw * 0.04, margin_x), vh - margin_y - wheel_size), Vector2(wheel_size, wheel_size))
     _place(_wheel, wheel_rect)
+    var joystick_size := wheel_size * 0.86
+    _place(_joystick, Rect2(Vector2(wheel_rect.position.x, wheel_rect.position.y + wheel_size - joystick_size), Vector2(joystick_size, joystick_size)))
     _place(_tilt_label, Rect2(wheel_rect.position + Vector2(0.0, -30.0), Vector2(wheel_size, 26.0)))
 
     var arrow_size := clampf(wheel_size * 0.34, 72.0, 116.0)
@@ -446,6 +521,8 @@ func _layout_hud() -> void:
     var drift_d := clampf(vh * 0.12, 64.0, 104.0)
     var drift_rect := Rect2(Vector2(nitro_rect.position.x - 16.0 - drift_d, nitro_rect.position.y + (nitro_d - drift_d) * 0.55), Vector2(drift_d, drift_d))
     _place(_drift_button, drift_rect)
+    _place(_jump_button, nitro_rect)
+    _place(_run_button, drift_rect)
 
     # 0.2.53: compact top-centre chip; the old 84x72 flashing R sat
     # directly on top of the car in chase view and read as a plate bug.
@@ -524,7 +601,13 @@ func update_from_vehicle(slow_update: bool = false) -> void:
     var car_transform := _vehicle.get_global_transform_interpolated()
     var car_position := car_transform.origin
     var forward := -car_transform.basis.z
-    _minimap.set_player(car_position, forward)
+    var map_position := car_position
+    var map_forward := forward
+    if _follow_override != null and is_instance_valid(_follow_override):
+        var override_transform := _follow_override.global_transform
+        map_position = override_transform.origin
+        map_forward = -override_transform.basis.z
+    _minimap.set_player(map_position, map_forward)
 
     if _wheel != null and _wheel.visible:
         _wheel.set_display_value(_vehicle.steering_input)
@@ -534,7 +617,7 @@ func update_from_vehicle(slow_update: bool = false) -> void:
         return
 
     if _world != null:
-        var district := _world.get_district_name(car_position)
+        var district := _world.get_district_name(map_position)
         if district != _current_district and not district.is_empty():
             _current_district = district
             _district_label.text = district.to_upper()
@@ -570,6 +653,8 @@ func get_smoke_state() -> Dictionary:
         "ignition_same_size_as_drift": ignition_diameter > 0.0 and absf(ignition_diameter - drift_diameter) <= 0.5,
         "vehicle_mode_button": {"created": _vehicle_mode_button != null, "visible": _vehicle_mode_button.visible if _vehicle_mode_button != null else false, "text": _vehicle_mode_button.text if _vehicle_mode_button != null else "", "rect": Rect2(_vehicle_mode_button.position, _vehicle_mode_button.size) if _vehicle_mode_button != null else Rect2()},
         "player_on_foot": _player_on_foot,
+        "on_foot_controls_created": _joystick != null and _run_button != null and _jump_button != null,
+        "on_foot_controls_visible": _player_on_foot and _joystick != null and _joystick.visible and _jump_button != null and _jump_button.visible and _run_button != null and _run_button.visible,
         "driving_controls_hidden_on_foot": _player_on_foot and (_gas_pedal == null or not _gas_pedal.visible) and (_brake_pedal == null or not _brake_pedal.visible) and (_wheel == null or not _wheel.visible) and (_ignition_button == null or not _ignition_button.visible),
         "driving_controls_visible": not _player_on_foot and _gas_pedal != null and _gas_pedal.visible and _brake_pedal != null and _brake_pedal.visible and _ignition_button != null and _ignition_button.visible,
         "safe_area_3pct_4pct": true,

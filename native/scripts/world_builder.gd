@@ -1447,6 +1447,16 @@ func get_surface_at(world_position: Vector3) -> Dictionary:
 			return {"kind": "grass", "label": "ГРУНТ", "mu": 0.62, "rolling_resistance": 0.078}
 
 
+## 0.3.28: walkability query for the on-foot avatar.  Dry land
+## only (the sea, canal and pools block), clear of building
+## footprints by a body radius; roads and sidewalks are walkable
+## so the road-clearance gate is disabled with a negative floor.
+func is_walkable_at(world_position: Vector3) -> bool:
+	if String(get_surface_at(world_position).get("kind", "")) == "water":
+		return false
+	return _is_position_clear(world_position, 0.32, -50.0)
+
+
 func get_district_name(world_position: Vector3) -> String:
 	var best_name := "RichTown"
 	var best_score := INF
