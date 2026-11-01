@@ -35,10 +35,41 @@ test('player avatar is a compact, valid glTF 2.0 human character', () => {
 });
 
 test('avatar geometry has valid indices, normals, and human-scale bounds', () => {
+// 0.3.28: the avatar is a translation-only limb hierarchy, so world
+  // bounds must accumulate node translations from the scene roots.
+  const parentOf = new Map();
+  for (const [nodeIndex, node] of json.nodes.entries()) {
+    assert.equal(node.rotation, undefined, 'limb nodes must stay translation-only at bind');
+    assert.equal(node.scale, undefined, 'limb nodes must stay unscaled at bind');
+    assert.equal(node.matrix, undefined, 'limb nodes must not use matrix transforms');
+    for (const child of node.children ?? []) parentOf.set(child, nodeIndex);
+  }
+  function worldOffset(nodeIndex) {
+    const offset = [0, 0, 0];
+    let current = nodeIndex;
+    while (current !== undefined) {
+      const translation = json.nodes[current].translation ?? [0, 0, 0];
+      for (let axis = 0; axis < 3; axis += 1) offset[axis] += translation[axis];
+      current = parentOf.get(current);
+    }
+    return offset;
+  }
+  const meshNodeOffset = new Map();
+  for (const [nodeIndex, node] of json.nodes.entries()) {
+    if (node.mesh !== undefined) meshNodeOffset.set(node.mesh, worldOffset(nodeIndex));
+  }
+  // Every joint the procedural gait poses must exist as a named node.
+  const nodeNames = new Set(json.nodes.map((node) => node.name));
+  for (const joint of ['Torso', 'Head', 'ThighL', 'ShinL', 'FootL', 'ThighR', 'ShinR', 'FootR', 'UpperArmL', 'ForearmL', 'UpperArmR', 'ForearmR']) {
+    assert.ok(nodeNames.has(joint), `missing limb node ${joint}`);
+  }
+  assert.equal(json.extras.joints?.length, 12, 'extras must list the 12 joints');
+
   let triangles = 0;
   let minY = Infinity;
   let maxY = -Infinity;
-  for (const mesh of json.meshes) {
+  for (const [meshIndex, mesh] of json.meshes.entries()) {
+    const worldYOffset = meshNodeOffset.get(meshIndex)?.[1] ?? 0;
     for (const primitive of mesh.primitives) {
       const positionAccessor = json.accessors[primitive.attributes.POSITION];
       const normalAccessor = json.accessors[primitive.attributes.NORMAL];
@@ -60,7 +91,7 @@ test('avatar geometry has valid indices, normals, and human-scale bounds', () =>
       const positionView = json.bufferViews[positionAccessor.bufferView];
       const positionOffset = (positionView.byteOffset ?? 0) + (positionAccessor.byteOffset ?? 0);
       for (let i = 0; i < positionAccessor.count; i += 1) {
-        const y = binary.readFloatLE(positionOffset + i * 12 + 4);
+        const y = binary.readFloatLE(positionOffset + i * 12 + 4) + worldYOffset;
         minY = Math.min(minY, y);
         maxY = Math.max(maxY, y);
       }
@@ -82,6 +113,15 @@ test('avatar geometry has valid indices, normals, and human-scale bounds', () =>
 test('native HUD and vehicle lifecycle expose parked-only enter/exit behavior', async () => {
   const main = await readFile('native/scripts/main.gd', 'utf8');
   const hud = await readFile('native/scripts/hud.gd', 'utf8');
+  const world = await readFile('native/scripts/world_builder.gd', 'utf8');
+  assert.match(world, /func is_walkable_at/);
+  const character = await readFile('native/scripts/player_character.gd', 'utf8');
+  assert.match(character, /class_name NativePlayerCharacter/);
+  assert.match(character, /func bind_model/);
+  assert.match(character, /func set_locomotion/);
+  const joystick = await readFile('native/scripts/touch_joystick.gd', 'utf8');
+  assert.match(joystick, /class_name NativeTouchJoystick/);
+  assert.match(joystick, /func get_value/);
   const sync = await readFile('scripts/sync-native-assets.mjs', 'utf8');
   assert.match(sync, /nitches_player\.glb.*characters\/nitches_player\.glb/);
   assert.match(main, /func _vehicle_is_stopped\(\)/);
@@ -89,7 +129,13 @@ test('native HUD and vehicle lifecycle expose parked-only enter/exit behavior', 
   assert.match(main, /func _exit_vehicle_to_player/);
   assert.match(main, /func _enter_vehicle/);
   assert.match(main, /look_target\.y = position\.y/);
-  assert.match(main, /vehicle_position = vehicle_position\.lerp\(_player_character\.global_position, 0\.45\)/);
+  // 0.3.28: free on-foot locomotion replaced the parked framing lerp.
+  assert.match(main, /func _update_on_foot_camera/);
+  assert.match(main, /func _step_on_foot/);
+  assert.match(main, /func _get_on_foot_move_input/);
+  assert.match(main, /func _can_enter_vehicle/);
+  assert.match(main, /is_walkable_at/);
+  assert.match(hud, /func get_on_foot_input/);
   assert.match(main, /old_character\.queue_free\(\)/);
   assert.match(hud, /vehicle_mode_requested/);
   assert.match(hud, /driving_controls_hidden_on_foot/);
