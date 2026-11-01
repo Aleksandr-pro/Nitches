@@ -210,6 +210,30 @@ BANKS = {
         "pop_sources": [2400, 3735, 5200],
         "pop_seed": 5200,
     },
+    "bugatti_chiron": {
+        # No openly licensed W16 recording exists; the voice is the
+        # deepest multi-cylinder CC0 material in the clip pool (BMW
+        # M6 / Huracan V10s low, supercharged Holden V8 top), pitched
+        # low for the Chiron's dense turbo note.  The manifest keeps
+        # per-anchor provenance exactly like the other banks.
+        "car": "Bugatti Chiron Super Sport 8.0 W16 quad-turbo",
+        "anchors": [
+            ("v10b_idle", 900, "psola"),
+            ("v10a_idle", 1602, "recorded"),
+            ("v10b_idle", 2000, "psola"),
+            ("v10a_rev", 3735, "recorded"),
+            ("v10a_rev", 5000, "psola"),
+            ("v8xsc_hi", 6478, "recorded"),
+            ("v8xsc_hi", 7000, "psola"),
+        ],
+        "idle_clip": "v10b_idle",
+        "catch_clip": "v10a_rev",
+        "off_cutoff_hz": 1100.0,
+        "starter_rate": 1.22,
+        "catch_rate": (0.30, 0.55),
+        "pop_sources": [3735, 5000, 6478],
+        "pop_seed": 1600,
+    },
 }
 
 SHELBY_PSOLA_RPMS = [5000, 5600]
