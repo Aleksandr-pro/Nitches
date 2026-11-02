@@ -1,0 +1,98 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.318 - Forward Mobile - Using Device #0: Unknown - llvmpipe (LLVM 20.1.2, 256 bits)
+
+ERROR: Non-existing or invalid boot splash at 'res://assets/ui/boot_splash_richtown.jpg'. The only supported format is PNG. Loading default splash.
+   at: setup_boot_logo (main/main.cpp:3958)
+WARNING: FSR1 3D scaling is only available when using the Forward+ renderer.
+     at: viewport_set_scaling_3d_mode (servers/rendering/renderer_viewport.cpp:1028)
+[native-screenshots] mode enabled, output dir: /home/runner/work/Nitches/Nitches/screenshots
+[native-build] world=richtown profile Выбираем точку старта=0ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms
+WARNING: Native model is missing: res://assets/props/palm_date.glb
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] _get_model_parts (res://scripts/world_builder.gd:6036)
+         [1] _add_batched_model (res://scripts/world_builder.gd:6320)
+         [2] _build_rt7_scenic_0326 (res://scripts/world_builder.gd:8740)
+         [3] _build_landmarks (res://scripts/world_builder.gd:8575)
+         [4] build_world_step (res://scripts/world_builder.gd:327)
+         [5] build_world (res://scripts/world_builder.gd:261)
+         [6] _bootstrap_game_sync (res://scripts/main.gd:203)
+         [7] _ready (res://scripts/main.gd:194)
+WARNING: Native model is missing: res://assets/props/flower_clump.glb
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] _get_model_parts (res://scripts/world_builder.gd:6036)
+         [1] _add_batched_model (res://scripts/world_builder.gd:6320)
+         [2] _build_rt7_scenic_0326 (res://scripts/world_builder.gd:8741)
+         [3] _build_landmarks (res://scripts/world_builder.gd:8575)
+         [4] build_world_step (res://scripts/world_builder.gd:327)
+         [5] build_world (res://scripts/world_builder.gd:261)
+         [6] _bootstrap_game_sync (res://scripts/main.gd:203)
+         [7] _ready (res://scripts/main.gd:194)
+WARNING: Native model is missing: res://assets/props/ornamental_shrub.glb
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] _get_model_parts (res://scripts/world_builder.gd:6036)
+         [1] _add_batched_model (res://scripts/world_builder.gd:6320)
+         [2] _build_rt7_scenic_0326 (res://scripts/world_builder.gd:8742)
+         [3] _build_landmarks (res://scripts/world_builder.gd:8575)
+         [4] build_world_step (res://scripts/world_builder.gd:327)
+         [5] build_world (res://scripts/world_builder.gd:261)
+         [6] _bootstrap_game_sync (res://scripts/main.gd:203)
+         [7] _ready (res://scripts/main.gd:194)
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms; Расставляем скамейки=8ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms; Расставляем скамейки=8ms; Собираем модели города=904ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms; Расставляем скамейки=8ms; Собираем модели города=904ms; Настраиваем отражения=0ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms; Расставляем скамейки=8ms; Собираем модели города=904ms; Настраиваем отражения=0ms; Закрываем границы мира=0ms
+[native-build] world=richtown profile Выбираем точку старта=0ms; Индексируем дороги=33ms; Проверяем здания у дорог=97ms; Проверяем бассейны и участки=12ms; Готовим физику мира=0ms; Настраиваем небо и освещение=39ms; Строим ландшафт RichTown 7×7=6278ms; Заполняем море и канал=46ms; Прокладываем дороги=6819ms; Возводим здания=6393ms; Строим достопримечательности=4034ms; Высаживаем деревья и пальмы=1194ms; Ставим уличные фонари=315ms; Расставляем скамейки=8ms; Собираем модели города=904ms; Настраиваем отражения=0ms; Закрываем границы мира=0ms; Финализируем RichTown 7×7=130ms
+[native] World build stats (richtown): { "terrainVertices": 251001.0, "roadEdges": 524.0, "roadSamples": 8155.0, "roadLengthKm": 168.0, "buildings": 1631.0, "blenderVillas": 46.0, "blenderGlassTowers": 11.0, "genericBuildings": 300.0, "cityBlenderBuildings": 1274.0, "landmarks": 148.0, "pools": 200.0, "trees": 1136.0, "bushes": 2264.0, "palms": 1238.0, "lamps": 1500.0, "benches": 75.0, "fields": 22.0, "trails": 3.0 }
+[native] Traffic removed: player vehicle only
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1519)
+     GDScript backtrace (most recent call first):
+         [0] _build_static_cache (res://scripts/minimap.gd:133)
+         [1] set_world_data (res://scripts/minimap.gd:101)
+         [2] bind (res://scripts/minimap.gd:67)
+         [3] bind (res://scripts/hud.gd:96)
+         [4] _bootstrap_create_camera_and_systems (res://scripts/main.gd:339)
+         [5] _bootstrap_game_sync (res://scripts/main.gd:206)
+         [6] _ready (res://scripts/main.gd:194)
+[native] Nitches Horizon Godot alpha is ready
+[native-screenshots] adapter=llvmpipe (LLVM 20.1.2, 256 bits) vendor=Unknown
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/01_spawn_gameplay.png (960x540) in 30.3s
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/01a_driver_exit.png (960x540) in 24.2s
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/01d_on_foot_walk.png (960x540) in 28.7s
+[native-screenshots] 01b_photo_corniche camera=(-2608.0, 13.28727, 258.0) target=(-2680.0, 9.297143, 318.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/01b_photo_corniche.png (960x540) in 82.6s
+[native-screenshots] 01c_photo_plaza camera=(168.0, 17.053, 168.0) target=(0.0, 29.45, 0.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/01c_photo_plaza.png (960x540) in 32.1s
+[native-screenshots] 02_mosque_east camera=(1030.0, 19.42761, 1420.0) target=(950.0, 17.35593, 1365.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/02_mosque_east.png (960x540) in 17.1s
+[native-screenshots] 03_mosque_street camera=(988.0, 9.395307, 1452.0) target=(950.0, 13.35593, 1365.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/03_mosque_street.png (960x540) in 6.3s
+[native-screenshots] 04_opera_boulevard camera=(-768.0, 13.34041, 572.0) target=(-700.0, 13.364, 500.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/04_opera_boulevard.png (960x540) in 11.0s
+[native-screenshots] 05_roses_plaza camera=(208.0, 8.114, 42.0) target=(60.0, 13.45, 0.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/05_roses_plaza.png (960x540) in 5.9s
+[native-screenshots] 06_main_tower camera=(-260.0, 33.30235, 260.0) target=(0.0, 73.45, 0.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/06_main_tower.png (960x540) in 2.0s
+[native-screenshots] 07_central_park_sunset camera=(212.0, 17.24237, -612.0) target=(300.0, 7.183143, -700.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/07_central_park_sunset.png (960x540) in 16.2s
+[native-screenshots] 08_city_aerial_sunset camera=(-1500.0, 263.5838, 900.0) target=(0.0, 23.45, 0.0)
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/08_city_aerial_sunset.png (960x540) in 1.4s
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/08a0_car_bugatti_chiron.png (960x540) in 47.5s
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/08a_car_audi_r8.png (960x540) in 16.4s
+[native-screenshots] SAVED /home/runner/work/Nitches/Nitches/screenshots/08b_car_camaro_ss.png (960x540) in 21.0s
