@@ -97,11 +97,11 @@ assert(preset.includes('platform="Android"'), 'Android export preset is missing'
 assert(preset.includes('architectures/arm64-v8a=true'), 'ARM64 Android export is not enabled');
 assert(preset.includes('package/unique_name="io.nitches.horizon"'), 'Android package id differs from io.nitches.horizon');
 assert(preset.includes('include_filter="*.json"'), 'Android export must explicitly include non-resource JSON world data');
-assert(project.includes('config/version="0.3.31-native-alpha"'), 'Native project version metadata must match 0.3.31-native-alpha');
-assert(preset.includes('version/code=97'), 'Native 0.3.31 must bump Android versionCode to 97');
-assert(preset.includes('version/name="0.3.31-native-alpha"'), 'Native version name must be 0.3.31-native-alpha');
-assert(mainMenuScript.includes('Nitches 0.3.31-native-alpha'), 'Main menu version label must match the native export version');
-assert(preset.includes('application/file_version="0.3.31"') && preset.includes('application/product_version="0.3.31"'), 'Desktop file/product versions must match native 0.3.31');
+assert(project.includes('config/version="0.3.32-native-alpha"'), 'Native project version metadata must match 0.3.32-native-alpha');
+assert(preset.includes('version/code=98'), 'Native 0.3.32 must bump Android versionCode to 98');
+assert(preset.includes('version/name="0.3.32-native-alpha"'), 'Native version name must be 0.3.32-native-alpha');
+assert(mainMenuScript.includes('Nitches 0.3.32-native-alpha'), 'Main menu version label must match the native export version');
+assert(preset.includes('application/file_version="0.3.32"') && preset.includes('application/product_version="0.3.32"'), 'Desktop file/product versions must match native 0.3.32');
 // 0.3.25: parked-only player character, ported from the
 // arena/1f423e59 feature branch (where it shipped as "0.2.63")
 // and adapted to the icons-instead-of-words HUD rule: an original
@@ -179,7 +179,7 @@ assert(preset.includes('platform="Windows Desktop"') && preset.includes('name="W
 assert(preset.includes('platform="Linux"') && preset.includes('name="Linux"'), 'Linux desktop export preset is missing');
 assert((preset.match(/include_filter="\*\.json"/g) ?? []).length >= 3, 'Android, Windows and Linux presets must all include the JSON world data');
 assert(preset.includes('application/modify_resources=false'), 'Windows export from Linux CI must not require rcedit (application/modify_resources=false)');
-assert(preset.includes('application/file_version="0.3.31"') && preset.includes('application/product_version="0.3.31"'), 'Desktop Windows version metadata must match native 0.3.31');
+assert(preset.includes('application/file_version="0.3.32"') && preset.includes('application/product_version="0.3.32"'), 'Desktop Windows version metadata must match native 0.3.32');
 assert(preset.includes('binary_format/include_pck=true'), 'Desktop exports must embed the PCK for single-file install-and-play builds');
 for (const marker of ['--export-release Windows', '--export-release Linux', '--native-smoke', 'NitchesHorizonNative-windows', 'NitchesHorizonNative-linux']) {
   assert(desktopWorkflow.includes(marker), `Desktop workflow marker is missing: ${marker}`);
@@ -311,7 +311,7 @@ assert(hudScript.includes('_performance_label.visible = false') && hudScript.inc
 for (const marker of ['clean_menu_0234', 'store_panel_0236', 'labeled_tabs_0236', 'backdrop_blur_0234', 'hint_screen_texture', 'textureLod(screen_texture', 'FontVariation', 'variation_embolden', 'variation_transform', 'MENU_PLAY_TEXTURE', 'MENU_SHELBY_TEXTURE', 'MENU_RICHTOWN_TEXTURE', 'MENU_WORLD_TEXTURE', 'menu_play_gameplay.jpg', 'menu_shelby_gameplay.jpg', 'menu_richtown_gameplay.jpg', 'menu_world_gameplay.jpg', 'UI_CLICK_STREAM', 'class_name NativeCarSilhouetteIcon', 'car_silhouette_icon_0234', 'panel_changed', 'garage_dragged', 'garage_zoomed', 'customization_changed', 'tuning_purchase_requested', 'profile_changed', 'GarageStudio0234', '_create_garage_studio', '_set_garage_active', 'StudioTurntable', 'set_paint_color', 'set_wheel_finish', 'set_tuning_level', 'get_tuning_preview', 'set_license_plate', 'customization_0234', 'TUNING_TORQUE_MULTIPLIERS', 'xp_progress', 'drift_record_deg', 'achievements', 'car_stats', '_claim_achievement_rewards', '_credit_distance_bank_m']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.34 menu/garage/profile marker is missing: ${marker}`);
 }
-for (const marker of ['_build_store_panel', 'PANEL_STORE', '_store_items', '_cycle_store_sort', '_on_store_action_pressed', 'StoreDragSurface0236', 'top_xp_bar_0236', 'clickable_home_cards_0236', 'home_goal_0236', 'wheel_previews_0236', 'profile_single_scroll_0236', 'achievement_cards_0236', 'locked_world_conditions_0236', 'hover_sound_0236', 'gameplay_card_textures_0236', 'PANEL_TRANSITION_SECONDS := 0.18', 'MIN_FONT_SIZE := 14', 'MIN_TOUCH_HEIGHT := 48.0', 'StudioReflectionProbe0236', '"current": distance_km', '"unit": "км"', '"progress": clampf', 'NativeMainMenu.PANEL_STORE', '11_menu_store']) {
+for (const marker of ['_build_store_panel', 'PANEL_STORE', '_store_items', '_cycle_store_sort', '_on_store_action_pressed', 'StoreDragSurface0236', 'top_xp_bar_0236', 'clickable_home_cards_0236', 'home_goal_0236', 'wheel_previews_0236', 'profile_single_scroll_0236', 'achievement_cards_0236', 'locked_world_conditions_0236', 'hover_sound_0236', 'gameplay_card_textures_0236', 'PANEL_TRANSITION_SECONDS := 0.18', 'MIN_FONT_SIZE := 14', 'MIN_TOUCH_HEIGHT := 56.0', 'StudioReflectionProbe0236', '"current": distance_km', '"unit": "км"', '"progress": clampf', 'NativeMainMenu.PANEL_STORE', '11_menu_store']) {
   assert(combinedRuntime.includes(marker), `Native 0.2.36 readable-menu/store marker is missing: ${marker}`);
 }
 // 0.2.36 road-infrastructure repair: junction pads, zebras, stop
@@ -2100,6 +2100,34 @@ assert(mainScript.includes('08a0_car_bugatti_chiron') && mainScript.includes('"c
 assert(syncScript.includes('bugatti_chiron: [900, 1602, 2000, 3735, 5000, 6478, 7000]'), 'Native 0.3.31 asset sync must stage the complete Bugatti bank');
 assert(audioCredits.includes('478597') && audioCredits.includes('177184') && audioCredits.includes('Bygatti'), 'Native 0.3.31 audio credits must document the Bugatti bank sources honestly');
 console.log('0.3.31 fifth car (Bygatti Shiron Super Sport) OK');
+// ---------------------------------------------------------------------------
+// 0.3.32: menu usability pass — every list scrolls by finger drag over
+// the cards themselves (DragScrollContainer eats the release after a
+// real drag so cards do not fire), fat always-visible scrollbars, big
+// page-arrow buttons on garage/store/profile/online lists, taller
+// cards, a 56px global touch floor, and the selected car is scrolled
+// into view automatically.
+for (const marker0332 of [
+  'class DragScrollContainer',
+  'func _make_list_scroll(parent: Node) -> DragScrollContainer',
+  'SCROLL_MODE_SHOW_ALWAYS',
+  'scroll.ensure_control_visible(control)',
+  '"drag_scroll_0332"',
+  '"scroll_arrows_0332"',
+  '"touch_targets_0332"',
+  'const MIN_TOUCH_HEIGHT := 56.0',
+  'Vector2(0.0, 104.0)',
+  'Vector2(0.0, 112.0)',
+  'Vector2(112.0, 64.0)',
+  'пять машин с реальными 3D-моделями',
+  'func page_down() -> void',
+  '_store_count_label.text = "ПОКАЗАНО %d ИЗ %d',
+]) {
+  assert(mainMenuScript.includes(marker0332), `Native 0.3.32 menu usability marker is missing: ${marker0332}`);
+}
+assert(mainScript.includes('drag_scroll_0332') && mainScript.includes('touch_targets_0332'), 'Native 0.3.32 main smoke must require the menu drag-scroll flags');
+console.log('0.3.32 menu scrolling & accessibility OK');
+
 
 console.log('Native Godot project validation OK');
 console.log(JSON.stringify(data.stats, null, 2));

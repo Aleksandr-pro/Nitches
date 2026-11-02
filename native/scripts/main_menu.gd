@@ -5,7 +5,7 @@ extends CanvasLayer
 ## visible behind clean dark translucent panels.  Navigation is a
 ## single row of labelled icon tabs, PLAY is the one dominant home
 ## action, and both the garage and the real-content store expose the
-## actual selected car in Main's studio scene.  Four catalogue cars
+## actual selected car in Main's studio scene.  Five catalogue cars
 ## have real GLBs, physics, recorded audio and per-car customization;
 ## no model-less fake cars are listed.
 
@@ -90,6 +90,140 @@ class WheelView:
         draw_colored_polygon(pointer, Color(1.0, 0.58, 0.08))
 
 
+# 0.3.32: every menu list scrolls three ways.  A plain ScrollContainer
+# never starts a touch drag over card Buttons (the button accepts the
+# press first), so this subclass watches _input: taps pass through to
+# the cards untouched, but once a press turns into a real drag past
+# the deadzone it scrolls and eats the release so the card under the
+# finger does not fire after scrolling.  The vertical scrollbar is a
+# fat orange handle, and page_up/page_down back the big arrow buttons.
+class DragScrollContainer:
+    extends ScrollContainer
+
+    const DEADZONE_PX := 14.0
+    static var _drag_owner: DragScrollContainer
+
+    var _press_active := false
+    var _press_is_touch := false
+    var _dragging := false
+    var _press_pos := Vector2.ZERO
+    var _last_pos := Vector2.ZERO
+    var _page_tween: Tween
+
+    func _ready() -> void:
+        horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+        var bar := get_v_scroll_bar()
+        if bar != null:
+            bar.custom_minimum_size.x = 26.0
+            bar.add_theme_stylebox_override("scroll", _bar_style(Color(1.0, 1.0, 1.0, 0.10)))
+            bar.add_theme_stylebox_override("scroll_focus", _bar_style(Color(1.0, 1.0, 1.0, 0.10)))
+            bar.add_theme_stylebox_override("grabber", _bar_style(Color(1.0, 0.58, 0.08, 0.85)))
+            bar.add_theme_stylebox_override("grabber_highlight", _bar_style(Color(1.0, 0.66, 0.20)))
+            bar.add_theme_stylebox_override("grabber_pressed", _bar_style(Color(1.0, 0.74, 0.34)))
+
+    func _bar_style(colour: Color) -> StyleBoxFlat:
+        var style := StyleBoxFlat.new()
+        style.bg_color = colour
+        style.set_corner_radius_all(9)
+        style.set_content_margin_all(2.0)
+        return style
+
+    func _notification(what: int) -> void:
+        if what == NOTIFICATION_PREDELETE and _drag_owner == self:
+            _drag_owner = null
+
+    func _input(event: InputEvent) -> void:
+        if not is_visible_in_tree():
+            return
+        if event is InputEventScreenTouch:
+            var touch := event as InputEventScreenTouch
+            if touch.pressed:
+                _begin_press(touch.position, true)
+            else:
+                _end_press()
+        elif event is InputEventScreenDrag:
+            var drag := event as InputEventScreenDrag
+            if _press_active and _press_is_touch:
+                _drag_to(drag.position)
+        elif event is InputEventMouseButton:
+            var click := event as InputEventMouseButton
+            if click.button_index == MOUSE_BUTTON_LEFT:
+                if click.pressed:
+                    _begin_press(click.position, false)
+                else:
+                    _end_press()
+        elif event is InputEventMouseMotion:
+            var motion := event as InputEventMouseMotion
+            if _press_active and not _press_is_touch and (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+                _drag_to(motion.position)
+
+    func _begin_press(pos: Vector2, is_touch: bool) -> void:
+        if _press_active:
+            return
+        if _drag_owner != null and _drag_owner != self:
+            return
+        if not get_global_rect().has_point(pos):
+            return
+        _drag_owner = self
+        _press_active = true
+        _press_is_touch = is_touch
+        _dragging = false
+        _press_pos = pos
+        _last_pos = pos
+
+    func _end_press() -> void:
+        if not _press_active:
+            return
+        if _dragging:
+            get_viewport().set_input_as_handled()
+            _reset_card_scales(self)
+        _press_active = false
+        _dragging = false
+        if _drag_owner == self:
+            _drag_owner = null
+
+    func _drag_to(pos: Vector2) -> void:
+        if not _dragging:
+            # Only claim predominantly vertical drags: horizontal ones
+            # belong to the settings HSliders living in a scroll area.
+            var offset := pos - _press_pos
+            if absf(offset.y) > DEADZONE_PX and absf(offset.y) >= absf(offset.x):
+                _dragging = true
+            elif offset.length() > DEADZONE_PX * 1.6 and absf(offset.x) > absf(offset.y):
+                _press_active = false
+                if _drag_owner == self:
+                    _drag_owner = null
+                return
+        if _dragging:
+            scroll_vertical = maxi(0, scroll_vertical - int(round(pos.y - _last_pos.y)))
+            get_viewport().set_input_as_handled()
+        _last_pos = pos
+
+    func _reset_card_scales(node: Node) -> void:
+        for child in node.get_children():
+            if child is Control:
+                (child as Control).scale = Vector2.ONE
+            _reset_card_scales(child)
+
+    func page_up() -> void:
+        _page_by(-1)
+
+    func page_down() -> void:
+        _page_by(1)
+
+    func _page_by(direction: int) -> void:
+        var page_px := int(size.y * 0.85) if size.y > 40.0 else 320
+        var target := maxi(0, scroll_vertical + direction * page_px)
+        var bar := get_v_scroll_bar()
+        if bar != null:
+            target = clampi(target, 0, maxi(0, int(bar.max_value - bar.page)))
+        if _page_tween != null and _page_tween.is_valid():
+            _page_tween.kill()
+        _page_tween = create_tween()
+        _page_tween.tween_property(self, "scroll_vertical", target, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+
 const CarSilhouetteScript := preload("res://scripts/car_silhouette_icon.gd")
 const AvatarIconScript := preload("res://scripts/avatar_icon.gd")
 const WheelPreviewScript := preload("res://scripts/wheel_preview.gd")
@@ -117,7 +251,7 @@ const PANEL_WORLDS := 4
 const PANEL_SETTINGS := 5
 const PANEL_ONLINE := 6
 const PANEL_TRANSITION_SECONDS := 0.18
-const MIN_TOUCH_HEIGHT := 48.0
+const MIN_TOUCH_HEIGHT := 56.0
 const MIN_FONT_SIZE := 14
 const WORLD_MOUNTAINS_REQUIRED_LEVEL := 5
 const WORLD_CANYON_REQUIRED_CREDITS := 25000
@@ -258,6 +392,7 @@ var _garage_dimensions_label: Label
 var _garage_rating_bars: Dictionary = {}
 var _garage_cars_title: Label
 var _garage_cars_box: VBoxContainer
+var _garage_scroll: DragScrollContainer
 var _garage_car_buttons: Dictionary = {}
 var _garage_drive_button: Button
 var _garage_status_label: Label
@@ -273,6 +408,9 @@ var _store_detail_title: Label
 var _store_detail_label: Label
 var _store_action_button: Button
 var _store_cards_box: VBoxContainer
+var _store_scroll: DragScrollContainer
+var _store_count_label: Label
+var _scroll_arrow_count := 0
 var _store_card_buttons: Dictionary = {}
 var _store_filter_buttons: Dictionary = {}
 var _store_sort_button: Button
@@ -448,6 +586,9 @@ func get_smoke_state() -> Dictionary:
         "gameplay_card_textures_0236": MENU_PLAY_TEXTURE != null and MENU_SHELBY_TEXTURE != null and MENU_RICHTOWN_TEXTURE != null and MENU_WORLD_TEXTURE != null,
         "readability_min_font_0236": MIN_FONT_SIZE >= 14,
         "touch_min_height_0236": MIN_TOUCH_HEIGHT >= 48.0,
+        "drag_scroll_0332": _garage_scroll != null and _store_scroll != null and _profile_scroll is DragScrollContainer,
+        "scroll_arrows_0332": _scroll_arrow_count >= 8,
+        "touch_targets_0332": MIN_TOUCH_HEIGHT >= 56.0 and _store_scroll != null and _store_scroll.get_v_scroll_bar() != null and _store_scroll.get_v_scroll_bar().custom_minimum_size.x >= 20.0,
         "car_icon_created": _top_car_icon != null,
         "garage_drag_surface": _garage_drag_surface != null,
         "customization_bound": _customization_bound,
@@ -717,6 +858,49 @@ func _line_edit(text: String, placeholder: String) -> LineEdit:
 # --------------------------------------------------------------------- #
 # layout
 # --------------------------------------------------------------------- #
+# 0.3.32: one standard scrollable list for every panel — drag-scroll
+# container, fat always-visible scrollbar and big 58px page arrows,
+# so lists scroll by swipe, wheel, scrollbar drag and arrow taps.
+func _make_list_scroll(parent: Node) -> DragScrollContainer:
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 6)
+    row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    parent.add_child(row)
+    var scroll := DragScrollContainer.new()
+    scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+    scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    row.add_child(scroll)
+    var arrows := VBoxContainer.new()
+    arrows.add_theme_constant_override("separation", 6)
+    row.add_child(arrows)
+    var up_button := _button("▲", COL_ACCENT, Vector2(58.0, 58.0), 24)
+    up_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    up_button.tooltip_text = "Листать вверх"
+    up_button.pressed.connect(func() -> void: scroll.page_up())
+    arrows.add_child(up_button)
+    var arrow_spacer := Control.new()
+    arrow_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    arrow_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    arrows.add_child(arrow_spacer)
+    var down_button := _button("▼", COL_ACCENT, Vector2(58.0, 58.0), 24)
+    down_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+    down_button.tooltip_text = "Листать вниз"
+    down_button.pressed.connect(func() -> void: scroll.page_down())
+    arrows.add_child(down_button)
+    _scroll_arrow_count += 2
+    return scroll
+
+
+func _scroll_selected_visible(scroll: DragScrollContainer, control: Control) -> void:
+    if scroll == null or control == null:
+        return
+    await get_tree().process_frame
+    if is_instance_valid(scroll) and is_instance_valid(control):
+        scroll.ensure_control_visible(control)
+
+
 func _build_ui() -> void:
     _root = Control.new()
     _root.name = "MainMenuRoot"
@@ -850,7 +1034,7 @@ func _build_tabs(parent: Node) -> void:
         ["◈", "Онлайн"],
     ]
     for i in specs.size():
-        var tab := _button("", COL_ACCENT, Vector2(104.0, 60.0), MIN_FONT_SIZE)
+        var tab := _button("", COL_ACCENT, Vector2(112.0, 64.0), MIN_FONT_SIZE)
         tab.name = "LabeledTab%d" % i
         tab.tooltip_text = String(specs[i][1])
         tab.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1179,8 +1363,8 @@ func _refresh_garage_car_list() -> void:
             _texture_for_car(car_id),
             _car_display_name(entry),
             "%s %d • %d л.с. • %s" % [String(values.get("class", "A")), int(values.get("pi", 612)), int(values.get("power", 0)), status],
-            Vector2(0.0, 88.0),
-            18
+            Vector2(0.0, 104.0),
+            19
         )
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         button.modulate = Color(1.0, 0.84, 0.58) if selected else (Color.WHITE if owned else Color(0.52, 0.54, 0.58))
@@ -1196,6 +1380,7 @@ func _refresh_garage_car_list() -> void:
         )
         _garage_cars_box.add_child(button)
         _garage_car_buttons[car_id] = button
+    _scroll_selected_visible(_garage_scroll, _garage_car_buttons.get(_selected_car_id) as Control)
 
 
 func _build_home_panel(parent: Node) -> Control:
@@ -1336,17 +1521,17 @@ func _build_garage_panel(parent: Node) -> Control:
     right_panel.custom_minimum_size = Vector2(300.0, 0.0)
     right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     right_panel.size_flags_stretch_ratio = 0.92
-    var scroll := ScrollContainer.new()
-    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    right_panel.add_child(scroll)
+    var scroll := _make_list_scroll(right_panel)
+    _garage_scroll = scroll
     var right := VBoxContainer.new()
     right.add_theme_constant_override("separation", 8)
     right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroll.add_child(right)
 
-    _garage_cars_title = _label(right, "МОИ АВТОМОБИЛИ (4)", 15, Color.WHITE, true)
+    _garage_cars_title = _label(right, "МОИ АВТОМОБИЛИ (5)", 16, Color.WHITE, true)
+    _label(right, "Листайте свайпом или кнопками ▲ ▼ справа", MIN_FONT_SIZE, COL_MUTED)
     _garage_cars_box = VBoxContainer.new()
-    _garage_cars_box.add_theme_constant_override("separation", 8)
+    _garage_cars_box.add_theme_constant_override("separation", 10)
     _garage_cars_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     right.add_child(_garage_cars_box)
     _refresh_garage_car_list()
@@ -1641,7 +1826,7 @@ func _build_store_panel(parent: Node) -> Control:
     var catalog := VBoxContainer.new()
     catalog.add_theme_constant_override("separation", 8)
     catalog_panel.add_child(catalog)
-    _label(catalog, "КАТАЛОГ • ТОЛЬКО РЕАЛЬНЫЙ КОНТЕНТ", MIN_FONT_SIZE, Color.WHITE, true)
+    _store_count_label = _label(catalog, "КАТАЛОГ • ЛИСТАЙТЕ СВАЙПОМ ИЛИ ▲▼", MIN_FONT_SIZE, Color.WHITE, true)
     var filter_row := HBoxContainer.new()
     filter_row.add_theme_constant_override("separation", 6)
     catalog.add_child(filter_row)
@@ -1689,12 +1874,10 @@ func _build_store_panel(parent: Node) -> Control:
     reset_filters_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     reset_filters_button.pressed.connect(_reset_store_filters)
     filters3_row.add_child(reset_filters_button)
-    var cards_scroll := ScrollContainer.new()
-    cards_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    cards_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    catalog.add_child(cards_scroll)
+    var cards_scroll := _make_list_scroll(catalog)
+    _store_scroll = cards_scroll
     _store_cards_box = VBoxContainer.new()
-    _store_cards_box.add_theme_constant_override("separation", 8)
+    _store_cards_box.add_theme_constant_override("separation", 10)
     _store_cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     cards_scroll.add_child(_store_cards_box)
 
@@ -1731,7 +1914,7 @@ func _build_store_panel(parent: Node) -> Control:
     _store_action_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _store_action_button.pressed.connect(_on_store_action_pressed)
     details.add_child(_store_action_button)
-    var honesty_note := _label(details, "Магазин показывает только четыре машины с реальными 3D-моделями, физикой и звуком, а также тюнинг выбранного авто. Фейковых машин без моделей здесь нет.", MIN_FONT_SIZE, COL_MUTED)
+    var honesty_note := _label(details, "Магазин показывает только пять машин с реальными 3D-моделями, физикой и звуком, а также тюнинг выбранного авто. Фейковых машин без моделей здесь нет.", MIN_FONT_SIZE, COL_MUTED)
     honesty_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
     _store_drive_button = _button("▶  ИГРАТЬ НА ВЫБРАННОМ АВТО", COL_ACCENT, Vector2(0.0, 56.0), 18)
@@ -1860,6 +2043,8 @@ func _refresh_store() -> void:
             selected_visible = true
     if not selected_visible and not visible_items.is_empty():
         _store_selected_id = String(visible_items[0].get("id", "shelby_gt500"))
+    if _store_count_label != null:
+        _store_count_label.text = "ПОКАЗАНО %d ИЗ %d • СВАЙП / ▲▼" % [visible_items.size(), items.size()]
     if visible_items.is_empty():
         var empty_label := _label(_store_cards_box, "Ничего не нашлось по этим фильтрам. Нажмите «Сбросить фильтры».", MIN_FONT_SIZE, COL_MUTED)
         empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1869,9 +2054,9 @@ func _refresh_store() -> void:
         var button: Button
         var item_car_id := String(item.get("car_id", item_id))
         if String(item.get("type", "")) == "cars":
-            button = _picture_button(_texture_for_car(item_car_id), String(item.get("name", "Автомобиль")), "%s %d • %d л.с. • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), status], Vector2(0.0, 98.0), 19)
+            button = _picture_button(_texture_for_car(item_car_id), String(item.get("name", "Автомобиль")), "%s %d • %d л.с. • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), status], Vector2(0.0, 112.0), 20)
         else:
-            button = _tile(String(item.get("name", "Тюнинг")), "%s %d • %d л.с. • %.1f с • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), float(item.get("accel", 6.0)), status], COL_ACCENT, Vector2(0.0, 84.0), 20)
+            button = _tile(String(item.get("name", "Тюнинг")), "%s %d • %d л.с. • %.1f с • %s" % [String(item.get("class", "A")), int(item.get("pi", 612)), int(item.get("power", 0)), float(item.get("accel", 6.0)), status], COL_ACCENT, Vector2(0.0, 96.0), 20)
         button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         button.modulate = Color(1.0, 0.82, 0.56) if item_id == _store_selected_id else Color.WHITE
         button.pressed.connect(func() -> void:
@@ -1884,6 +2069,7 @@ func _refresh_store() -> void:
         )
         _store_cards_box.add_child(button)
         _store_card_buttons[item_id] = button
+    _scroll_selected_visible(_store_scroll, _store_card_buttons.get(_store_selected_id) as Control)
     _refresh_store_details()
 
 
@@ -1990,11 +2176,8 @@ func _avatar_glyph(avatar_id: String) -> String:
 func _build_profile_panel(parent: Node) -> Control:
     var vbox := _new_panel(parent, 0.52)
     _label(vbox, "ПРОФИЛЬ ВОДИТЕЛЯ", 27, Color.WHITE, true)
-    _profile_scroll = ScrollContainer.new()
+    _profile_scroll = _make_list_scroll(vbox)
     _profile_scroll.name = "ProfileSingleScroll0236"
-    _profile_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    _profile_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(_profile_scroll)
     var columns := HBoxContainer.new()
     columns.add_theme_constant_override("separation", 14)
     columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2196,10 +2379,14 @@ func _slider_row(parent: Node, key: String, caption: String, minimum: float, max
 func _build_settings_panel(parent: Node) -> Control:
     var vbox := _new_panel(parent, 0.58)
     _label(vbox, "НАСТРОЙКИ", 27, Color.WHITE, true)
+    var settings_scroll := DragScrollContainer.new()
+    settings_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    vbox.add_child(settings_scroll)
     var columns := HBoxContainer.new()
     columns.add_theme_constant_override("separation", 20)
+    columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(columns)
+    settings_scroll.add_child(columns)
 
     var left := VBoxContainer.new()
     left.add_theme_constant_override("separation", 9)
@@ -2279,7 +2466,7 @@ func _build_settings_panel(parent: Node) -> Control:
     right.add_child(spacer)
     _developer_status_label = _label(right, "режим разработчика выключен", MIN_FONT_SIZE, COL_MUTED)
     _developer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _version_button = _button("Nitches 0.3.31-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
+    _version_button = _button("Nitches 0.3.32-native-alpha", COL_LOCKED, Vector2(0.0, MIN_TOUCH_HEIGHT), MIN_FONT_SIZE)
     _version_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
     _version_button.pressed.connect(_on_version_pressed)
     right.add_child(_version_button)
@@ -2751,11 +2938,8 @@ func _build_online_panel(parent: Node) -> Control:
     _online_status_label = _label(vbox, "Гостевой режим: игра работает полностью офлайн. Аккаунт добавит серверные сохранения, задания, лидеров и мультиплеер.", 15, Color(1.0, 0.82, 0.55))
     _online_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-    var scroll := ScrollContainer.new()
+    var scroll := _make_list_scroll(vbox)
     scroll.name = "OnlineScroll0261"
-    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    vbox.add_child(scroll)
     var col := VBoxContainer.new()
     col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     col.add_theme_constant_override("separation", 10)
@@ -2946,8 +3130,8 @@ func _build_online_overlay() -> void:
     vbox.add_theme_constant_override("separation", 12)
     margin.add_child(vbox)
     _online_overlay_title = _label(vbox, "", 25, Color.WHITE, true)
-    var scroll := ScrollContainer.new()
-    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    var scroll := DragScrollContainer.new()
+    scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     vbox.add_child(scroll)
     _online_overlay_text = _label(scroll, "", 16, COL_TEXT)
