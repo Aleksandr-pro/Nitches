@@ -1,0 +1,36 @@
+name: "Unity: request activation file"
+
+# One-time manual step for Unity Personal CI builds.
+# Run this workflow, download the .alf artifact, exchange it for a
+# .ulf at https://license.unity3d.com/manual and store the .ulf
+# contents as the UNITY_LICENSE repository secret.
+# Full walkthrough: unity/CI_SETUP_RU.md
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  activation:
+    name: Request .alf
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request manual activation file
+        id: getManualLicenseFile
+        uses: game-ci/unity-request-activation-file@v2
+        with:
+          unityVersion: 6000.3.0f1
+      - name: Upload activation file
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.getManualLicenseFile.outputs.filePath }}
+          path: ${{ steps.getManualLicenseFile.outputs.filePath }}
+          if-no-files-found: error
+      - name: Explain next steps
+        run: |
+          {
+            echo "## Next steps"
+            echo "1. Download the .alf artifact from this run."
+            echo "2. Go to https://license.unity3d.com/manual and exchange it for a .ulf file."
+            echo "3. Add repository secrets: UNITY_LICENSE (full .ulf contents), UNITY_EMAIL, UNITY_PASSWORD."
+            echo "Details: unity/CI_SETUP_RU.md"
+          } >> "$GITHUB_STEP_SUMMARY"
