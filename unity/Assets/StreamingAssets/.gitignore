@@ -1,0 +1,12 @@
+# Only the prototype car + its audio bank are committed (plain Git, no LFS).
+# scripts/sync-unity-assets.mjs copies the rest for local use and CI.
+*
+!.gitignore
+!README.md
+!Cars/
+Cars/*
+!Cars/bugatti_chiron_super_sport.glb
+!Audio/
+Audio/*
+!Audio/bugatti_chiron/
+!Audio/bugatti_chiron/**

@@ -1,0 +1,5 @@
+# The repo root marks *.glb as Git LFS, but the Unity runtime copies under
+# StreamingAssets must stay plain Git so a fresh clone opens in Unity and
+# plays without git-lfs being installed.
+Assets/StreamingAssets/**/*.glb -filter -diff -merge -text
+Assets/StreamingAssets/**/*.wav -filter -diff -merge -text
