@@ -93,5 +93,27 @@ public static class TestTrack
             float x = 30f + (i % 2 == 0 ? -2.6f : 2.6f);
             Box(parent, "Slalom" + i, new Vector3(x, 0.5f, 200f + i * 45f), new Vector3(1.2f, 1f, 1.2f), _edge, ObstacleLayer);
         }
+
+        // --- procedural surface roughness (variation + шероховатость) ---
+        var rough = new System.Random(777);
+        // Micro-bumps along both road edges so the suspension works off the
+        // perfect plane; kept tiny so they don't knock the car off course.
+        for (float z = -90f; z < 1395f; z += 14f)
+        {
+            foreach (float side in new[] { -7f, 7f })
+            {
+                float h = 0.02f + (float)rough.NextDouble() * 0.06f;
+                Box(parent, "Bump", new Vector3(side, h * 0.5f, z), new Vector3(1.4f, h, 1.4f), _edge, ObstacleLayer);
+            }
+        }
+        // Scattered rocks on the grass shoulders (visual roughness, no gameplay impact).
+        for (int i = 0; i < 60; i++)
+        {
+            float side = (i % 2 == 0 ? -1f : 1f);
+            float x = side * (14f + (float)rough.NextDouble() * 40f);
+            float z = -40f + (float)rough.NextDouble() * 1440f;
+            float s = 0.5f + (float)rough.NextDouble() * 0.9f;
+            Box(parent, "Rock" + i, new Vector3(x, s * 0.5f, z), new Vector3(s, s, s), _edge, ObstacleLayer);
+        }
     }
 }

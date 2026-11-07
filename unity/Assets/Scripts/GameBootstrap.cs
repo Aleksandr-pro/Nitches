@@ -135,6 +135,7 @@ public class GameBootstrap : MonoBehaviour
         audioGo.transform.SetParent(carGo.transform, false);
         var engineAudio = audioGo.AddComponent<EngineAudio>();
         engineAudio.Vehicle = vehicle;
+        engineAudio.BankName = "bugatti_chiron"; // matches StreamingAssets/Audio/bugatti_chiron
 
         // --- real model (async; fallback hides on success) ---
         hud.SetStatus("UNITY PROTOTYPE 0.1.0 - " + PrototypeCarGlb);
