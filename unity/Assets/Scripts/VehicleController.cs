@@ -45,6 +45,21 @@ public class VehicleController : MonoBehaviour
     public float SteerAngleDeg { get; private set; }
     public bool AnyWheelGrounded { get; private set; }
 
+    /// <summary>Engine ignition state. When false the car makes no torque and revs to zero.</summary>
+    public bool EngineOn { get; private set; }
+
+    /// <summary>Called by the round ignition button (HUD) or keyboard I.</summary>
+    public void SetIgnition(bool on)
+    {
+        EngineOn = on;
+        if (!on)
+        {
+            Gear = 0;
+            _rpmSmooth = IdleRpm; // will decay below idle in FixedUpdate toward 0
+        }
+        Debug.Log($"[Nitches] Ignition {(on ? "ON" : "OFF")}");
+    }
+
     /// <summary>Current spring length per wheel [FL, FR, RL, RR] for visuals.</summary>
     public readonly float[] SpringLengths = new float[4];
     /// <summary>Wheel spin speed, rad/s (signed).</summary>
@@ -106,6 +121,7 @@ public class VehicleController : MonoBehaviour
         // In reverse, "brake" pedal drives backwards; in drive, brake brakes.
         float drivePedal = Gear < 0 ? brake : throttle;
         float brakePedal = Gear < 0 ? throttle : brake;
+        if (!EngineOn) drivePedal = 0f; // no torque when the engine is off
 
         float ratio = Gear < 0 ? ReverseRatio : GearRatios[Mathf.Clamp(Gear, 0, GearRatios.Length - 1)];
         float wheelRad = absSpeed / WheelRadius;
@@ -113,9 +129,13 @@ public class VehicleController : MonoBehaviour
         float coupledRpm = wheelRad * ratio * FinalDrive * 60f / (2f * Mathf.PI);
 
         // Free-rev when wheels are off the ground or clutch would slip.
-        float targetRpm = AnyWheelGrounded
-            ? Mathf.Max(IdleRpm, coupledRpm)
-            : Mathf.Lerp(IdleRpm, RedlineRpm, drivePedal);
+        float targetRpm;
+        if (!EngineOn)
+            targetRpm = 0f; // engine stopped
+        else if (AnyWheelGrounded)
+            targetRpm = Mathf.Max(IdleRpm, coupledRpm);
+        else
+            targetRpm = Mathf.Lerp(IdleRpm, RedlineRpm, drivePedal);
         _rpmSmooth = Mathf.Lerp(_rpmSmooth, targetRpm, 1f - Mathf.Exp(-8f * Time.fixedDeltaTime));
         Rpm = _rpmSmooth;
 
